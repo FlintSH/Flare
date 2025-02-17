@@ -10,13 +10,13 @@
 [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
 
 </div>
-Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX, Flameshot, and ScreenCloud. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
+Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX and Flameshot. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
 
 ## ✨ Features
 
 - 🚀 **Universal Screenshot Integration**
-  - ShareX, Flameshot, and ScreenCloud support
-  - One-click configuration exports
+  - ShareX, Flameshot, and Bash Script support
+  - One-click configuration downloads
 - 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
@@ -55,7 +55,7 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
    cp .env.example .env
    ```
 3. Update environment variables (e.g. NEXTAUTH_SECRET and DATABASE_URL) to point to your Postgres server and secure your instance with a secret key.
-4. Launch Flare (which runs PostgreSQL and Redis) with:
+4. Launch Flare (which runs PostgreSQL) with:
    ```bash
    docker compose up -d
    ```
