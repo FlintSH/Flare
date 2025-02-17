@@ -29,14 +29,17 @@ const configSchema = z.object({
           region: z.string().default(''),
           accessKeyId: z.string().default(''),
           secretAccessKey: z.string().default(''),
-          endpoint: z.string().optional().transform((val) => {
-            if (!val) return val;
-            let normalized = val.replace(/\/+$/, '');
-            if (!/^https?:\/\//.test(normalized)) {
-              normalized = `https://${normalized}`;
-            }
-            return normalized;
-          }),
+          endpoint: z
+            .string()
+            .optional()
+            .transform((val) => {
+              if (!val) return val
+              let normalized = val.replace(/\/+$/, '')
+              if (!/^https?:\/\//.test(normalized)) {
+                normalized = `https://${normalized}`
+              }
+              return normalized
+            }),
           forcePathStyle: z.boolean().default(false),
         }),
         quotas: z.object({
