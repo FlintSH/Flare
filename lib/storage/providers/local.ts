@@ -51,6 +51,11 @@ export class LocalStorageProvider implements StorageProvider {
       process.env.NEXTAUTH_URL || 'http://localhost:3000'
     ).replace(/\/+$/, '')
     const cleanPath = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    if (cleanPath.match(/\.(mp4|webm|mov|avi|mkv)$/i)) {
+      return `${baseUrl}/api/files/${cleanPath}`
+    }
+
     return `${baseUrl}/${cleanPath}/raw`
   }
 
