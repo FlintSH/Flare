@@ -103,8 +103,15 @@ export async function GET(
 
     // No range requested
     if (storageProvider instanceof S3StorageProvider) {
-      const fileUrl = await storageProvider.getFileUrl(file.path)
-      return NextResponse.redirect(fileUrl)
+      const stream = await storageProvider.getFileStream(file.path)
+      return new NextResponse(stream as unknown as ReadableStream, {
+        headers: {
+          'Accept-Ranges': 'bytes',
+          'Content-Length': size.toString(),
+          'Content-Type': file.mimeType,
+          'Content-Disposition': `inline; filename="${file.name}"`,
+        },
+      })
     }
 
     // For local files, serve entire file

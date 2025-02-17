@@ -95,8 +95,14 @@ export async function GET(
       )
 
       if (!shouldStream) {
-        const fileUrl = await storageProvider.getFileUrl(file.path)
-        return NextResponse.redirect(fileUrl)
+        const stream = await storageProvider.getFileStream(file.path)
+        return new NextResponse(stream as unknown as ReadableStream, {
+          headers: {
+            'Content-Type': file.mimeType,
+            'Content-Disposition': `inline; filename="${file.name}"`,
+            'Content-Length': (await storageProvider.getFileSize(file.path)).toString(),
+          },
+        })
       }
     }
 

@@ -95,10 +95,7 @@ export class S3StorageProvider implements StorageProvider {
   async getFileUrl(path: string): Promise<string> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
-    if (this.endpoint) {
-      return `${this.endpoint}/${this.bucket}/${key}`
-    }
-
+    // Always use signed URLs to prevent direct S3 access
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
