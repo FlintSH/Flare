@@ -99,9 +99,6 @@
     "typescript": "^5"
   },
   "lint-staged": {
-    "**/*.{ts,tsx,js,jsx,json,md}": [
-      "prettier --write",
-      "prettier --check"
-    ]
+    "**/*.{ts,tsx,js,jsx,json,md}": "prettier --write"
   }
 }

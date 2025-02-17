@@ -100,7 +100,9 @@ export async function GET(
           headers: {
             'Content-Type': file.mimeType,
             'Content-Disposition': `inline; filename="${file.name}"`,
-            'Content-Length': (await storageProvider.getFileSize(file.path)).toString(),
+            'Content-Length': (
+              await storageProvider.getFileSize(file.path)
+            ).toString(),
           },
         })
       }
