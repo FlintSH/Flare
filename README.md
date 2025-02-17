@@ -59,13 +59,9 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
    ```bash
    docker compose up -d
    ```
-5. Run the database migrations:
-   ```bash
-   docker compose exec app npx prisma migrate deploy
-   ```
-6. Open http://localhost:3000 to complete the setup and create your admin account.
+5. Open http://localhost:3000 (or wherever you deployed Flare) to complete the setup and create your admin account.
 
-Pre-built Docker images are available on both Docker Hub and GitHub's Container Registry under `flintsh/flare`.
+Pre-built Docker images are available on both Docker Hub and GitHub under `flintsh/flare`.
 
 ## 📝 Configuration
 
