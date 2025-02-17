@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<!-- Credits to xNefas for the icon, you can find them here: https://github.com/tythebeast-->
+
+<svg
+   width="512"
+   height="512"
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+     id="defs1"><linearGradient
+       id="linearGradient29"><stop
+         style="stop-color:#ffc301;stop-opacity:1;"
+         offset="0"
+         id="stop28" /><stop
+         style="stop-color:#ff2b01;stop-opacity:1;"
+         offset="1"
+         id="stop29" /></linearGradient><linearGradient
+       xlink:href="#linearGradient29"
+       id="linearGradient28"
+       x1="608.60522"
+       y1="487.71616"
+       x2="948.4292"
+       y2="17.017775"
+       gradientUnits="userSpaceOnUse" /></defs><g
+     id="g134"
+     transform="translate(-522)"><path
+       id="path7"
+       d="m 918.33455,369.49003 c -18.57138,57.35093 -70.17216,97.6278 -130.31711,101.72466 -60.14494,4.09686 -116.73079,-28.81071 -142.90763,-83.11355 -26.17687,-54.30298 -16.67626,-119.07195 23.99355,-163.57138 -21.85622,23.91585 -18.12412,61.50882 8.00758,80.66067 26.13171,19.15183 63.10365,11.39072 79.32814,-16.65262 48.18363,-83.28988 -53.86348,-137.55016 68.02121,-248.124713 -20.81334,61.204463 -1.75932,128.905713 47.92138,170.270093 46.32851,38.5734 64.52429,101.45578 45.95288,158.80684 z"
+       stroke="#f8f8f2"
+       stroke-width="0.7 px"
+       style="fill:none;fill-opacity:1;fill-rule:evenodd;stroke:url(#linearGradient28);stroke-width:50;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" /></g><style
+     type="text/css"
+     id="style1">
+.st0{fill:#3FA648;stroke:#23552A;stroke-width:19.2122;stroke-linecap:round;stroke-linejoin:round;}
+.st1{fill:#010101;}
+.st2{fill:none;stroke:#010101;stroke-width:7.5241;stroke-linecap:round;stroke-linejoin:round;}
+</style><style
+     type="text/css"
+     id="style1-0">
+.st0{fill:#3FA648;stroke:#23552A;stroke-width:19.2122;stroke-linecap:round;stroke-linejoin:round;}
+.st1{fill:#010101;}
+.st2{fill:none;stroke:#010101;stroke-width:7.5241;stroke-linecap:round;stroke-linejoin:round;}
+</style></svg>

@@ -1,0 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+    overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-inter);
+  overflow-x: hidden;
+  width: 100vw;
+  max-width: 100%;
+}
+
+.flare-text {
+  font-family: var(--font-inter);
+  font-weight: 800;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Glassmorphism Effects */
+.glass {
+  @apply bg-background/80 backdrop-blur-lg border border-white/10;
+}
+
+.glass-hover {
+  @apply hover:bg-background/90 transition-colors duration-200;
+}
+
+.glass-card {
+  @apply glass rounded-lg shadow-lg;
+}
+
+/* Custom Gradients */
+.gradient-border {
+  @apply border border-transparent bg-gradient-to-r from-primary/50 via-primary/25 to-transparent;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+.gradient-bg {
+  @apply bg-gradient-to-br from-background via-background/95 to-primary/10;
+}
+
+/* Animation Utilities */
+.animate-fade-in {
+  @apply animate-in fade-in duration-500;
+}
+
+.animate-slide-in {
+  @apply animate-in slide-in-from-bottom-4 duration-500;
+}
+
+/* Custom Scrollbar */
+@layer utilities {
+  .scrollbar-custom {
+    @apply scrollbar-thin scrollbar-track-transparent scrollbar-thumb-primary/20 hover:scrollbar-thumb-primary/30;
+  }
+}
+
+/* Customize scrollbar for Webkit browsers (Chrome, Safari, etc.) */
+::-webkit-scrollbar {
+  width: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground));
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground)) transparent;
+}

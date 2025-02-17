@@ -1,0 +1,91 @@
+name: Docker Test
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  docker-build-test:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: flare:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker container
+        run: |
+          # Create network
+          docker network create flare-network
+
+          # Start PostgreSQL
+          docker run -d --name postgres \
+            --network flare-network \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=flare_test \
+            postgres:16
+
+          # Wait for PostgreSQL to be ready
+          timeout=30
+          while [ $timeout -gt 0 ]; do
+            if docker exec postgres pg_isready -U postgres; then
+              break
+            fi
+            sleep 1
+            timeout=$((timeout-1))
+          done
+          if [ $timeout -eq 0 ]; then
+            echo "PostgreSQL failed to become ready"
+            exit 1
+          fi
+
+          # Run migrations
+          docker run --rm \
+            --network flare-network \
+            -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
+            flare:test \
+            npx prisma migrate deploy
+
+          # Start the application
+          docker run --name flare-test -d \
+            -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
+            -e NEXTAUTH_SECRET=test-secret \
+            -e NEXTAUTH_URL=http://localhost:3000 \
+            --network flare-network \
+            flare:test
+          
+          # Wait for container to be healthy
+          timeout=60
+          while [ $timeout -gt 0 ]; do
+            if docker inspect flare-test --format='{{.State.Health.Status}}' | grep -q healthy; then
+              echo "Container is healthy"
+              exit 0
+            fi
+            sleep 1
+            timeout=$((timeout-1))
+          done
+          echo "Container failed to become healthy"
+          docker logs flare-test
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop flare-test postgres || true
+          docker rm flare-test postgres || true
+          docker network rm flare-network || true 
