@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-import { checkAuthentication } from './modules/auth-checker'
-import { handleBotRequest } from './modules/bot-handler'
-import { PUBLIC_PATHS } from './modules/constants'
-import { checkSetupStatus, handleSetupRedirect } from './modules/setup-checker'
+import { checkAuthentication } from './lib/middleware/auth-checker'
+import { handleBotRequest } from './lib/middleware/bot-handler'
+import { PUBLIC_PATHS } from './lib/middleware/constants'
+import { checkSetupStatus, handleSetupRedirect } from './lib/middleware/setup-checker'
 
 export async function middleware(request: NextRequest) {
   // Early return for raw endpoints
@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check if path is public
-  if (PUBLIC_PATHS.some((path) => request.nextUrl.pathname.startsWith(path))) {
+  if (PUBLIC_PATHS.some((path: string) => request.nextUrl.pathname.startsWith(path))) {
     return NextResponse.next()
   }
 
@@ -51,4 +51,4 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
-}
+} 
