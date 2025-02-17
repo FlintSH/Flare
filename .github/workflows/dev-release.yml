@@ -70,22 +70,6 @@ jobs:
             ```bash
             docker pull flintsh/flare:dev
             ```
-
-            Required environment variables:
-            - DATABASE_URL: PostgreSQL connection string
-            - NEXTAUTH_SECRET: Secret for NextAuth.js
-            - NEXTAUTH_URL: Your application URL
-
-            Quick start:
-            ```bash
-            docker run -d \
-              -e DATABASE_URL=postgresql://user:pass@host:5432/db \
-              -e NEXTAUTH_SECRET=your-secret \
-              -e NEXTAUTH_URL=http://localhost:3000 \
-              ghcr.io/flintsh/flare:dev
-            ```
-
-            Commit: ${GITHUB_SHA::7}
         run: |
           # Create new tag
           git tag -f development
