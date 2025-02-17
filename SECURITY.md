@@ -13,11 +13,7 @@ I currently maintain security updates for:
 
 Found a security issue in Flare? Thanks for looking out! You can report it in two ways:
 
-1. **GitHub Security Advisory** (Preferred)
-
-   - Go to `Security` > `Advisories` > `New draft security advisory`
-   - This keeps things private until we can fix the issue
-   - I'll get notified immediately and respond within 48 hours
+1. Click **Report a vulnerability** in the top right corner.
 
 2. **Email**
    - If you prefer email: me@fl1nt.dev
