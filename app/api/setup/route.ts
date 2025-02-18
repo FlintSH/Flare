@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { hash } from 'bcryptjs'
+import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 
 import { updateConfig } from '@/lib/config'
@@ -76,6 +77,7 @@ export async function POST(req: Request) {
         role: 'ADMIN',
         emailVerified: new Date(), // Auto-verify admin email
         urlId, // Use the generated URL ID
+        uploadToken: uuidv4(),
       },
     })
 

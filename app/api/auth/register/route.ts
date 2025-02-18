@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { hash } from 'bcryptjs'
 import { nanoid } from 'nanoid'
+import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 
 import { getConfig } from '@/lib/config'
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
         password: await hash(body.password, 10),
         urlId,
         role: isFirstUser ? 'ADMIN' : 'USER',
+        uploadToken: uuidv4(),
       },
     })
 

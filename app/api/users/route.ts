@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { hash } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
+import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
@@ -124,6 +125,7 @@ export async function POST(req: Request) {
         password: body.password ? await hash(body.password, 10) : undefined,
         role: body.role,
         urlId,
+        uploadToken: uuidv4(),
       },
       select: {
         id: true,

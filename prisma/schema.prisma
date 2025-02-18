@@ -26,7 +26,7 @@ model User {
   vanityId      String?   @unique // TODO: For custom URLs
   urlId         String    @unique // 5-character random ID for URLs
   shortenedUrls ShortenedUrl[]
-  uploadToken   String    @unique @default(cuid()) // Permanent token for upload authentication
+  uploadToken   String    @unique // Permanent token for upload authentication
 }
 
 model File {
