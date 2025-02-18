@@ -144,8 +144,12 @@ export async function POST(req: Request) {
       })
     }
 
+    // Ensure URL has protocol and handle trailing slashes
+    const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+    const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+
     return NextResponse.json({
-      url: `${process.env.NEXTAUTH_URL}${urlPath}`,
+      url: `${fullUrl}${urlPath}`,
       name: displayName,
       size: uploadedFile.size,
       type: uploadedFile.type,
