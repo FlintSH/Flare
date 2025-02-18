@@ -211,6 +211,7 @@ interface UserFormData {
   email: string
   password?: string
   role: 'ADMIN' | 'USER'
+  urlId?: string
 }
 
 function getPaginationRange(
@@ -542,6 +543,7 @@ export function UserList() {
       name: user.name,
       email: user.email,
       role: user.role,
+      urlId: user.urlId,
     })
     setIsDialogOpen(true)
   }
@@ -1025,6 +1027,28 @@ export function UserList() {
                   </SelectContent>
                 </Select>
               </div>
+              {editingUser && (
+                <div className="space-y-2">
+                  <Label htmlFor="urlId">
+                    URL ID
+                    <span className="text-sm text-muted-foreground ml-2">
+                      (5 characters, alphanumeric)
+                    </span>
+                  </Label>
+                  <Input
+                    id="urlId"
+                    value={formData.urlId || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.toUpperCase()
+                      if (/^[A-Z0-9]*$/.test(value) && value.length <= 5) {
+                        setFormData({ ...formData, urlId: value })
+                      }
+                    }}
+                    placeholder="e.g. ABC12"
+                    maxLength={5}
+                  />
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="submit">

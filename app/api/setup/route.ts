@@ -6,10 +6,10 @@ import { z } from 'zod'
 import { updateConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 
-// Generate a URL-safe ID that's 4 characters long
+// Generate a URL-safe ID that's 5 characters long
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  return Array.from({ length: 4 }, () => {
+  return Array.from({ length: 5 }, () => {
     return alphabet.charAt(Math.floor(Math.random() * alphabet.length))
   }).join('')
 }

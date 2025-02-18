@@ -1,5 +1,13 @@
 import { createReadStream, createWriteStream } from 'fs'
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'fs/promises'
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'fs/promises'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
 import { join } from 'path'
 
@@ -136,5 +144,20 @@ export class LocalStorageProvider implements StorageProvider {
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
     return createWriteStream(fullPath)
+  }
+
+  async renameFolder(oldPath: string, newPath: string): Promise<void> {
+    const fullOldPath = oldPath.startsWith('public/')
+      ? oldPath
+      : join(process.cwd(), oldPath)
+    const fullNewPath = newPath.startsWith('public/')
+      ? newPath
+      : join(process.cwd(), newPath)
+
+    // Create the new directory if it doesn't exist
+    await mkdir(fullNewPath, { recursive: true })
+
+    // Move the directory
+    await rename(fullOldPath, fullNewPath)
   }
 }

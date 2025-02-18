@@ -17,6 +17,7 @@ export interface StorageProvider {
   getFileStream(path: string, range?: RangeOptions): Promise<Readable>
   getFileUrl(path: string): Promise<string>
   getFileSize(path: string): Promise<number>
+  renameFolder(oldPath: string, newPath: string): Promise<void>
 }
 
 export interface S3Config {

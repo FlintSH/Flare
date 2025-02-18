@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { getStorageProvider } from '@/lib/storage'
 
 const userSchema = z.object({
   id: z.string().optional(),
@@ -13,6 +14,10 @@ const userSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   role: z.enum(['ADMIN', 'USER']),
+  urlId: z
+    .string()
+    .regex(/^[A-Z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
+    .optional(),
 })
 
 export async function GET(req: Request) {
@@ -91,9 +96,9 @@ export async function POST(req: Request) {
       )
     }
 
-    // Generate a unique URL ID (4 characters)
+    // Generate a unique URL ID (5 characters)
     const generateUrlId = () =>
-      Array.from({ length: 4 }, () => {
+      Array.from({ length: 5 }, () => {
         const chars =
           '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
         return chars.charAt(Math.floor(Math.random() * chars.length))
@@ -177,6 +182,19 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // Check if the URL ID is already in use by another user
+    if (body.urlId) {
+      const existingUrlId = await prisma.user.findUnique({
+        where: { urlId: body.urlId },
+      })
+      if (existingUrlId && existingUrlId.id !== body.id) {
+        return NextResponse.json(
+          { error: 'URL ID is already in use' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Only update fields that are provided and handle password separately
     const updateData = {
       updatedAt: new Date(),
@@ -184,6 +202,43 @@ export async function PUT(req: Request) {
       ...(body.email !== undefined && { email: body.email }),
       ...(body.role !== undefined && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
+      ...(body.urlId && { urlId: body.urlId }),
+    }
+
+    // If URL ID is changing, we need to rename the user's upload folder
+    if (body.urlId && body.urlId !== existingUser.urlId) {
+      try {
+        const storageProvider = await getStorageProvider()
+        const oldPath = `uploads/${existingUser.urlId}`
+        const newPath = `uploads/${body.urlId}`
+        await storageProvider.renameFolder(oldPath, newPath)
+
+        // Update file paths in the database
+        const files = await prisma.file.findMany({
+          where: { userId: body.id },
+          select: { id: true, path: true, urlPath: true },
+        })
+
+        // Update each file's paths
+        for (const file of files) {
+          await prisma.file.update({
+            where: { id: file.id },
+            data: {
+              path: file.path.replace(`${oldPath}/`, `${newPath}/`),
+              urlPath: file.urlPath.replace(
+                `/${existingUser.urlId}/`,
+                `/${body.urlId}/`
+              ),
+            },
+          })
+        }
+      } catch (error) {
+        console.error('Error renaming user folder:', error)
+        return NextResponse.json(
+          { error: 'Failed to rename user folder' },
+          { status: 500 }
+        )
+      }
     }
 
     const user = await prisma.user.update({

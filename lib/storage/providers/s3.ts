@@ -1,10 +1,12 @@
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -312,5 +314,57 @@ export class S3StorageProvider implements StorageProvider {
     })
 
     return passThrough
+  }
+
+  async renameFolder(oldPath: string, newPath: string): Promise<void> {
+    const oldPrefix =
+      oldPath
+        .replace(/^\/+/, '')
+        .replace(/^uploads\//, '')
+        .replace(/\/$/, '') + '/'
+    const newPrefix =
+      newPath
+        .replace(/^\/+/, '')
+        .replace(/^uploads\//, '')
+        .replace(/\/$/, '') + '/'
+
+    let continuationToken: string | undefined
+
+    do {
+      const listCommand = new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: oldPrefix,
+        ContinuationToken: continuationToken,
+      })
+
+      const response = await this.client.send(listCommand)
+      const objects = response.Contents || []
+
+      // Copy each object to the new location
+      await Promise.all(
+        objects.map(async (object) => {
+          if (!object.Key) return
+
+          const newKey = object.Key.replace(oldPrefix, newPrefix)
+          await this.client.send(
+            new CopyObjectCommand({
+              Bucket: this.bucket,
+              CopySource: `${this.bucket}/${object.Key}`,
+              Key: newKey,
+            })
+          )
+
+          // Delete the old object
+          await this.client.send(
+            new DeleteObjectCommand({
+              Bucket: this.bucket,
+              Key: object.Key,
+            })
+          )
+        })
+      )
+
+      continuationToken = response.NextContinuationToken
+    } while (continuationToken)
   }
 }

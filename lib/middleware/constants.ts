@@ -1,4 +1,4 @@
-export const FILE_URL_PATTERN = /^\/[A-Za-z0-9]{4}\/[^\/]+\.[^\/]+(?:\/raw)?$/
+export const FILE_URL_PATTERN = /^\/[A-Za-z0-9]{5}\/[^\/]+\.[^\/]+(?:\/raw)?$/
 
 export const PUBLIC_PATHS = [
   '/api/auth',

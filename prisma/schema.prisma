@@ -23,8 +23,8 @@ model User {
   storageUsed   Float     @default(0)  // Total storage used in megabytes
   sessionVersion Int      @default(1)   // Used to invalidate all sessions
   files         File[]
-  vanityId      String?   @unique // For custom URLs
-  urlId         String    @unique // 4-character random ID for URLs
+  vanityId      String?   @unique // TODO: For custom URLs
+  urlId         String    @unique // 5-character random ID for URLs
   shortenedUrls ShortenedUrl[]
   uploadToken   String    @unique @default(cuid()) // Permanent token for upload authentication
 }

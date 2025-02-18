@@ -13,10 +13,10 @@ const registerSchema = z.object({
   name: z.string().min(2),
 })
 
-// Generate a URL-safe ID that's 4 characters long
+// Generate a URL-safe ID that's 5 characters long
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  return nanoid(4)
+  return nanoid(5)
     .split('')
     .map((char) => {
       // map to our custom one
