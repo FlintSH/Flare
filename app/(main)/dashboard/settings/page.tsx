@@ -15,6 +15,7 @@ import {
   InfoIcon,
   Upload,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDebounce } from 'use-debounce'
 
 import { Icons } from '@/components/shared/icons'
@@ -154,6 +155,25 @@ function SettingsSkeleton() {
       </div>
     </div>
   )
+}
+
+async function queueOCRProcessing() {
+  try {
+    const response = await fetch('/api/settings/ocr', {
+      method: 'POST',
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to queue OCR processing')
+    }
+
+    const data = await response.json()
+    toast.success(
+      `Successfully queued ${data.queuedFiles} files for OCR processing`
+    )
+  } catch (error) {
+    toast.error('Failed to queue OCR processing')
+  }
 }
 
 export default function SettingsPage() {
@@ -314,10 +334,31 @@ export default function SettingsPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-8">
-      <div>
+      <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Configure your Flare instance</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Instance Actions</CardTitle>
+          <CardDescription>
+            Perform maintenance actions on your Flare instance
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-medium">Queue OCR Processing</h3>
+              <p className="text-sm text-muted-foreground">
+                Process all unprocessed image files with OCR
+              </p>
+            </div>
+            <Button onClick={queueOCRProcessing} variant="secondary">
+              Process Images
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="general" className="space-y-4">
         <TabsList>

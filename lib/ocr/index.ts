@@ -24,3 +24,6 @@ export function getOCRQueueStatus() {
     activeProcesses: ocrQueue.getActiveProcesses(),
   }
 }
+
+// Export the queue instance
+export { ocrQueue }
