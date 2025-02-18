@@ -17,7 +17,7 @@ const userSchema = z.object({
   role: z.enum(['ADMIN', 'USER']),
   urlId: z
     .string()
-    .regex(/^[A-Z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
+    .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
     .optional(),
 })
 
