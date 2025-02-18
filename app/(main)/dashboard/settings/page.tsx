@@ -171,7 +171,7 @@ async function queueOCRProcessing() {
     toast.success(
       `Successfully queued ${data.queuedFiles} files for OCR processing`
     )
-  } catch (error) {
+  } catch {
     toast.error('Failed to queue OCR processing')
   }
 }
