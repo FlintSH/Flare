@@ -15,6 +15,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Early return for shortened URLs
+  if (request.nextUrl.pathname.startsWith('/u/')) {
+    return NextResponse.next()
+  }
+
   // Check if path is public
   if (
     PUBLIC_PATHS.some((path: string) =>
