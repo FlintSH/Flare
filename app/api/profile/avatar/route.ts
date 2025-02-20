@@ -77,18 +77,18 @@ export async function POST(req: Request) {
       .toBuffer()
 
     const storageProvider = await getStorageProvider()
-    const avatarPath = join('uploads', 'avatars', `${session.user.id}.jpg`)
-    let publicPath = `/api/avatars/${session.user.id}.jpg`
+    const avatarFilename = `${session.user.id}.jpg`
+    const avatarPath = join('avatars', avatarFilename)
+    let publicPath = `/api/avatars/${avatarFilename}`
 
     // Delete old avatar if it exists
     if (user?.image?.startsWith('/api/avatars/')) {
       try {
-        const oldPath = join(
-          'uploads',
-          'avatars',
-          user.image.split('/').pop() || ''
-        )
-        await storageProvider.deleteFile(oldPath)
+        const oldFilename = user.image.split('/').pop()
+        if (oldFilename) {
+          const oldPath = join('avatars', oldFilename)
+          await storageProvider.deleteFile(oldPath)
+        }
       } catch (error) {
         console.error('Failed to delete old avatar:', error)
       }
@@ -99,9 +99,7 @@ export async function POST(req: Request) {
 
     // If using S3, get the direct URL
     if (storageProvider instanceof S3StorageProvider) {
-      // Remove the /uploads prefix since it's not needed for the public URL
-      const s3Path = avatarPath.replace(/^uploads\//, '')
-      publicPath = await storageProvider.getFileUrl(s3Path)
+      publicPath = await storageProvider.getFileUrl(avatarPath)
     }
 
     // Update user record with the public URL

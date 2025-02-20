@@ -29,12 +29,16 @@ export async function DELETE(
       return new NextResponse('User not found', { status: 404 })
     }
 
-    // Only delete if it's a local avatar
-    if (user.image?.startsWith('/avatars/')) {
+    // Delete if it's a local or S3 avatar (starting with /api/avatars/)
+    if (user.image?.startsWith('/api/avatars/')) {
       try {
         const storageProvider = await getStorageProvider()
-        const avatarPath = join('public', user.image.slice(1))
-        await storageProvider.deleteFile(avatarPath)
+        // Extract just the filename from the path and construct the avatars path
+        const filename = user.image.split('/').pop()
+        if (filename) {
+          const avatarPath = join('avatars', filename)
+          await storageProvider.deleteFile(avatarPath)
+        }
       } catch (error) {
         console.error('Error deleting avatar file:', error)
       }
