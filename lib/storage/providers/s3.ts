@@ -56,6 +56,7 @@ export class S3StorageProvider implements StorageProvider {
         Key: key,
         Body: file,
         ContentType: mimeType,
+        ACL: key.startsWith('avatars/') ? 'public-read' : undefined,
       })
     )
   }
@@ -97,7 +98,15 @@ export class S3StorageProvider implements StorageProvider {
   async getFileUrl(path: string): Promise<string> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
-    // Always use signed URLs to prevent direct S3 access
+    // For avatars, return a public URL
+    if (key.startsWith('avatars/')) {
+      if (this.endpoint) {
+        return `${this.endpoint}/${this.bucket}/${key}`
+      }
+      return `https://${this.bucket}.s3.amazonaws.com/${key}`
+    }
+
+    // For other files, use signed URLs to prevent direct S3 access
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
