@@ -9,8 +9,7 @@ export async function GET() {
       enabled: config.settings.general.registrations.enabled,
       message: config.settings.general.registrations.disabledMessage,
     })
-  } catch (error) {
-    console.error('Error checking registration status:', error)
+  } catch {
     // If we can't verify the config, return disabled for safety
     return NextResponse.json({
       enabled: false,

@@ -35,8 +35,6 @@ export function LoginForm({
     const email = formData.get('email') as string
     const password = formData.get('password') as string
 
-    console.log('[Login] Attempting login for email:', email)
-
     try {
       const result = await signIn('credentials', {
         email,
@@ -45,22 +43,13 @@ export function LoginForm({
         callbackUrl: '/dashboard',
       })
 
-      console.log('[Login] Sign in result:', {
-        ok: result?.ok,
-        error: result?.error,
-        url: result?.url,
-      })
-
       if (result?.error) {
-        console.log('[Login] Login failed:', result.error)
         setError('Invalid email or password')
         return
       }
 
-      console.log('[Login] Login successful, redirecting to dashboard')
       router.push((result?.url as string) || '/dashboard')
-    } catch (error) {
-      console.error('[Login] Unexpected error during login:', error)
+    } catch {
       setError('An error occurred. Please try again.')
     } finally {
       setIsLoading(false)
