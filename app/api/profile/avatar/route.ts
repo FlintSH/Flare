@@ -99,7 +99,9 @@ export async function POST(req: Request) {
 
     // If using S3, get the direct URL
     if (storageProvider instanceof S3StorageProvider) {
-      publicPath = await storageProvider.getFileUrl(avatarPath)
+      // Remove the /uploads prefix since it's not needed for the public URL
+      const s3Path = avatarPath.replace(/^uploads\//, '')
+      publicPath = await storageProvider.getFileUrl(s3Path)
     }
 
     // Update user record with the public URL

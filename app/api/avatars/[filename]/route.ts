@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { filename } = await params
-    const filepath = join('uploads', 'avatars', filename)
+    const filepath = join('avatars', filename)
 
     const storageProvider = await getStorageProvider()
 
@@ -19,7 +19,8 @@ export async function GET(
       return NextResponse.redirect(fileUrl)
     }
 
-    const stream = await storageProvider.getFileStream(filepath)
+    const localFilepath = join('uploads', filepath)
+    const stream = await storageProvider.getFileStream(localFilepath)
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {
