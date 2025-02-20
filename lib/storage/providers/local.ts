@@ -9,9 +9,32 @@ import {
   writeFile,
 } from 'fs/promises'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
-import { join } from 'path'
+import { isAbsolute, join, normalize } from 'path'
 
 import type { RangeOptions, StorageProvider } from '../types'
+
+// Utility function to validate storage paths
+function validateStoragePath(path: string): string {
+  // Normalize the path and convert to forward slashes
+  const normalizedPath = normalize(path).replace(/\\/g, '/')
+
+  // Ensure the path is relative and doesn't try to traverse up
+  if (isAbsolute(normalizedPath) || normalizedPath.includes('..')) {
+    throw new Error('Invalid storage path: Path traversal detected')
+  }
+
+  // Ensure the path is within the allowed storage directories
+  if (
+    !normalizedPath.startsWith('uploads/') &&
+    !normalizedPath.startsWith('public/')
+  ) {
+    throw new Error(
+      'Invalid storage path: Path must be within allowed directories'
+    )
+  }
+
+  return normalizedPath
+}
 
 export class LocalStorageProvider implements StorageProvider {
   private activeWriteStreams = new Map<
@@ -27,9 +50,8 @@ export class LocalStorageProvider implements StorageProvider {
     path: string,
     mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
   ): Promise<void> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
     await writeFile(fullPath, file)
@@ -137,10 +159,12 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async createWriteStream(path: string): Promise<NodeWritable> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+  async createWriteStream(
+    path: string,
+    mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
+  ): Promise<NodeWritable> {
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
     return createWriteStream(fullPath)

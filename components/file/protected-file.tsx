@@ -16,6 +16,8 @@ import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
 import { Button } from '@/components/ui/button'
 
+import { sanitizeUrl } from '@/lib/utils/url'
+
 interface ProtectedFileProps {
   file: {
     id: string
@@ -357,7 +359,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
   const fetchCodeContent = useCallback(async () => {
     if (CODE_FILE_TYPES[file.mimeType] && !codeContent) {
       const response = await fetch(
-        `/api/files${file.urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+        `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
       )
       const text = await response.text()
       setCodeContent(text)
@@ -371,7 +373,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
         fetchCodeContent()
       } else if (TEXT_FILE_TYPES.includes(file.mimeType) && !codeContent) {
         fetch(
-          `/api/files${file.urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
         )
           .then((response) => response.text())
           .then((text) => setCodeContent(text))
@@ -407,7 +409,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
   if (file.password && !isOwner && !isVerified) {
     const verifyPassword = async (password: string) => {
       const response = await fetch(
-        `/api/files${file.urlPath}?password=${password}`
+        `/api/files${sanitizeUrl(file.urlPath)}?password=${password}`
       )
       if (response.ok) {
         setVerifiedPassword(password)
@@ -428,8 +430,8 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       {/* File content */}
       <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
         {(() => {
-          const fileUrl = `/api/files${file.urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-          const rawUrl = `${file.urlPath}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          const fileUrl = `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          const rawUrl = `${sanitizeUrl(file.urlPath)}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
 
           // Image files
           if (file.mimeType.startsWith('image/')) {
@@ -570,7 +572,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       {/* Actions */}
       <div className="p-6 border-t bg-muted/50">
         <FileActions
-          urlPath={file.urlPath}
+          urlPath={sanitizeUrl(file.urlPath)}
           name={file.name}
           verifiedPassword={verifiedPassword}
           showOcr={file.mimeType.startsWith('image/')}

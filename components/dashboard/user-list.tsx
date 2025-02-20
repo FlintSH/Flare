@@ -86,6 +86,7 @@ import {
 
 import { formatFileSize } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { sanitizeUrl } from '@/lib/utils/url'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -1154,7 +1155,7 @@ export function UserList() {
                           <TableCell className="font-medium max-w-[300px]">
                             <div className="flex items-center justify-between gap-2">
                               <a
-                                href={file.urlPath}
+                                href={sanitizeUrl(file.urlPath)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:underline flex items-center gap-2 truncate"

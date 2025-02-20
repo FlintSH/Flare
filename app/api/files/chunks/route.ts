@@ -134,8 +134,22 @@ export async function POST(req: Request) {
         filename
       )
 
-      const filePath = join('uploads', user.urlId, urlSafeName)
-      const urlPath = `/${user.urlId}/${urlSafeName}`
+      // Construct paths with validation
+      let filePath: string
+      let urlPath: string
+      try {
+        filePath = join('uploads', user.urlId, urlSafeName)
+        if (!filePath.startsWith(join('uploads', user.urlId))) {
+          throw new Error('Invalid file path: Path traversal detected')
+        }
+        urlPath = `/${user.urlId}/${urlSafeName}`
+      } catch (error) {
+        console.error('Path validation error:', error)
+        return NextResponse.json(
+          { error: 'Invalid file path' },
+          { status: 400 }
+        )
+      }
 
       // Initialize the write stream
       const storageProvider = await getStorageProvider()

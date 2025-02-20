@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/tooltip'
 
 import { formatFileSize } from '@/lib/utils'
+import { sanitizeUrl } from '@/lib/utils/url'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -160,7 +161,8 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}${file.urlPath}`)
+    const safeUrl = sanitizeUrl(file.urlPath)
+    navigator.clipboard.writeText(`${window.location.origin}${safeUrl}`)
     toast({
       title: 'Link copied',
       description: 'File link has been copied to clipboard',
@@ -293,7 +295,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
     <Card className="group relative overflow-hidden">
       {/* Preview Section */}
       <div className="relative">
-        <a href={file.urlPath} className="block">
+        <Link href={sanitizeUrl(file.urlPath)} className="block">
           {isImage ? (
             <div className="relative aspect-square">
               <Image
@@ -321,7 +323,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
               {getFileIcon(file.mimeType, 'h-16 w-16 text-muted-foreground')}
             </div>
           )}
-        </a>
+        </Link>
 
         {/* Overlay with quick actions */}
         <div
@@ -329,7 +331,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         >
           {/* Primary View button */}
           <Button variant="secondary" className="glass-hover" size="sm" asChild>
-            <Link href={file.urlPath}>View</Link>
+            <Link href={sanitizeUrl(file.urlPath)}>View</Link>
           </Button>
 
           {/* Action buttons row */}
@@ -357,7 +359,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                     asChild
                   >
                     <a
-                      href={`/api/files${file.urlPath}?download=true`}
+                      href={`/api/files${sanitizeUrl(file.urlPath)}?download=true`}
                       download={file.name}
                     >
                       <Download className="h-4 w-4" />
@@ -477,7 +479,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  href={file.urlPath}
+                  href={sanitizeUrl(file.urlPath)}
                   className="font-medium hover:underline truncate block text-sm"
                 >
                   {file.name}
