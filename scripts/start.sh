@@ -46,7 +46,7 @@ fi
 
 # Run config migrations
 echo "Running config migrations..."
-if ! npx ts-node lib/config/migrate.ts; then
+if ! node scripts/migrate-config.mjs; then
     echo "Failed to run config migrations"
     exit 1
 fi
