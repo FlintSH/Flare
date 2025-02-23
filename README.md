@@ -45,23 +45,30 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-1. Clone the repository and enter the project directory:
-   ```bash
-   git clone https://github.com/FlintSH/flare.git
-   cd flare
-   ```
-2. Copy the sample environment file:
-   ```bash
-   cp .env.example .env
-   ```
-3. Update environment variables (e.g. NEXTAUTH_SECRET and DATABASE_URL) to point to your Postgres server and secure your instance with a secret key.
-4. Launch Flare (which runs PostgreSQL) with:
-   ```bash
-   docker compose up -d
-   ```
-5. Open http://localhost:3000 (or wherever you deployed Flare) to complete the setup and create your admin account.
+1. Set up a PostgreSQL server and create a database for Flare.
 
-Pre-built Docker images are available on both Docker Hub and GitHub under `flintsh/flare`.
+2. Create a `.env` file with the following required variables:
+
+   ```bash
+   DATABASE_URL=postgresql://user:pass@host:5432/dbname # (replace with your PostgreSQL connection string)
+   NEXTAUTH_SECRET=your-secure-secret-key # (generate with `openssl rand -base64 32`)
+   NEXTAUTH_URL=http://localhost:3000 # (or wherever you deploy Flare)
+   ```
+
+3. Run Flare using the pre-built Docker image:
+
+   ```bash
+   docker run -d \
+     --name flare \
+     -p 3000:3000 \
+     --env-file .env \
+     -v ./uploads:/app/uploads \
+     flintsh/flare:latest
+   ```
+
+4. Open http://localhost:3000 to complete the setup and create your admin account.
+
+The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
 
 ## 💬 Support
 
