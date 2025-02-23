@@ -46,7 +46,7 @@ fi
 
 # Run config migrations
 echo "Running config migrations..."
-if ! node lib/config/migrate.js; then
+if ! node /app/scripts/migrate-config.js; then
     echo "Failed to run config migrations"
     exit 1
 fi
