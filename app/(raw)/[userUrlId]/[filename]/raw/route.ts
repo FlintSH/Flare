@@ -7,6 +7,14 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 
+// Helper function to encode filename for Content-Disposition header
+function encodeFilename(filename: string): string {
+  // First encode as URI component to handle special characters
+  const encoded = encodeURIComponent(filename)
+  // Then wrap in quotes and escape quotes in filename
+  return `"${encoded.replace(/"/g, '\\"')}"`
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ userUrlId: string; filename: string }> }
@@ -73,7 +81,7 @@ export async function GET(
           'Accept-Ranges': 'bytes',
           'Content-Length': chunkSize.toString(),
           'Content-Type': file.mimeType,
-          'Content-Disposition': `inline; filename="${file.name}"`,
+          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         }
 
         return new NextResponse(response.body, {
@@ -92,7 +100,7 @@ export async function GET(
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
-        'Content-Disposition': `inline; filename="${file.name}"`,
+        'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
       }
 
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -109,7 +117,7 @@ export async function GET(
           'Accept-Ranges': 'bytes',
           'Content-Length': size.toString(),
           'Content-Type': file.mimeType,
-          'Content-Disposition': `inline; filename="${file.name}"`,
+          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         },
       })
     }
@@ -120,7 +128,7 @@ export async function GET(
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'Content-Type': file.mimeType,
-      'Content-Disposition': `inline; filename="${file.name}"`,
+      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
     }
 
     return new NextResponse(stream as unknown as ReadableStream, { headers })

@@ -7,6 +7,14 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 
+// Helper function to encode filename for Content-Disposition header
+function encodeFilename(filename: string): string {
+  // First encode as URI component to handle special characters
+  const encoded = encodeURIComponent(filename)
+  // Then wrap in quotes and escape quotes in filename
+  return `"${encoded.replace(/"/g, '\\"')}"`
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -69,7 +77,7 @@ export async function GET(
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
-        'Content-Disposition': `inline; filename="${file.name}"`,
+        'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
       }
 
@@ -83,7 +91,7 @@ export async function GET(
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Content-Type': file.mimeType,
-      'Content-Disposition': `inline; filename="${file.name}"`,
+      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
