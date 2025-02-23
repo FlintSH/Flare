@@ -45,7 +45,7 @@ export function FileActions({
 
   const handleCopyUrl = () => {
     if (!urls) return
-    navigator.clipboard.writeText(window.location.origin + urls.fileUrl)
+    navigator.clipboard.writeText(window.location.origin + urlPath)
     toast({
       title: 'URL copied',
       description: 'File URL has been copied to clipboard',
