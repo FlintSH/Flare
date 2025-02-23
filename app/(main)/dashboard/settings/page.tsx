@@ -517,7 +517,8 @@ export default function SettingsPage() {
                 <div className="space-y-0.5">
                   <Label>Background OCR Processing</Label>
                   <p className="text-sm text-muted-foreground">
-                    Enable automatic OCR processing for uploaded images
+                    Enable OCR to allow searching through text content in
+                    uploaded images.
                   </p>
                 </div>
                 <Switch
