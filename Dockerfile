@@ -21,9 +21,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application and compile migration script
+# Build the application
 RUN npm run build
-RUN npx tsc lib/config/migrate.ts --outDir dist --esModuleInterop true --module commonjs
 
 # Stage 3: Runner
 FROM node:22-alpine AS runner
@@ -50,7 +49,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist/config/migrate.js ./lib/config/migrate.js
+COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/scripts/start.sh ./start.sh
 
 # Set correct permissions
