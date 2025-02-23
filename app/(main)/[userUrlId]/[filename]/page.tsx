@@ -79,10 +79,13 @@ function prepareFileProps(file: PrismaFile) {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: FilePageProps): Promise<Metadata> {
   const { userUrlId, filename } = await params
   const urlPath = `/${userUrlId}/${filename}`
   const headersList = await headers()
+  const session = await getServerSession(authOptions)
+  const providedPassword = (await searchParams).password as string | undefined
 
   // Skip metadata for /raw requests
   const path = headersList.get('x-invoke-path') || ''
@@ -97,6 +100,35 @@ export async function generateMetadata({
 
   if (!file || !file.user) {
     return {}
+  }
+
+  const isOwner = session?.user?.id === file.userId
+  const isPrivate = file.visibility === 'PRIVATE' && !isOwner
+
+  // Return minimal metadata if file is private or needs password
+  if (isPrivate || (file.password && !isOwner)) {
+    return {
+      title: 'Protected File - Flare',
+      description: 'This file is protected',
+    }
+  }
+
+  // If password protected, verify password is correct
+  if (file.password && !isOwner) {
+    if (!providedPassword) {
+      return {
+        title: 'Protected File - Flare',
+        description: 'This file is protected',
+      }
+    }
+
+    const isPasswordValid = await compare(providedPassword, file.password)
+    if (!isPasswordValid) {
+      return {
+        title: 'Protected File - Flare',
+        description: 'This file is protected',
+      }
+    }
   }
 
   const cleanFile = {
