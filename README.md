@@ -63,6 +63,10 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 Pre-built Docker images are available on both Docker Hub and GitHub under `flintsh/flare`.
 
+## 💬 Support
+
+Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) for support, discussions, and updates!
+
 ## 📝 Configuration
 
 Flare is built to be really configurable. Head to `/dashboard/settings` to tweak different settings like:
@@ -70,7 +74,7 @@ Flare is built to be really configurable. Head to `/dashboard/settings` to tweak
 - Setting storage quotas and file size limits for users
 - Defining upload rules and restrictions
 - Configuring registration options and user permissions
-- Customizing the site’s appearance and branding
+- Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 
 For more details on each setting, visit the [Docs](https://flare.fl1nt.dev) (coming soon).
