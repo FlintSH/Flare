@@ -46,7 +46,7 @@ fi
 
 # Run config migrations
 echo "Running config migrations..."
-if ! node -e 'require("./lib/config/migrate.js").migrateConfig()'; then
+if ! node -e 'require("./lib/config/migrate").migrateConfig()'; then
     echo "Failed to run config migrations"
     exit 1
 fi
