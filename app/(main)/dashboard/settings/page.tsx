@@ -513,6 +513,23 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Background OCR Processing</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable automatic OCR processing for uploaded images
+                  </p>
+                </div>
+                <Switch
+                  checked={config.settings.general.ocr.enabled}
+                  onCheckedChange={(checked) =>
+                    handleSettingChange('general', {
+                      ocr: { enabled: checked },
+                    })
+                  }
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label>Storage Provider</Label>
                 <Select

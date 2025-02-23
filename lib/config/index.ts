@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/database/prisma'
 
 // Config schema
-const configSchema = z.object({
+export const configSchema = z.object({
   version: z.string(),
   settings: z.object({
     general: z.object({
@@ -57,6 +57,9 @@ const configSchema = z.object({
       credits: z.object({
         showFooter: z.boolean(),
       }),
+      ocr: z.object({
+        enabled: z.boolean().default(true),
+      }),
     }),
     appearance: z.object({
       theme: z.string(),
@@ -72,7 +75,7 @@ const configSchema = z.object({
 
 export type FlareConfig = z.infer<typeof configSchema>
 
-const DEFAULT_CONFIG: FlareConfig = {
+export const DEFAULT_CONFIG: FlareConfig = {
   version: '1.0.0',
   settings: {
     general: {
@@ -108,6 +111,9 @@ const DEFAULT_CONFIG: FlareConfig = {
       },
       credits: {
         showFooter: true,
+      },
+      ocr: {
+        enabled: true,
       },
     },
     appearance: {
@@ -222,6 +228,14 @@ export async function updateConfig(
               ...currentConfig.settings.general.storage.maxUploadSize,
               ...(newConfig.settings?.general?.storage?.maxUploadSize || {}),
             },
+          },
+          credits: {
+            ...currentConfig.settings.general.credits,
+            ...(newConfig.settings?.general?.credits || {}),
+          },
+          ocr: {
+            ...currentConfig.settings.general.ocr,
+            ...(newConfig.settings?.general?.ocr || {}),
           },
         },
         appearance: {

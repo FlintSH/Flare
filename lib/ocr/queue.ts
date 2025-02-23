@@ -1,3 +1,6 @@
+import { getConfig } from '@/lib/config'
+import { prisma } from '@/lib/database/prisma'
+
 import { processImageOCRTask } from './processor'
 
 interface OCRTask {
@@ -11,7 +14,24 @@ class OCRQueue {
   private concurrentLimit: number = 1
   private activeProcesses: number = 0
 
-  async add(task: OCRTask) {
+  async add(task: OCRTask, force: boolean = false) {
+    // Check if OCR is enabled in settings, unless force is true
+    if (!force) {
+      const config = await getConfig()
+      if (!config.settings.general.ocr.enabled) {
+        console.log('OCR processing is disabled in settings, skipping queue')
+        await prisma.file.update({
+          where: { id: task.fileId },
+          data: {
+            isOcrProcessed: true,
+            ocrText: null,
+            ocrConfidence: null,
+          },
+        })
+        return
+      }
+    }
+
     this.queue.push(task)
     this.processQueue()
   }

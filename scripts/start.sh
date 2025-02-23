@@ -44,6 +44,13 @@ if ! npx prisma generate; then
     exit 1
 fi
 
+# Run config migrations
+echo "Running config migrations..."
+if ! node -e 'require("./lib/config/migrate.js").migrateConfig()'; then
+    echo "Failed to run config migrations"
+    exit 1
+fi
+
 # Start the application
 echo "Starting the application..."
 exec npm run start
