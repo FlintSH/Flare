@@ -21,10 +21,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application and compile migration script
+# Build the application
 RUN npm run build
-RUN mkdir -p .next/standalone/lib/config
-RUN npx tsc lib/config/migrate.ts lib/config/index.ts --outDir .next/standalone/lib/config --esModuleInterop true --module commonjs
 
 # Stage 3: Runner
 FROM node:22-alpine AS runner
