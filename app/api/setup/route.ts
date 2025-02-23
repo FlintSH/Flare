@@ -111,6 +111,9 @@ export async function POST(req: Request) {
           credits: {
             showFooter: true,
           },
+          ocr: {
+            enabled: true,
+          },
         },
         appearance: {
           theme: 'dark',
