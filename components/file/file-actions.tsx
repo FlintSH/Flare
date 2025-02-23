@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Copy, Download, ExternalLink, Link, ScanText } from 'lucide-react'
 
@@ -34,11 +34,18 @@ export function FileActions({
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [isLoadingOcr, setIsLoadingOcr] = useState(false)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
+
+  // Set up URLs when password changes
+  useEffect(() => {
+    const fileUrl = `/api/files${urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    const rawUrl = `${urlPath}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    setUrls({ fileUrl, rawUrl })
+  }, [urlPath, verifiedPassword])
 
   const handleCopyUrl = () => {
-    navigator.clipboard.writeText(
-      window.location.origin + '/api/files' + urlPath
-    )
+    if (!urls) return
+    navigator.clipboard.writeText(window.location.origin + urls.fileUrl)
     toast({
       title: 'URL copied',
       description: 'File URL has been copied to clipboard',
@@ -46,6 +53,7 @@ export function FileActions({
   }
 
   const handleCopyText = async () => {
+    if (!urls) return
     try {
       if (content) {
         await navigator.clipboard.writeText(content)
@@ -54,9 +62,7 @@ export function FileActions({
           description: 'File content has been copied to clipboard',
         })
       } else {
-        const response = await fetch(
-          `/api/files${urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-        )
+        const response = await fetch(urls.fileUrl)
         const text = await response.text()
         await navigator.clipboard.writeText(text)
         toast({
@@ -126,12 +132,7 @@ export function FileActions({
     }
   }
 
-  const getRawUrl = () => {
-    const baseUrl = `${urlPath}/raw`
-    return verifiedPassword
-      ? `${baseUrl}?password=${verifiedPassword}`
-      : baseUrl
-  }
+  if (!urls) return null
 
   return (
     <div className="flex items-center justify-center flex-wrap gap-2">
@@ -140,16 +141,13 @@ export function FileActions({
         Copy URL
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <a
-          href={`/api/files${urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`}
-          download={name}
-        >
+        <a href={urls.fileUrl} download={name}>
           <Download className="h-4 w-4 mr-2" />
           Download
         </a>
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <a href={getRawUrl()} target="_blank" rel="noopener noreferrer">
+        <a href={urls.rawUrl} target="_blank" rel="noopener noreferrer">
           <ExternalLink className="h-4 w-4 mr-2" />
           Raw
         </a>

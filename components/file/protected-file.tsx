@@ -331,6 +331,10 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
   const [isVerified, setIsVerified] = useState(false)
   const [verifiedPassword, setVerifiedPassword] = useState<string>()
   const [codeContent, setCodeContent] = useState<string>()
+  const [fileUrls, setFileUrls] = useState<{
+    fileUrl: string
+    rawUrl: string
+  }>()
   const isOwner = session?.user?.id === file.userId
 
   // Check if file is accessible
@@ -342,6 +346,13 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       TEXT_FILE_TYPES.includes(file.mimeType) ||
       file.mimeType === 'text/csv'
   )
+
+  // Set up URLs when password or verification status changes
+  useEffect(() => {
+    const fileUrl = `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    const rawUrl = `${sanitizeUrl(file.urlPath)}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    setFileUrls({ fileUrl, rawUrl })
+  }, [file.urlPath, verifiedPassword])
 
   // Check URL parameters for password on client-side only if not owner
   useEffect(() => {
@@ -430,8 +441,8 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       {/* File content */}
       <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
         {(() => {
-          const fileUrl = `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-          const rawUrl = `${sanitizeUrl(file.urlPath)}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          if (!fileUrls) return null
+          const { fileUrl, rawUrl } = fileUrls
 
           // Image files
           if (file.mimeType.startsWith('image/')) {
