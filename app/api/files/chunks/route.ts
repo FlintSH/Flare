@@ -38,11 +38,11 @@ setInterval(
             await unlink(metadataPath)
           }
         } catch (error) {
-          console.error(`[Server] Error cleaning up file ${file}:`, error)
+          console.error(`Error cleaning up file ${file}:`, error)
         }
       }
     } catch (error) {
-      console.error('[Server] Error during cleanup:', error)
+      console.error('Error during cleanup:', error)
     }
   },
   60 * 60 * 1000
@@ -94,7 +94,7 @@ async function getUploadMetadata(
   } catch (error) {
     if (error instanceof Error) {
       console.error(
-        `[Server] Error reading metadata for upload ${uploadId}:`,
+        `Error reading metadata for upload ${uploadId}:`,
         error.message
       )
     }
@@ -115,10 +115,7 @@ async function deleteUploadMetadata(uploadId: string) {
     const metadataPath = join(TEMP_DIR, uploadId)
     await unlink(metadataPath)
   } catch (error) {
-    console.error(
-      `[Server] Error deleting metadata for upload ${uploadId}:`,
-      error
-    )
+    console.error(`Error deleting metadata for upload ${uploadId}:`, error)
   }
 }
 
@@ -358,7 +355,7 @@ export async function PUT(req: Request) {
     // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
-        console.error('[Server] Background OCR processing failed:', error)
+        console.error('Background OCR processing failed:', error)
       })
     }
 

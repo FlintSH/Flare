@@ -139,7 +139,7 @@ export async function POST(
     // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
-        console.error('[Server] Background OCR processing failed:', error)
+        console.error('Background OCR processing failed:', error)
       })
     }
 

@@ -47,7 +47,7 @@ async function getUploadMetadata(uploadId: string) {
   } catch (error) {
     if (error instanceof Error) {
       console.error(
-        `[Server] Error reading metadata for upload ${uploadId}:`,
+        `Error reading metadata for upload ${uploadId}:`,
         error.message
       )
     }
@@ -114,12 +114,10 @@ export async function PUT(
 
     const metadata = await getUploadMetadata(uploadId)
     if (!metadata) {
-      console.log(`[Server] Upload ${uploadId} not found in metadata`)
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
 
     if (metadata.userId !== user.id) {
-      console.log(`[Server] Unauthorized access attempt for upload ${uploadId}`)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -134,8 +132,6 @@ export async function PUT(
       parseInt(partNumber),
       Buffer.from(chunk)
     )
-
-    console.log(`[Server] Successfully uploaded part ${partNumber}`)
 
     return NextResponse.json({
       data: { etag: response.ETag },
