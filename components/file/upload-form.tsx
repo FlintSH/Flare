@@ -25,8 +25,6 @@ import { formatBytes } from '@/lib/utils'
 
 import { useToast } from '@/hooks/use-toast'
 
-const CHUNK_SIZE = 5 * 1024 * 1024 // 5MB chunks
-
 interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
@@ -126,6 +124,7 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
       if (timeElapsed > 0) {
         const instantSpeed = uploaded / timeElapsed
         // Use a weighted moving average with more weight on recent speeds
+        // could prob be done better but it works for now
         file.uploadSpeed = file.uploadSpeed
           ? file.uploadSpeed * 0.6 + instantSpeed * 0.4
           : instantSpeed
@@ -137,7 +136,7 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
       // Calculate estimated time remaining using the smoothed speed
       if (file.uploadSpeed && file.uploadSpeed > 0) {
         const bytesRemaining = file.size - file.uploaded
-        // Add 10% buffer to the estimate to account for network variations
+        // Just a lil buffer to account for network variations
         file.estimatedTimeLeft = (bytesRemaining / file.uploadSpeed) * 1.1
       }
 
@@ -146,91 +145,156 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
   }
 
   const uploadFileInChunks = async (file: FileWithPreview, index: number) => {
-    const uploadId = `${Date.now()}-${Math.random().toString(36).substring(2)}`
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
-    const chunkProgress = new Map<number, number>()
-
-    const updateTotalProgress = () => {
-      const totalUploaded = Array.from(chunkProgress.values()).reduce(
-        (sum, progress) => sum + progress,
-        0
-      )
-      updateFileProgress(index, totalUploaded, Date.now())
-    }
-
-    const uploadChunk = (
-      chunkNumber: number
-    ): Promise<{
-      status: string
-      chunksReceived?: number
-      totalChunks?: number
-    }> => {
-      const start = chunkNumber * CHUNK_SIZE
-      const end = Math.min(start + CHUNK_SIZE, file.size)
-      const chunk = file.slice(start, end)
-
-      const formData = new FormData()
-      formData.append('uploadId', uploadId)
-      formData.append('chunkNumber', chunkNumber.toString())
-      formData.append('totalChunks', totalChunks.toString())
-      formData.append('chunk', chunk)
-      formData.append('filename', file.name)
-      formData.append('mimeType', file.type)
-      formData.append('totalSize', file.size.toString())
-      formData.append('visibility', visibility)
-      if (password) formData.append('password', password)
-
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            chunkProgress.set(chunkNumber, event.loaded)
-            updateTotalProgress()
-          }
-        })
-
-        xhr.addEventListener('load', async () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const result = JSON.parse(xhr.responseText)
-            // Set final progress for this chunk
-            chunkProgress.set(chunkNumber, chunk.size)
-            updateTotalProgress()
-            resolve(result)
-          } else {
-            reject(new Error(xhr.statusText))
-          }
-        })
-
-        xhr.addEventListener('error', () => {
-          reject(new Error('Network error occurred'))
-        })
-
-        xhr.open('POST', '/api/files/chunks')
-        xhr.send(formData)
+    try {
+      // Initialize multipart upload
+      const initResponse = await fetch('/api/files/chunks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          mimeType: file.type,
+          size: file.size,
+        }),
       })
-    }
 
-    // Upload all chunks simultaneously
-    const chunkResponses = await Promise.all(
-      Array.from({ length: totalChunks }, (_, i) => uploadChunk(i))
-    )
+      if (!initResponse.ok) {
+        throw new Error('Failed to initialize upload')
+      }
 
-    // Find the last response (should be the completion response)
-    const lastResponse = chunkResponses.find(
-      (response) =>
-        response.status === 'complete' ||
-        response.chunksReceived === response.totalChunks
-    )
+      const {
+        data: { uploadId, fileKey },
+      } = await initResponse.json()
 
-    if (!lastResponse || lastResponse.status !== 'complete') {
-      // If we didn't get a completion response, try one more time to check status
-      const finalCheck = await uploadChunk(0)
-      if (finalCheck.status !== 'complete') {
-        throw new Error(
-          'Upload did not complete successfully. Server may still be processing chunks.'
+      if (!uploadId || !fileKey) {
+        throw new Error('Failed to initialize upload')
+      }
+
+      const chunkSize = 5 * 1024 * 1024 // 5MB minimum for S3
+      const chunks: Blob[] = []
+      const totalChunks = Math.ceil(file.size / chunkSize)
+      const chunkProgress = new Map<number, number>()
+
+      // Split file into chunks
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * chunkSize
+        const end = Math.min(start + chunkSize, file.size)
+        chunks.push(file.slice(start, end))
+      }
+
+      const updateTotalProgress = () => {
+        const totalUploaded = Array.from(chunkProgress.values()).reduce(
+          (sum, progress) => sum + progress,
+          0
+        )
+        updateFileProgress(index, totalUploaded, Date.now())
+      }
+
+      // Upload chunks in batches of 3
+      const uploadedParts: { ETag: string; PartNumber: number }[] = []
+
+      for (let i = 0; i < chunks.length; i += 3) {
+        const batch = chunks.slice(i, i + 3)
+        const batchNumbers = Array.from(
+          { length: batch.length },
+          (_, j) => i + j + 1
+        )
+
+        await Promise.all(
+          batch.map(async (chunk, batchIndex) => {
+            const partNumber = batchNumbers[batchIndex]
+            let retries = 3
+
+            while (retries > 0) {
+              try {
+                // Upload chunk through our server
+                const xhr = new XMLHttpRequest()
+                const uploadPromise = new Promise<{ etag: string }>(
+                  (resolve, reject) => {
+                    xhr.upload.addEventListener('progress', (event) => {
+                      if (event.lengthComputable) {
+                        chunkProgress.set(partNumber - 1, event.loaded)
+                        updateTotalProgress()
+                      }
+                    })
+
+                    xhr.addEventListener('load', () => {
+                      if (xhr.status >= 200 && xhr.status < 300) {
+                        const response = JSON.parse(xhr.responseText)
+                        resolve(response.data)
+                      } else {
+                        reject(
+                          new Error(
+                            `Failed to upload part ${partNumber}: ${xhr.statusText}`
+                          )
+                        )
+                      }
+                    })
+
+                    xhr.addEventListener('error', () => {
+                      reject(new Error('Network error occurred'))
+                    })
+
+                    xhr.open(
+                      'PUT',
+                      `/api/files/chunks/${uploadId}/part/${partNumber}`
+                    )
+                    xhr.send(chunk)
+                  }
+                )
+
+                const { etag } = await uploadPromise
+
+                if (!etag) {
+                  throw new Error('Missing ETag in response')
+                }
+
+                uploadedParts.push({
+                  ETag: etag,
+                  PartNumber: partNumber,
+                })
+
+                chunkProgress.set(partNumber - 1, chunk.size)
+                updateTotalProgress()
+                break
+              } catch (error) {
+                console.error(
+                  `Error uploading part ${partNumber}, retries left: ${retries - 1}`,
+                  error
+                )
+                retries--
+                if (retries === 0) throw error
+                await new Promise((resolve) => setTimeout(resolve, 1000))
+              }
+            }
+          })
         )
       }
+
+      // Complete the multipart upload
+      const completeResponse = await fetch(
+        `/api/files/chunks/${uploadId}/complete`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            parts: uploadedParts,
+          }),
+        }
+      )
+
+      if (!completeResponse.ok) {
+        throw new Error('Failed to complete upload')
+      }
+
+      // Set final progress
+      updateFileProgress(index, file.size, Date.now())
+    } catch (error) {
+      console.error('Upload error:', error)
+      throw error
     }
   }
 
@@ -311,7 +375,6 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
         variant: 'destructive',
       })
 
-      // If it was a quota error, scroll to the storage usage section
       if (error instanceof Error && error.message.includes('storage quota')) {
         const storageSection = document.querySelector(
           '[data-section="storage"]'

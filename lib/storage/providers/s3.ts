@@ -209,7 +209,10 @@ export class S3StorageProvider implements StorageProvider {
     mimeType: string
   ): Promise<NodeWritable> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+    const { PassThrough } = await import('stream')
+    const passThrough = new PassThrough()
 
+    // Start multipart upload
     const createResponse = await this.client.send(
       new CreateMultipartUploadCommand({
         Bucket: this.bucket,
@@ -223,92 +226,171 @@ export class S3StorageProvider implements StorageProvider {
       throw new Error('Failed to create multipart upload')
     }
 
-    const { PassThrough } = await import('stream')
-    const passThrough = new PassThrough()
-
-    let partNumber = 1
-    let buffer = Buffer.alloc(0)
+    // Track upload state
+    let currentPartBuffer = Buffer.alloc(0)
+    let currentPartNumber = 1
+    let totalBytesUploaded = 0
+    let isUploading = false
+    let hasEnded = false
+    let uploadError: Error | null = null
     const parts: { ETag: string; PartNumber: number }[] = []
-    const minPartSize = 5 * 1024 * 1024 // 5MB minimum part size for S3
+    const maxPartSize = 5 * 1024 * 1024 // 5MB minimum for S3
+    const maxConcurrentUploads = 3
+    let activeUploads = 0
 
-    passThrough.on('data', async (chunk: Buffer) => {
-      buffer = Buffer.concat([buffer, chunk])
+    // Helper to get presigned URL for part upload
+    const getPresignedUrl = async (partNumber: number): Promise<string> => {
+      const command = new UploadPartCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      })
+      return getSignedUrl(this.client, command, { expiresIn: 3600 })
+    }
 
-      if (buffer.length >= minPartSize) {
-        try {
-          const response = await this.client.send(
-            new UploadPartCommand({
-              Bucket: this.bucket,
-              Key: key,
-              PartNumber: partNumber,
-              UploadId: uploadId,
-              Body: buffer,
-            })
+    // Helper to upload a part using presigned URL
+    const uploadPart = async (data: Buffer, partNum: number): Promise<void> => {
+      try {
+        activeUploads++
+
+        const presignedUrl = await getPresignedUrl(partNum)
+
+        const response = await fetch(presignedUrl, {
+          method: 'PUT',
+          body: data,
+        })
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to upload part ${partNum}: ${response.statusText}`
           )
+        }
 
-          if (!response.ETag) {
-            throw new Error('Missing ETag in upload part response')
-          }
+        const etag = response.headers.get('ETag')
+        if (!etag) {
+          throw new Error('Missing ETag in upload part response')
+        }
 
-          parts.push({
-            ETag: response.ETag,
-            PartNumber: partNumber,
+        parts.push({
+          ETag: etag.replace(/['"]/g, ''), // Remove quotes from ETag
+          PartNumber: partNum,
+        })
+
+        totalBytesUploaded += data.length
+
+        passThrough.emit('s3Progress', {
+          part: partNum,
+          uploaded: totalBytesUploaded,
+          etag,
+        })
+      } catch (error) {
+        uploadError = error as Error
+        throw error
+      } finally {
+        activeUploads--
+        if (hasEnded && activeUploads === 0) {
+          completeUpload().catch((error) => {
+            passThrough.destroy(error as Error)
           })
+        }
+      }
+    }
 
-          partNumber++
-          buffer = Buffer.alloc(0)
-        } catch (error) {
-          passThrough.destroy(error as Error)
+    // Handle incoming data
+    passThrough.on('data', async (chunk: Buffer) => {
+      if (uploadError) {
+        passThrough.destroy(uploadError)
+        return
+      }
+
+      currentPartBuffer = Buffer.concat([currentPartBuffer, chunk])
+
+      // Upload part when it reaches minimum size
+      while (
+        currentPartBuffer.length >= maxPartSize &&
+        activeUploads < maxConcurrentUploads &&
+        !isUploading
+      ) {
+        isUploading = true
+        const partData = currentPartBuffer.slice(0, maxPartSize)
+        currentPartBuffer = currentPartBuffer.slice(maxPartSize)
+
+        try {
+          await uploadPart(partData, currentPartNumber++)
+        } finally {
+          isUploading = false
         }
       }
     })
 
-    passThrough.on('end', async () => {
+    // Handle stream end
+    passThrough.on('end', () => {
+      hasEnded = true
+      if (activeUploads === 0) {
+        completeUpload().catch((error) => {
+          passThrough.destroy(error as Error)
+        })
+      }
+    })
+
+    // Handle upload completion
+    const completeUpload = async () => {
       try {
-        if (buffer.length > 0) {
-          const response = await this.client.send(
-            new UploadPartCommand({
-              Bucket: this.bucket,
-              Key: key,
-              PartNumber: partNumber,
-              UploadId: uploadId,
-              Body: buffer,
-            })
-          )
-
-          if (!response.ETag) {
-            throw new Error('Missing ETag in upload part response')
-          }
-
-          parts.push({
-            ETag: response.ETag,
-            PartNumber: partNumber,
-          })
+        // Upload any remaining data as final part
+        if (currentPartBuffer.length > 0) {
+          await uploadPart(currentPartBuffer, currentPartNumber)
+          currentPartBuffer = Buffer.alloc(0)
         }
 
+        // Wait for any remaining uploads
+        while (activeUploads > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+
+        // Sort parts by part number
+        const sortedParts = parts.sort((a, b) => a.PartNumber - b.PartNumber)
+
+        // Complete the multipart upload
         await this.client.send(
           new CompleteMultipartUploadCommand({
             Bucket: this.bucket,
             Key: key,
             UploadId: uploadId,
             MultipartUpload: {
-              Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
+              Parts: sortedParts,
             },
           })
         )
-      } catch (error) {
+
+        // Verify the file exists
         await this.client.send(
-          new AbortMultipartUploadCommand({
+          new HeadObjectCommand({
             Bucket: this.bucket,
             Key: key,
-            UploadId: uploadId,
           })
         )
+        passThrough.emit('s3Complete')
+      } catch (error) {
+        try {
+          await this.client.send(
+            new AbortMultipartUploadCommand({
+              Bucket: this.bucket,
+              Key: key,
+              UploadId: uploadId,
+            })
+          )
+        } catch (abortError) {
+          console.error('Error aborting multipart upload:', abortError)
+        }
+        uploadError = error as Error
         passThrough.destroy(error as Error)
       }
-    })
+    }
 
-    passThrough.on('error', async () => {
+    // Handle stream errors
+    passThrough.on('error', async (error) => {
+      console.error('Stream error:', error)
       try {
         await this.client.send(
           new AbortMultipartUploadCommand({
@@ -318,7 +400,7 @@ export class S3StorageProvider implements StorageProvider {
           })
         )
       } catch (abortError) {
-        console.error('Failed to abort multipart upload:', abortError)
+        console.error('Error aborting multipart upload:', abortError)
       }
     })
 
@@ -375,5 +457,87 @@ export class S3StorageProvider implements StorageProvider {
 
       continuationToken = response.NextContinuationToken
     } while (continuationToken)
+  }
+
+  async initializeMultipartUpload(
+    path: string,
+    mimeType: string
+  ): Promise<string> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    const response = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: mimeType,
+      })
+    )
+
+    if (!response.UploadId) {
+      throw new Error('Failed to initialize multipart upload')
+    }
+
+    return response.UploadId
+  }
+
+  async getPresignedPartUploadUrl(
+    path: string,
+    uploadId: string,
+    partNumber: number
+  ): Promise<string> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    const command = new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    })
+
+    return getSignedUrl(this.client, command, { expiresIn: 3600 })
+  }
+
+  async completeMultipartUpload(
+    path: string,
+    uploadId: string,
+    parts: { ETag: string; PartNumber: number }[]
+  ): Promise<void> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
+        },
+      })
+    )
+  }
+
+  async uploadPart(
+    path: string,
+    uploadId: string,
+    partNumber: number,
+    data: Buffer
+  ): Promise<{ ETag: string }> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    const response = await this.client.send(
+      new UploadPartCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        Body: data,
+      })
+    )
+
+    if (!response.ETag) {
+      throw new Error('Missing ETag in upload part response')
+    }
+
+    return { ETag: response.ETag }
   }
 }

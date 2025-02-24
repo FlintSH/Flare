@@ -18,6 +18,23 @@ export interface StorageProvider {
   getFileUrl(path: string): Promise<string>
   getFileSize(path: string): Promise<number>
   renameFolder(oldPath: string, newPath: string): Promise<void>
+  initializeMultipartUpload(path: string, mimeType: string): Promise<string>
+  getPresignedPartUploadUrl(
+    path: string,
+    uploadId: string,
+    partNumber: number
+  ): Promise<string>
+  uploadPart(
+    path: string,
+    uploadId: string,
+    partNumber: number,
+    data: Buffer
+  ): Promise<{ ETag: string }>
+  completeMultipartUpload(
+    path: string,
+    uploadId: string,
+    parts: { ETag: string; PartNumber: number }[]
+  ): Promise<void>
 }
 
 export interface S3Config {
