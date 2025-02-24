@@ -185,16 +185,27 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async deleteFile(path: string): Promise<void> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
-    await unlink(fullPath)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
+    try {
+      await unlink(fullPath)
+    } catch (error) {
+      // Ignore ENOENT errors
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        return
+      }
+      throw error
+    }
   }
 
   async getFileStream(path: string, range?: RangeOptions): Promise<Readable> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const options: { start?: number; end?: number } = {}
     if (range) {
       if (typeof range.start !== 'undefined') options.start = range.start
@@ -217,9 +228,8 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async getFileSize(path: string): Promise<number> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const stats = await stat(fullPath)
     return stats.size
   }
@@ -229,9 +239,8 @@ export class LocalStorageProvider implements StorageProvider {
     targetPath: string,
     _mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
   ): Promise<void> {
-    const fullPath = targetPath.startsWith('public/')
-      ? targetPath
-      : join(process.cwd(), targetPath)
+    const validPath = validateStoragePath(targetPath)
+    const fullPath = join(process.cwd(), validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
 
@@ -251,39 +260,29 @@ export class LocalStorageProvider implements StorageProvider {
       })
     }
 
-    const { stream, processedChunks } = this.activeWriteStreams.get(fullPath)!
-
+    const writeStream = this.activeWriteStreams.get(fullPath)!
     for (const chunkFile of sortedChunks) {
-      const chunkNumber = parseInt(chunkFile.split('-')[1])
-
-      if (processedChunks.has(chunkNumber)) continue
-
       const chunkPath = join(chunksDir, chunkFile)
       const chunkData = await readFile(chunkPath)
-
       await new Promise<void>((resolve, reject) => {
-        stream.write(chunkData, (err: Error | null | undefined) => {
-          if (err) reject(err)
-          else {
-            processedChunks.add(chunkNumber)
-            resolve()
+        writeStream.stream.write(
+          chunkData,
+          (error: Error | null | undefined) => {
+            if (error) reject(error)
+            else resolve()
           }
-        })
+        )
       })
     }
 
-    if (processedChunks.size === sortedChunks.length) {
-      await new Promise<void>((resolve, reject) => {
-        const callback = (err: Error | null | undefined) => {
-          if (err) reject(err)
-          else {
-            this.activeWriteStreams.delete(fullPath)
-            resolve()
-          }
-        }
-        stream.end(callback)
+    await new Promise<void>((resolve, reject) => {
+      writeStream.stream.end((error: Error | null | undefined) => {
+        if (error) reject(error)
+        else resolve()
       })
-    }
+    })
+
+    this.activeWriteStreams.delete(fullPath)
   }
 
   async createWriteStream(
@@ -298,17 +297,12 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async renameFolder(oldPath: string, newPath: string): Promise<void> {
-    const fullOldPath = oldPath.startsWith('public/')
-      ? oldPath
-      : join(process.cwd(), oldPath)
-    const fullNewPath = newPath.startsWith('public/')
-      ? newPath
-      : join(process.cwd(), newPath)
-
-    // Create the new directory if it doesn't exist
-    await mkdir(fullNewPath, { recursive: true })
-
-    // Move the directory
+    const validOldPath = validateStoragePath(oldPath)
+    const validNewPath = validateStoragePath(newPath)
+    const fullOldPath = join(process.cwd(), validOldPath)
+    const fullNewPath = join(process.cwd(), validNewPath)
+    const newDir = fullNewPath.substring(0, fullNewPath.lastIndexOf('/'))
+    await mkdir(newDir, { recursive: true })
     await rename(fullOldPath, fullNewPath)
   }
 }

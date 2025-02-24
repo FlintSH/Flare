@@ -64,12 +64,25 @@ export class S3StorageProvider implements StorageProvider {
   async deleteFile(path: string): Promise<void> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
-    await this.client.send(
-      new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      })
-    )
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        })
+      )
+    } catch (error) {
+      // Ignore NoSuchKey errors
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        error.name === 'NoSuchKey'
+      ) {
+        return
+      }
+      throw error
+    }
   }
 
   async getFileStream(path: string, range?: RangeOptions): Promise<Readable> {
