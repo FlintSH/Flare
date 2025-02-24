@@ -164,26 +164,7 @@ export default function SettingsPage() {
   const [cssValue, setCssValue] = useState('')
   const [htmlValue, setHtmlValue] = useState('')
   const [disabledMessage, setDisabledMessage] = useState('')
-  const [s3Bucket, setS3Bucket] = useState('')
-  const [s3Region, setS3Region] = useState('')
-  const [s3AccessKeyId, setS3AccessKeyId] = useState('')
-  const [s3SecretKey, setS3SecretKey] = useState('')
-  const [s3Endpoint, setS3Endpoint] = useState('')
-  const [storageQuota, setStorageQuota] = useState('')
-  const [maxUploadSize, setMaxUploadSize] = useState('')
-
   const [debouncedMessage] = useDebounce(disabledMessage, 500)
-  const [debouncedS3Bucket] = useDebounce(s3Bucket, 500)
-  const [debouncedS3Region] = useDebounce(s3Region, 500)
-  const [debouncedS3AccessKeyId] = useDebounce(s3AccessKeyId, 500)
-  const [debouncedS3SecretKey] = useDebounce(s3SecretKey, 500)
-  const [debouncedS3Endpoint] = useDebounce(s3Endpoint, 500)
-  const [debouncedStorageQuota] = useDebounce(storageQuota, 500)
-  const [debouncedMaxUploadSize] = useDebounce(maxUploadSize, 500)
-  const [debouncedCssValue] = useDebounce(cssValue, 500)
-  const [debouncedHtmlValue] = useDebounce(htmlValue, 500)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{
     hasUpdate: boolean
@@ -243,18 +224,6 @@ export default function SettingsPage() {
         setDisabledMessage(
           data.settings.general.registrations.disabledMessage || ''
         )
-        setS3Bucket(data.settings.general.storage.s3.bucket || '')
-        setS3Region(data.settings.general.storage.s3.region || '')
-        setS3AccessKeyId(data.settings.general.storage.s3.accessKeyId || '')
-        setS3SecretKey(data.settings.general.storage.s3.secretAccessKey || '')
-        setS3Endpoint(data.settings.general.storage.s3.endpoint || '')
-        setStorageQuota(
-          data.settings.general.storage.quotas.default.value.toString()
-        )
-        setMaxUploadSize(
-          data.settings.general.storage.maxUploadSize.value.toString()
-        )
-        setIsInitialLoad(false)
       } catch (error) {
         console.error('Failed to load config:', error)
       }
@@ -264,7 +233,6 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (
-      !isInitialLoad &&
       config &&
       debouncedMessage !== config.settings.general.registrations.disabledMessage
     ) {
@@ -275,115 +243,39 @@ export default function SettingsPage() {
         },
       })
     }
-  }, [debouncedMessage, config, handleSettingChange, isInitialLoad])
-
-  useEffect(() => {
-    if (
-      !isInitialLoad &&
-      config &&
-      config.settings.general.storage.provider === 's3' &&
-      (debouncedS3Bucket !== config.settings.general.storage.s3.bucket ||
-        debouncedS3Region !== config.settings.general.storage.s3.region ||
-        debouncedS3AccessKeyId !==
-          config.settings.general.storage.s3.accessKeyId ||
-        debouncedS3SecretKey !==
-          config.settings.general.storage.s3.secretAccessKey ||
-        debouncedS3Endpoint !== config.settings.general.storage.s3.endpoint)
-    ) {
-      handleSettingChange('general', {
-        storage: {
-          ...config.settings.general.storage,
-          s3: {
-            ...config.settings.general.storage.s3,
-            bucket: debouncedS3Bucket,
-            region: debouncedS3Region,
-            accessKeyId: debouncedS3AccessKeyId,
-            secretAccessKey: debouncedS3SecretKey,
-            endpoint: debouncedS3Endpoint || undefined,
-          },
-        },
-      })
-    }
-  }, [
-    debouncedS3Bucket,
-    debouncedS3Region,
-    debouncedS3AccessKeyId,
-    debouncedS3SecretKey,
-    debouncedS3Endpoint,
-    config,
-    handleSettingChange,
-    isInitialLoad,
-  ])
-
-  useEffect(() => {
-    if (!isInitialLoad && config) {
-      const numValue = parseInt(debouncedStorageQuota)
-      if (
-        !isNaN(numValue) &&
-        numValue !== config.settings.general.storage.quotas.default.value
-      ) {
-        handleSettingChange('general', {
-          storage: {
-            ...config.settings.general.storage,
-            quotas: {
-              ...config.settings.general.storage.quotas,
-              default: {
-                ...config.settings.general.storage.quotas.default,
-                value: numValue,
-              },
-            },
-          },
-        })
-      }
-    }
-  }, [debouncedStorageQuota, config, handleSettingChange, isInitialLoad])
-
-  useEffect(() => {
-    if (!isInitialLoad && config) {
-      const numValue = parseInt(debouncedMaxUploadSize)
-      if (
-        !isNaN(numValue) &&
-        numValue !== config.settings.general.storage.maxUploadSize.value
-      ) {
-        handleSettingChange('general', {
-          storage: {
-            ...config.settings.general.storage,
-            maxUploadSize: {
-              ...config.settings.general.storage.maxUploadSize,
-              value: numValue,
-            },
-          },
-        })
-      }
-    }
-  }, [debouncedMaxUploadSize, config, handleSettingChange, isInitialLoad])
-
-  useEffect(() => {
-    if (
-      !isInitialLoad &&
-      config &&
-      debouncedCssValue !== config.settings.advanced.customCSS
-    ) {
-      handleSettingChange('advanced', { customCSS: debouncedCssValue })
-    }
-  }, [debouncedCssValue, config, handleSettingChange, isInitialLoad])
-
-  useEffect(() => {
-    if (
-      !isInitialLoad &&
-      config &&
-      debouncedHtmlValue !== config.settings.advanced.customHead
-    ) {
-      handleSettingChange('advanced', { customHead: debouncedHtmlValue })
-    }
-  }, [debouncedHtmlValue, config, handleSettingChange, isInitialLoad])
+  }, [debouncedMessage, config, handleSettingChange])
 
   const handleStorageQuotaChange = (value: string) => {
-    setStorageQuota(value)
+    const numValue = parseInt(value)
+    if (isNaN(numValue)) return
+
+    handleSettingChange('general', {
+      storage: {
+        ...config!.settings.general.storage,
+        quotas: {
+          ...config!.settings.general.storage.quotas,
+          default: {
+            ...config!.settings.general.storage.quotas.default,
+            value: numValue,
+          },
+        },
+      },
+    })
   }
 
   const handleMaxUploadSizeChange = (value: string) => {
-    setMaxUploadSize(value)
+    const numValue = parseInt(value)
+    if (isNaN(numValue)) return
+
+    handleSettingChange('general', {
+      storage: {
+        ...config!.settings.general.storage,
+        maxUploadSize: {
+          ...config!.settings.general.storage.maxUploadSize,
+          value: numValue,
+        },
+      },
+    })
   }
 
   const handleCustomColorsChange = async (colors: Partial<ColorConfig>) => {
@@ -668,7 +560,17 @@ export default function SettingsPage() {
                     <Label>S3 Bucket</Label>
                     <Input
                       value={config.settings.general.storage.s3.bucket}
-                      onChange={(e) => setS3Bucket(e.target.value)}
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...config.settings.general.storage,
+                            s3: {
+                              ...config.settings.general.storage.s3,
+                              bucket: e.target.value,
+                            },
+                          },
+                        })
+                      }
                       placeholder="my-bucket"
                     />
                   </div>
@@ -677,7 +579,17 @@ export default function SettingsPage() {
                     <Label>Region</Label>
                     <Input
                       value={config.settings.general.storage.s3.region}
-                      onChange={(e) => setS3Region(e.target.value)}
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...config.settings.general.storage,
+                            s3: {
+                              ...config.settings.general.storage.s3,
+                              region: e.target.value,
+                            },
+                          },
+                        })
+                      }
                       placeholder="us-east-1"
                     />
                   </div>
@@ -687,7 +599,17 @@ export default function SettingsPage() {
                     <Input
                       type="password"
                       value={config.settings.general.storage.s3.accessKeyId}
-                      onChange={(e) => setS3AccessKeyId(e.target.value)}
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...config.settings.general.storage,
+                            s3: {
+                              ...config.settings.general.storage.s3,
+                              accessKeyId: e.target.value,
+                            },
+                          },
+                        })
+                      }
                       placeholder="AKIAXXXXXXXXXXXXXXXX"
                     />
                   </div>
@@ -697,7 +619,17 @@ export default function SettingsPage() {
                     <Input
                       type="password"
                       value={config.settings.general.storage.s3.secretAccessKey}
-                      onChange={(e) => setS3SecretKey(e.target.value)}
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...config.settings.general.storage,
+                            s3: {
+                              ...config.settings.general.storage.s3,
+                              secretAccessKey: e.target.value,
+                            },
+                          },
+                        })
+                      }
                       placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
                     />
                   </div>
@@ -706,7 +638,17 @@ export default function SettingsPage() {
                     <Label>Custom Endpoint (Optional)</Label>
                     <Input
                       value={config.settings.general.storage.s3.endpoint || ''}
-                      onChange={(e) => setS3Endpoint(e.target.value)}
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...config.settings.general.storage,
+                            s3: {
+                              ...config.settings.general.storage.s3,
+                              endpoint: e.target.value,
+                            },
+                          },
+                        })
+                      }
                       placeholder="https://s3.custom-domain.com"
                     />
                     <p className="text-sm text-muted-foreground">
@@ -964,6 +906,7 @@ export default function SettingsPage() {
                         extensions={[css()]}
                         onChange={(value) => {
                           setCssValue(value)
+                          handleSettingChange('advanced', { customCSS: value })
                         }}
                         theme="dark"
                         className="border rounded-md"
@@ -1010,6 +953,7 @@ export default function SettingsPage() {
                         extensions={[html()]}
                         onChange={(value) => {
                           setHtmlValue(value)
+                          handleSettingChange('advanced', { customHead: value })
                         }}
                         theme="dark"
                         className="border rounded-md"
