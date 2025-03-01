@@ -82,19 +82,25 @@ interface UploadMetadata {
   password: string | null
   lastActivity: number
   urlPath: string
+  s3UploadId: string // Store the actual S3 uploadId separately
+}
+
+// Generate a short, random ID for local metadata files
+function generateLocalId(): string {
+  return Math.random().toString(36).substring(2, 15)
 }
 
 async function getUploadMetadata(
-  uploadId: string
+  localId: string
 ): Promise<UploadMetadata | null> {
   try {
-    const metadataPath = join(TEMP_DIR, uploadId)
+    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     const data = await readFile(metadataPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
       console.error(
-        `Error reading metadata for upload ${uploadId}:`,
+        `Error reading metadata for upload ${localId}:`,
         error.message
       )
     }
@@ -103,19 +109,19 @@ async function getUploadMetadata(
 }
 
 async function saveUploadMetadata(
-  uploadId: string,
+  localId: string,
   metadata: UploadMetadata
 ): Promise<void> {
-  const metadataPath = join(TEMP_DIR, uploadId)
+  const metadataPath = join(TEMP_DIR, `meta-${localId}`)
   await writeFile(metadataPath, JSON.stringify(metadata))
 }
 
-async function deleteUploadMetadata(uploadId: string) {
+async function deleteUploadMetadata(localId: string) {
   try {
-    const metadataPath = join(TEMP_DIR, uploadId)
+    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     await unlink(metadataPath)
   } catch (error) {
-    console.error(`Error deleting metadata for upload ${uploadId}:`, error)
+    console.error(`Error deleting metadata for upload ${localId}:`, error)
   }
 }
 
@@ -194,10 +200,13 @@ export async function POST(req: Request) {
 
     // Initialize multipart upload
     const storageProvider = await getStorageProvider()
-    const uploadId = await storageProvider.initializeMultipartUpload(
+    const s3UploadId = await storageProvider.initializeMultipartUpload(
       filePath,
       mimeType
     )
+
+    // Generate a shorter local ID for metadata
+    const localId = generateLocalId()
 
     // Store metadata in temp file
     const metadata: UploadMetadata = {
@@ -210,13 +219,14 @@ export async function POST(req: Request) {
       password: null,
       lastActivity: Date.now(),
       urlPath,
+      s3UploadId,
     }
 
-    await saveUploadMetadata(uploadId, metadata)
+    await saveUploadMetadata(localId, metadata)
 
     return NextResponse.json({
       data: {
-        uploadId,
+        uploadId: localId,
         fileKey: filePath,
       },
     })
@@ -244,10 +254,10 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url)
     const parts = url.pathname.split('/')
-    const uploadId = parts[parts.length - 3]
+    const localId = parts[parts.length - 3]
     const partNumber = parseInt(parts[parts.length - 1])
 
-    const metadata = await getUploadMetadata(uploadId)
+    const metadata = await getUploadMetadata(localId)
     if (!metadata) {
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
@@ -256,19 +266,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Use the actual S3 uploadId stored in metadata
     const storageProvider = await getStorageProvider()
     const presignedUrl = await storageProvider.getPresignedPartUploadUrl(
       metadata.fileKey,
-      uploadId,
+      metadata.s3UploadId,
       partNumber
     )
 
+    // Update last activity
     metadata.lastActivity = Date.now()
-    await saveUploadMetadata(uploadId, metadata)
+    await saveUploadMetadata(localId, metadata)
 
-    return NextResponse.json({
-      data: { url: presignedUrl },
-    })
+    return NextResponse.json({ data: { presignedUrl } })
   } catch (error) {
     console.error('Error getting presigned URL:', error)
     return NextResponse.json(
@@ -293,9 +303,9 @@ export async function PUT(req: Request) {
 
     const url = new URL(req.url)
     const parts = url.pathname.split('/')
-    const uploadId = parts[parts.length - 1]
+    const localId = parts[parts.length - 2]
 
-    const metadata = await getUploadMetadata(uploadId)
+    const metadata = await getUploadMetadata(localId)
     if (!metadata) {
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
@@ -305,17 +315,13 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json()
-    const { parts: uploadParts } = body
-
-    if (!Array.isArray(uploadParts)) {
-      return NextResponse.json({ error: 'Invalid parts data' }, { status: 400 })
-    }
+    const { parts: uploadedParts } = body
 
     const storageProvider = await getStorageProvider()
     await storageProvider.completeMultipartUpload(
       metadata.fileKey,
-      uploadId,
-      uploadParts
+      metadata.s3UploadId,
+      uploadedParts
     )
 
     // Create database record
@@ -349,8 +355,8 @@ export async function PUT(req: Request) {
       return file
     })
 
-    // Clean up metadata
-    await deleteUploadMetadata(uploadId)
+    // Clean up metadata file
+    await deleteUploadMetadata(localId)
 
     // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {
