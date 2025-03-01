@@ -39,16 +39,16 @@ async function getAuthenticatedUser(req: Request) {
 }
 
 // Get upload metadata from temp file
-async function getUploadMetadata(uploadId: string) {
+async function getUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, uploadId)
+    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     const data = await readFile(metadataPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
       console.error(
-        `Error reading metadata for upload ${uploadId}:`,
+        `Error reading metadata for upload ${localId}:`,
         error.message
       )
     }
@@ -57,13 +57,13 @@ async function getUploadMetadata(uploadId: string) {
 }
 
 // Delete upload metadata file
-async function deleteUploadMetadata(uploadId: string) {
+async function deleteUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, uploadId)
+    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     await unlink(metadataPath)
   } catch (err) {
-    console.error(`Error deleting metadata for upload ${uploadId}:`, err)
+    console.error(`Error deleting metadata for upload ${localId}:`, err)
   }
 }
 
@@ -77,9 +77,9 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { uploadId } = await context.params
+    const { uploadId: localId } = await context.params
 
-    const metadata = await getUploadMetadata(uploadId)
+    const metadata = await getUploadMetadata(localId)
     if (!metadata) {
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
@@ -98,7 +98,7 @@ export async function POST(
     const storageProvider = await getStorageProvider()
     await storageProvider.completeMultipartUpload(
       metadata.fileKey,
-      uploadId,
+      metadata.s3UploadId,
       parts
     )
 
@@ -134,7 +134,7 @@ export async function POST(
     })
 
     // Clean up metadata
-    await deleteUploadMetadata(uploadId)
+    await deleteUploadMetadata(localId)
 
     // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {

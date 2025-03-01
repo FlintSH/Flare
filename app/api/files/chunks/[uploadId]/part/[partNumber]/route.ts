@@ -38,16 +38,16 @@ async function getAuthenticatedUser(req: Request) {
 }
 
 // Get upload metadata from temp file
-async function getUploadMetadata(uploadId: string) {
+async function getUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, uploadId)
+    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     const data = await readFile(metadataPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
       console.error(
-        `Error reading metadata for upload ${uploadId}:`,
+        `Error reading metadata for upload ${localId}:`,
         error.message
       )
     }
@@ -65,9 +65,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { uploadId, partNumber } = await context.params
+    const { uploadId: localId, partNumber } = await context.params
 
-    const metadata = await getUploadMetadata(uploadId)
+    const metadata = await getUploadMetadata(localId)
     if (!metadata) {
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
@@ -79,7 +79,7 @@ export async function GET(
     const storageProvider = await getStorageProvider()
     const url = await storageProvider.getPresignedPartUploadUrl(
       metadata.fileKey,
-      uploadId,
+      metadata.s3UploadId,
       parseInt(partNumber)
     )
 
@@ -110,9 +110,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { uploadId, partNumber } = await context.params
+    const { uploadId: localId, partNumber } = await context.params
 
-    const metadata = await getUploadMetadata(uploadId)
+    const metadata = await getUploadMetadata(localId)
     if (!metadata) {
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
@@ -128,7 +128,7 @@ export async function PUT(
     const storageProvider = await getStorageProvider()
     const response = await storageProvider.uploadPart(
       metadata.fileKey,
-      uploadId,
+      metadata.s3UploadId,
       parseInt(partNumber),
       Buffer.from(chunk)
     )
