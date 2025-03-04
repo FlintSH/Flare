@@ -6,13 +6,6 @@ import { ChevronDown } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -167,8 +160,6 @@ function SimpleThemeCustomizer({
   initialColors,
 }: ThemeCustomizerProps) {
   const [baseHue, setBaseHue] = useState(222.2) // Default hue
-  const [unsavedChanges, setUnsavedChanges] = useState(false)
-  const [pendingColors, setPendingColors] = useState<Partial<ColorConfig>>({})
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
     foreground: '',
@@ -206,7 +197,6 @@ function SimpleThemeCustomizer({
 
   const handleHueChange = (newHue: number) => {
     setBaseHue(newHue)
-    setUnsavedChanges(true)
 
     // Update all colors with the new hue while maintaining their original saturation and lightness
     // except for destructive colors
@@ -227,7 +217,8 @@ function SimpleThemeCustomizer({
       document.documentElement.style.setProperty(`--${cssKey}`, value)
     })
 
-    setPendingColors(newColors)
+    // Immediately notify parent of color changes
+    onColorChange(newColors)
   }
 
   const handleReset = () => {
@@ -238,14 +229,9 @@ function SimpleThemeCustomizer({
     })
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
-    setPendingColors({})
-    onColorChange(DEFAULT_COLORS)
-    setUnsavedChanges(false)
-  }
 
-  const handleSave = () => {
-    onColorChange(pendingColors)
-    setUnsavedChanges(false)
+    // Notify parent of reset
+    onColorChange(DEFAULT_COLORS)
   }
 
   const updatePreview = (key: keyof ColorConfig, value: string) => {
@@ -265,8 +251,9 @@ function SimpleThemeCustomizer({
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
     setColors((prev) => ({ ...prev, [key]: value }))
-    setPendingColors((prev) => ({ ...prev, [key]: value }))
-    setUnsavedChanges(true)
+
+    // Immediately notify parent of color change
+    onColorChange({ [key]: value })
   }
 
   const handleColorChange = (key: keyof ColorConfig, value: string) => {
@@ -294,88 +281,69 @@ function SimpleThemeCustomizer({
   )
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Theme Color</CardTitle>
-            <CardDescription>
-              Choose a base color for your theme
-            </CardDescription>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleReset}>
-            Reset to Default
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-4 gap-4">
-          {PRESET_HUES.map(({ hue, name, saturation, lightness }) => (
-            <button
-              key={hue}
-              onClick={() => handleHueChange(hue)}
-              className={`relative h-14 w-full overflow-hidden rounded-md border transition-[border,opacity] ${
-                baseHue === hue
-                  ? 'border-2 border-primary opacity-100'
-                  : 'border-transparent opacity-80 hover:opacity-100'
-              }`}
-              style={{
-                background: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/20" />
-              <div className="absolute inset-0 flex items-center justify-center font-medium tracking-wide text-[13px] text-white text-shadow-sm">
-                {name}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <Collapsible>
-          <div className="flex items-center gap-4 h-9 relative">
-            <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-              <ChevronDown className="h-4 w-4" />
-              Show Advanced Options
-            </CollapsibleTrigger>
-
-            <div className="absolute right-0 top-1/2 -translate-y-1/2">
-              {unsavedChanges && (
-                <Button size="sm" onClick={handleSave}>
-                  Save Changes
-                </Button>
-              )}
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-4">
+        {PRESET_HUES.map(({ hue, name, saturation, lightness }) => (
+          <button
+            key={hue}
+            onClick={() => handleHueChange(hue)}
+            className={`relative h-14 w-full overflow-hidden rounded-md border transition-[border,opacity] ${
+              baseHue === hue
+                ? 'border-2 border-primary opacity-100'
+                : 'border-transparent opacity-80 hover:opacity-100'
+            }`}
+            style={{
+              background: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/20" />
+            <div className="absolute inset-0 flex items-center justify-center font-medium tracking-wide text-[13px] text-white text-shadow-sm">
+              {name}
             </div>
-          </div>
+          </button>
+        ))}
+      </div>
 
-          <CollapsibleContent className="space-y-4 pt-4">
-            <div className="grid grid-cols-2 gap-4">
-              {renderColorInput('background', 'Background')}
-              {renderColorInput('foreground', 'Foreground')}
-              {renderColorInput('card', 'Card')}
-              {renderColorInput('cardForeground', 'Card Foreground')}
-              {renderColorInput('popover', 'Popover')}
-              {renderColorInput('popoverForeground', 'Popover Foreground')}
-              {renderColorInput('primary', 'Primary')}
-              {renderColorInput('primaryForeground', 'Primary Foreground')}
-              {renderColorInput('secondary', 'Secondary')}
-              {renderColorInput('secondaryForeground', 'Secondary Foreground')}
-              {renderColorInput('muted', 'Muted')}
-              {renderColorInput('mutedForeground', 'Muted Foreground')}
-              {renderColorInput('accent', 'Accent')}
-              {renderColorInput('accentForeground', 'Accent Foreground')}
-              {renderColorInput('destructive', 'Destructive')}
-              {renderColorInput(
-                'destructiveForeground',
-                'Destructive Foreground'
-              )}
-              {renderColorInput('border', 'Border')}
-              {renderColorInput('input', 'Input')}
-              {renderColorInput('ring', 'Ring')}
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </CardContent>
-    </Card>
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleReset}>
+          Reset to Default
+        </Button>
+      </div>
+
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronDown className="h-4 w-4" />
+          Advanced Color Options
+        </CollapsibleTrigger>
+
+        <CollapsibleContent className="space-y-4 pt-4">
+          <div className="grid grid-cols-2 gap-4">
+            {renderColorInput('background', 'Background')}
+            {renderColorInput('foreground', 'Foreground')}
+            {renderColorInput('card', 'Card')}
+            {renderColorInput('cardForeground', 'Card Foreground')}
+            {renderColorInput('popover', 'Popover')}
+            {renderColorInput('popoverForeground', 'Popover Foreground')}
+            {renderColorInput('primary', 'Primary')}
+            {renderColorInput('primaryForeground', 'Primary Foreground')}
+            {renderColorInput('secondary', 'Secondary')}
+            {renderColorInput('secondaryForeground', 'Secondary Foreground')}
+            {renderColorInput('muted', 'Muted')}
+            {renderColorInput('mutedForeground', 'Muted Foreground')}
+            {renderColorInput('accent', 'Accent')}
+            {renderColorInput('accentForeground', 'Accent Foreground')}
+            {renderColorInput('destructive', 'Destructive')}
+            {renderColorInput(
+              'destructiveForeground',
+              'Destructive Foreground'
+            )}
+            {renderColorInput('border', 'Border')}
+            {renderColorInput('input', 'Input')}
+            {renderColorInput('ring', 'Ring')}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   )
 }
 

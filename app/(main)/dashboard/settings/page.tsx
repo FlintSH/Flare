@@ -6,16 +6,19 @@ import pkg from '@/package.json'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import CodeMirror from '@uiw/react-codemirror'
+import { deepEqual } from 'fast-equals'
 import {
+  Circle,
   Code,
   ExternalLink,
   FileCode,
   Github,
   Heart,
   InfoIcon,
+  Save,
   Upload,
+  XCircle,
 } from 'lucide-react'
-import { useDebounce } from 'use-debounce'
 
 import { Icons } from '@/components/shared/icons'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
@@ -158,72 +161,231 @@ function SettingsSkeleton() {
 
 export default function SettingsPage() {
   const { toast } = useToast()
-  const [config, setConfig] = useState<FlareConfig | null>(null)
+  const [savedConfig, setSavedConfig] = useState<FlareConfig | null>(null)
+  const [workingConfig, setWorkingConfig] = useState<FlareConfig | null>(null)
+  const [pendingFaviconFile, setPendingFaviconFile] = useState<File | null>(
+    null
+  )
+  const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | null>(
+    null
+  )
+
   const [cssEditorOpen, setCssEditorOpen] = useState(false)
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false)
-  const [cssValue, setCssValue] = useState('')
-  const [htmlValue, setHtmlValue] = useState('')
-  const [disabledMessage, setDisabledMessage] = useState('')
-  const [debouncedMessage] = useDebounce(disabledMessage, 500)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{
     hasUpdate: boolean
     latestVersion?: string
     releaseUrl?: string
   } | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const hasChanges =
+    !deepEqual(savedConfig, workingConfig) || pendingFaviconFile !== null
+
+  const saveChanges = async () => {
+    if (!workingConfig) return
+
+    try {
+      setIsSaving(true)
+
+      // Check if we have a pending favicon file to upload
+      if (pendingFaviconFile) {
+        const formData = new FormData()
+        formData.append('file', pendingFaviconFile)
+
+        const response = await fetch('/api/settings/favicon', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to upload favicon')
+        }
+
+        // Update the working config with the new favicon path
+        const newConfig = { ...workingConfig }
+        newConfig.settings.appearance.favicon = '/api/favicon'
+        setWorkingConfig(newConfig)
+
+        // Update the favicon in the browser
+        const link = document.querySelector(
+          "link[rel*='icon']"
+        ) as HTMLLinkElement
+        if (link) {
+          link.href = '/api/favicon'
+          link.type = 'image/png'
+        }
+
+        // Clear the pending favicon and preview
+        setPendingFaviconFile(null)
+        if (faviconPreviewUrl) {
+          URL.revokeObjectURL(faviconPreviewUrl)
+          setFaviconPreviewUrl(null)
+        }
+      }
+
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(workingConfig),
+      })
+
+      if (!response.ok) throw new Error()
+
+      // Update the saved config to match the working config
+      setSavedConfig(JSON.parse(JSON.stringify(workingConfig)))
+
+      toast({
+        title: 'Settings updated',
+        description: 'Your changes have been saved successfully',
+      })
+    } catch (error) {
+      console.error('Failed to update settings:', error)
+      toast({
+        title: 'Failed to update settings',
+        description: 'Please try again',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const discardChanges = () => {
+    if (!savedConfig) return
+
+    // If there was a pending favicon preview, revoke it
+    if (faviconPreviewUrl) {
+      URL.revokeObjectURL(faviconPreviewUrl)
+      setFaviconPreviewUrl(null)
+    }
+
+    // Clear pending favicon
+    setPendingFaviconFile(null)
+
+    // Reset working config to match saved config
+    setWorkingConfig(JSON.parse(JSON.stringify(savedConfig)))
+
+    toast({
+      title: 'Changes discarded',
+      description: 'All changes have been reverted to the saved state',
+    })
+  }
 
   const handleSettingChange = useCallback(
-    async <T extends keyof FlareConfig['settings']>(
+    <T extends keyof FlareConfig['settings']>(
       section: T,
       value: SettingValue<T>
     ) => {
-      if (!config) return
+      if (!workingConfig) return
 
-      try {
-        const newConfig = { ...config }
-        newConfig.settings[section] = {
-          ...newConfig.settings[section],
-          ...(value as FlareConfig['settings'][T]),
-        }
-        setConfig(newConfig)
-
-        const response = await fetch('/api/settings', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(newConfig),
-        })
-
-        if (!response.ok) throw new Error()
-
-        toast({
-          title: 'Settings updated',
-          description: 'Your changes have been saved successfully',
-        })
-      } catch (error) {
-        console.error('Failed to update settings:', error)
-        toast({
-          title: 'Failed to update settings',
-          description: 'Please try again',
-          variant: 'destructive',
-        })
+      const newConfig = { ...workingConfig }
+      newConfig.settings[section] = {
+        ...newConfig.settings[section],
+        ...(value as FlareConfig['settings'][T]),
       }
+      setWorkingConfig(newConfig)
     },
-    [config, toast]
+    [workingConfig]
   )
+
+  const isFieldChanged = useCallback(
+    <T extends keyof FlareConfig['settings']>(
+      section: T,
+      fieldPath: string[]
+    ): boolean => {
+      if (!savedConfig || !workingConfig) return false
+
+      let savedValue: unknown = savedConfig.settings[section]
+      let workingValue: unknown = workingConfig.settings[section]
+
+      for (const field of fieldPath) {
+        if (
+          typeof savedValue !== 'object' ||
+          savedValue === null ||
+          typeof workingValue !== 'object' ||
+          workingValue === null
+        ) {
+          return false
+        }
+
+        savedValue = (savedValue as Record<string, unknown>)[field]
+        workingValue = (workingValue as Record<string, unknown>)[field]
+      }
+
+      return !deepEqual(savedValue, workingValue)
+    },
+    [savedConfig, workingConfig]
+  )
+
+  const countChangedSettings = useCallback((): number => {
+    if (!savedConfig || !workingConfig) return 0
+
+    let count = 0
+
+    if (
+      !deepEqual(savedConfig.settings.general, workingConfig.settings.general)
+    ) {
+      count++
+    }
+
+    if (
+      !deepEqual(
+        savedConfig.settings.appearance,
+        workingConfig.settings.appearance
+      )
+    ) {
+      count++
+    }
+
+    if (
+      !deepEqual(savedConfig.settings.advanced, workingConfig.settings.advanced)
+    ) {
+      count++
+    }
+
+    return count
+  }, [savedConfig, workingConfig])
+
+  const getChangedSettingsGroups = useCallback((): string[] => {
+    if (!savedConfig || !workingConfig) return []
+
+    const changedGroups: string[] = []
+
+    if (
+      !deepEqual(savedConfig.settings.general, workingConfig.settings.general)
+    ) {
+      changedGroups.push('General')
+    }
+
+    if (
+      !deepEqual(
+        savedConfig.settings.appearance,
+        workingConfig.settings.appearance
+      )
+    ) {
+      changedGroups.push('Appearance')
+    }
+
+    if (
+      !deepEqual(savedConfig.settings.advanced, workingConfig.settings.advanced)
+    ) {
+      changedGroups.push('Advanced')
+    }
+
+    return changedGroups
+  }, [savedConfig, workingConfig])
 
   useEffect(() => {
     const loadConfig = async () => {
       try {
         const response = await fetch('/api/settings')
         const data = await response.json()
-        setConfig(data)
-        setCssValue(data.settings.advanced.customCSS)
-        setHtmlValue(data.settings.advanced.customHead)
-        setDisabledMessage(
-          data.settings.general.registrations.disabledMessage || ''
-        )
+        setSavedConfig(data)
+        setWorkingConfig(JSON.parse(JSON.stringify(data)))
       } catch (error) {
         console.error('Failed to load config:', error)
       }
@@ -231,31 +393,17 @@ export default function SettingsPage() {
     loadConfig()
   }, [])
 
-  useEffect(() => {
-    if (
-      config &&
-      debouncedMessage !== config.settings.general.registrations.disabledMessage
-    ) {
-      handleSettingChange('general', {
-        registrations: {
-          ...config.settings.general.registrations,
-          disabledMessage: debouncedMessage,
-        },
-      })
-    }
-  }, [debouncedMessage, config, handleSettingChange])
-
   const handleStorageQuotaChange = (value: string) => {
     const numValue = parseInt(value)
     if (isNaN(numValue)) return
 
     handleSettingChange('general', {
       storage: {
-        ...config!.settings.general.storage,
+        ...workingConfig!.settings.general.storage,
         quotas: {
-          ...config!.settings.general.storage.quotas,
+          ...workingConfig!.settings.general.storage.quotas,
           default: {
-            ...config!.settings.general.storage.quotas.default,
+            ...workingConfig!.settings.general.storage.quotas.default,
             value: numValue,
           },
         },
@@ -269,17 +417,17 @@ export default function SettingsPage() {
 
     handleSettingChange('general', {
       storage: {
-        ...config!.settings.general.storage,
+        ...workingConfig!.settings.general.storage,
         maxUploadSize: {
-          ...config!.settings.general.storage.maxUploadSize,
+          ...workingConfig!.settings.general.storage.maxUploadSize,
           value: numValue,
         },
       },
     })
   }
 
-  const handleCustomColorsChange = async (colors: Partial<ColorConfig>) => {
-    await handleSettingChange('appearance', {
+  const handleCustomColorsChange = (colors: Partial<ColorConfig>) => {
+    handleSettingChange('appearance', {
       customColors: colors,
     })
   }
@@ -308,21 +456,69 @@ export default function SettingsPage() {
     }
   }
 
-  if (!config) {
+  const hasFaviconChanged = useCallback(() => {
+    return pendingFaviconFile !== null
+  }, [pendingFaviconFile])
+
+  if (!workingConfig || !savedConfig) {
     return <SettingsSkeleton />
   }
 
+  const getFieldClasses = (
+    section: keyof FlareConfig['settings'],
+    fieldPath: string[]
+  ) => {
+    const isChanged = isFieldChanged(section, fieldPath)
+    return isChanged ? 'border-primary ring-1 ring-primary bg-primary/5' : ''
+  }
+
+  const ChangeIndicator = () => (
+    <div className="flex items-center">
+      <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
+    </div>
+  )
+
   return (
-    <div className="container mx-auto py-6 space-y-8">
+    <div className="container mx-auto py-6 pb-32 space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Settings</h1>
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          <TabsTrigger value="general" className="relative">
+            General
+            {!deepEqual(
+              savedConfig?.settings.general,
+              workingConfig?.settings.general
+            ) && (
+              <span className="absolute -top-1 -right-1">
+                <Circle className="h-2 w-2 fill-primary text-primary" />
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="appearance" className="relative">
+            Appearance
+            {!deepEqual(
+              savedConfig?.settings.appearance,
+              workingConfig?.settings.appearance
+            ) && (
+              <span className="absolute -top-1 -right-1">
+                <Circle className="h-2 w-2 fill-primary text-primary" />
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="advanced" className="relative">
+            Advanced
+            {!deepEqual(
+              savedConfig?.settings.advanced,
+              workingConfig?.settings.advanced
+            ) && (
+              <span className="absolute -top-1 -right-1">
+                <Circle className="h-2 w-2 fill-primary text-primary" />
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">
@@ -415,27 +611,58 @@ export default function SettingsPage() {
                     Enable or disable new user registrations
                   </p>
                 </div>
-                <Switch
-                  checked={config.settings.general.registrations.enabled}
-                  onCheckedChange={(checked) =>
-                    handleSettingChange('general', {
-                      registrations: {
-                        ...config.settings.general.registrations,
-                        enabled: checked,
-                      },
-                    })
-                  }
-                />
+                <div className="flex items-center gap-2">
+                  {isFieldChanged('general', ['registrations', 'enabled']) && (
+                    <ChangeIndicator />
+                  )}
+                  <Switch
+                    checked={
+                      workingConfig.settings.general.registrations.enabled
+                    }
+                    onCheckedChange={(checked) =>
+                      handleSettingChange('general', {
+                        registrations: {
+                          ...workingConfig.settings.general.registrations,
+                          enabled: checked,
+                        },
+                      })
+                    }
+                    className={getFieldClasses('general', [
+                      'registrations',
+                      'enabled',
+                    ])}
+                  />
+                </div>
               </div>
 
-              {!config.settings.general.registrations.enabled && (
+              {!workingConfig.settings.general.registrations.enabled && (
                 <div className="space-y-2">
                   <Label>Registration Disabled Message</Label>
-                  <Input
-                    placeholder="Registrations are currently disabled"
-                    value={disabledMessage}
-                    onChange={(e) => setDisabledMessage(e.target.value)}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Registrations are currently disabled"
+                      value={
+                        workingConfig.settings.general.registrations
+                          .disabledMessage || ''
+                      }
+                      onChange={(e) =>
+                        handleSettingChange('general', {
+                          registrations: {
+                            ...workingConfig.settings.general.registrations,
+                            disabledMessage: e.target.value,
+                          },
+                        })
+                      }
+                      className={getFieldClasses('general', [
+                        'registrations',
+                        'disabledMessage',
+                      ])}
+                    />
+                    {isFieldChanged('general', [
+                      'registrations',
+                      'disabledMessage',
+                    ]) && <ChangeIndicator />}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     This message will be shown to users on the login page when
                     registrations are disabled
@@ -450,56 +677,101 @@ export default function SettingsPage() {
                     Enable storage limits per user
                   </p>
                 </div>
-                <Switch
-                  checked={config.settings.general.storage.quotas.enabled}
-                  onCheckedChange={(checked) =>
-                    handleSettingChange('general', {
-                      storage: {
-                        ...config.settings.general.storage,
-                        quotas: {
-                          ...config.settings.general.storage.quotas,
-                          enabled: checked,
-                        },
-                      },
-                    })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Data Quota per User</Label>
-                <div className="flex space-x-2 mt-1.5">
-                  <Input
-                    type="number"
-                    value={config.settings.general.storage.quotas.default.value}
-                    onChange={(e) => handleStorageQuotaChange(e.target.value)}
-                    placeholder="500"
-                  />
-                  <Select
-                    value={config.settings.general.storage.quotas.default.unit}
-                    onValueChange={(value) =>
+                <div className="flex items-center gap-2">
+                  {isFieldChanged('general', [
+                    'storage',
+                    'quotas',
+                    'enabled',
+                  ]) && <ChangeIndicator />}
+                  <Switch
+                    checked={
+                      workingConfig.settings.general.storage.quotas.enabled
+                    }
+                    onCheckedChange={(checked) =>
                       handleSettingChange('general', {
                         storage: {
-                          ...config.settings.general.storage,
+                          ...workingConfig.settings.general.storage,
                           quotas: {
-                            ...config.settings.general.storage.quotas,
-                            default: {
-                              ...config.settings.general.storage.quotas.default,
-                              unit: value as 'MB' | 'GB',
-                            },
+                            ...workingConfig.settings.general.storage.quotas,
+                            enabled: checked,
                           },
                         },
                       })
                     }
-                  >
-                    <SelectTrigger className="w-[110px]">
-                      <SelectValue placeholder="Unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MB">MB</SelectItem>
-                      <SelectItem value="GB">GB</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    className={getFieldClasses('general', [
+                      'storage',
+                      'quotas',
+                      'enabled',
+                    ])}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Data Quota per User</Label>
+                <div className="flex items-center space-x-2 mt-1.5">
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="number"
+                      value={
+                        workingConfig.settings.general.storage.quotas.default
+                          .value
+                      }
+                      onChange={(e) => handleStorageQuotaChange(e.target.value)}
+                      placeholder="500"
+                      className={getFieldClasses('general', [
+                        'storage',
+                        'quotas',
+                        'default',
+                        'value',
+                      ])}
+                    />
+                    {isFieldChanged('general', [
+                      'storage',
+                      'quotas',
+                      'default',
+                      'value',
+                    ]) && <ChangeIndicator />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={
+                        workingConfig.settings.general.storage.quotas.default
+                          .unit
+                      }
+                      onValueChange={(value) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...workingConfig.settings.general.storage,
+                            quotas: {
+                              ...workingConfig.settings.general.storage.quotas,
+                              default: {
+                                ...workingConfig.settings.general.storage.quotas
+                                  .default,
+                                unit: value as 'MB' | 'GB',
+                              },
+                            },
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        className={`w-[110px] ${getFieldClasses('general', ['storage', 'quotas', 'default', 'unit'])}`}
+                      >
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MB">MB</SelectItem>
+                        <SelectItem value="GB">GB</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isFieldChanged('general', [
+                      'storage',
+                      'quotas',
+                      'default',
+                      'unit',
+                    ]) && <ChangeIndicator />}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -521,136 +793,220 @@ export default function SettingsPage() {
                     uploaded images.
                   </p>
                 </div>
-                <Switch
-                  checked={config.settings.general.ocr.enabled}
-                  onCheckedChange={(checked) =>
-                    handleSettingChange('general', {
-                      ocr: { enabled: checked },
-                    })
-                  }
-                />
+                <div className="flex items-center gap-2">
+                  {isFieldChanged('general', ['ocr', 'enabled']) && (
+                    <ChangeIndicator />
+                  )}
+                  <Switch
+                    checked={workingConfig.settings.general.ocr.enabled}
+                    onCheckedChange={(checked) =>
+                      handleSettingChange('general', {
+                        ocr: { enabled: checked },
+                      })
+                    }
+                    className={getFieldClasses('general', ['ocr', 'enabled'])}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Storage Provider</Label>
-                <Select
-                  value={config.settings.general.storage.provider}
-                  onValueChange={(value) =>
-                    handleSettingChange('general', {
-                      storage: {
-                        ...config.settings.general.storage,
-                        provider: value as 'local' | 's3',
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="local">Local Storage</SelectItem>
-                    <SelectItem value="s3">S3 Storage</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={workingConfig.settings.general.storage.provider}
+                    onValueChange={(value) =>
+                      handleSettingChange('general', {
+                        storage: {
+                          ...workingConfig.settings.general.storage,
+                          provider: value as 'local' | 's3',
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      className={getFieldClasses('general', [
+                        'storage',
+                        'provider',
+                      ])}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">Local Storage</SelectItem>
+                      <SelectItem value="s3">S3 Storage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isFieldChanged('general', ['storage', 'provider']) && (
+                    <ChangeIndicator />
+                  )}
+                </div>
               </div>
 
-              {config.settings.general.storage.provider === 's3' && (
+              {workingConfig.settings.general.storage.provider === 's3' && (
                 <div className="space-y-4 border rounded-lg p-4">
                   <div className="space-y-2">
                     <Label>S3 Bucket</Label>
-                    <Input
-                      value={config.settings.general.storage.s3.bucket}
-                      onChange={(e) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              bucket: e.target.value,
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={workingConfig.settings.general.storage.s3.bucket}
+                        onChange={(e) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                bucket: e.target.value,
+                              },
                             },
-                          },
-                        })
-                      }
-                      placeholder="my-bucket"
-                    />
+                          })
+                        }
+                        placeholder="my-bucket"
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'bucket',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'bucket',
+                      ]) && <ChangeIndicator />}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Region</Label>
-                    <Input
-                      value={config.settings.general.storage.s3.region}
-                      onChange={(e) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              region: e.target.value,
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={workingConfig.settings.general.storage.s3.region}
+                        onChange={(e) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                region: e.target.value,
+                              },
                             },
-                          },
-                        })
-                      }
-                      placeholder="us-east-1"
-                    />
+                          })
+                        }
+                        placeholder="us-east-1"
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'region',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'region',
+                      ]) && <ChangeIndicator />}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Access Key ID</Label>
-                    <Input
-                      type="password"
-                      value={config.settings.general.storage.s3.accessKeyId}
-                      onChange={(e) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              accessKeyId: e.target.value,
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="password"
+                        value={
+                          workingConfig.settings.general.storage.s3.accessKeyId
+                        }
+                        onChange={(e) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                accessKeyId: e.target.value,
+                              },
                             },
-                          },
-                        })
-                      }
-                      placeholder="AKIAXXXXXXXXXXXXXXXX"
-                    />
+                          })
+                        }
+                        placeholder="AKIAXXXXXXXXXXXXXXXX"
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'accessKeyId',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'accessKeyId',
+                      ]) && <ChangeIndicator />}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Secret Access Key</Label>
-                    <Input
-                      type="password"
-                      value={config.settings.general.storage.s3.secretAccessKey}
-                      onChange={(e) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              secretAccessKey: e.target.value,
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="password"
+                        value={
+                          workingConfig.settings.general.storage.s3
+                            .secretAccessKey
+                        }
+                        onChange={(e) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                secretAccessKey: e.target.value,
+                              },
                             },
-                          },
-                        })
-                      }
-                      placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                    />
+                          })
+                        }
+                        placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'secretAccessKey',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'secretAccessKey',
+                      ]) && <ChangeIndicator />}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>Custom Endpoint (Optional)</Label>
-                    <Input
-                      value={config.settings.general.storage.s3.endpoint || ''}
-                      onChange={(e) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              endpoint: e.target.value,
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={
+                          workingConfig.settings.general.storage.s3.endpoint ||
+                          ''
+                        }
+                        onChange={(e) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                endpoint: e.target.value,
+                              },
                             },
-                          },
-                        })
-                      }
-                      placeholder="https://s3.custom-domain.com"
-                    />
+                          })
+                        }
+                        placeholder="https://s3.custom-domain.com"
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'endpoint',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'endpoint',
+                      ]) && <ChangeIndicator />}
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       For S3-compatible services like MinIO or DigitalOcean
                       Spaces
@@ -658,22 +1014,35 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <Switch
-                      checked={
-                        config.settings.general.storage.s3.forcePathStyle
-                      }
-                      onCheckedChange={(checked) =>
-                        handleSettingChange('general', {
-                          storage: {
-                            ...config.settings.general.storage,
-                            s3: {
-                              ...config.settings.general.storage.s3,
-                              forcePathStyle: checked,
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={
+                          workingConfig.settings.general.storage.s3
+                            .forcePathStyle
+                        }
+                        onCheckedChange={(checked) =>
+                          handleSettingChange('general', {
+                            storage: {
+                              ...workingConfig.settings.general.storage,
+                              s3: {
+                                ...workingConfig.settings.general.storage.s3,
+                                forcePathStyle: checked,
+                              },
                             },
-                          },
-                        })
-                      }
-                    />
+                          })
+                        }
+                        className={getFieldClasses('general', [
+                          'storage',
+                          's3',
+                          'forcePathStyle',
+                        ])}
+                      />
+                      {isFieldChanged('general', [
+                        'storage',
+                        's3',
+                        'forcePathStyle',
+                      ]) && <ChangeIndicator />}
+                    </div>
                     <Label>Force Path Style</Label>
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -685,35 +1054,65 @@ export default function SettingsPage() {
 
               <div className="space-y-2">
                 <Label>Maximum Upload Size</Label>
-                <div className="flex space-x-2 mt-1.5">
-                  <Input
-                    type="number"
-                    value={config.settings.general.storage.maxUploadSize.value}
-                    onChange={(e) => handleMaxUploadSizeChange(e.target.value)}
-                    placeholder="10"
-                  />
-                  <Select
-                    value={config.settings.general.storage.maxUploadSize.unit}
-                    onValueChange={(value) =>
-                      handleSettingChange('general', {
-                        storage: {
-                          ...config.settings.general.storage,
-                          maxUploadSize: {
-                            ...config.settings.general.storage.maxUploadSize,
-                            unit: value as 'MB' | 'GB',
+                <div className="flex space-x-2 items-center mt-1.5">
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="number"
+                      value={
+                        workingConfig.settings.general.storage.maxUploadSize
+                          .value
+                      }
+                      onChange={(e) =>
+                        handleMaxUploadSizeChange(e.target.value)
+                      }
+                      placeholder="10"
+                      className={getFieldClasses('general', [
+                        'storage',
+                        'maxUploadSize',
+                        'value',
+                      ])}
+                    />
+                    {isFieldChanged('general', [
+                      'storage',
+                      'maxUploadSize',
+                      'value',
+                    ]) && <ChangeIndicator />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={
+                        workingConfig.settings.general.storage.maxUploadSize
+                          .unit
+                      }
+                      onValueChange={(value) =>
+                        handleSettingChange('general', {
+                          storage: {
+                            ...workingConfig.settings.general.storage,
+                            maxUploadSize: {
+                              ...workingConfig.settings.general.storage
+                                .maxUploadSize,
+                              unit: value as 'MB' | 'GB',
+                            },
                           },
-                        },
-                      })
-                    }
-                  >
-                    <SelectTrigger className="w-[110px]">
-                      <SelectValue placeholder="Unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MB">MB</SelectItem>
-                      <SelectItem value="GB">GB</SelectItem>
-                    </SelectContent>
-                  </Select>
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        className={`w-[110px] ${getFieldClasses('general', ['storage', 'maxUploadSize', 'unit'])}`}
+                      >
+                        <SelectValue placeholder="Unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MB">MB</SelectItem>
+                        <SelectItem value="GB">GB</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isFieldChanged('general', [
+                      'storage',
+                      'maxUploadSize',
+                      'unit',
+                    ]) && <ChangeIndicator />}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -734,14 +1133,23 @@ export default function SettingsPage() {
                     Display Flare credits in the footer
                   </p>
                 </div>
-                <Switch
-                  checked={config.settings.general.credits.showFooter}
-                  onCheckedChange={(checked) =>
-                    handleSettingChange('general', {
-                      credits: { showFooter: checked },
-                    })
-                  }
-                />
+                <div className="flex items-center gap-2">
+                  {isFieldChanged('general', ['credits', 'showFooter']) && (
+                    <ChangeIndicator />
+                  )}
+                  <Switch
+                    checked={workingConfig.settings.general.credits.showFooter}
+                    onCheckedChange={(checked) =>
+                      handleSettingChange('general', {
+                        credits: { showFooter: checked },
+                      })
+                    }
+                    className={getFieldClasses('general', [
+                      'credits',
+                      'showFooter',
+                    ])}
+                  />
+                </div>
               </div>
 
               <Alert>
@@ -758,32 +1166,54 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="appearance" className="space-y-4">
-          <ThemeCustomizer
-            onColorChange={handleCustomColorsChange}
-            initialColors={config.settings.appearance.customColors}
-          />
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Theme Colors</CardTitle>
+                <CardDescription>
+                  Customize the colors of your Flare instance
+                </CardDescription>
+              </div>
+              {!deepEqual(
+                savedConfig?.settings.appearance.customColors,
+                workingConfig?.settings.appearance.customColors
+              ) && <ChangeIndicator />}
+            </CardHeader>
+            <CardContent>
+              <ThemeCustomizer
+                onColorChange={handleCustomColorsChange}
+                initialColors={workingConfig?.settings.appearance.customColors}
+              />
+            </CardContent>
+          </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Favicon</CardTitle>
-              <CardDescription>
-                Upload a custom favicon for your instance
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Favicon</CardTitle>
+                <CardDescription>
+                  Upload a custom favicon for your instance
+                </CardDescription>
+              </div>
+              {hasFaviconChanged() && <ChangeIndicator />}
             </CardHeader>
             <CardContent>
               <div className="mt-2">
                 <div className="flex items-center justify-center w-full">
                   <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted relative">
-                    {config.settings.appearance.favicon && (
+                    {(workingConfig?.settings.appearance.favicon ||
+                      faviconPreviewUrl) && (
                       <div className="absolute top-4 left-4">
                         <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                           <img
-                            src="/api/favicon"
-                            alt="Current favicon"
+                            src={faviconPreviewUrl || '/api/favicon'}
+                            alt="Favicon"
                             className="w-6 h-6"
                           />
                           <span className="text-sm text-muted-foreground">
-                            Current favicon
+                            {faviconPreviewUrl
+                              ? 'New favicon (unsaved)'
+                              : 'Current favicon'}
                           </span>
                         </div>
                       </div>
@@ -815,48 +1245,26 @@ export default function SettingsPage() {
                           return
                         }
 
-                        const formData = new FormData()
-                        formData.append('file', file)
-
                         try {
-                          const response = await fetch(
-                            '/api/settings/favicon',
-                            {
-                              method: 'POST',
-                              body: formData,
-                            }
-                          )
-
-                          if (!response.ok) throw new Error()
-
-                          // Update the config to reflect the new favicon
-                          const newConfig = {
-                            ...config!,
-                            settings: {
-                              ...config!.settings,
-                              appearance: {
-                                ...config!.settings.appearance,
-                                favicon: '/api/favicon',
-                              },
-                            },
+                          // If there was a previous preview, revoke it
+                          if (faviconPreviewUrl) {
+                            URL.revokeObjectURL(faviconPreviewUrl)
                           }
-                          setConfig(newConfig)
 
-                          // Update the favicon in the browser
-                          const link = document.querySelector(
-                            "link[rel*='icon']"
-                          ) as HTMLLinkElement
-                          if (link) {
-                            link.href = '/api/favicon'
-                            link.type = 'image/png'
-                          }
+                          // Create a preview URL for the new favicon
+                          const previewUrl = URL.createObjectURL(file)
+                          setFaviconPreviewUrl(previewUrl)
+
+                          // Store the file for upload on save
+                          setPendingFaviconFile(file)
 
                           toast({
-                            title: 'Favicon updated',
+                            title: 'Favicon changed',
                             description:
-                              'Your favicon has been updated successfully',
+                              'Save your changes to apply the new favicon',
                           })
-                        } catch {
+                        } catch (error) {
+                          console.error('Failed to handle favicon:', error)
                           toast({
                             title: 'Failed to update favicon',
                             description: 'Please try again',
@@ -881,7 +1289,12 @@ export default function SettingsPage() {
             <CardContent>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Custom CSS</Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Custom CSS</Label>
+                    {isFieldChanged('advanced', ['customCSS']) && (
+                      <ChangeIndicator />
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -892,20 +1305,26 @@ export default function SettingsPage() {
                   </Button>
                 </div>
                 {cssEditorOpen && (
-                  <Card className="mt-4">
-                    <CardHeader>
-                      <CardTitle>Custom CSS Editor</CardTitle>
-                      <CardDescription>
-                        Add custom CSS to customize your instance
-                      </CardDescription>
+                  <Card
+                    className={`mt-4 ${isFieldChanged('advanced', ['customCSS']) ? 'border-primary' : ''}`}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle>Custom CSS Editor</CardTitle>
+                        <CardDescription>
+                          Add custom CSS to customize your instance
+                        </CardDescription>
+                      </div>
+                      {isFieldChanged('advanced', ['customCSS']) && (
+                        <ChangeIndicator />
+                      )}
                     </CardHeader>
                     <CardContent>
                       <CodeMirror
-                        value={cssValue}
+                        value={workingConfig.settings.advanced.customCSS}
                         height="200px"
                         extensions={[css()]}
                         onChange={(value) => {
-                          setCssValue(value)
                           handleSettingChange('advanced', { customCSS: value })
                         }}
                         theme="dark"
@@ -928,7 +1347,12 @@ export default function SettingsPage() {
             <CardContent>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Custom HTML</Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Custom HTML</Label>
+                    {isFieldChanged('advanced', ['customHead']) && (
+                      <ChangeIndicator />
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -939,20 +1363,26 @@ export default function SettingsPage() {
                   </Button>
                 </div>
                 {htmlEditorOpen && (
-                  <Card className="mt-4">
-                    <CardHeader>
-                      <CardTitle>Custom HTML Editor</CardTitle>
-                      <CardDescription>
-                        Add custom HTML to the head of your instance
-                      </CardDescription>
+                  <Card
+                    className={`mt-4 ${isFieldChanged('advanced', ['customHead']) ? 'border-primary' : ''}`}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle>Custom HTML Editor</CardTitle>
+                        <CardDescription>
+                          Add custom HTML to the head of your instance
+                        </CardDescription>
+                      </div>
+                      {isFieldChanged('advanced', ['customHead']) && (
+                        <ChangeIndicator />
+                      )}
                     </CardHeader>
                     <CardContent>
                       <CodeMirror
-                        value={htmlValue}
+                        value={workingConfig.settings.advanced.customHead}
                         height="200px"
                         extensions={[html()]}
                         onChange={(value) => {
-                          setHtmlValue(value)
                           handleSettingChange('advanced', { customHead: value })
                         }}
                         theme="dark"
@@ -966,6 +1396,48 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {hasChanges && (
+        <div className="fixed bottom-8 left-0 right-0 flex justify-center z-50">
+          <div className="flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur-md border rounded-full shadow-lg">
+            <div className="flex items-center gap-2 mr-2">
+              <Circle className="h-3 w-3 fill-primary text-primary animate-pulse" />
+              <span className="text-sm font-medium">
+                {countChangedSettings()}{' '}
+                {countChangedSettings() === 1 ? 'section' : 'sections'} changed:{' '}
+                {getChangedSettingsGroups().join(', ')}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={discardChanges}
+              className="flex items-center rounded-full px-4"
+              size="sm"
+            >
+              <XCircle className="mr-2 h-4 w-4" />
+              Discard
+            </Button>
+            <Button
+              onClick={saveChanges}
+              disabled={isSaving}
+              className="flex items-center rounded-full px-4"
+              size="sm"
+            >
+              {isSaving ? (
+                <>
+                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
