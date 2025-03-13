@@ -1,0 +1,39 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "lib/**/*.{ts,tsx}",
+    "hooks/**/*.{ts,tsx}",
+    "middleware.ts"
+  ],
+  "project": ["**/*.{ts,tsx}"],
+  "ignoreDependencies": [
+    "eslint-config-next",
+    "postcss",
+    "tailwindcss",
+    "typescript"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["prisma"],
+  "includeEntryExports": true,
+  "rules": {
+    "classMembers": "error",
+    "enumMembers": "error",
+    "types": "error",
+    "exports": "error",
+    "files": "error",
+    "dependencies": "error",
+    "duplicates": "error",
+    "nsExports": "error",
+    "nsTypes": "error"
+  },
+  "ignore": [
+    "**/*.test.{ts,tsx}",
+    "**/*.spec.{ts,tsx}",
+    "**/__tests__/**",
+    "**/node_modules/**",
+    ".next/**",
+    "coverage/**"
+  ]
+}

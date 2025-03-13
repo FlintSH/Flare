@@ -21,10 +21,6 @@ export function bytesToMB(bytes: number): number {
   return bytes / (1024 * 1024)
 }
 
-export function mbToBytes(mb: number): number {
-  return mb * 1024 * 1024
-}
-
 export function formatFileSize(mb: number, decimals = 2): string {
   const bytes = mb * 1024 * 1024
 
