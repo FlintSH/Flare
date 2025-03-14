@@ -21,7 +21,6 @@ import { sql } from '@codemirror/lang-sql'
 import { wast } from '@codemirror/lang-wast'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
-// Replace syntax highlighting imports with CodeMirror
 import CodeMirror from '@uiw/react-codemirror'
 import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
