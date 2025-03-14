@@ -4,13 +4,29 @@ import { useCallback, useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
+import { cpp } from '@codemirror/lang-cpp'
+import { css } from '@codemirror/lang-css'
+import { go } from '@codemirror/lang-go'
+import { html } from '@codemirror/lang-html'
+import { java } from '@codemirror/lang-java'
+import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
+import { less } from '@codemirror/lang-less'
+import { markdown } from '@codemirror/lang-markdown'
+import { php } from '@codemirror/lang-php'
+import { python } from '@codemirror/lang-python'
+import { rust } from '@codemirror/lang-rust'
+import { sass } from '@codemirror/lang-sass'
+import { sql } from '@codemirror/lang-sql'
+import { wast } from '@codemirror/lang-wast'
+import { xml } from '@codemirror/lang-xml'
+import { yaml } from '@codemirror/lang-yaml'
+// Replace syntax highlighting imports with CodeMirror
+import CodeMirror from '@uiw/react-codemirror'
 import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
-// Import syntax highlighting components
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
@@ -326,6 +342,57 @@ function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
   )
 }
 
+// Add a function to get the appropriate language extension for CodeMirror
+function getLanguageExtension(language: string) {
+  switch (language) {
+    case 'html':
+      return html()
+    case 'css':
+      return css()
+    case 'javascript':
+      return javascript()
+    case 'json':
+      return json()
+    case 'jsx':
+      return javascript({ jsx: true })
+    case 'typescript':
+      return javascript({ typescript: true })
+    case 'tsx':
+      return javascript({ jsx: true, typescript: true })
+    case 'python':
+      return python()
+    case 'markdown':
+      return markdown()
+    case 'yaml':
+      return yaml()
+    case 'java':
+      return java()
+    case 'sql':
+      return sql()
+    case 'xml':
+      return xml()
+    case 'wasm':
+      return wast()
+    case 'c':
+    case 'cpp':
+      return cpp()
+    case 'rust':
+      return rust()
+    case 'php':
+      return php()
+    case 'go':
+      return go()
+    case 'sass':
+      return sass()
+    case 'scss':
+      return sass()
+    case 'less':
+      return less()
+    default:
+      return javascript() // Default to javascript for unknown languages
+  }
+}
+
 export function ProtectedFile({ file }: ProtectedFileProps) {
   const { data: session } = useSession()
   const [isVerified, setIsVerified] = useState(false)
@@ -520,20 +587,21 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           // Code files with syntax highlighting
           if (CODE_FILE_TYPES[file.mimeType]) {
             return (
-              <div className="w-full max-h-[60vh] overflow-auto p-4">
-                <SyntaxHighlighter
-                  language={CODE_FILE_TYPES[file.mimeType]}
-                  style={oneDark}
-                  showLineNumbers
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    minHeight: '100%',
-                    fontSize: '14px',
+              <div className="w-full max-h-[60vh] overflow-auto">
+                <CodeMirror
+                  value={codeContent || ''}
+                  width="40vw"
+                  extensions={[
+                    getLanguageExtension(CODE_FILE_TYPES[file.mimeType]),
+                  ]}
+                  editable={false}
+                  theme="dark"
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: false,
+                    highlightActiveLine: false,
                   }}
-                >
-                  {codeContent || ''}
-                </SyntaxHighlighter>
+                />
               </div>
             )
           }
@@ -551,19 +619,18 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
               )
             }
             return (
-              <div className="w-full max-h-[60vh] overflow-auto p-4">
-                <SyntaxHighlighter
-                  style={oneDark}
-                  showLineNumbers
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    minHeight: '100%',
-                    fontSize: '14px',
+              <div className="w-full max-h-[60vh] overflow-auto">
+                <CodeMirror
+                  value={codeContent}
+                  width="40vw"
+                  editable={false}
+                  theme="dark"
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: false,
+                    highlightActiveLine: false,
                   }}
-                >
-                  {codeContent}
-                </SyntaxHighlighter>
+                />
               </div>
             )
           }
