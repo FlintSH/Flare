@@ -159,6 +159,13 @@ function SettingsSkeleton() {
   )
 }
 
+// Safe URL validation function
+const isSafeUrl = (url: string | null): url is string => {
+  if (!url) return false
+  // Only allow blob URLs created by URL.createObjectURL
+  return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
+}
+
 export default function SettingsPage() {
   const { toast } = useToast()
   const [savedConfig, setSavedConfig] = useState<FlareConfig | null>(null)
@@ -1207,8 +1214,7 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                           <img
                             src={
-                              faviconPreviewUrl &&
-                              faviconPreviewUrl.startsWith('blob:')
+                              isSafeUrl(faviconPreviewUrl)
                                 ? faviconPreviewUrl
                                 : '/api/favicon'
                             }
