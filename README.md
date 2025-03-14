@@ -1,6 +1,6 @@
 <div align="center">
   <img src="./public/banner.png" alt="Flare Banner" width="600px" />
-  <p><small><i>Icon designed by <a href="https://github.com/tythebeast/">xNefas</a></i></small></p>
+  <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
   
   ### A modern, lightning-fast file sharing platform built for self-hosting
 
