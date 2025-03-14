@@ -11,8 +11,8 @@ import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 function encodeFilename(filename: string): string {
   // First encode as URI component to handle special characters
   const encoded = encodeURIComponent(filename)
-  // Then wrap in quotes and escape quotes in filename
-  return `"${encoded.replace(/"/g, '\\"')}"`
+  // Then wrap in quotes and escape quotes and backslashes in filename
+  return `"${encoded.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
 export async function GET(

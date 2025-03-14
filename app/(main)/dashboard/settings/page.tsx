@@ -1206,7 +1206,12 @@ export default function SettingsPage() {
                       <div className="absolute top-4 left-4">
                         <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                           <img
-                            src={faviconPreviewUrl || '/api/favicon'}
+                            src={
+                              faviconPreviewUrl &&
+                              faviconPreviewUrl.startsWith('blob:')
+                                ? faviconPreviewUrl
+                                : '/api/favicon'
+                            }
                             alt="Favicon"
                             className="w-6 h-6"
                           />
@@ -1240,6 +1245,16 @@ export default function SettingsPage() {
                             title: 'File too large',
                             description:
                               'Please upload a file smaller than 1MB',
+                            variant: 'destructive',
+                          })
+                          return
+                        }
+
+                        // Validate file type to ensure it's an image/png
+                        if (file.type !== 'image/png') {
+                          toast({
+                            title: 'Invalid file type',
+                            description: 'Please upload a PNG image file',
                             variant: 'destructive',
                           })
                           return
