@@ -4,13 +4,29 @@ import { useCallback, useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
+import { cpp } from '@codemirror/lang-cpp'
+import { css } from '@codemirror/lang-css'
+import { go } from '@codemirror/lang-go'
+import { html } from '@codemirror/lang-html'
+import { java } from '@codemirror/lang-java'
+import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
+import { less } from '@codemirror/lang-less'
+import { markdown } from '@codemirror/lang-markdown'
+import { php } from '@codemirror/lang-php'
+import { python } from '@codemirror/lang-python'
+import { rust } from '@codemirror/lang-rust'
+import { sass } from '@codemirror/lang-sass'
+import { sql } from '@codemirror/lang-sql'
+import { wast } from '@codemirror/lang-wast'
+import { xml } from '@codemirror/lang-xml'
+import { yaml } from '@codemirror/lang-yaml'
+import CodeMirror from '@uiw/react-codemirror'
+import DOMPurify from 'dompurify'
 import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
-// Import syntax highlighting components
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
@@ -236,9 +252,13 @@ function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
   useEffect(() => {
     const fetchAndParseCsv = async () => {
       try {
-        const response = await fetch(
-          url + (verifiedPassword ? `?password=${verifiedPassword}` : '')
+        const sanitizedUrl = DOMPurify.sanitize(
+          url +
+            (verifiedPassword
+              ? `?password=${DOMPurify.sanitize(verifiedPassword)}`
+              : '')
         )
+        const response = await fetch(sanitizedUrl)
 
         // Check file size
         const contentLength = response.headers.get('content-length')
@@ -287,7 +307,7 @@ function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
       <div className="w-full flex flex-col items-center justify-center p-8 text-center">
         <p className="text-muted-foreground mb-2">{error}</p>
         <iframe
-          src={url}
+          src={DOMPurify.sanitize(url)}
           className="w-full h-full border-0 font-mono"
           title={title}
         />
@@ -326,6 +346,57 @@ function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
   )
 }
 
+// Add a function to get the appropriate language extension for CodeMirror
+function getLanguageExtension(language: string) {
+  switch (language) {
+    case 'html':
+      return html()
+    case 'css':
+      return css()
+    case 'javascript':
+      return javascript()
+    case 'json':
+      return json()
+    case 'jsx':
+      return javascript({ jsx: true })
+    case 'typescript':
+      return javascript({ typescript: true })
+    case 'tsx':
+      return javascript({ jsx: true, typescript: true })
+    case 'python':
+      return python()
+    case 'markdown':
+      return markdown()
+    case 'yaml':
+      return yaml()
+    case 'java':
+      return java()
+    case 'sql':
+      return sql()
+    case 'xml':
+      return xml()
+    case 'wasm':
+      return wast()
+    case 'c':
+    case 'cpp':
+      return cpp()
+    case 'rust':
+      return rust()
+    case 'php':
+      return php()
+    case 'go':
+      return go()
+    case 'sass':
+      return sass()
+    case 'scss':
+      return sass()
+    case 'less':
+      return less()
+    default:
+      return javascript() // Default to javascript for unknown languages
+  }
+}
+
 export function ProtectedFile({ file }: ProtectedFileProps) {
   const { data: session } = useSession()
   const [isVerified, setIsVerified] = useState(false)
@@ -349,8 +420,12 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
 
   // Set up URLs when password or verification status changes
   useEffect(() => {
-    const fileUrl = `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-    const rawUrl = `${sanitizeUrl(file.urlPath)}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    const fileUrl = DOMPurify.sanitize(
+      `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    )
+    const rawUrl = DOMPurify.sanitize(
+      `${sanitizeUrl(file.urlPath)}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    )
     setFileUrls({ fileUrl, rawUrl })
   }, [file.urlPath, verifiedPassword])
 
@@ -360,7 +435,8 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       const searchParams = new URLSearchParams(window.location.search)
       const parentVerifiedPassword = searchParams.get('password')
       if (parentVerifiedPassword && !verifiedPassword) {
-        setVerifiedPassword(parentVerifiedPassword)
+        const sanitizedPassword = DOMPurify.sanitize(parentVerifiedPassword)
+        setVerifiedPassword(sanitizedPassword)
         setIsVerified(true)
       }
     }
@@ -369,8 +445,11 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
   // Fetch code content for syntax highlighting if needed
   const fetchCodeContent = useCallback(async () => {
     if (CODE_FILE_TYPES[file.mimeType] && !codeContent) {
+      const sanitizedPassword = verifiedPassword
+        ? DOMPurify.sanitize(verifiedPassword)
+        : ''
       const response = await fetch(
-        `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+        `/api/files${sanitizeUrl(file.urlPath)}${sanitizedPassword ? `?password=${sanitizedPassword}` : ''}`
       )
       const text = await response.text()
       setCodeContent(text)
@@ -383,8 +462,11 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       if (CODE_FILE_TYPES[file.mimeType]) {
         fetchCodeContent()
       } else if (TEXT_FILE_TYPES.includes(file.mimeType) && !codeContent) {
+        const sanitizedPassword = verifiedPassword
+          ? DOMPurify.sanitize(verifiedPassword)
+          : ''
         fetch(
-          `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          `/api/files${sanitizeUrl(file.urlPath)}${sanitizedPassword ? `?password=${sanitizedPassword}` : ''}`
         )
           .then((response) => response.text())
           .then((text) => setCodeContent(text))
@@ -410,7 +492,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           This file is private. Please sign in to view it.
         </p>
         <Button asChild>
-          <Link href="/auth/signin">Sign In</Link>
+          <Link href={DOMPurify.sanitize('/auth/signin')}>Sign In</Link>
         </Button>
       </div>
     )
@@ -419,11 +501,12 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
   // Only show password prompt if not owner and password is required
   if (file.password && !isOwner && !isVerified) {
     const verifyPassword = async (password: string) => {
+      const sanitizedPassword = DOMPurify.sanitize(password)
       const response = await fetch(
-        `/api/files${sanitizeUrl(file.urlPath)}?password=${password}`
+        `/api/files${sanitizeUrl(file.urlPath)}?password=${sanitizedPassword}`
       )
       if (response.ok) {
-        setVerifiedPassword(password)
+        setVerifiedPassword(sanitizedPassword)
       }
       return response.ok
     }
@@ -448,7 +531,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           if (file.mimeType.startsWith('image/')) {
             return (
               <img
-                src={fileUrl}
+                src={DOMPurify.sanitize(fileUrl)}
                 alt={file.name}
                 className="max-w-full max-h-[70vh] object-contain"
               />
@@ -463,9 +546,13 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
             console.log('CSV file detected, using CSV viewer')
             return (
               <CsvViewer
-                url={fileUrl}
+                url={DOMPurify.sanitize(fileUrl)}
                 title={file.name}
-                verifiedPassword={verifiedPassword}
+                verifiedPassword={
+                  verifiedPassword
+                    ? DOMPurify.sanitize(verifiedPassword)
+                    : undefined
+                }
               />
             )
           }
@@ -475,7 +562,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
             return (
               <div className="w-full">
                 <iframe
-                  src={fileUrl}
+                  src={DOMPurify.sanitize(fileUrl)}
                   className="w-full h-[80vh]"
                   title={file.name}
                 />
@@ -487,13 +574,13 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           if (VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
             return (
               <video
-                src={rawUrl}
+                src={DOMPurify.sanitize(rawUrl)}
                 controls
                 className="max-w-full max-h-[70vh]"
                 controlsList="nodownload"
                 preload="metadata"
               >
-                <source src={rawUrl} type={file.mimeType} />
+                <source src={DOMPurify.sanitize(rawUrl)} type={file.mimeType} />
                 Your browser does not support the video tag.
               </video>
             )
@@ -504,13 +591,16 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
             return (
               <div className="w-full p-8">
                 <audio
-                  src={fileUrl}
+                  src={DOMPurify.sanitize(fileUrl)}
                   controls
                   className="w-full"
                   controlsList="nodownload"
                   preload="metadata"
                 >
-                  <source src={fileUrl} type={file.mimeType} />
+                  <source
+                    src={DOMPurify.sanitize(fileUrl)}
+                    type={file.mimeType}
+                  />
                   Your browser does not support the audio tag.
                 </audio>
               </div>
@@ -520,20 +610,21 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           // Code files with syntax highlighting
           if (CODE_FILE_TYPES[file.mimeType]) {
             return (
-              <div className="w-full max-h-[60vh] overflow-auto p-4">
-                <SyntaxHighlighter
-                  language={CODE_FILE_TYPES[file.mimeType]}
-                  style={oneDark}
-                  showLineNumbers
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    minHeight: '100%',
-                    fontSize: '14px',
+              <div className="w-full max-h-[60vh] overflow-auto">
+                <CodeMirror
+                  value={codeContent || ''}
+                  width="40vw"
+                  extensions={[
+                    getLanguageExtension(CODE_FILE_TYPES[file.mimeType]),
+                  ]}
+                  editable={false}
+                  theme="dark"
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: false,
+                    highlightActiveLine: false,
                   }}
-                >
-                  {codeContent || ''}
-                </SyntaxHighlighter>
+                />
               </div>
             )
           }
@@ -551,19 +642,18 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
               )
             }
             return (
-              <div className="w-full max-h-[60vh] overflow-auto p-4">
-                <SyntaxHighlighter
-                  style={oneDark}
-                  showLineNumbers
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: 0,
-                    minHeight: '100%',
-                    fontSize: '14px',
+              <div className="w-full max-h-[60vh] overflow-auto">
+                <CodeMirror
+                  value={codeContent}
+                  width="40vw"
+                  editable={false}
+                  theme="dark"
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLineGutter: false,
+                    highlightActiveLine: false,
                   }}
-                >
-                  {codeContent}
-                </SyntaxHighlighter>
+                />
               </div>
             )
           }

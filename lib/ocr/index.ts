@@ -17,13 +17,5 @@ export async function processImageOCR(
   }
 }
 
-// Export queue status functions for monitoring
-export function getOCRQueueStatus() {
-  return {
-    queueLength: ocrQueue.getQueueLength(),
-    activeProcesses: ocrQueue.getActiveProcesses(),
-  }
-}
-
 // Export the queue instance
 export { ocrQueue }

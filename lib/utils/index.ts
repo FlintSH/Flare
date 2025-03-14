@@ -1,9 +1,3 @@
-export {
-  cn,
-  formatBytes,
-  bytesToMB,
-  mbToBytes,
-  formatFileSize,
-} from './formatting'
+export { cn, formatBytes, bytesToMB, formatFileSize } from './formatting'
 
 export { updateProgress, clearProgress, getProgress } from './progress'

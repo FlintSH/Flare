@@ -1,15 +1,6 @@
 import Image from 'next/image'
 
-import {
-  Infinity,
-  AlertCircle,
-  Copy,
-  FileIcon,
-  Loader2,
-  type Icon as LucideIcon,
-} from 'lucide-react'
-
-export type Icon = typeof LucideIcon
+import { Infinity, AlertCircle, Copy, FileIcon, Loader2 } from 'lucide-react'
 
 const FlareIcon = (
   props: Omit<

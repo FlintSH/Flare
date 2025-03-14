@@ -6,6 +6,7 @@ import pkg from '@/package.json'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import CodeMirror from '@uiw/react-codemirror'
+import DOMPurify from 'dompurify'
 import { deepEqual } from 'fast-equals'
 import {
   Circle,
@@ -157,6 +158,13 @@ function SettingsSkeleton() {
       </div>
     </div>
   )
+}
+
+// Safe URL validation function
+const isSafeUrl = (url: string | null): url is string => {
+  if (!url) return false
+  // Only allow blob URLs created by URL.createObjectURL
+  return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
 }
 
 export default function SettingsPage() {
@@ -1206,7 +1214,11 @@ export default function SettingsPage() {
                       <div className="absolute top-4 left-4">
                         <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                           <img
-                            src={faviconPreviewUrl || '/api/favicon'}
+                            src={
+                              isSafeUrl(faviconPreviewUrl)
+                                ? DOMPurify.sanitize(faviconPreviewUrl)
+                                : '/api/favicon'
+                            }
                             alt="Favicon"
                             className="w-6 h-6"
                           />
@@ -1240,6 +1252,16 @@ export default function SettingsPage() {
                             title: 'File too large',
                             description:
                               'Please upload a file smaller than 1MB',
+                            variant: 'destructive',
+                          })
+                          return
+                        }
+
+                        // Validate file type to ensure it's an image/png
+                        if (file.type !== 'image/png') {
+                          toast({
+                            title: 'Invalid file type',
+                            description: 'Please upload a PNG image file',
                             variant: 'destructive',
                           })
                           return

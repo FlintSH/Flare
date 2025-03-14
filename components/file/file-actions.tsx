@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
+import DOMPurify from 'dompurify'
 import { Copy, Download, ExternalLink, Link, ScanText } from 'lucide-react'
 
 import { OcrDialog } from '@/components/shared/ocr-dialog'
@@ -36,16 +37,26 @@ export function FileActions({
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
 
+  // Sanitize a URL
+  const sanitizeUrl = (url: string): string => {
+    return DOMPurify.sanitize(url)
+  }
+
   // Set up URLs when password changes
   useEffect(() => {
-    const fileUrl = `/api/files${urlPath}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-    const rawUrl = `${urlPath}/raw${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+    const passwordParam = verifiedPassword
+      ? `?password=${encodeURIComponent(DOMPurify.sanitize(verifiedPassword))}`
+      : ''
+    const sanitizedUrlPath = DOMPurify.sanitize(urlPath)
+    const fileUrl = `/api/files${sanitizedUrlPath}${passwordParam}`
+    const rawUrl = `${sanitizedUrlPath}/raw${passwordParam}`
     setUrls({ fileUrl, rawUrl })
   }, [urlPath, verifiedPassword])
 
   const handleCopyUrl = () => {
     if (!urls) return
-    navigator.clipboard.writeText(window.location.origin + urlPath)
+    const sanitizedUrl = DOMPurify.sanitize(window.location.origin + urlPath)
+    navigator.clipboard.writeText(sanitizedUrl)
     toast({
       title: 'URL copied',
       description: 'File URL has been copied to clipboard',
@@ -62,7 +73,7 @@ export function FileActions({
           description: 'File content has been copied to clipboard',
         })
       } else {
-        const response = await fetch(urls.fileUrl)
+        const response = await fetch(sanitizeUrl(urls.fileUrl))
         const text = await response.text()
         await navigator.clipboard.writeText(text)
         toast({
@@ -93,9 +104,13 @@ export function FileActions({
       setIsLoadingOcr(true)
       setOcrError(null)
       console.log('[OCR] Starting OCR request for file:', fileId)
-      const response = await fetch(
-        `/api/files/${fileId}/ocr${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
-      )
+      const sanitizedFileId = DOMPurify.sanitize(fileId)
+      const passwordParam = verifiedPassword
+        ? `?password=${DOMPurify.sanitize(verifiedPassword)}`
+        : ''
+      const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
+
+      const response = await fetch(sanitizeUrl(ocrUrl))
       console.log('[OCR] Response status:', response.status)
 
       if (!response.ok) {
@@ -141,13 +156,17 @@ export function FileActions({
         Copy URL
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <a href={urls.fileUrl} download={name}>
+        <a href={sanitizeUrl(urls.fileUrl)} download={DOMPurify.sanitize(name)}>
           <Download className="h-4 w-4 mr-2" />
           Download
         </a>
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <a href={urls.rawUrl} target="_blank" rel="noopener noreferrer">
+        <a
+          href={sanitizeUrl(urls.rawUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           <ExternalLink className="h-4 w-4 mr-2" />
           Raw
         </a>
