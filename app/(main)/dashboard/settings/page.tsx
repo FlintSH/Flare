@@ -6,6 +6,7 @@ import pkg from '@/package.json'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import CodeMirror from '@uiw/react-codemirror'
+import DOMPurify from 'dompurify'
 import { deepEqual } from 'fast-equals'
 import {
   Circle,
@@ -1215,7 +1216,7 @@ export default function SettingsPage() {
                           <img
                             src={
                               isSafeUrl(faviconPreviewUrl)
-                                ? faviconPreviewUrl
+                                ? DOMPurify.sanitize(faviconPreviewUrl)
                                 : '/api/favicon'
                             }
                             alt="Favicon"
