@@ -10,6 +10,8 @@ jobs:
   build:
     name: Build Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     services:
       postgres:
