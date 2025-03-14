@@ -59,7 +59,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: |
-            🚧 Latest development build from dev branch
+            🚧 Latest development build from branch ${{ github.ref_name }}
 
             Get the Docker image from GitHub Container Registry:
             ```bash
@@ -77,7 +77,6 @@ jobs:
           git push origin development --force
           # Create new dev release
           gh release create development \
-            --title "Development Build" \
+            --title "Development Build from ${{ github.ref_name }}" \
             --notes "$RELEASE_NOTES" \
-            --target dev \
             --prerelease 
