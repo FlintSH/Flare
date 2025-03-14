@@ -2,7 +2,7 @@ name: Dev Release
 
 on:
   push:
-    branches: [ dev ]
+    branches-ignore: [ main ]
 
 jobs:
   create-dev-release:
