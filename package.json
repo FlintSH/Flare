@@ -76,7 +76,7 @@
     "date-fns": "^2.30.0",
     "dompurify": "^3.2.4",
     "fast-equals": "^5.2.2",
-    "lucide-react": "^0.474.0",
+    "lucide-react": "^0.476.0",
     "nanoid": "^5.0.9",
     "next": "^15.2.2",
     "next-auth": "^4.24.11",
