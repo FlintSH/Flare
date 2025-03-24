@@ -34,6 +34,7 @@ interface PrismaFile {
   size: number
   uploadedAt: Date
   path: string
+  views?: number
   user?: {
     name: string | null
     image: string | null
@@ -54,6 +55,7 @@ function prepareFileProps(file: PrismaFile) {
       size: file.size,
       uploadedAt: file.uploadedAt,
       path: file.path,
+      views: file.views || 0,
       user: {
         name: file.user?.name || '',
         image: file.user?.image || undefined,
@@ -73,6 +75,7 @@ function prepareFileProps(file: PrismaFile) {
     size: plainFile.size,
     uploadedAt: plainFile.uploadedAt,
     path: plainFile.path,
+    views: plainFile.views,
     user: plainFile.user,
   }
 }
