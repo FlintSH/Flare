@@ -17,6 +17,7 @@ interface FileData {
   urlPath: string
   isPaste: boolean
   password: string | null
+  views: number
 }
 
 export async function GET(
@@ -76,6 +77,7 @@ export async function GET(
         urlPath: true,
         isPaste: true,
         password: true,
+        views: true,
       },
     })
 

@@ -55,6 +55,18 @@ export async function GET(
       }
     }
 
+    // Increment view count
+    if (!isOwner) {
+      prisma.file
+        .update({
+          where: { id: file.id },
+          data: { views: { increment: 1 } },
+        })
+        .catch((error) => {
+          console.error('Failed to increment view count:', error)
+        })
+    }
+
     const storageProvider = await getStorageProvider()
     const isVideo = file.mimeType.startsWith('video/')
     const range = request.headers.get('range')

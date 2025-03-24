@@ -3,10 +3,16 @@
 import { useEffect, useState } from 'react'
 
 import DOMPurify from 'dompurify'
-import { Copy, Download, ExternalLink, Link, ScanText } from 'lucide-react'
+import { Copy, Download, ExternalLink, Eye, Link, ScanText } from 'lucide-react'
 
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -18,6 +24,7 @@ interface FileActionsProps {
   isTextBased?: boolean
   content?: string
   fileId?: string
+  views?: number
 }
 
 export function FileActions({
@@ -28,6 +35,7 @@ export function FileActions({
   isTextBased = false,
   content,
   fileId,
+  views = 0,
 }: FileActionsProps) {
   const { toast } = useToast()
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
@@ -150,44 +158,61 @@ export function FileActions({
   if (!urls) return null
 
   return (
-    <div className="flex items-center justify-center flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={handleCopyUrl}>
-        <Link className="h-4 w-4 mr-2" />
-        Copy URL
-      </Button>
-      <Button variant="outline" size="sm" asChild>
-        <a href={sanitizeUrl(urls.fileUrl)} download={DOMPurify.sanitize(name)}>
-          <Download className="h-4 w-4 mr-2" />
-          Download
-        </a>
-      </Button>
-      <Button variant="outline" size="sm" asChild>
-        <a
-          href={sanitizeUrl(urls.rawUrl)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink className="h-4 w-4 mr-2" />
-          Raw
-        </a>
-      </Button>
-      {showOcr && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleOcr}
-          disabled={isLoadingOcr}
-        >
-          <ScanText className="h-4 w-4 mr-2" />
-          Extract Text (OCR)
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={handleCopyUrl}>
+          <Link className="h-4 w-4 mr-2" />
+          Copy URL
         </Button>
-      )}
-      {isTextBased && (
-        <Button variant="outline" size="sm" onClick={handleCopyText}>
-          <Copy className="h-4 w-4 mr-2" />
-          Copy Text
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={sanitizeUrl(urls.fileUrl)}
+            download={DOMPurify.sanitize(name)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </a>
         </Button>
-      )}
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={sanitizeUrl(urls.rawUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />
+            Raw
+          </a>
+        </Button>
+        {showOcr && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOcr}
+            disabled={isLoadingOcr}
+          >
+            <ScanText className="h-4 w-4 mr-2" />
+            Extract Text (OCR)
+          </Button>
+        )}
+        {isTextBased && (
+          <Button variant="outline" size="sm" onClick={handleCopyText}>
+            <Copy className="h-4 w-4 mr-2" />
+            Copy Text
+          </Button>
+        )}
+      </div>
+
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 text-muted-foreground">
+              <Eye className="h-4 w-4" />
+              <span>{views}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>View count</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <OcrDialog
         isOpen={isOcrDialogOpen}

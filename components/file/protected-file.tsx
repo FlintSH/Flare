@@ -44,6 +44,7 @@ interface ProtectedFileProps {
     password: string | null
     userId: string
     mimeType: string
+    views: number
   }
 }
 
@@ -729,6 +730,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           isTextBased={isTextBased}
           content={codeContent}
           fileId={file.id}
+          views={file.views}
         />
       </div>
     </>

@@ -46,6 +46,7 @@ model File {
   password      String?   // Optional password protection
   isPaste       Boolean   @default(false)  // Whether this is a paste entry
   ocrConfidence Float?
+  views         Int       @default(0)      // Number of times the file has been viewed
 }
 
 model ShortenedUrl {
