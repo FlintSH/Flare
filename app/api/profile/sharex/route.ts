@@ -22,7 +22,10 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const baseUrl = process.env.NEXTAUTH_URL
+    const baseUrl =
+      process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3000'
+        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
 
     if (!baseUrl) {
       return NextResponse.json(

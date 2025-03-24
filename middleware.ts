@@ -10,8 +10,11 @@ import {
 } from './lib/middleware/setup-checker'
 
 export async function middleware(request: NextRequest) {
-  // Early return for raw endpoints
-  if (request.nextUrl.pathname.endsWith('/raw')) {
+  // Early return for raw and direct endpoints
+  if (
+    request.nextUrl.pathname.endsWith('/raw') ||
+    request.nextUrl.pathname.endsWith('/direct')
+  ) {
     return NextResponse.next()
   }
 

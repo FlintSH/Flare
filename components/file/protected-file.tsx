@@ -27,6 +27,7 @@ import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
+import ReactPlayer from 'react-player'
 
 import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
@@ -406,6 +407,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
     fileUrl: string
     rawUrl: string
   }>()
+  const [directS3VideoUrl, setDirectS3VideoUrl] = useState<string>()
   const isOwner = session?.user?.id === file.userId
 
   // Check if file is accessible
@@ -428,6 +430,29 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
     )
     setFileUrls({ fileUrl, rawUrl })
   }, [file.urlPath, verifiedPassword])
+
+  // Fetch direct S3 URL for video files
+  useEffect(() => {
+    if (
+      VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type)) &&
+      fileUrls
+    ) {
+      const fetchDirectUrl = async () => {
+        try {
+          const response = await fetch(
+            `${sanitizeUrl(file.urlPath)}/direct${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+          )
+          if (response.ok) {
+            const data = await response.json()
+            setDirectS3VideoUrl(DOMPurify.sanitize(data.url))
+          }
+        } catch (error) {
+          console.error('Failed to fetch direct S3 URL:', error)
+        }
+      }
+      fetchDirectUrl()
+    }
+  }, [file.mimeType, file.urlPath, verifiedPassword, fileUrls])
 
   // Check URL parameters for password on client-side only if not owner
   useEffect(() => {
@@ -525,7 +550,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
         {(() => {
           if (!fileUrls) return null
-          const { fileUrl, rawUrl } = fileUrls
+          const { fileUrl } = fileUrls
 
           // Image files
           if (file.mimeType.startsWith('image/')) {
@@ -573,16 +598,40 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           // Video files
           if (VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
             return (
-              <video
-                src={DOMPurify.sanitize(rawUrl)}
-                controls
-                className="max-w-full max-h-[70vh]"
-                controlsList="nodownload"
-                preload="metadata"
+              <div
+                className="w-full flex justify-center relative"
+                style={{ maxHeight: '60vh', maxWidth: '60vw' }}
               >
-                <source src={DOMPurify.sanitize(rawUrl)} type={file.mimeType} />
-                Your browser does not support the video tag.
-              </video>
+                <div
+                  className="w-full max-w-full"
+                  style={{ maxHeight: '60vh', maxWidth: '60vw' }}
+                >
+                  {directS3VideoUrl ? (
+                    <ReactPlayer
+                      url={DOMPurify.sanitize(directS3VideoUrl)}
+                      controls={true}
+                      width="100%"
+                      height="100%"
+                      style={{ maxHeight: '60vh' }}
+                      config={{
+                        file: {
+                          attributes: {
+                            controlsList: 'nodownload',
+                            preload: 'metadata',
+                          },
+                        },
+                      }}
+                      playing={false}
+                      muted={false}
+                      playsinline={true}
+                    />
+                  ) : (
+                    <div className="w-full flex items-center justify-center p-8">
+                      <p className="text-muted-foreground">Loading video...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             )
           }
 

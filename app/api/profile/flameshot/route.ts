@@ -79,8 +79,11 @@ function generateFlameshotScript({
   useWayland,
   useCompositor,
 }: ScriptOptions): string {
-  // Get base URL from NEXTAUTH_URL and ensure no trailing slash
-  const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+  // Get base URL from NEXTAUTH_URL or use localhost in dev mode
+  const baseUrl =
+    process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
 
   return `#!/bin/bash
 

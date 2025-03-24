@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
-import { getStorageProvider } from '@/lib/storage'
+import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -158,11 +158,16 @@ export async function generateMetadata({
   const baseUrl = `${protocol}://${host}`
   const rawUrl = `${baseUrl}${urlPath}/raw`
 
-  // For videos, always use the storage provider's URL to ensure proper URL formatting
-  const storageProvider = await getStorageProvider()
-  const videoUrl = isVideo
-    ? await storageProvider.getFileUrl(file.path)
-    : rawUrl
+  // For videos, get direct URL to avoid NS_BINDING_ABORTED issues in Firefox
+  let videoUrl = rawUrl
+  if (isVideo) {
+    const storageProvider = await getStorageProvider()
+    if (storageProvider instanceof S3StorageProvider) {
+      videoUrl = await storageProvider.getFileUrl(file.path)
+    } else {
+      videoUrl = `${baseUrl}${urlPath}/raw`
+    }
+  }
 
   const metadata: Metadata = {
     title: ogTitle,

@@ -24,8 +24,11 @@ export async function GET() {
       )
     }
 
-    // Get base URL from NEXTAUTH_URL and ensure no trailing slash
-    const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+    // Get base URL from NEXTAUTH_URL or use localhost in dev mode
+    const baseUrl =
+      process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3000'
+        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
 
     // Generate the bash upload script
     const script = generateBashScript({

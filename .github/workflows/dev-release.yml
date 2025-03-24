@@ -44,22 +44,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Delete existing dev release
+      - name: Create or update Dev Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Delete the release if it exists (ignore error if it doesn't)
-          gh release delete development --yes || true
-          # Delete the remote tag
-          git push origin :refs/tags/development || true
-          # Delete the local tag if it exists
-          git tag -d development || true
-
-      - name: Create Dev Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: |
-            🚧 Latest development build from dev branch
+            🚧 Latest development build from branch ${{ github.ref_name }}
 
             Get the Docker image from GitHub Container Registry:
             ```bash
@@ -71,13 +60,18 @@ jobs:
             docker pull flintsh/flare:dev
             ```
         run: |
-          # Create new tag
-          git tag -f development
-          # Force push the tag
-          git push origin development --force
-          # Create new dev release
-          gh release create development \
-            --title "Development Build" \
-            --notes "$RELEASE_NOTES" \
-            --target dev \
-            --prerelease 
+          if ! git ls-remote --tags origin refs/tags/development | grep -q 'development'; then
+            git tag -f development
+            git push origin development --force
+          fi
+          
+          if gh release view development &>/dev/null; then
+            gh release edit development \
+              --title "Development Build from ${{ github.ref_name }}" \
+              --notes "$RELEASE_NOTES"
+          else
+            gh release create development \
+              --title "Development Build from ${{ github.ref_name }}" \
+              --notes "$RELEASE_NOTES" \
+              --prerelease 
+          fi 

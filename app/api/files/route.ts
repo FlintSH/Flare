@@ -145,7 +145,10 @@ export async function POST(req: Request) {
     }
 
     // Ensure URL has protocol and handle trailing slashes
-    const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+    const baseUrl =
+      process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3000'
+        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
     const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
 
     return NextResponse.json({
