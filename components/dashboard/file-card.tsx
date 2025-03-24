@@ -8,7 +8,6 @@ import Link from 'next/link'
 import {
   Archive,
   Clock,
-  Download,
   Eye,
   EyeOff,
   File,
@@ -22,7 +21,6 @@ import {
   Music,
   ScanText,
   Table,
-  Trash2,
   Video,
 } from 'lucide-react'
 
@@ -371,12 +369,13 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                         variant="ghost"
                         size="icon"
                         className="bg-muted/50 hover:bg-muted rounded-full h-7 w-7"
-                        onClick={() => setIsOcrDialogOpen(true)}
+                        onClick={handleFetchOcr}
+                        disabled={isLoadingOcr}
                       >
                         <ScanText className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>OCR Text</TooltipContent>
+                    <TooltipContent>Extract text (OCR)</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
