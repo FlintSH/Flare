@@ -837,9 +837,9 @@ export function ProfileClient({
 
           <Card>
             <CardHeader>
-              <CardTitle>File URL Settings</CardTitle>
+              <CardTitle>File Upload Settings</CardTitle>
               <CardDescription>
-                Configure how your uploaded files are accessible via URLs.
+                Configure default settings for your uploaded files.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -849,9 +849,6 @@ export function ProfileClient({
                   <p className="text-sm text-muted-foreground">
                     When enabled, all new uploads will have randomized URLs
                     instead of using the original filename.
-                    <br />
-                    Example: /{user.urlId}/<strong>EjS8Dc</strong>.png instead
-                    of /{user.urlId}/<strong>filename</strong>.png
                   </p>
                 </div>
                 <Switch
