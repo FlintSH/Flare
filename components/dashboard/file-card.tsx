@@ -8,7 +8,7 @@ import Link from 'next/link'
 import {
   Archive,
   Clock,
-  Eye,
+  Download,
   EyeOff,
   File,
   FileCode,
@@ -21,6 +21,7 @@ import {
   Music,
   ScanText,
   Table,
+  Trash2,
   Video,
 } from 'lucide-react'
 
@@ -59,7 +60,6 @@ interface FileCardProps {
     password: string | null
     size: number
     uploadedAt: string
-    views: number
   }
   onDelete?: (id: string) => void
 }
@@ -326,74 +326,104 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </Link>
 
         {/* Overlay with quick actions */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background/90 to-background/0 p-3 opacity-0 transition-opacity group-hover:opacity-100">
-          <div className="flex gap-2 justify-between items-center">
-            <div className="flex gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="bg-muted/50 hover:bg-muted rounded-full h-7 w-7"
-                      onClick={handleCopyLink}
-                    >
-                      <LinkIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Copy link</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+        <div
+          className={`absolute inset-0 bg-black/50 opacity-0 ${!isLoadingOcr && 'group-hover:opacity-100'} transition-opacity flex flex-col items-center justify-center gap-3`}
+        >
+          {/* Primary View button */}
+          <Button variant="secondary" className="glass-hover" size="sm" asChild>
+            <Link href={sanitizeUrl(file.urlPath)}>View</Link>
+          </Button>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="bg-muted/50 hover:bg-muted rounded-full h-7 w-7"
-                      onClick={() => setIsVisibilityDialogOpen(true)}
+          {/* Action buttons row */}
+          <div className="flex gap-1">
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
+                    onClick={handleCopyLink}
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy link</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
+                    asChild
+                  >
+                    <a
+                      href={`/api/files${sanitizeUrl(file.urlPath)}?download=true`}
+                      download={file.name}
                     >
-                      <EyeOff className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Change visibility</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Download</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
+                    onClick={() => setIsVisibilityDialogOpen(true)}
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Change visibility</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
+                    onClick={() => setIsPasswordDialogOpen(true)}
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Password protect</TooltipContent>
+              </Tooltip>
               {isImage && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="bg-muted/50 hover:bg-muted rounded-full h-7 w-7"
-                        onClick={handleFetchOcr}
-                        disabled={isLoadingOcr}
-                      >
-                        <ScanText className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Extract text (OCR)</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-
-            <div className="flex gap-2 items-center">
-              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                      <Eye className="h-3.5 w-3.5" />
-                      {file.views}
-                    </div>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-8 w-8 glass-hover"
+                      onClick={handleFetchOcr}
+                      disabled={isLoadingOcr}
+                    >
+                      <ScanText className="h-4 w-4" />
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Views</TooltipContent>
+                  <TooltipContent>Extract text (OCR)</TooltipContent>
                 </Tooltip>
-              </TooltipProvider>
-            </div>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 

@@ -317,7 +317,6 @@ export async function GET(request: Request) {
         uploadedAt: true,
         visibility: true,
         password: true,
-        views: true,
         user: {
           select: {
             urlId: true,

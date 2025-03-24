@@ -113,7 +113,6 @@ interface File {
   password?: string | null
   uploadedAt: string
   urlPath: string
-  views: number
 }
 
 interface ShortenedUrl {
@@ -1142,7 +1141,6 @@ export function UserList() {
                         <TableHead>Type</TableHead>
                         <TableHead>Size</TableHead>
                         <TableHead>Visibility</TableHead>
-                        <TableHead>Views</TableHead>
                         <TableHead>Uploaded</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1221,7 +1219,6 @@ export function UserList() {
                               {file.password ? 'PROTECTED' : file.visibility}
                             </span>
                           </TableCell>
-                          <TableCell>{file.views}</TableCell>
                           <TableCell className="whitespace-nowrap">
                             {new Date(file.uploadedAt).toLocaleDateString()}
                           </TableCell>
