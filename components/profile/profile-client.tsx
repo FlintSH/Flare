@@ -832,40 +832,35 @@ export function ProfileClient({
                   </div>
                 </div>
               </>
+            </CardContent>
+          </Card>
 
-              {/* Add new card for File URL Settings */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>File URL Settings</CardTitle>
-                  <CardDescription>
-                    Configure how your uploaded files are accessible via URLs.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="randomize-urls">
-                          Randomize File URLs
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          When enabled, all new uploads will have randomized
-                          URLs instead of using the original filename.
-                          <br />
-                          Example: /{user.urlId}/<strong>EjS8Dc</strong>.png
-                          instead of /{user.urlId}/<strong>filename</strong>.png
-                        </p>
-                      </div>
-                      <Switch
-                        id="randomize-urls"
-                        checked={user.randomizeFileUrls}
-                        onCheckedChange={handleRandomizeUrlsToggle}
-                        disabled={isLoading}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>File URL Settings</CardTitle>
+              <CardDescription>
+                Configure how your uploaded files are accessible via URLs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="randomize-urls">Randomize File URLs</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, all new uploads will have randomized URLs
+                    instead of using the original filename.
+                    <br />
+                    Example: /{user.urlId}/<strong>EjS8Dc</strong>.png instead
+                    of /{user.urlId}/<strong>filename</strong>.png
+                  </p>
+                </div>
+                <Switch
+                  id="randomize-urls"
+                  checked={user.randomizeFileUrls}
+                  onCheckedChange={handleRandomizeUrlsToggle}
+                  disabled={isLoading}
+                />
+              </div>
             </CardContent>
           </Card>
 
