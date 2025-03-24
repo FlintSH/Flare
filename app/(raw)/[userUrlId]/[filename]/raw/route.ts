@@ -61,42 +61,11 @@ export async function GET(
     // Get file size for range calculations
     const size = await storageProvider.getFileSize(file.path)
 
-    // Add common headers for all responses
-    const commonHeaders = {
-      'Accept-Ranges': 'bytes',
-      'Content-Type': file.mimeType,
-      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
-      'Cache-Control': 'public, max-age=3600',
-      'Access-Control-Allow-Origin': '*',
-    }
-
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-')
       const start = parseInt(parts[0], 10)
-
-      let end = parts[1]
-        ? parseInt(parts[1], 10)
-        : Math.min(start + 1024 * 1024, size - 1)
-
-      end = Math.min(end, size - 1)
-
+      const end = parts[1] ? parseInt(parts[1], 10) : size - 1
       const chunkSize = end - start + 1
-
-      if (
-        isNaN(start) ||
-        isNaN(end) ||
-        start >= size ||
-        end >= size ||
-        start > end
-      ) {
-        return new Response(null, {
-          status: 416,
-          headers: {
-            ...commonHeaders,
-            'Content-Range': `bytes */${size}`,
-          },
-        })
-      }
 
       if (storageProvider instanceof S3StorageProvider) {
         // For S3, we'll still use direct URLs but include the range header
@@ -108,9 +77,11 @@ export async function GET(
         })
 
         const headers = {
-          ...commonHeaders,
           'Content-Range': `bytes ${start}-${end}/${size}`,
+          'Accept-Ranges': 'bytes',
           'Content-Length': chunkSize.toString(),
+          'Content-Type': file.mimeType,
+          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         }
 
         return new NextResponse(response.body, {
@@ -125,9 +96,11 @@ export async function GET(
       })
 
       const headers = {
-        ...commonHeaders,
         'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize.toString(),
+        'Content-Type': file.mimeType,
+        'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
       }
 
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -141,8 +114,10 @@ export async function GET(
       const stream = await storageProvider.getFileStream(file.path)
       return new NextResponse(stream as unknown as ReadableStream, {
         headers: {
-          ...commonHeaders,
+          'Accept-Ranges': 'bytes',
           'Content-Length': size.toString(),
+          'Content-Type': file.mimeType,
+          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         },
       })
     }
@@ -150,8 +125,10 @@ export async function GET(
     // For local files, serve entire file
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
-      ...commonHeaders,
+      'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
+      'Content-Type': file.mimeType,
+      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
     }
 
     return new NextResponse(stream as unknown as ReadableStream, { headers })
