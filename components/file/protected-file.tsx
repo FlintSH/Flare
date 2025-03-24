@@ -592,8 +592,10 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
                       file: {
                         attributes: {
                           controlsList: 'nodownload',
-                          preload: 'metadata',
+                          preload: 'none',
                         },
+                        forceVideo: true,
+                        forceAudio: false,
                       },
                     }}
                     playing={false}
