@@ -69,6 +69,7 @@ interface ProfileClientProps {
     storageUsed: number
     role: 'ADMIN' | 'USER'
     randomizeFileUrls: boolean
+    urlId: string
   }
   quotasEnabled: boolean
   formattedQuota: string
