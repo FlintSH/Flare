@@ -61,7 +61,6 @@ jobs:
             ```
         run: |
           if ! git ls-remote --tags origin refs/tags/development | grep -q 'development'; then
-            # Tag doesn't exist - create it
             git tag -f development
             git push origin development --force
           fi
@@ -75,3 +74,4 @@ jobs:
               --title "Development Build from ${{ github.ref_name }}" \
               --notes "$RELEASE_NOTES" \
               --prerelease 
+          fi 
