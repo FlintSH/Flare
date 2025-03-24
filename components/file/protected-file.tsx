@@ -440,7 +440,7 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
       const fetchDirectUrl = async () => {
         try {
           const response = await fetch(
-            `/api/files${sanitizeUrl(file.urlPath)}/direct${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
+            `${sanitizeUrl(file.urlPath)}/direct${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
           )
           if (response.ok) {
             const data = await response.json()
