@@ -16,6 +16,7 @@ const updateProfileSchema = z.object({
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).optional(),
   image: z.string().optional(),
+  randomizeFileUrls: z.boolean().optional(),
 })
 
 export async function PUT(req: Request) {
@@ -84,6 +85,8 @@ export async function PUT(req: Request) {
     if (body.email) updateData.email = body.email
     if (body.newPassword) updateData.password = await hash(body.newPassword, 10)
     if (body.image) updateData.image = body.image
+    if (typeof body.randomizeFileUrls === 'boolean')
+      updateData.randomizeFileUrls = body.randomizeFileUrls
 
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
@@ -93,6 +96,7 @@ export async function PUT(req: Request) {
         name: true,
         email: true,
         image: true,
+        randomizeFileUrls: true,
       },
     })
 

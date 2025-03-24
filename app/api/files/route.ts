@@ -20,7 +20,13 @@ async function getAuthenticatedUser(req: Request) {
   if (session?.user) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        role: true,
+        randomizeFileUrls: true,
+      },
     })
     return user
   }
@@ -31,7 +37,13 @@ async function getAuthenticatedUser(req: Request) {
     const token = authHeader.substring(7)
     const user = await prisma.user.findUnique({
       where: { uploadToken: token },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        role: true,
+        randomizeFileUrls: true,
+      },
     })
     return user
   }
@@ -94,7 +106,8 @@ export async function POST(req: Request) {
     // Get unique filename
     const { urlSafeName, displayName } = await getUniqueFilename(
       join('uploads', user.urlId),
-      uploadedFile.name
+      uploadedFile.name,
+      user.randomizeFileUrls
     )
 
     // Construct paths

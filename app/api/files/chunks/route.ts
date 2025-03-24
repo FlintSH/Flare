@@ -54,17 +54,31 @@ async function getAuthenticatedUser(req: Request) {
   if (session?.user) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        role: true,
+        randomizeFileUrls: true,
+      },
     })
     return user
   }
 
   const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
+  if (!authHeader) return null
+
+  if (authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
     const user = await prisma.user.findUnique({
       where: { uploadToken: token },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        role: true,
+        randomizeFileUrls: true,
+      },
     })
     return user
   }
@@ -181,7 +195,8 @@ export async function POST(req: Request) {
     // Get unique filename and paths
     const { urlSafeName, displayName } = await getUniqueFilename(
       join('uploads', user.urlId),
-      filename
+      filename,
+      user.randomizeFileUrls
     )
 
     // Construct paths with validation
