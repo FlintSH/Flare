@@ -27,6 +27,7 @@ model User {
   urlId         String    @unique // 5-character random ID for URLs
   shortenedUrls ShortenedUrl[]
   uploadToken   String    @unique // Permanent token for upload authentication
+  randomizeFileUrls Boolean @default(false) // Whether to randomize file URLs
 }
 
 model File {

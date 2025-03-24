@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid'
 import { join } from 'path'
 
 import { prisma } from '@/lib/database/prisma'
@@ -26,9 +27,22 @@ function validateAndNormalizePath(basePath: string, filename: string): string {
   return fullPath
 }
 
+// Generate a random file name with 6 characters
+export function generateRandomFileName(originalName: string): string {
+  const extension = originalName.includes('.')
+    ? originalName.split('.').pop()
+    : ''
+
+  // Generate a 6 character random ID
+  const randomId = nanoid(6)
+
+  return extension ? `${randomId}.${extension.toLowerCase()}` : randomId
+}
+
 export async function getUniqueFilename(
   basePath: string,
-  originalName: string
+  originalName: string,
+  randomize: boolean = false
 ): Promise<{ urlSafeName: string; displayName: string }> {
   // Validate inputs
   if (!basePath || !originalName) {
@@ -36,6 +50,40 @@ export async function getUniqueFilename(
   }
 
   const displayName = originalName
+
+  // If randomization is enabled, generate a random name instead
+  if (randomize) {
+    const randomName = generateRandomFileName(originalName)
+
+    // Check if the random name already exists
+    let exists = true
+    let finalRandomName = randomName
+    let attempts = 0
+
+    while (exists && attempts < 5) {
+      const normalizedPath = validateAndNormalizePath(basePath, finalRandomName)
+
+      exists =
+        (await prisma.file.findFirst({
+          where: {
+            path: normalizedPath,
+          },
+        })) !== null
+
+      if (!exists) break
+
+      // Generate a new random name if conflict exists
+      finalRandomName = generateRandomFileName(originalName)
+      attempts++
+    }
+
+    return {
+      urlSafeName: finalRandomName,
+      displayName,
+    }
+  }
+
+  // Original non-randomized logic
   const extension = originalName.includes('.')
     ? originalName.split('.').pop()
     : ''

@@ -68,6 +68,8 @@ interface ProfileClientProps {
     image: string | null
     storageUsed: number
     role: 'ADMIN' | 'USER'
+    randomizeFileUrls: boolean
+    urlId: string
   }
   quotasEnabled: boolean
   formattedQuota: string
@@ -327,6 +329,43 @@ export function ProfileClient({
         title: 'Error',
         description:
           error instanceof Error ? error.message : 'Failed to update password',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRandomizeUrlsToggle = async (checked: boolean) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          randomizeFileUrls: checked,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update settings')
+      }
+
+      // Force a router refresh to update all components
+      router.refresh()
+
+      toast({
+        title: 'Success',
+        description: 'File URL settings updated successfully',
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description:
+          error instanceof Error ? error.message : 'Failed to update settings',
         variant: 'destructive',
       })
     } finally {
@@ -793,6 +832,32 @@ export function ProfileClient({
                   </div>
                 </div>
               </>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>File Upload Settings</CardTitle>
+              <CardDescription>
+                Configure default settings for your uploaded files.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="randomize-urls">Randomize File URLs</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, all new uploads will have randomized URLs
+                    instead of using the original filename.
+                  </p>
+                </div>
+                <Switch
+                  id="randomize-urls"
+                  checked={user.randomizeFileUrls}
+                  onCheckedChange={handleRandomizeUrlsToggle}
+                  disabled={isLoading}
+                />
+              </div>
             </CardContent>
           </Card>
 

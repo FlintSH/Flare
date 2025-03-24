@@ -25,6 +25,8 @@ export default async function ProfilePage() {
       image: true,
       storageUsed: true,
       role: true,
+      randomizeFileUrls: true,
+      urlId: true,
     },
   })
 
