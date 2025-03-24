@@ -592,15 +592,26 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
                       file: {
                         attributes: {
                           controlsList: 'nodownload',
-                          preload: 'none',
+                          preload: 'metadata',
+                          crossOrigin: 'anonymous',
                         },
                         forceVideo: true,
-                        forceAudio: false,
+                        forceSafariHLS: false,
+                        hlsOptions: {
+                          // Better fragment handling for Firefox
+                          maxBufferLength: 30,
+                          maxMaxBufferLength: 60,
+                          progressive: true,
+                          lowLatencyMode: false,
+                        },
                       },
                     }}
                     playing={false}
                     muted={false}
                     playsinline={true}
+                    onError={(e) => {
+                      console.error('Video playback error:', e)
+                    }}
                   />
                 </div>
               </div>
