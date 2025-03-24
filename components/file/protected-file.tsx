@@ -27,6 +27,7 @@ import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
+import ReactPlayer from 'react-player'
 
 import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
@@ -573,16 +574,34 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
           // Video files
           if (VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
             return (
-              <video
-                src={DOMPurify.sanitize(rawUrl)}
-                controls
-                className="max-w-full max-h-[70vh]"
-                controlsList="nodownload"
-                preload="metadata"
+              <div
+                className="w-full flex justify-center relative"
+                style={{ maxHeight: '60vh', maxWidth: '60vw' }}
               >
-                <source src={DOMPurify.sanitize(rawUrl)} type={file.mimeType} />
-                Your browser does not support the video tag.
-              </video>
+                <div
+                  className="w-full max-w-full"
+                  style={{ maxHeight: '60vh', maxWidth: '60vw' }}
+                >
+                  <ReactPlayer
+                    url={DOMPurify.sanitize(rawUrl)}
+                    controls={true}
+                    width="100%"
+                    height="100%"
+                    style={{ maxHeight: '60vh' }}
+                    config={{
+                      file: {
+                        attributes: {
+                          controlsList: 'nodownload',
+                          preload: 'metadata',
+                        },
+                      },
+                    }}
+                    playing={false}
+                    muted={false}
+                    playsinline={true}
+                  />
+                </div>
+              </div>
             )
           }
 
