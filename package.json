@@ -28,8 +28,8 @@
     "knip:fix": "knip --fix"
   },
   "dependencies": {
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
     "@aws-sdk/client-s3": "^3.758.0",
-    "@aws-sdk/s3-request-presigner": "^3.744.0",
     "@codemirror/lang-cpp": "^6.0.2",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-go": "^6.0.1",
