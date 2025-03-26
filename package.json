@@ -68,7 +68,7 @@
     "@types/archiver": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/papaparse": "^5.3.15",
-    "@uiw/react-codemirror": "^4.23.8",
+    "@uiw/react-codemirror": "^4.23.10",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
