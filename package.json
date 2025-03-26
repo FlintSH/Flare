@@ -28,8 +28,8 @@
     "knip:fix": "knip --fix"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.750.0",
     "@aws-sdk/s3-request-presigner": "^3.758.0",
+    "@aws-sdk/client-s3": "^3.758.0",
     "@codemirror/lang-cpp": "^6.0.2",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-go": "^6.0.1",
@@ -68,7 +68,7 @@
     "@types/archiver": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/papaparse": "^5.3.15",
-    "@uiw/react-codemirror": "^4.23.8",
+    "@uiw/react-codemirror": "^4.23.10",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
