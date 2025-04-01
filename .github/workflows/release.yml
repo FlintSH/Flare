@@ -62,11 +62,12 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker images
+      - name: Build and push Docker images (multi-platform)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ steps.meta.outputs.tags }}
             ${{ steps.ghcr_meta.outputs.tags }}
