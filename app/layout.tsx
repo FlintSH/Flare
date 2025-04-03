@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 
 import { CustomHead } from '@/components/layout/custom-head'
 import { Footer } from '@/components/layout/footer'
@@ -12,8 +12,20 @@ import { getConfig } from '@/lib/config'
 
 import './globals.css'
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: [
+    {
+      path: '../public/fonts/inter/Inter-VariableFont_opsz,wght.ttf',
+      weight: '100 900',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/inter/Inter-Italic-VariableFont_opsz,wght.ttf',
+      weight: '100 900',
+      style: 'italic',
+    },
+  ],
+  display: 'swap',
   variable: '--font-inter',
 })
 
