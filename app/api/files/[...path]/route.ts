@@ -25,6 +25,7 @@ export async function GET(
     const urlPath = '/' + path.join('/')
     const url = new URL(request.url)
     const providedPassword = url.searchParams.get('password')
+    const isDownloadRequest = url.searchParams.get('download') === 'true'
 
     // Find the file
     const file = await prisma.file.findUnique({
@@ -55,6 +56,14 @@ export async function GET(
       }
     }
 
+    // Increment download count if requested
+    if (isDownloadRequest) {
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { downloads: { increment: 1 } },
+      })
+    }
+
     const storageProvider = await getStorageProvider()
     const isVideo = file.mimeType.startsWith('video/')
     const range = request.headers.get('range')
@@ -77,7 +86,7 @@ export async function GET(
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
-        'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+        'Content-Disposition': `${isDownloadRequest ? 'attachment' : 'inline'}; filename=${encodeFilename(file.name)}`,
         'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
       }
 
@@ -91,7 +100,7 @@ export async function GET(
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Content-Type': file.mimeType,
-      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+      'Content-Disposition': `${isDownloadRequest ? 'attachment' : 'inline'}; filename=${encodeFilename(file.name)}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
