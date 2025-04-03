@@ -25,6 +25,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Generate platform tag suffix
+        id: generate_tag
+        run: |
+          platform="${{ matrix.platform }}"
+          echo "TAG_SUFFIX=${platform//\//-}" >> $GITHUB_OUTPUT
+
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -32,7 +38,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           load: true
-          tags: flare:test-${{ matrix.platform }}
+          tags: flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
           cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.platform }}
 
@@ -67,7 +73,7 @@ jobs:
           docker run --rm \
             --network flare-network \
             -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
-            flare:test-${{ matrix.platform }} \
+            flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }} \
             npx prisma migrate deploy
 
           # Start the application
@@ -76,7 +82,7 @@ jobs:
             -e NEXTAUTH_SECRET=test-secret \
             -e NEXTAUTH_URL=http://localhost:3000 \
             --network flare-network \
-            flare:test-${{ matrix.platform }}
+            flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
           
           # Wait for container to be healthy
           timeout=60
