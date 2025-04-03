@@ -9,6 +9,7 @@ import {
   Archive,
   Clock,
   Download,
+  Eye,
   EyeOff,
   File,
   FileCode,
@@ -60,6 +61,7 @@ interface FileCardProps {
     password: string | null
     size: number
     uploadedAt: string
+    views: number
   }
   onDelete?: (id: string) => void
 }
@@ -493,6 +495,10 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             {formatFileSize(file.size)}
           </span>
+        </div>
+        <div className="mt-1 flex items-center text-xs text-muted-foreground">
+          <Eye className="h-3 w-3 mr-1" />
+          <span>{file.views} views</span>
         </div>
       </div>
 

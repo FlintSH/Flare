@@ -235,6 +235,12 @@ export default async function FilePage({
     notFound()
   }
 
+  // Increment view count
+  await prisma.file.update({
+    where: { id: file.id },
+    data: { views: { increment: 1 } },
+  })
+
   const serializedFile = prepareFileProps(file)
 
   const isOwner = session?.user?.id === serializedFile.userId

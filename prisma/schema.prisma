@@ -36,6 +36,7 @@ model File {
   urlPath       String    @unique // Full URL path: /{userUrlId}/{filename}
   mimeType      String
   size          Float     // File size in megabytes
+  views         Int       @default(0)
   visibility    FileVisibility @default(PUBLIC)
   uploadedAt    DateTime  @default(now())
   userId        String
