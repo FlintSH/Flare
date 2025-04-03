@@ -54,6 +54,7 @@ interface FileType {
   size: number
   uploadedAt: string
   views: number
+  downloads: number
 }
 
 interface PaginationInfo {

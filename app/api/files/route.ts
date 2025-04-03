@@ -318,6 +318,7 @@ export async function GET(request: Request) {
         visibility: true,
         password: true,
         views: true,
+        downloads: true,
         user: {
           select: {
             urlId: true,

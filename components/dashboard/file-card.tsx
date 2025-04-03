@@ -62,6 +62,7 @@ interface FileCardProps {
     size: number
     uploadedAt: string
     views: number
+    downloads: number
   }
   onDelete?: (id: string) => void
 }
@@ -496,9 +497,15 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
             {formatFileSize(file.size)}
           </span>
         </div>
-        <div className="mt-1 flex items-center text-xs text-muted-foreground">
-          <Eye className="h-3 w-3 mr-1" />
-          <span>{file.views} views</span>
+        <div className="mt-1 flex items-center space-x-2 text-xs text-muted-foreground">
+          <div className="flex items-center">
+            <Eye className="h-3 w-3 mr-1" />
+            <span>{file.views} views</span>
+          </div>
+          <div className="flex items-center">
+            <Download className="h-3 w-3 mr-1" />
+            <span>{file.downloads} downloads</span>
+          </div>
         </div>
       </div>
 

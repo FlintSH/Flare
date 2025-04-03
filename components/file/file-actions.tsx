@@ -156,7 +156,10 @@ export function FileActions({
         Copy URL
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <a href={sanitizeUrl(urls.fileUrl)} download={DOMPurify.sanitize(name)}>
+        <a
+          href={`${sanitizeUrl(urls.fileUrl)}${verifiedPassword ? '&' : '?'}download=true`}
+          download={DOMPurify.sanitize(name)}
+        >
           <Download className="h-4 w-4 mr-2" />
           Download
         </a>
