@@ -53,6 +53,7 @@ interface FileType {
   password: string | null
   size: number
   uploadedAt: string
+  views: number
 }
 
 interface PaginationInfo {
