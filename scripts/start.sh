@@ -8,7 +8,8 @@ wait_for_db() {
     
     while [ $counter -lt $max_retries ]
     do
-        if npx prisma migrate deploy 2>/dev/null; then
+        # Use a lighter-weight query to check DB readiness instead of migrate deploy
+        if npx prisma db execute --stdin <<< "SELECT 1;" >/dev/null 2>&1; then
             echo "Database is ready!"
             return 0
         fi
