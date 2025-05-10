@@ -33,8 +33,8 @@ export function generateRandomFileName(originalName: string): string {
     ? originalName.split('.').pop()
     : ''
 
-  // Generate a 6 character random ID
-  const randomId = nanoid(6)
+  // Generate a random ID
+  const randomId = nanoid()
 
   return extension ? `${randomId}.${extension.toLowerCase()}` : randomId
 }
