@@ -27,6 +27,9 @@ export default async function ProfilePage() {
       role: true,
       randomizeFileUrls: true,
       urlId: true,
+      _count: {
+        select: { files: true, shortenedUrls: true },
+      },
     },
   })
 
@@ -46,7 +49,18 @@ export default async function ProfilePage() {
 
   return (
     <ProfileClient
-      user={user}
+      user={{
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        storageUsed: user.storageUsed,
+        role: user.role,
+        randomizeFileUrls: user.randomizeFileUrls,
+        urlId: user.urlId,
+        fileCount: user._count.files,
+        shortUrlCount: user._count.shortenedUrls,
+      }}
       quotasEnabled={quotasEnabled}
       formattedQuota={formattedQuota}
       formattedUsed={formattedUsed}
