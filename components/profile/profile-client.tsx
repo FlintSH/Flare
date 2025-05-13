@@ -70,6 +70,8 @@ interface ProfileClientProps {
     role: 'ADMIN' | 'USER'
     randomizeFileUrls: boolean
     urlId: string
+    fileCount: number
+    shortUrlCount: number
   }
   quotasEnabled: boolean
   formattedQuota: string
@@ -93,6 +95,7 @@ export function ProfileClient({
   usagePercentage,
   isAdmin,
 }: ProfileClientProps) {
+  const { fileCount, shortUrlCount } = user
   const { update: updateSession, data: session } = useSession()
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
@@ -829,6 +832,30 @@ export function ProfileClient({
                         </div>
                       </div>
                     )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4">
+                        <div className="flex flex-col">
+                          <span className="text-lg font-medium">
+                            {fileCount}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Total Files
+                          </span>
+                        </div>
+                        <Icons.file className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4">
+                        <div className="flex flex-col">
+                          <span className="text-lg font-medium">
+                            {shortUrlCount}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Shortened URLs
+                          </span>
+                        </div>
+                        <Icons.copy className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </>
