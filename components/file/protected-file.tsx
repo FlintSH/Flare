@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 
 import { cpp } from '@codemirror/lang-cpp'
@@ -27,7 +28,6 @@ import { LockIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import Papa from 'papaparse'
 import type { ParseResult } from 'papaparse'
-import ReactPlayer from 'react-player'
 
 import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { FileActions } from '@/components/file/file-actions'
@@ -238,6 +238,8 @@ const AUDIO_FILE_TYPES = [
 
 // Constants
 const MAX_CSV_SIZE = 1024 * 1024 // 1MB limit for CSV preview
+
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 
 interface CsvViewerProps {
   url: string
