@@ -64,7 +64,7 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-tabs": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.5",
-    "@radix-ui/react-tooltip": "^1.1.7",
+    "@radix-ui/react-tooltip": "^1.2.4",
     "@types/archiver": "^6.0.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/papaparse": "^5.3.15",
