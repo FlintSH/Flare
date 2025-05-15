@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
-import dynamic from 'next/dynamic'
 import Link from 'next/link'
 
 import { cpp } from '@codemirror/lang-cpp'
@@ -236,10 +235,8 @@ const AUDIO_FILE_TYPES = [
   'audio/x-wav',
 ]
 
-// Constantss
+// Constants
 const MAX_CSV_SIZE = 1024 * 1024 // 1MB limit for CSV preview
-
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 
 interface CsvViewerProps {
   url: string
@@ -609,23 +606,16 @@ export function ProtectedFile({ file }: ProtectedFileProps) {
                   style={{ maxHeight: '60vh', maxWidth: '60vw' }}
                 >
                   {directS3VideoUrl ? (
-                    <ReactPlayer
-                      url={DOMPurify.sanitize(directS3VideoUrl)}
-                      controls={true}
+                    <video
+                      src={DOMPurify.sanitize(directS3VideoUrl)}
+                      controls
                       width="100%"
                       height="100%"
                       style={{ maxHeight: '60vh' }}
-                      config={{
-                        file: {
-                          attributes: {
-                            controlsList: 'nodownload',
-                            preload: 'metadata',
-                          },
-                        },
-                      }}
-                      playing={false}
+                      controlsList="nodownload"
+                      preload="metadata"
                       muted={false}
-                      playsinline={true}
+                      playsInline
                     />
                   ) : (
                     <div className="w-full flex items-center justify-center p-8">
