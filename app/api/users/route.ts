@@ -1,30 +1,22 @@
-import { NextResponse } from 'next/server'
-
+import { UserResponse, UserSchema } from '@/types/dto/user'
 import { hash } from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
-import { z } from 'zod'
 
+import {
+  HTTP_STATUS,
+  apiError,
+  apiResponse,
+  paginatedResponse,
+} from '@/lib/api/response'
 import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 
-const userSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(8).optional(),
-  role: z.enum(['ADMIN', 'USER']),
-  urlId: z
-    .string()
-    .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
-    .optional(),
-})
-
 export async function GET(req: Request) {
-  const { response } = await requireAdmin()
-  if (response) return response
-
   try {
+    const { response } = await requireAdmin()
+    if (response) return response
+
     const { searchParams } = new URL(req.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '25')
@@ -56,38 +48,41 @@ export async function GET(req: Request) {
       take: limit,
     })
 
-    return NextResponse.json({
-      users,
-      pagination: {
-        total,
-        pages: Math.ceil(total / limit),
-        page,
-        limit,
-      },
-    })
+    const pagination = {
+      total,
+      pageCount: Math.ceil(total / limit),
+      page,
+      limit,
+    }
+
+    return paginatedResponse<UserResponse[]>(users, pagination)
   } catch (error) {
     console.error('Error fetching users:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
-  if (response) return response
-
   try {
+    const { response } = await requireAdmin()
+    if (response) return response
+
     const json = await req.json()
-    const body = userSchema.parse(json)
+
+    // Validate request body
+    const result = UserSchema.safeParse(json)
+    if (!result.success) {
+      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
+    }
+
+    const body = result.data
 
     const exists = await prisma.user.findUnique({
       where: { email: body.email },
     })
 
     if (exists) {
-      return NextResponse.json(
-        { error: 'User already exists' },
-        { status: 400 }
-      )
+      return apiError('User already exists', HTTP_STATUS.BAD_REQUEST)
     }
 
     // Generate a unique URL ID (5 characters)
@@ -137,33 +132,30 @@ export async function POST(req: Request) {
       },
     })
 
-    return NextResponse.json(user)
+    return apiResponse<UserResponse>(user)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    }
-
     console.error('Error creating user:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function PUT(req: Request) {
-  const { response } = await requireAdmin()
-  if (response) return response
-
   try {
+    const { response } = await requireAdmin()
+    if (response) return response
+
     const json = await req.json()
-    const body = userSchema.parse(json)
+
+    // Validate request body
+    const result = UserSchema.safeParse(json)
+    if (!result.success) {
+      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
+    }
+
+    const body = result.data
 
     if (!body.id) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      )
+      return apiError('User ID is required', HTTP_STATUS.BAD_REQUEST)
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -171,7 +163,7 @@ export async function PUT(req: Request) {
     })
 
     if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
 
     // Check if the URL ID is already in use by another user
@@ -180,10 +172,7 @@ export async function PUT(req: Request) {
         where: { urlId: body.urlId },
       })
       if (existingUrlId && existingUrlId.id !== body.id) {
-        return NextResponse.json(
-          { error: 'URL ID is already in use' },
-          { status: 400 }
-        )
+        return apiError('URL ID is already in use', HTTP_STATUS.BAD_REQUEST)
       }
     }
 
@@ -226,9 +215,9 @@ export async function PUT(req: Request) {
         }
       } catch (error) {
         console.error('Error renaming user folder:', error)
-        return NextResponse.json(
-          { error: 'Failed to rename user folder' },
-          { status: 500 }
+        return apiError(
+          'Failed to rename user folder',
+          HTTP_STATUS.INTERNAL_SERVER_ERROR
         )
       }
     }
@@ -253,16 +242,9 @@ export async function PUT(req: Request) {
       },
     })
 
-    return NextResponse.json(user)
+    return apiResponse<UserResponse>(user)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    }
-
     console.error('Error updating user:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

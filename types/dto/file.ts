@@ -18,6 +18,15 @@ export const FileUploadSchema = z.object({
 
 export type FileUploadRequest = z.infer<typeof FileUploadSchema>
 
+// File upload form data schema
+export const FileUploadFormDataSchema = z.object({
+  file: z.instanceof(File, { message: 'No file provided' }),
+  visibility: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
+  password: z.string().optional().nullable(),
+})
+
+export type FileUploadFormData = z.infer<typeof FileUploadFormDataSchema>
+
 // File metadata response
 export interface FileMetadata {
   id: string

@@ -1,5 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import {
+  PublicSettings,
+  SettingsUpdateResponse,
+  UpdateSettingSectionRequest,
+} from '@/types/dto/settings'
 
+import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAdmin, requireAuth } from '@/lib/auth/api-auth'
 import {
   FlareConfig,
@@ -15,7 +20,7 @@ export async function GET(req: Request) {
     if (response) {
       // Still return public settings
       const config = await getConfig()
-      return NextResponse.json({
+      const publicSettings: PublicSettings = {
         version: config.version,
         settings: {
           general: {
@@ -35,14 +40,15 @@ export async function GET(req: Request) {
             customHead: config.settings.advanced.customHead,
           },
         },
-      })
+      }
+      return apiResponse<PublicSettings>(publicSettings)
     }
 
     const config = await getConfig()
 
     // If not admin, return only public settings
     if (user.role !== 'ADMIN') {
-      return NextResponse.json({
+      const publicSettings: PublicSettings = {
         version: config.version,
         settings: {
           general: {
@@ -62,29 +68,29 @@ export async function GET(req: Request) {
             customHead: config.settings.advanced.customHead,
           },
         },
-      })
+      }
+      return apiResponse<PublicSettings>(publicSettings)
     }
 
     // Return full config for admin
-    return NextResponse.json(config)
+    return apiResponse<FlareConfig>(config)
   } catch (error) {
     console.error('Failed to get config:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
+// Settings section type
 type SettingSection = keyof FlareConfig['settings']
-type SettingData<T extends SettingSection> = Partial<FlareConfig['settings'][T]>
 
-export async function PATCH(request: NextRequest) {
-  const { response } = await requireAdmin()
-  if (response) return response
-
+export async function PATCH(request: Request) {
   try {
-    const { section, data } = (await request.json()) as {
-      section: SettingSection
-      data: SettingData<SettingSection>
-    }
+    const { response } = await requireAdmin()
+    if (response) return response
+
+    const body = await request.json()
+    const { section, data } =
+      body as UpdateSettingSectionRequest<SettingSection>
 
     const config = await getConfig()
 
@@ -113,10 +119,10 @@ export async function PATCH(request: NextRequest) {
 
     await updateConfigSection(section, data)
     const updatedConfig = await getConfig()
-    return NextResponse.json(updatedConfig)
+    return apiResponse<FlareConfig>(updatedConfig)
   } catch (error) {
     console.error('Failed to update config:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
@@ -142,9 +148,13 @@ export async function POST(req: Request) {
       invalidateStorageProvider()
     }
 
-    return new NextResponse('Settings updated successfully', { status: 200 })
+    const responseData: SettingsUpdateResponse = {
+      message: 'Settings updated successfully',
+    }
+
+    return apiResponse<SettingsUpdateResponse>(responseData)
   } catch (error) {
     console.error('Error updating settings:', error)
-    return new NextResponse('Internal server error', { status: 500 })
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

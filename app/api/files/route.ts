@@ -1,9 +1,17 @@
-import { NextResponse } from 'next/server'
-
+import {
+  FileMetadata,
+  FileUploadFormDataSchema,
+  FileUploadResponse,
+} from '@/types/dto/file'
 import { Prisma } from '@prisma/client'
 import { join } from 'path'
-import { z } from 'zod'
 
+import {
+  HTTP_STATUS,
+  apiError,
+  apiResponse,
+  paginatedResponse,
+} from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
@@ -23,13 +31,21 @@ export async function POST(req: Request) {
     if (response) return response
 
     const formData = await req.formData()
+
+    // Parse and validate form data
     const uploadedFile = formData.get('file') as File
     const visibility =
       (formData.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC'
     const password = formData.get('password') as string | null
 
-    if (!uploadedFile) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    const result = FileUploadFormDataSchema.safeParse({
+      file: uploadedFile,
+      visibility,
+      password,
+    })
+
+    if (!result.success) {
+      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
 
     // Get config to check max upload size and quotas
@@ -41,11 +57,9 @@ export async function POST(req: Request) {
     const defaultQuota = config.settings.general.storage.quotas.default
 
     if (uploadedFile.size > maxBytes) {
-      return NextResponse.json(
-        {
-          error: `Maximum file size is ${maxSize.value}${maxSize.unit}`,
-        },
-        { status: 413 }
+      return apiError(
+        `Maximum file size is ${maxSize.value}${maxSize.unit}`,
+        HTTP_STATUS.PAYLOAD_TOO_LARGE
       )
     }
 
@@ -56,11 +70,9 @@ export async function POST(req: Request) {
       const fileSizeMB = bytesToMB(uploadedFile.size)
 
       if (user.storageUsed + fileSizeMB > quotaMB) {
-        return NextResponse.json(
-          {
-            error: `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
-          },
-          { status: 413 }
+        return apiError(
+          `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
+          HTTP_STATUS.PAYLOAD_TOO_LARGE
         )
       }
     }
@@ -126,12 +138,14 @@ export async function POST(req: Request) {
         : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
     const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
 
-    return NextResponse.json({
+    const responseData: FileUploadResponse = {
       url: `${fullUrl}${urlPath}`,
       name: displayName,
       size: uploadedFile.size,
       type: uploadedFile.type,
-    })
+    }
+
+    return apiResponse<FileUploadResponse>(responseData)
   } catch (error) {
     console.error('Upload error:', error)
 
@@ -146,23 +160,9 @@ export async function POST(req: Request) {
       }
     }
 
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          error: 'Invalid metadata format',
-        },
-        { status: 400 }
-      )
-    }
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred',
-      },
-      { status: 500 }
+    return apiError(
+      error instanceof Error ? error.message : 'An unexpected error occurred',
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
     )
   }
 }
@@ -287,29 +287,22 @@ export async function GET(request: Request) {
       },
     })
 
-    const responseData = {
-      files,
-      pagination: {
-        total,
-        pageCount: Math.ceil(total / limit),
-        page,
-        limit,
-      },
+    // Transform response to match expected type
+    const filesList = files.map((file) => ({
+      ...file,
+      hasPassword: Boolean(file.password),
+    })) as FileMetadata[]
+
+    const pagination = {
+      total,
+      pageCount: Math.ceil(total / limit),
+      page,
+      limit,
     }
 
-    return NextResponse.json(responseData)
+    return paginatedResponse<FileMetadata[]>(filesList, pagination)
   } catch (error) {
-    const err = error as Error
-    console.error('Error fetching files:', {
-      name: err.name,
-      message: err.message,
-      stack: err.stack,
-      cause: err.cause,
-    })
-
-    return NextResponse.json(
-      { error: 'Failed to fetch files' },
-      { status: 500 }
-    )
+    console.error('Error fetching files:', error)
+    return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
