@@ -27,6 +27,7 @@ module.exports = {
     '!**/node_modules/**',
   ],
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  modulePathIgnorePatterns: ['.next'],
   testTimeout: 15000,
   globals: {
     'ts-jest': {

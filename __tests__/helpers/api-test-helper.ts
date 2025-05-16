@@ -10,8 +10,10 @@ declare global {
   }
 }
 
-// Mock NextRequest
-class MockNextRequest {
+/**
+ * Creates a mock request for testing API routes
+ */
+export class MockNextRequest {
   url: string
   method: string
   headers: Headers
@@ -35,6 +37,11 @@ class MockNextRequest {
   async json() {
     return this.body ? JSON.parse(this.body) : null
   }
+
+  // Add formData method for file uploads
+  async formData() {
+    return this.body
+  }
 }
 
 /**
@@ -55,7 +62,7 @@ export function createRequest(options: {
 
   // Create headers with content type if body is an object
   const reqHeaders = new Headers(headers)
-  if (body && typeof body === 'object') {
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
     reqHeaders.set('Content-Type', 'application/json')
   }
 
@@ -64,7 +71,7 @@ export function createRequest(options: {
     method,
     headers: reqHeaders,
     body: body
-      ? typeof body === 'object'
+      ? typeof body === 'object' && !(body instanceof FormData)
         ? JSON.stringify(body)
         : body
       : null,

@@ -26,7 +26,14 @@ jest.mock('next-auth', () => ({
 }))
 
 jest.mock('next-auth/next', () => ({
-  default: jest.fn(),
+  default: jest.fn(() => {
+    return { GET: jest.fn(), POST: jest.fn() }
+  }),
+}))
+
+// Mock Next.js headers function
+jest.mock('next/headers', () => ({
+  headers: jest.fn(() => new Map()),
 }))
 
 // Mock nanoid to fix ESM import issues
@@ -34,30 +41,35 @@ jest.mock('nanoid', () => ({
   nanoid: jest.fn(() => 'test-nanoid-value'),
 }))
 
+// Create a simple mock response object that mimics NextResponse
+class MockResponse {
+  status: number
+  headers: Record<string, string>
+  body: any
+
+  constructor(
+    body: any,
+    options: { status?: number; headers?: Record<string, string> } = {}
+  ) {
+    this.body = body
+    this.status = options.status || 200
+    this.headers = options.headers || {}
+  }
+
+  // Add a json method to mimic the Response interface
+  async json() {
+    return this.body
+  }
+}
+
 // Improved NextResponse mock for API tests
 jest.mock('next/server', () => {
   return {
     NextResponse: {
       json: jest.fn((data, init) => {
-        const response = {
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          // Add a json method to mimic the Response interface
-          json: async () => data,
-          // Add status property to match expectations in tests
-          statusCode: init?.status || 200,
-        }
-
-        // Define a non-enumerable status property (handled by getter)
-        Object.defineProperty(response, 'status', {
-          get: function () {
-            return this.statusCode
-          },
-        })
-
-        return response
+        return new MockResponse(data, init)
       }),
-      redirect: jest.fn((url) => ({ url })),
+      redirect: jest.fn((url) => ({ url, status: 302 })),
     },
   }
 })
