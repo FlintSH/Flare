@@ -43,6 +43,7 @@ import {
 import { cn } from '@/lib/utils'
 
 import { useDebounce } from '@/hooks/use-debounce'
+import { useFileFilters } from '@/hooks/use-file-filters'
 
 interface FileType {
   id: string
@@ -340,48 +341,40 @@ const PaginationSkeleton = () => (
 
 export function FileGrid() {
   const [files, setFiles] = useState<FileType[]>([])
-  const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [sortBy, setSortBy] = useState<SortOption>('newest')
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([])
   const [fileTypes, setFileTypes] = useState<string[]>([])
-  const [date, setDate] = useState<DateRange | undefined>()
-  const [visibility, setVisibility] = useState<string[]>([])
-  const [pagination, setPagination] = useState<PaginationInfo>({
+  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
     total: 0,
     pageCount: 0,
     page: 1,
     limit: 24,
   })
 
-  // Remove this line as we're already debouncing in SearchInput
-  // const debouncedSearch = useDebounce(search, 300)
+  // Use the useFileFilters hook
+  const {
+    filters,
+    setSearch,
+    setTypes,
+    setDateRange,
+    setVisibility,
+    setSortBy,
+    setPage,
+  } = useFileFilters()
 
-  // Update callback to also reset pagination
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value)
-    setPagination((prev) => ({ ...prev, page: 1 }))
-  }, [])
-
-  const handleSortChange = useCallback((value: SortOption) => {
-    setSortBy(value)
-    setPagination((prev) => ({ ...prev, page: 1 }))
-  }, [])
-
-  const handleTypesChange = useCallback((types: string[]) => {
-    setSelectedTypes(types)
-    setPagination((prev) => ({ ...prev, page: 1 }))
-  }, [])
-
-  const handleDateChange = useCallback((range: DateRange | undefined) => {
-    setDate(range)
-    setPagination((prev) => ({ ...prev, page: 1 }))
-  }, [])
-
-  const handleVisibilityChange = useCallback((value: string[]) => {
-    setVisibility(value)
-    setPagination((prev) => ({ ...prev, page: 1 }))
-  }, [])
+  // Handle date range changes with the DateRange object
+  const handleDateChange = useCallback(
+    (range: DateRange | undefined) => {
+      if (range?.from) {
+        setDateRange(
+          range.from.toISOString(),
+          range.to ? range.to.toISOString() : null
+        )
+      } else {
+        setDateRange(null, null)
+      }
+    },
+    [setDateRange]
+  )
 
   // Fetch file types
   useEffect(() => {
@@ -403,26 +396,27 @@ export function FileGrid() {
       try {
         setIsLoading(true)
         const params = new URLSearchParams({
-          page: pagination.page.toString(),
-          limit: pagination.limit.toString(),
-          search,
-          sortBy,
-          ...(selectedTypes.length > 0 && { types: selectedTypes.join(',') }),
-          ...(date?.from && { dateFrom: date.from.toISOString() }),
-          ...(date?.to && { dateTo: date.to.toISOString() }),
-          ...(visibility.length > 0 && {
-            visibility: visibility.join(','),
+          page: filters.page.toString(),
+          limit: filters.limit.toString(),
+          search: filters.search,
+          sortBy: filters.sortBy,
+          ...(filters.types.length > 0 && { types: filters.types.join(',') }),
+          ...(filters.dateFrom && { dateFrom: filters.dateFrom }),
+          ...(filters.dateTo && { dateTo: filters.dateTo }),
+          ...(filters.visibility.length > 0 && {
+            visibility: filters.visibility.join(','),
           }),
         })
         const response = await fetch(`/api/files?${params}`)
         if (!response.ok) throw new Error('Failed to fetch files')
         const data = await response.json()
         setFiles(data.files)
-        setPagination((prev) => ({
-          ...prev,
+        setPaginationInfo({
           total: data.pagination.total,
           pageCount: data.pagination.pageCount,
-        }))
+          page: filters.page,
+          limit: filters.limit,
+        })
       } catch (error) {
         console.error('Error fetching files:', error)
       } finally {
@@ -431,24 +425,25 @@ export function FileGrid() {
     }
 
     fetchFiles()
-  }, [
-    pagination.page,
-    pagination.limit,
-    search,
-    sortBy,
-    selectedTypes,
-    date,
-    visibility,
-  ])
+  }, [filters])
 
   const handleDelete = (fileId: string) => {
     setFiles((files) => files.filter((file) => file.id !== fileId))
-    setPagination((prev) => ({
+    setPaginationInfo((prev) => ({
       ...prev,
       total: prev.total - 1,
       pageCount: Math.ceil((prev.total - 1) / prev.limit),
     }))
   }
+
+  // Create derived values for UI components
+  const dateRangeValue =
+    filters.dateFrom || filters.dateTo
+      ? {
+          from: filters.dateFrom ? new Date(filters.dateFrom) : undefined,
+          to: filters.dateTo ? new Date(filters.dateTo) : undefined,
+        }
+      : undefined
 
   const renderContent = () => {
     if (isLoading) {
@@ -464,13 +459,13 @@ export function FileGrid() {
       )
     }
 
-    if (files.length === 0 && pagination.total === 0) {
+    if (files.length === 0 && paginationInfo.total === 0) {
       const hasActiveFilters =
-        search ||
-        selectedTypes.length > 0 ||
-        visibility.length > 0 ||
-        date?.from ||
-        date?.to
+        filters.search ||
+        filters.types.length > 0 ||
+        filters.visibility.length > 0 ||
+        filters.dateFrom ||
+        filters.dateTo
 
       return (
         <EmptyPlaceholder>
@@ -501,7 +496,7 @@ export function FileGrid() {
             <FileCard key={file.id} file={file} onDelete={handleDelete} />
           ))}
         </div>
-        {pagination.pageCount > 1 && (
+        {paginationInfo.pageCount > 1 && (
           <div className="flex justify-center mt-8">
             <Pagination>
               <PaginationContent>
@@ -510,74 +505,67 @@ export function FileGrid() {
                     href="#"
                     onClick={(e) => {
                       e.preventDefault()
-                      if (pagination.page > 1) {
-                        setPagination((prev) => ({
-                          ...prev,
-                          page: prev.page - 1,
-                        }))
+                      if (paginationInfo.page > 1) {
+                        setPage(paginationInfo.page - 1)
                       }
                     }}
                     className={
-                      pagination.page <= 1
+                      paginationInfo.page <= 1
                         ? 'pointer-events-none opacity-50'
                         : ''
                     }
                   />
                 </PaginationItem>
-                {Array.from({ length: pagination.pageCount }).map((_, i) => {
-                  const pageNumber = i + 1
-                  // Show first page, last page, and 2 pages around current page
-                  if (
-                    pageNumber === 1 ||
-                    pageNumber === pagination.pageCount ||
-                    (pageNumber >= pagination.page - 2 &&
-                      pageNumber <= pagination.page + 2)
-                  ) {
-                    return (
-                      <PaginationItem key={pageNumber}>
-                        <PaginationLink
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            setPagination((prev) => ({
-                              ...prev,
-                              page: pageNumber,
-                            }))
-                          }}
-                          isActive={pageNumber === pagination.page}
-                        >
-                          {pageNumber}
-                        </PaginationLink>
-                      </PaginationItem>
-                    )
-                  } else if (
-                    // Show ellipsis only when there's a gap
-                    (pageNumber === 2 && pagination.page - 2 > 2) ||
-                    (pageNumber === pagination.pageCount - 1 &&
-                      pagination.page + 2 < pagination.pageCount - 1)
-                  ) {
-                    return (
-                      <PaginationItem key={pageNumber}>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )
+                {Array.from({ length: paginationInfo.pageCount }).map(
+                  (_, i) => {
+                    const pageNumber = i + 1
+                    // Show first page, last page, and 2 pages around current page
+                    if (
+                      pageNumber === 1 ||
+                      pageNumber === paginationInfo.pageCount ||
+                      (pageNumber >= paginationInfo.page - 2 &&
+                        pageNumber <= paginationInfo.page + 2)
+                    ) {
+                      return (
+                        <PaginationItem key={pageNumber}>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              setPage(pageNumber)
+                            }}
+                            isActive={pageNumber === paginationInfo.page}
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    } else if (
+                      // Show ellipsis only when there's a gap
+                      (pageNumber === 2 && paginationInfo.page - 2 > 2) ||
+                      (pageNumber === paginationInfo.pageCount - 1 &&
+                        paginationInfo.page + 2 < paginationInfo.pageCount - 1)
+                    ) {
+                      return (
+                        <PaginationItem key={pageNumber}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )
+                    }
+                    return null
                   }
-                  return null
-                })}
+                )}
                 <PaginationItem>
                   <PaginationNext
                     href="#"
                     onClick={(e) => {
                       e.preventDefault()
-                      if (pagination.page < pagination.pageCount) {
-                        setPagination((prev) => ({
-                          ...prev,
-                          page: prev.page + 1,
-                        }))
+                      if (paginationInfo.page < paginationInfo.pageCount) {
+                        setPage(paginationInfo.page + 1)
                       }
                     }}
                     className={
-                      pagination.page >= pagination.pageCount
+                      paginationInfo.page >= paginationInfo.pageCount
                         ? 'pointer-events-none opacity-50'
                         : ''
                     }
@@ -594,17 +582,17 @@ export function FileGrid() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4">
-        <SearchInput onSearch={handleSearchChange} />
+        <SearchInput onSearch={setSearch} />
         <Filters
-          sortBy={sortBy}
-          onSortChange={handleSortChange}
-          selectedTypes={selectedTypes}
-          onTypesChange={handleTypesChange}
+          sortBy={filters.sortBy as SortOption}
+          onSortChange={setSortBy}
+          selectedTypes={filters.types}
+          onTypesChange={setTypes}
           fileTypes={fileTypes}
-          date={date}
+          date={dateRangeValue}
           onDateChange={handleDateChange}
-          visibility={visibility}
-          onVisibilityChange={handleVisibilityChange}
+          visibility={filters.visibility}
+          onVisibilityChange={setVisibility}
         />
       </div>
       {renderContent()}
