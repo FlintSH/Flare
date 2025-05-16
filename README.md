@@ -86,6 +86,39 @@ Flare is built to be really configurable. Head to `/dashboard/settings` to tweak
 
 For more details on each setting, visit the [Docs](https://flare.fl1nt.dev) (coming soon).
 
+## 🧪 Testing with Cypress
+
+Flare includes a comprehensive testing suite using Cypress to ensure functionality and reliability:
+
+### Running Tests
+
+```bash
+# Install all dependencies
+npm install
+
+# Start the development server
+npm run dev
+
+# In a separate terminal, run Cypress tests
+npm run cy:run
+
+# Or, run the server and tests together
+npm run test:e2e
+
+# For interactive testing UI
+npm run cy:open
+```
+
+The test suite covers:
+
+- Authentication (login, registration)
+- Dashboard functionality
+- Navigation and routing
+- File upload interface
+- URL shortener
+
+See the [Cypress Testing Guide](CYPRESS-TESTING-GUIDE.md) for more details on running and extending the test suite.
+
 ## 📜 License
 
 Flare is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
