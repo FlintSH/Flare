@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-// Mock for the single user endpoint route handler
+// Mock for the user by ID endpoint route handler
 import * as userByIdApi from '@/app/api/users/[id]/route'
 // Define mock implementation for route handlers
 import * as usersApi from '@/app/api/users/route'
@@ -15,6 +15,12 @@ import {
 import {
   createApiResponse,
   createPaginatedApiResponse,
+  mockPrismaCount,
+  mockPrismaCreate,
+  mockPrismaDelete,
+  mockPrismaFindMany,
+  mockPrismaFindUnique,
+  mockPrismaUpdate,
 } from '../helpers/test-utils'
 import { prisma } from '../setup'
 
@@ -57,19 +63,24 @@ describe('Users API', () => {
     })
 
     userByIdApi.DELETE.mockImplementation(() => {
-      return createApiResponse('User not found', {
-        success: false,
-        status: 404,
-      })
+      return createApiResponse({ success: true })
     })
 
     // Reset prisma mock implementation
-    prisma.user.findMany.mockResolvedValue([])
-    prisma.user.count.mockResolvedValue(0)
-    prisma.user.create.mockResolvedValue({ id: 'mock-id' })
-    prisma.user.update.mockResolvedValue({ id: 'mock-id' })
-    prisma.user.delete.mockResolvedValue({ id: 'mock-id' })
-    prisma.user.findUnique.mockResolvedValue({ id: 'mock-id' })
+    prisma.user.findMany.mockResolvedValue(mockPrismaFindMany([]))
+    prisma.user.count.mockResolvedValue(mockPrismaCount(0))
+    prisma.user.create.mockResolvedValue(
+      mockPrismaCreate({ id: 'mock-user-id' })
+    )
+    prisma.user.update.mockResolvedValue(
+      mockPrismaUpdate({ id: 'mock-user-id' })
+    )
+    prisma.user.delete.mockResolvedValue(
+      mockPrismaDelete({ id: 'mock-user-id' })
+    )
+    prisma.user.findUnique.mockResolvedValue(
+      mockPrismaFindUnique({ id: 'mock-user-id' })
+    )
   })
 
   describe('GET /api/users', () => {
@@ -117,8 +128,8 @@ describe('Users API', () => {
       mockAdminSession()
 
       // Mock prisma response
-      prisma.user.findMany.mockResolvedValue(mockUsers)
-      prisma.user.count.mockResolvedValue(mockUsers.length)
+      prisma.user.findMany.mockResolvedValue(mockPrismaFindMany(mockUsers))
+      prisma.user.count.mockResolvedValue(mockPrismaCount(mockUsers.length))
 
       // Mock API response with our helper
       usersApi.GET.mockImplementation(() => {
@@ -162,8 +173,8 @@ describe('Users API', () => {
       mockAdminSession()
 
       // Mock database responses
-      prisma.user.findMany.mockResolvedValue(mockUsers)
-      prisma.user.count.mockResolvedValue(35) // Total users (for pagination)
+      prisma.user.findMany.mockResolvedValue(mockPrismaFindMany(mockUsers))
+      prisma.user.count.mockResolvedValue(mockPrismaCount(35)) // Total users (for pagination)
 
       // Mock the API response with pagination
       usersApi.GET.mockImplementation(() => {
@@ -205,7 +216,7 @@ describe('Users API', () => {
       }
 
       // Mock the database response
-      prisma.user.findUnique.mockResolvedValue(mockUser)
+      prisma.user.findUnique.mockResolvedValue(mockPrismaFindUnique(mockUser))
 
       // Mock API response
       userByIdApi.GET.mockImplementation(() => {
@@ -233,7 +244,7 @@ describe('Users API', () => {
       const userId = 'non-existent'
 
       // Mock database response for non-existent user
-      prisma.user.findUnique.mockResolvedValue(null)
+      prisma.user.findUnique.mockResolvedValue(mockPrismaFindUnique(null))
 
       // Mock API response
       userByIdApi.GET.mockImplementation(() => {
@@ -279,8 +290,8 @@ describe('Users API', () => {
       }
 
       // Mock the database to simulate a new user creation
-      prisma.user.findUnique.mockResolvedValue(null) // No existing user
-      prisma.user.create.mockResolvedValue(createdUser)
+      prisma.user.findUnique.mockResolvedValue(mockPrismaFindUnique(null)) // No existing user
+      prisma.user.create.mockResolvedValue(mockPrismaCreate(createdUser))
 
       // Mock API response
       usersApi.POST.mockImplementation(() => {

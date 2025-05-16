@@ -1,8 +1,12 @@
+import { NextResponse } from 'next/server'
+
+import { asMockFunction, asPrismaResult } from './types'
+
 /**
  * Helper function to create a standardized API response for tests
  */
-export function createApiResponse(
-  data: any,
+export function createApiResponse<T = any>(
+  data: T,
   options: { success?: boolean; status?: number } = {}
 ) {
   const { success = true, status = success ? 200 : 400 } = options
@@ -23,8 +27,8 @@ export function createApiResponse(
 /**
  * Helper to create paginated API responses for tests
  */
-export function createPaginatedApiResponse(
-  data: any[],
+export function createPaginatedApiResponse<T = any>(
+  data: T[],
   options: {
     page?: number
     limit?: number
@@ -61,4 +65,31 @@ export function createPaginatedApiResponse(
     json: async () => responseBody,
     headers: {},
   }
+}
+
+/**
+ * Type-safe helpers to create Prisma mock returns
+ */
+export function mockPrismaFindMany<T>(data: T[]) {
+  return asPrismaResult(data)
+}
+
+export function mockPrismaCount(count: number) {
+  return asPrismaResult(count)
+}
+
+export function mockPrismaFindUnique<T>(data: T | null) {
+  return asPrismaResult(data)
+}
+
+export function mockPrismaCreate<T>(data: T) {
+  return asPrismaResult(data)
+}
+
+export function mockPrismaUpdate<T>(data: T) {
+  return asPrismaResult(data)
+}
+
+export function mockPrismaDelete<T>(data: T) {
+  return asPrismaResult(data)
 }

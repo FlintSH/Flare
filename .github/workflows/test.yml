@@ -59,6 +59,9 @@ jobs:
           NEXTAUTH_SECRET: test-secret
           NEXTAUTH_URL: http://localhost:3000
       
+      - name: Run type check
+        run: npx tsc --noEmit --skipLibCheck
+      
       - name: Run linting
         run: npm run lint
 

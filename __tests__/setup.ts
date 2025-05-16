@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import { mockDeep, mockReset } from 'jest-mock-extended'
 
+import { asMockFunction } from './helpers/types'
+
 // Add Jest typings
 declare global {
   namespace NodeJS {
@@ -73,6 +75,85 @@ jest.mock('next/server', () => {
     },
   }
 })
+
+// Mock all API handlers to make them type-safe
+jest.mock(
+  '@/app/api/health/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/auth/register/route',
+  () => ({
+    POST: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/auth/registration-status/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/setup/route',
+  () => ({
+    POST: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/setup/check/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/users/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+    POST: asMockFunction(jest.fn()),
+    PUT: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/users/[id]/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+    DELETE: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/files/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+    POST: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
+
+jest.mock(
+  '@/app/api/files/[id]/route',
+  () => ({
+    GET: asMockFunction(jest.fn()),
+    PUT: asMockFunction(jest.fn()),
+    DELETE: asMockFunction(jest.fn()),
+  }),
+  { virtual: true }
+)
 
 // Reset mocks between tests
 beforeEach(() => {

@@ -1,5 +1,7 @@
 import { getServerSession } from 'next-auth'
 
+import { MockRequest, asRequest } from './types'
+
 // Add Jest types
 declare global {
   namespace jest {
@@ -52,7 +54,7 @@ export function createRequest(options: {
   url?: string
   body?: any
   headers?: Record<string, string>
-}): MockNextRequest {
+}): Request {
   const {
     method = 'GET',
     url = 'http://localhost:3000',
@@ -67,7 +69,7 @@ export function createRequest(options: {
   }
 
   // Initialize the request
-  return new MockNextRequest(url, {
+  const mockRequest = new MockNextRequest(url, {
     method,
     headers: reqHeaders,
     body: body
@@ -76,6 +78,9 @@ export function createRequest(options: {
         : body
       : null,
   })
+
+  // Cast to Request type for TypeScript compatibility
+  return asRequest(mockRequest)
 }
 
 /**

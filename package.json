@@ -28,7 +28,9 @@
     "knip:fix": "knip --fix",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit --project tsconfig.jest.json"
   },
   "dependencies": {
     "@aws-sdk/s3-request-presigner": "^3.779.0",
