@@ -16,19 +16,21 @@ import { useToast } from '@/hooks/use-toast'
 interface OcrDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  isLoading: boolean
   error: string | null
   text: string | null
   confidence?: number | null
+  filename?: string
+  isLoading?: boolean
 }
 
 export function OcrDialog({
   isOpen,
   onOpenChange,
-  isLoading,
+  isLoading = false,
   error,
   text,
   confidence,
+  filename,
 }: OcrDialogProps) {
   const { toast } = useToast()
 
@@ -41,11 +43,15 @@ export function OcrDialog({
     })
   }
 
+  const dialogTitle = filename
+    ? `Extracted Text - ${filename}`
+    : 'Extracted Text'
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Extracted Text</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           {isLoading ? (
