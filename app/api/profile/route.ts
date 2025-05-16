@@ -1,22 +1,12 @@
-import { NextResponse } from 'next/server'
-
+import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
 import { Prisma } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
-import { z } from 'zod'
 
+import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
-
-const updateProfileSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
-  currentPassword: z.string().optional(),
-  newPassword: z.string().min(8).optional(),
-  image: z.string().optional(),
-  randomizeFileUrls: z.boolean().optional(),
-})
 
 export async function PUT(req: Request) {
   try {
@@ -24,7 +14,14 @@ export async function PUT(req: Request) {
     if (response) return response
 
     const json = await req.json()
-    const body = updateProfileSchema.parse(json)
+
+    // Validate request body
+    const result = UpdateProfileSchema.safeParse(json)
+    if (!result.success) {
+      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
+    }
+
+    const body = result.data
 
     // If email is being changed, check if it's already taken
     if (body.email) {
@@ -38,20 +35,14 @@ export async function PUT(req: Request) {
       })
 
       if (existingUser) {
-        return NextResponse.json(
-          { error: 'Email already taken' },
-          { status: 400 }
-        )
+        return apiError('Email already taken', HTTP_STATUS.BAD_REQUEST)
       }
     }
 
     // If password is being changed, verify current password
     if (body.newPassword) {
       if (!body.currentPassword) {
-        return NextResponse.json(
-          { error: 'Current password is required' },
-          { status: 400 }
-        )
+        return apiError('Current password is required', HTTP_STATUS.BAD_REQUEST)
       }
 
       const userData = await prisma.user.findUnique({
@@ -60,10 +51,7 @@ export async function PUT(req: Request) {
       })
 
       if (!userData?.password) {
-        return NextResponse.json(
-          { error: 'Invalid credentials' },
-          { status: 400 }
-        )
+        return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
       }
 
       const isPasswordValid = await compare(
@@ -72,10 +60,7 @@ export async function PUT(req: Request) {
       )
 
       if (!isPasswordValid) {
-        return NextResponse.json(
-          { error: 'Invalid credentials' },
-          { status: 400 }
-        )
+        return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
       }
     }
 
@@ -100,20 +85,10 @@ export async function PUT(req: Request) {
       },
     })
 
-    return NextResponse.json(updatedUser)
+    return apiResponse<ProfileResponse>(updatedUser)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    }
-
     console.error('Profile update error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
@@ -135,7 +110,7 @@ export async function DELETE(req: Request) {
     })
 
     if (!userData) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
 
     for (const file of userData.files) {
@@ -160,12 +135,9 @@ export async function DELETE(req: Request) {
       where: { id: user.id },
     })
 
-    return new NextResponse(null, { status: 204 })
+    return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
     console.error('Account deletion error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
