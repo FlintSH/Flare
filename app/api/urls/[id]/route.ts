@@ -1,8 +1,5 @@
-import { NextResponse } from 'next/server'
-
-import { getServerSession } from 'next-auth'
-
-import { authOptions } from '@/lib/auth'
+import { HTTP_STATUS, apiError } from '@/lib/api/response'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
 export async function DELETE(
@@ -10,10 +7,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const { id } = await params
 
@@ -24,11 +19,11 @@ export async function DELETE(
     })
 
     if (!url) {
-      return NextResponse.json({ error: 'URL not found' }, { status: 404 })
+      return apiError('URL not found', HTTP_STATUS.NOT_FOUND)
     }
 
-    if (url.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    if (url.userId !== user.id) {
+      return apiError('Unauthorized', HTTP_STATUS.FORBIDDEN)
     }
 
     // Delete the URL
@@ -36,12 +31,10 @@ export async function DELETE(
       where: { id },
     })
 
-    return new NextResponse(null, { status: 204 })
+    // Return 204 No Content
+    return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
     console.error('URL deletion error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

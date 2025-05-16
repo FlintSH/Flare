@@ -1,14 +1,13 @@
-import { NextResponse } from 'next/server'
-
+import {
+  CreateUrlResponse,
+  CreateUrlSchema,
+  UrlListResponse,
+} from '@/types/dto/url'
 import { nanoid } from 'nanoid'
-import { z } from 'zod'
 
+import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
-
-const urlSchema = z.object({
-  url: z.string().url(),
-})
 
 // Generate a 6-character random code
 function generateShortCode() {
@@ -17,11 +16,19 @@ function generateShortCode() {
 
 export async function POST(req: Request) {
   try {
+    // Use standardized auth handler
     const { user, response } = await requireAuth(req)
     if (response) return response
 
     const json = await req.json()
-    const { url } = urlSchema.parse(json)
+
+    // Validate request body
+    const result = CreateUrlSchema.safeParse(json)
+    if (!result.success) {
+      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
+    }
+
+    const { url } = result.data
 
     // Generate a unique short code
     let shortCode = generateShortCode()
@@ -45,25 +52,17 @@ export async function POST(req: Request) {
       },
     })
 
-    return NextResponse.json(shortenedUrl)
+    // Return typed response
+    return apiResponse<CreateUrlResponse>(shortenedUrl)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    }
-
     console.error('URL creation error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function GET(req: Request) {
   try {
+    // Use standardized auth handler
     const { user, response } = await requireAuth(req)
     if (response) return response
 
@@ -76,12 +75,10 @@ export async function GET(req: Request) {
       },
     })
 
-    return NextResponse.json(urls)
+    // Return typed response
+    return apiResponse<UrlListResponse>({ urls })
   } catch (error) {
     console.error('URL list error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
