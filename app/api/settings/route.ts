@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
-
-import { authOptions } from '@/lib/auth'
+import { requireAdmin, requireAuth } from '@/lib/auth/api-auth'
 import {
   FlareConfig,
   getConfig,
@@ -11,13 +9,39 @@ import {
 } from '@/lib/config'
 import { invalidateStorageProvider } from '@/lib/storage'
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { user, response } = await requireAuth(req)
+    if (response) {
+      // Still return public settings
+      const config = await getConfig()
+      return NextResponse.json({
+        version: config.version,
+        settings: {
+          general: {
+            registrations: {
+              enabled: config.settings.general.registrations.enabled,
+              disabledMessage:
+                config.settings.general.registrations.disabledMessage,
+            },
+          },
+          appearance: {
+            theme: config.settings.appearance.theme,
+            favicon: config.settings.appearance.favicon,
+            customColors: config.settings.appearance.customColors,
+          },
+          advanced: {
+            customCSS: config.settings.advanced.customCSS,
+            customHead: config.settings.advanced.customHead,
+          },
+        },
+      })
+    }
+
     const config = await getConfig()
 
     // If not admin, return only public settings
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    if (user.role !== 'ADMIN') {
       return NextResponse.json({
         version: config.version,
         settings: {
@@ -53,11 +77,8 @@ type SettingSection = keyof FlareConfig['settings']
 type SettingData<T extends SettingSection> = Partial<FlareConfig['settings'][T]>
 
 export async function PATCH(request: NextRequest) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
+  const { response } = await requireAdmin()
+  if (response) return response
 
   try {
     const { section, data } = (await request.json()) as {
@@ -101,11 +122,8 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(req: Request) {
   try {
-    // Check auth
-    const session = await getServerSession(authOptions)
-    if (session?.user?.role !== 'ADMIN') {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
+    const { response } = await requireAdmin()
+    if (response) return response
 
     const config: FlareConfig = await req.json()
 
