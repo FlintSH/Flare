@@ -29,8 +29,13 @@ export function useProfile(options: UseProfileOptions = {}) {
   const emailRef = useRef<HTMLInputElement>(null)
   const currentPasswordRef = useRef<HTMLInputElement>(null)
   const newPasswordRef = useRef<HTMLInputElement>(null)
-  const { exportData, isExporting, exportProgress, downloadProgress, status } =
-    useDataExport()
+  const {
+    handleExport,
+    isExporting,
+    exportProgress,
+    downloadProgress,
+    status,
+  } = useDataExport()
   const { downloadFile, isDownloading } = useFileDownload()
 
   const triggerAvatarUpload = useCallback(() => {
@@ -240,8 +245,8 @@ export function useProfile(options: UseProfileOptions = {}) {
   }, [toast, router, options])
 
   const exportProfileData = useCallback(() => {
-    exportData('/api/profile/export', '/api/profile/export/progress')
-  }, [exportData])
+    handleExport()
+  }, [handleExport])
 
   const downloadShareXConfig = useCallback(() => {
     downloadFile('/api/profile/sharex')

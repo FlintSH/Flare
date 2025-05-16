@@ -2,21 +2,16 @@ import { useState } from 'react'
 
 import { useToast } from './use-toast'
 
-export type ExportStatus = 'idle' | 'preparing' | 'downloading' | 'complete'
-
-export interface UseDataExportOptions {
-  onComplete?: () => void
-  onError?: (error: Error) => void
-}
-
-export function useDataExport(options: UseDataExportOptions = {}) {
+export function useDataExport() {
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
   const [downloadProgress, setDownloadProgress] = useState(0)
-  const [status, setStatus] = useState<ExportStatus>('idle')
+  const [status, setStatus] = useState<'idle' | 'preparing' | 'downloading'>(
+    'idle'
+  )
   const { toast } = useToast()
 
-  const exportData = async (exportUrl: string, progressUrl?: string) => {
+  const handleExport = async () => {
     setIsExporting(true)
     setExportProgress(0)
     setDownloadProgress(0)
@@ -24,21 +19,18 @@ export function useDataExport(options: UseDataExportOptions = {}) {
 
     let eventSource: EventSource | null = null
     try {
-      // Set up progress updates if a progress URL is provided
-      if (progressUrl) {
-        // Start listening for export progress updates
-        eventSource = new EventSource(progressUrl)
-        eventSource.onmessage = (event) => {
-          const data = JSON.parse(event.data)
-          setExportProgress(data.progress)
-          if (data.progress === 100) {
-            eventSource?.close()
-            setStatus('downloading')
-          }
+      // Start listening for export progress updates
+      eventSource = new EventSource('/api/profile/export/progress')
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        setExportProgress(data.progress)
+        if (data.progress === 100) {
+          eventSource?.close()
+          setStatus('downloading')
         }
       }
 
-      const response = await fetch(exportUrl)
+      const response = await fetch('/api/profile/export')
       if (!response.ok) throw new Error('Export failed')
 
       // Get the total size if available
@@ -107,10 +99,7 @@ export function useDataExport(options: UseDataExportOptions = {}) {
       }
 
       // Create and download the blob
-      const blob = new Blob(chunks, {
-        type:
-          response.headers.get('Content-Type') || 'application/octet-stream',
-      })
+      const blob = new Blob(chunks, { type: 'application/zip' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -118,27 +107,13 @@ export function useDataExport(options: UseDataExportOptions = {}) {
         response.headers
           .get('content-disposition')
           ?.split('filename=')[1]
-          ?.replace(/"/g, '') || 'export.zip'
+          .replace(/"/g, '') || 'flare-data-export.zip'
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-
-      setStatus('complete')
-      if (options.onComplete) {
-        options.onComplete()
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Data exported successfully',
-      })
     } catch (error) {
       console.error('Export error:', error)
-      if (options.onError && error instanceof Error) {
-        options.onError(error)
-      }
-
       toast({
         title: 'Error',
         description: 'Failed to export data',
@@ -158,6 +133,6 @@ export function useDataExport(options: UseDataExportOptions = {}) {
     exportProgress,
     downloadProgress,
     status,
-    exportData,
+    handleExport,
   }
 }
