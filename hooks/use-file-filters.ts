@@ -2,29 +2,20 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export type FileFilter = {
-  search: string
-  types: string[]
-  dateFrom: string | null
-  dateTo: string | null
-  visibility: string[]
-  sortBy: string
-  page: number
-  limit: number
-}
+import { FileFilter, FileFilterOptions } from '@/types/components/file'
 
-export type FileFilterOptions = {
-  defaultLimit?: number
-  onFilterChange?: (filters: FileFilter) => void
-}
-
-export function useFileFilters(options: FileFilterOptions = {}) {
+export function useFileFilters(
+  options: {
+    defaultLimit?: number
+    onFilterChange?: (filters: FileFilter) => void
+  } = {}
+) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const defaultLimit = options.defaultLimit || 24
 
   // Initialize filters from URL search params
-  const [filters, setFilters] = useState<FileFilter>({
+  const [filters, setFilters] = useState<FileFilterOptions>({
     search: searchParams.get('search') || '',
     types: searchParams.get('types')?.split(',').filter(Boolean) || [],
     dateFrom: searchParams.get('dateFrom'),

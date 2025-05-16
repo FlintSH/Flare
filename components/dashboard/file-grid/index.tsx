@@ -1,0 +1,199 @@
+import { useCallback, useEffect, useState } from 'react'
+
+import { FileType, PaginationInfo, SortOption } from '@/types/components/file'
+import { DateRange } from 'react-day-picker'
+
+import { FileCard } from '@/components/dashboard/file-card'
+import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
+import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
+import {
+  FileGridPagination,
+  PaginationSkeleton,
+} from '@/components/dashboard/file-grid/pagination'
+import { SearchInput } from '@/components/dashboard/file-grid/search-input'
+import { EmptyPlaceholder } from '@/components/shared/empty-placeholder'
+
+import { useFileFilters } from '@/hooks/use-file-filters'
+
+export function FileGrid() {
+  const [files, setFiles] = useState<FileType[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [fileTypes, setFileTypes] = useState<string[]>([])
+  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
+    total: 0,
+    pageCount: 0,
+    page: 1,
+    limit: 24,
+  })
+
+  // Use the useFileFilters hook
+  const {
+    filters,
+    setSearch,
+    setTypes,
+    setDateRange,
+    setVisibility,
+    setSortBy,
+    setPage,
+  } = useFileFilters()
+
+  // Handle date range changes with the DateRange object
+  const handleDateChange = useCallback(
+    (range: DateRange | undefined) => {
+      if (range?.from) {
+        setDateRange(
+          range.from.toISOString(),
+          range.to ? range.to.toISOString() : null
+        )
+      } else {
+        setDateRange(null, null)
+      }
+    },
+    [setDateRange]
+  )
+
+  // Fetch file types
+  useEffect(() => {
+    async function fetchFileTypes() {
+      try {
+        const response = await fetch('/api/files/types')
+        if (!response.ok) throw new Error('Failed to fetch file types')
+        const data = await response.json()
+        setFileTypes(data.types)
+      } catch (error) {
+        console.error('Error fetching file types:', error)
+      }
+    }
+    fetchFileTypes()
+  }, [])
+
+  useEffect(() => {
+    async function fetchFiles() {
+      try {
+        setIsLoading(true)
+        const params = new URLSearchParams({
+          page: filters.page.toString(),
+          limit: filters.limit.toString(),
+          search: filters.search,
+          sortBy: filters.sortBy,
+          ...(filters.types.length > 0 && { types: filters.types.join(',') }),
+          ...(filters.dateFrom && { dateFrom: filters.dateFrom }),
+          ...(filters.dateTo && { dateTo: filters.dateTo }),
+          ...(filters.visibility.length > 0 && {
+            visibility: filters.visibility.join(','),
+          }),
+        })
+        const response = await fetch(`/api/files?${params}`)
+        if (!response.ok) throw new Error('Failed to fetch files')
+        const data = await response.json()
+        setFiles(data.files)
+        setPaginationInfo({
+          total: data.pagination.total,
+          pageCount: data.pagination.pageCount,
+          page: filters.page,
+          limit: filters.limit,
+        })
+      } catch (error) {
+        console.error('Error fetching files:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchFiles()
+  }, [filters])
+
+  const handleDelete = (fileId: string) => {
+    setFiles((files) => files.filter((file) => file.id !== fileId))
+    setPaginationInfo((prev) => ({
+      ...prev,
+      total: prev.total - 1,
+      pageCount: Math.ceil((prev.total - 1) / prev.limit),
+    }))
+  }
+
+  // Create derived values for UI components
+  const dateRangeValue =
+    filters.dateFrom || filters.dateTo
+      ? {
+          from: filters.dateFrom ? new Date(filters.dateFrom) : undefined,
+          to: filters.dateTo ? new Date(filters.dateTo) : undefined,
+        }
+      : undefined
+
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 24 }).map((_, i) => (
+              <FileCardSkeleton key={i} />
+            ))}
+          </div>
+          <PaginationSkeleton />
+        </>
+      )
+    }
+
+    if (files.length === 0 && paginationInfo.total === 0) {
+      const hasActiveFilters =
+        filters.search ||
+        filters.types.length > 0 ||
+        filters.visibility.length > 0 ||
+        filters.dateFrom ||
+        filters.dateTo
+
+      return (
+        <EmptyPlaceholder>
+          <EmptyPlaceholder.Icon name="file" />
+          {hasActiveFilters ? (
+            <>
+              <EmptyPlaceholder.Title>No files found</EmptyPlaceholder.Title>
+              <EmptyPlaceholder.Description>
+                Try adjusting your filters to find files.
+              </EmptyPlaceholder.Description>
+            </>
+          ) : (
+            <>
+              <EmptyPlaceholder.Title>No files uploaded</EmptyPlaceholder.Title>
+              <EmptyPlaceholder.Description>
+                Upload your first file to get started.
+              </EmptyPlaceholder.Description>
+            </>
+          )}
+        </EmptyPlaceholder>
+      )
+    }
+
+    return (
+      <>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {files.map((file) => (
+            <FileCard key={file.id} file={file} onDelete={handleDelete} />
+          ))}
+        </div>
+        <FileGridPagination paginationInfo={paginationInfo} setPage={setPage} />
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <SearchInput onSearch={setSearch} initialValue={filters.search} />
+        <FileFilters
+          sortBy={filters.sortBy as SortOption}
+          onSortChange={setSortBy}
+          selectedTypes={filters.types}
+          onTypesChange={setTypes}
+          fileTypes={fileTypes}
+          date={dateRangeValue}
+          onDateChange={handleDateChange}
+          visibility={filters.visibility}
+          onVisibilityChange={setVisibility}
+        />
+      </div>
+      {renderContent()}
+    </div>
+  )
+}
