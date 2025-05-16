@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server'
 
 import { existsSync } from 'fs'
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
@@ -47,44 +46,6 @@ setInterval(
   },
   60 * 60 * 1000
 )
-
-// Get user from either session or upload token
-async function getAuthenticatedUser(req: Request) {
-  const session = await getServerSession(authOptions)
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        role: true,
-        randomizeFileUrls: true,
-      },
-    })
-    return user
-  }
-
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader) return null
-
-  if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: token },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        role: true,
-        randomizeFileUrls: true,
-      },
-    })
-    return user
-  }
-
-  return null
-}
 
 interface UploadMetadata {
   fileKey: string
@@ -142,10 +103,8 @@ async function deleteUploadMetadata(localId: string) {
 // Initialize multipart upload
 export async function POST(req: Request) {
   try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const body = await req.json()
     const { filename, mimeType, size } = body
@@ -262,10 +221,8 @@ export async function POST(req: Request) {
 // Get presigned URL for part upload
 export async function GET(req: Request) {
   try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const url = new URL(req.url)
     const parts = url.pathname.split('/')
@@ -311,10 +268,8 @@ export async function GET(req: Request) {
 // Complete multipart upload
 export async function PUT(req: Request) {
   try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const url = new URL(req.url)
     const parts = url.pathname.split('/')

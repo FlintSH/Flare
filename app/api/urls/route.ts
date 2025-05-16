@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
 
 import { nanoid } from 'nanoid'
-import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
 const urlSchema = z.object({
@@ -18,10 +17,8 @@ function generateShortCode() {
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const json = await req.json()
     const { url } = urlSchema.parse(json)
@@ -44,7 +41,7 @@ export async function POST(req: Request) {
       data: {
         shortCode,
         targetUrl: url,
-        userId: session.user.id,
+        userId: user.id,
       },
     })
 
@@ -65,16 +62,14 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const urls = await prisma.shortenedUrl.findMany({
       where: {
-        userId: session.user.id,
+        userId: user.id,
       },
       orderBy: {
         createdAt: 'desc',

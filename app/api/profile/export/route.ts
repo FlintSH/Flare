@@ -3,10 +3,9 @@ import { NextResponse } from 'next/server'
 import archiver from 'archiver'
 import { existsSync } from 'fs'
 import { mkdir, rm, writeFile } from 'fs/promises'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { clearProgress, getProgress, updateProgress } from '@/lib/utils'
 
@@ -44,19 +43,17 @@ type UserData = {
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-export async function GET() {
+export async function GET(req: Request) {
   let exportDir: string | null = null
   let totalFiles = 0
   let successfulFiles = 0
   let userId: string | null = null
 
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
-    userId = session.user.id
+    userId = user.id
 
     // Initialize progress
     updateProgress(userId, 0)
@@ -67,7 +64,7 @@ export async function GET() {
     await mkdir(exportDir, { recursive: true })
 
     // Get user data
-    const user = await prisma.user.findUnique({
+    const userData = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -99,24 +96,24 @@ export async function GET() {
       },
     })
 
-    if (!user) {
+    if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Create user data JSON
-    const userData: UserData = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      files: user.files,
-      shortenedUrls: user.shortenedUrls,
+    const userDataForExport: UserData = {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt,
+      files: userData.files,
+      shortenedUrls: userData.shortenedUrls,
     }
 
     // Write user data to JSON file
     const userDataPath = join(exportDir, 'user-data.json')
-    await writeFile(userDataPath, JSON.stringify(userData, null, 2))
+    await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
 
     // Set up archive stream
     const archive = archiver('zip', {
@@ -193,8 +190,8 @@ export async function GET() {
         // Process files
         ;(async () => {
           try {
-            totalFiles = user.files.length
-            for (const file of user.files) {
+            totalFiles = userData.files.length
+            for (const file of userData.files) {
               try {
                 // Try both absolute and workspace-relative paths
                 const absolutePath = join('/', file.path)
