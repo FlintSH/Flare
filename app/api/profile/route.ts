@@ -3,11 +3,10 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
 import { unlink } from 'fs/promises'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 import { z } from 'zod'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
 const updateProfileSchema = z.object({
@@ -21,10 +20,8 @@ const updateProfileSchema = z.object({
 
 export async function PUT(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const json = await req.json()
     const body = updateProfileSchema.parse(json)
@@ -35,7 +32,7 @@ export async function PUT(req: Request) {
         where: {
           email: body.email,
           NOT: {
-            id: session.user.id,
+            id: user.id,
           },
         },
       })
@@ -57,19 +54,22 @@ export async function PUT(req: Request) {
         )
       }
 
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
+      const userData = await prisma.user.findUnique({
+        where: { id: user.id },
         select: { password: true },
       })
 
-      if (!user?.password) {
+      if (!userData?.password) {
         return NextResponse.json(
           { error: 'Invalid credentials' },
           { status: 400 }
         )
       }
 
-      const isPasswordValid = await compare(body.currentPassword, user.password)
+      const isPasswordValid = await compare(
+        body.currentPassword,
+        userData.password
+      )
 
       if (!isPasswordValid) {
         return NextResponse.json(
@@ -89,7 +89,7 @@ export async function PUT(req: Request) {
       updateData.randomizeFileUrls = body.randomizeFileUrls
 
     const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
+      where: { id: user.id },
       data: updateData,
       select: {
         id: true,
@@ -117,16 +117,14 @@ export async function PUT(req: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     // Get user's files to nuke them from storage
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
       include: {
         files: {
           select: {
@@ -136,11 +134,11 @@ export async function DELETE() {
       },
     })
 
-    if (!user) {
+    if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    for (const file of user.files) {
+    for (const file of userData.files) {
       try {
         await unlink(join(process.cwd(), file.path))
       } catch (error) {
@@ -149,9 +147,9 @@ export async function DELETE() {
     }
 
     // Delete user's avatar if they have one
-    if (user.image?.startsWith('/avatars/')) {
+    if (userData.image?.startsWith('/avatars/')) {
       try {
-        await unlink(join(process.cwd(), 'public', user.image))
+        await unlink(join(process.cwd(), 'public', userData.image))
       } catch (error) {
         console.error('Error deleting avatar:', error)
       }
@@ -159,7 +157,7 @@ export async function DELETE() {
 
     // Delete user from database and all their data
     await prisma.user.delete({
-      where: { id: session.user.id },
+      where: { id: user.id },
     })
 
     return new NextResponse(null, { status: 204 })

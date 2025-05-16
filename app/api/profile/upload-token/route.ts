@@ -1,28 +1,25 @@
 import { NextResponse } from 'next/server'
 
 import { randomUUID } from 'crypto'
-import { getServerSession } from 'next-auth'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
       select: { uploadToken: true },
     })
 
-    if (!user) {
+    if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ uploadToken: user.uploadToken })
+    return NextResponse.json({ uploadToken: userData.uploadToken })
   } catch (error) {
     console.error('Error fetching upload token:', error)
     return NextResponse.json(
@@ -32,21 +29,19 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     // Generate new upload token using UUID
-    const user = await prisma.user.update({
-      where: { id: session.user.id },
+    const userData = await prisma.user.update({
+      where: { id: user.id },
       data: { uploadToken: randomUUID() },
       select: { uploadToken: true },
     })
 
-    return NextResponse.json({ uploadToken: user.uploadToken })
+    return NextResponse.json({ uploadToken: userData.uploadToken })
   } catch (error) {
     console.error('Error refreshing upload token:', error)
     return NextResponse.json(

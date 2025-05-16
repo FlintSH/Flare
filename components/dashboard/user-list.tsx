@@ -89,6 +89,7 @@ import { cn } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
 
 import { useToast } from '@/hooks/use-toast'
+import { UserFormData, useUserManagement } from '@/hooks/use-user-management'
 
 interface User {
   id: string
@@ -146,11 +147,6 @@ interface UrlResponse {
   pagination: PaginationData
 }
 
-interface UsersResponse {
-  users: User[]
-  pagination: PaginationData
-}
-
 function UserTableSkeleton() {
   return (
     <div className="rounded-md border">
@@ -205,14 +201,6 @@ function UserTableSkeleton() {
       </Table>
     </div>
   )
-}
-
-interface UserFormData {
-  name: string
-  email: string
-  password?: string
-  role: 'ADMIN' | 'USER'
-  urlId?: string
 }
 
 function getPaginationRange(
@@ -333,8 +321,18 @@ function FileSettingsDialog({
 }
 
 export function UserList() {
-  const [users, setUsers] = useState<User[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const {
+    users,
+    isLoading,
+    currentPage,
+    pagination,
+    fetchUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    removeUserAvatar,
+  } = useUserManagement()
+
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isViewingFiles, setIsViewingFiles] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -367,8 +365,6 @@ export function UserList() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isFileDeleteDialogOpen, setIsFileDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<PaginationData | null>(null)
 
   // Memoize callback functions to prevent unnecessary re-renders
   const fetchUserFiles = useCallback(
@@ -437,29 +433,6 @@ export function UserList() {
     [urlSearch, toast]
   )
 
-  const fetchUsers = useCallback(
-    async (page: number = 1) => {
-      try {
-        const response = await fetch(`/api/users?page=${page}&limit=25`)
-        if (!response.ok) throw new Error('Failed to fetch users')
-        const data: UsersResponse = await response.json()
-        setUsers(data.users)
-        setPagination(data.pagination)
-        setCurrentPage(page)
-      } catch (error) {
-        console.error('Error fetching users:', error)
-        toast({
-          title: 'Error',
-          description: 'Failed to fetch users',
-          variant: 'destructive',
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [toast]
-  )
-
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
@@ -499,42 +472,15 @@ export function UserList() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
-      const response = await fetch('/api/users', {
-        method: editingUser ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          id: editingUser?.id,
-          password: formData.password || undefined,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to save user')
-      }
-
-      // If editing an existing user, notify them of changes
       if (editingUser) {
+        await updateUser(editingUser.id, formData)
         await notifyUserOfChanges(editingUser.id)
+      } else {
+        await createUser(formData)
       }
-
-      toast({
-        title: 'Success',
-        description: `User ${editingUser ? 'updated' : 'created'} successfully`,
-      })
-
       setIsDialogOpen(false)
-      fetchUsers()
     } catch (error) {
       console.error('Error saving user:', error)
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to save user',
-        variant: 'destructive',
-      })
     }
   }
 
@@ -732,28 +678,9 @@ export function UserList() {
 
   const handleRemoveAvatar = async (userId: string) => {
     try {
-      const response = await fetch(`/api/users/${userId}/avatar`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to remove avatar')
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Avatar removed successfully',
-      })
-
-      // Refresh the users list
-      fetchUsers()
+      await removeUserAvatar(userId)
     } catch (error) {
       console.error('Error removing avatar:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to remove avatar',
-        variant: 'destructive',
-      })
     }
   }
 
@@ -768,32 +695,11 @@ export function UserList() {
         throw new Error('Failed to invalidate user sessions')
       }
 
-      // Then delete the user
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete user')
-      }
-
-      toast({
-        title: 'Success',
-        description: 'User deleted successfully',
-        variant: 'default',
-      })
-
-      // Refresh the users list
-      fetchUsers()
+      await deleteUser(userId)
       setIsDeleteDialogOpen(false)
       setUserToDelete(null)
     } catch (error) {
-      console.error('Error deleting user:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to delete user',
-        variant: 'destructive',
-      })
+      console.error('Error during user deletion process:', error)
     }
   }
 

@@ -1,40 +1,14 @@
 import { NextResponse } from 'next/server'
 
 import { readFile } from 'fs/promises'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/database/prisma'
+import { getAuthenticatedUser } from '@/lib/auth/api-auth'
 import { getStorageProvider } from '@/lib/storage'
 
 interface RouteParams {
   uploadId: string
   partNumber: string
-}
-
-// Get user from either session or upload token
-async function getAuthenticatedUser(req: Request) {
-  const session = await getServerSession(authOptions)
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
-    })
-    return user
-  }
-
-  const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: token },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
-    })
-    return user
-  }
-
-  return null
 }
 
 // Get upload metadata from temp file

@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { hash } from 'bcryptjs'
-import { getServerSession } from 'next-auth'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 
-import { authOptions } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -22,11 +21,8 @@ const userSchema = z.object({
 })
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
+  const { response } = await requireAdmin()
+  if (response) return response
 
   try {
     const { searchParams } = new URL(req.url)
@@ -76,11 +72,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
+  const { response } = await requireAdmin()
+  if (response) return response
 
   try {
     const json = await req.json()
@@ -159,11 +152,8 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user || session.user.role !== 'ADMIN') {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
+  const { response } = await requireAdmin()
+  if (response) return response
 
   try {
     const json = await req.json()
