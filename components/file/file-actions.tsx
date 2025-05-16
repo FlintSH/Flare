@@ -8,6 +8,7 @@ import { Copy, Download, ExternalLink, Link, ScanText } from 'lucide-react'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
+import { useFileActions } from '@/hooks/use-file-actions'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileActionsProps {
@@ -37,6 +38,13 @@ export function FileActions({
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
 
+  const { copyUrl, download, openRaw } = useFileActions({
+    urlPath,
+    name,
+    fileId,
+    verifiedPassword,
+  })
+
   // Sanitize a URL
   const sanitizeUrl = (url: string): string => {
     return DOMPurify.sanitize(url)
@@ -52,16 +60,6 @@ export function FileActions({
     const rawUrl = `${sanitizedUrlPath}/raw${passwordParam}`
     setUrls({ fileUrl, rawUrl })
   }, [urlPath, verifiedPassword])
-
-  const handleCopyUrl = () => {
-    if (!urls) return
-    const sanitizedUrl = DOMPurify.sanitize(window.location.origin + urlPath)
-    navigator.clipboard.writeText(sanitizedUrl)
-    toast({
-      title: 'URL copied',
-      description: 'File URL has been copied to clipboard',
-    })
-  }
 
   const handleCopyText = async () => {
     if (!urls) return
@@ -151,28 +149,17 @@ export function FileActions({
 
   return (
     <div className="flex items-center justify-center flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={handleCopyUrl}>
+      <Button variant="outline" size="sm" onClick={copyUrl}>
         <Link className="h-4 w-4 mr-2" />
         Copy URL
       </Button>
-      <Button variant="outline" size="sm" asChild>
-        <a
-          href={`${sanitizeUrl(urls.fileUrl)}${verifiedPassword ? '&' : '?'}download=true`}
-          download={DOMPurify.sanitize(name)}
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Download
-        </a>
+      <Button variant="outline" size="sm" onClick={download}>
+        <Download className="h-4 w-4 mr-2" />
+        Download
       </Button>
-      <Button variant="outline" size="sm" asChild>
-        <a
-          href={sanitizeUrl(urls.rawUrl)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <ExternalLink className="h-4 w-4 mr-2" />
-          Raw
-        </a>
+      <Button variant="outline" size="sm" onClick={openRaw}>
+        <ExternalLink className="h-4 w-4 mr-2" />
+        Raw
       </Button>
       {showOcr && (
         <Button

@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { Prisma } from '@prisma/client'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 import { z } from 'zod'
 
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
@@ -14,51 +13,14 @@ import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
 // Helper function to get user from either session or upload token
-async function getAuthenticatedUser(req: Request) {
-  // First try session auth
-  const session = await getServerSession(authOptions)
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        role: true,
-        randomizeFileUrls: true,
-      },
-    })
-    return user
-  }
-
-  // Then try token auth
-  const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: token },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        role: true,
-        randomizeFileUrls: true,
-      },
-    })
-    return user
-  }
-
-  return null
-}
+// This has been moved to lib/auth/api-auth.ts
 
 export async function POST(req: Request) {
   let filePath = ''
 
   try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(req)
+    if (response) return response
 
     const formData = await req.formData()
     const uploadedFile = formData.get('file') as File
@@ -207,10 +169,8 @@ export async function POST(req: Request) {
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, response } = await requireAuth(request)
+    if (response) return response
 
     // parse pagination params from URL
     const { searchParams } = new URL(request.url)
@@ -226,7 +186,7 @@ export async function GET(request: Request) {
 
     // Build where clause for filtering
     const where: Prisma.FileWhereInput = {
-      userId: session.user.id,
+      userId: user.id,
     }
 
     const conditions: Prisma.FileWhereInput[] = []
