@@ -36,6 +36,12 @@ We've successfully set up and enhanced a comprehensive Cypress test suite for th
 - Created comprehensive test coverage for all key application features
 - Added appropriate documentation in the form of comments and README files
 
+### 6. Continuous Integration
+
+- Added GitHub Actions workflow to run tests on every push and pull request
+- Configured the workflow to capture screenshots and videos for failed tests
+- Set up the CI pipeline to use a temporary SQLite database for testing
+
 ## Test Suite Organization
 
 ```
@@ -69,14 +75,28 @@ To run Cypress in interactive mode:
 npm run cy:open
 ```
 
+## GitHub Actions Workflow
+
+The repository now includes a GitHub Actions workflow that automatically runs the Cypress tests on every push to the main branch and on pull requests. The workflow:
+
+1. Sets up Node.js and installs dependencies
+2. Generates the Prisma client
+3. Sets up necessary environment variables
+4. Builds the application
+5. Starts the Next.js development server
+6. Runs the Cypress tests
+7. Uploads screenshots (on test failure) and videos as artifacts
+
+To view test results in GitHub, navigate to the Actions tab in your repository.
+
 ## Potential Future Improvements
 
 1. **Mock API Responses**: For authentication and protected routes, consider adding more mocking capabilities
 2. **Visual Regression Testing**: Add screenshot comparison for UI consistency
-3. **CI Integration**: Add configuration for continuous integration pipelines
+3. **Extend CI Integration**: Add matrix testing for different browsers and operating systems
 4. **Performance Testing**: Add Cypress performance measurements
 5. **Accessibility Testing**: Integrate accessibility testing tools
 
 ## Conclusion
 
-The Cypress test suite now provides reliable, maintainable test coverage for the Flare application. Tests are designed to be resilient to UI changes and can run successfully in different environments without the need for frequent updates.
+The Cypress test suite now provides reliable, maintainable test coverage for the Flare application. Tests are designed to be resilient to UI changes and can run successfully in different environments without the need for frequent updates. The CI/CD integration ensures that tests are run automatically, providing early feedback on potential issues.
