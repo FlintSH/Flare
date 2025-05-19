@@ -7,7 +7,7 @@ import { join } from 'path'
 
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
-import { clearProgress, getProgress, updateProgress } from '@/lib/utils'
+import { clearProgress, updateProgress } from '@/lib/utils'
 
 // This whole file could probably be improved at some point. The way progress is tracked is kinda jank, but it works for now.
 
@@ -115,11 +115,6 @@ export async function GET(req: Request) {
     const userDataPath = join(exportDir, 'user-data.json')
     await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
 
-    // Set up archive stream
-    const archive = archiver('zip', {
-      zlib: { level: 9 },
-    })
-
     // Set up response headers
     const headers = new Headers()
     headers.set('Content-Type', 'application/zip')
@@ -132,132 +127,128 @@ export async function GET(req: Request) {
       'no-store, no-cache, must-revalidate, proxy-revalidate'
     )
 
-    // Create a transform stream to track download progress
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        controller.enqueue(chunk)
-      },
+    // Create a transform stream for tracking download progress
+    const { readable, writable } = new TransformStream()
+
+    // Set up archive stream
+    const archive = archiver('zip', {
+      zlib: { level: 9 },
     })
 
-    // Create a readable stream that will contain our zip
-    const stream = new ReadableStream({
-      start(controller) {
-        // Buffer to accumulate initial data for size estimation
-        const initialChunks: Uint8Array[] = []
-        let initialSize = 0
-        let hasSetHeaders = false
+    // Handle archive warnings and errors for better debugging
+    archive.on('warning', (err) => {
+      if (err.code === 'ENOENT') {
+        console.warn('Archive warning:', err)
+      } else {
+        console.error('Archive error:', err)
+      }
+    })
 
-        // Pipe archive data to the controller
-        archive.on('data', (chunk) => {
-          if (!hasSetHeaders && userId) {
-            initialChunks.push(chunk)
-            initialSize += chunk.length
+    archive.on('error', (err) => {
+      console.error('Archive error:', err)
+    })
 
-            // after collecting enough data for size estimation
-            if (initialSize > 1024 * 1024) {
-              // estimate total size based on preparation progress
-              const progress = getProgress(userId)
-              if (progress > 0) {
-                const estimatedTotalSize = Math.ceil(
-                  initialSize * (100 / progress)
-                )
-                headers.set('Content-Length', estimatedTotalSize.toString())
-              }
+    // Pipe archive data to the writable stream
+    const writer = writable.getWriter()
 
-              // Enqueue all buffered chunks
-              for (const bufferedChunk of initialChunks) {
-                controller.enqueue(bufferedChunk)
-              }
-              hasSetHeaders = true
-            }
-          } else {
-            controller.enqueue(chunk)
-          }
-        })
+    // Handle archive data
+    archive.on('data', async (chunk) => {
+      await writer.write(chunk)
+    })
 
-        archive.on('end', () => {
-          controller.close()
-        })
+    // Close the writable stream when the archive is done
+    archive.on('end', async () => {
+      try {
+        await writer.close()
+      } catch (err) {
+        console.error('Error closing writer:', err)
+      }
+    })
 
-        archive.on('error', (error) => {
-          controller.error(error)
-          console.error('Archive error:', error)
-        })
+    // Add user data JSON to the archive
+    archive.file(userDataPath, { name: 'user-data.json' })
 
-        // Add user data JSON to the archive
-        archive.file(userDataPath, { name: 'user-data.json' })
+    // Process files asynchronously
+    ;(async () => {
+      try {
+        totalFiles = userData.files.length
+        updateProgress(userId, 0)
 
-        // Process files
-        ;(async () => {
+        // If there are no files, make sure we still finalize the archive
+        if (totalFiles === 0) {
+          archive.finalize()
+          return
+        }
+
+        for (const file of userData.files) {
           try {
-            totalFiles = userData.files.length
-            for (const file of userData.files) {
-              try {
-                // Try both absolute and workspace-relative paths
-                const absolutePath = join('/', file.path)
-                const workspacePath = join(
-                  process.cwd(),
-                  'uploads',
-                  file.path.split('uploads/')[1] || ''
-                )
+            // Try both absolute and workspace-relative paths
+            const absolutePath = join('/', file.path)
+            const workspacePath = join(
+              process.cwd(),
+              'uploads',
+              file.path.split('uploads/')[1] || ''
+            )
 
-                let filePath = null
-                if (existsSync(absolutePath)) {
-                  filePath = absolutePath
-                } else if (existsSync(workspacePath)) {
-                  filePath = workspacePath
-                } else {
-                  console.error(`File not found: ${file.path}`)
-                  continue
-                }
-
-                // Only proceed if we have a valid file path
-                if (filePath) {
-                  const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
-                  archive.file(filePath, { name: zipPath })
-                  successfulFiles++
-
-                  // Update progress
-                  const progress = Math.round(
-                    (successfulFiles / totalFiles) * 100
-                  )
-                  if (userId) {
-                    updateProgress(userId, progress)
-                  }
-                }
-              } catch (error) {
-                console.error(
-                  `Error adding file ${file.name} to archive:`,
-                  error
-                )
-              }
+            let filePath = null
+            if (existsSync(absolutePath)) {
+              filePath = absolutePath
+            } else if (existsSync(workspacePath)) {
+              filePath = workspacePath
+            } else {
+              console.error(`File not found: ${file.path}`)
+              continue
             }
 
-            // Finalize the archive
-            archive.finalize()
+            // Only proceed if we have a valid file path
+            if (filePath) {
+              const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
+              archive.file(filePath, { name: zipPath })
+              successfulFiles++
 
-            // Clean up the export folder after a delay
-            setTimeout(async () => {
-              try {
-                if (exportDir) {
-                  await rm(exportDir, { recursive: true })
-                  console.log(
-                    `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
-                  )
-                }
-              } catch (error) {
-                console.error('Error cleaning up export directory:', error)
+              // Update progress
+              const progress = Math.round((successfulFiles / totalFiles) * 100)
+              if (userId) {
+                updateProgress(userId, progress)
               }
-            }, 1000)
+            }
           } catch (error) {
-            controller.error(error)
+            console.error(`Error adding file ${file.name} to archive:`, error)
           }
-        })()
-      },
-    })
+        }
+
+        // Finalize the archive when all files are processed
+        try {
+          await archive.finalize()
+        } catch (error) {
+          console.error('Error finalizing archive:', error)
+        }
+
+        // Clean up the export folder after a delay
+        setTimeout(async () => {
+          try {
+            if (exportDir) {
+              await rm(exportDir, { recursive: true })
+              console.log(
+                `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
+              )
+            }
+          } catch (cleanupError) {
+            console.error('Error cleaning up export directory:', cleanupError)
+          }
+        }, 5000)
+      } catch (error) {
+        console.error('File processing error:', error)
+        try {
+          await writer.close()
+        } catch (closeErr) {
+          console.error('Error closing writer after error:', closeErr)
+        }
+      }
+    })()
 
     // Return the streaming response
-    return new Response(stream.pipeThrough(transformStream), { headers })
+    return new Response(readable, { headers })
   } catch (error) {
     // Clean up on error
     if (userId) {
