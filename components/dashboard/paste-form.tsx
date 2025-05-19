@@ -57,23 +57,58 @@ export function PasteForm() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create paste')
+        let errorDescription = 'Failed to create paste'
+        try {
+          // Attempt to get a more specific error message from the server response
+          const errorData = await response.json()
+          if (errorData?.message) {
+            errorDescription = errorData.message
+          }
+        } catch (jsonError) {
+          // If the error response isn't JSON or can't be parsed, use the generic message
+          console.warn('Could not parse error response JSON:', jsonError)
+        }
+        throw new Error(errorDescription)
       }
 
-      const responseData = await response.json()
-
+      // If response.ok is true, the paste creation was successful on the server side.
       toast({
         title: 'Success',
         description: 'Paste created successfully',
       })
 
-      // Extract the path from the full URL and redirect to it
-      const urlPath = new URL(responseData.url).pathname
-      router.push(urlPath)
-    } catch {
+      // Attempt to parse the response and redirect.
+      // This part is now separated so its failure doesn't negate the success of paste creation.
+      try {
+        const responseData = await response.json()
+        if (responseData?.data?.url) {
+          const urlPath = new URL(responseData.data.url).pathname
+          router.push(urlPath)
+        } else {
+          console.warn(
+            'Paste created, but no redirect URL found in response:',
+            responseData
+          )
+          // Optionally, redirect to a generic page or handle as needed
+          router.push('/dashboard') // Default redirect to dashboard
+        }
+      } catch (jsonError) {
+        console.error(
+          'Paste created, but failed to parse response JSON for redirect URL:',
+          jsonError
+        )
+        // Handle cases where response.json() might fail (e.g., empty response body)
+        // Optionally, redirect to a generic page or handle as needed
+        // router.push('/dashboard'); // Example
+      }
+    } catch (error) {
+      // This catch block now handles network errors or errors explicitly thrown for non-ok responses.
       toast({
         title: 'Error',
-        description: 'Failed to create paste',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred while creating the paste.',
         variant: 'destructive',
       })
     } finally {
