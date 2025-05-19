@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { FileType, PaginationInfo, SortOption } from '@/types/components/file'
-import { DateRange } from 'react-day-picker'
+import type {
+  FileType,
+  PaginationInfo,
+  SortOption,
+} from '@/types/components/file'
+import type { DateRange } from 'react-day-picker'
 
 import { FileCard } from '@/components/dashboard/file-card'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
@@ -57,11 +61,16 @@ export function FileGrid() {
     async function fetchFileTypes() {
       try {
         const response = await fetch('/api/files/types')
-        if (!response.ok) throw new Error('Failed to fetch file types')
+        if (!response.ok) {
+          console.error('Failed to fetch file types, status:', response.status)
+          setFileTypes([]) // Ensure it's an array on HTTP error
+          return
+        }
         const data = await response.json()
-        setFileTypes(data.types)
+        setFileTypes(Array.isArray(data.types) ? data.types : []) // Ensure data.types is an array
       } catch (error) {
         console.error('Error fetching file types:', error)
+        setFileTypes([]) // Ensure it's an array on exception
       }
     }
     fetchFileTypes()
@@ -85,14 +94,28 @@ export function FileGrid() {
         })
         const response = await fetch(`/api/files?${params}`)
         if (!response.ok) throw new Error('Failed to fetch files')
-        const data = await response.json()
-        setFiles(data.files)
-        setPaginationInfo({
-          total: data.pagination.total,
-          pageCount: data.pagination.pageCount,
-          page: filters.page,
-          limit: filters.limit,
-        })
+        const apiResult = await response.json()
+        console.log(
+          'API Response for /api/files:',
+          JSON.stringify(apiResult, null, 2)
+        )
+        setFiles(Array.isArray(apiResult.data) ? apiResult.data : [])
+        if (apiResult.pagination) {
+          setPaginationInfo({
+            total: apiResult.pagination.total || 0,
+            pageCount: apiResult.pagination.pageCount || 0,
+            page: filters.page,
+            limit: filters.limit,
+          })
+        } else {
+          // Handle missing pagination gracefully
+          setPaginationInfo({
+            total: 0,
+            pageCount: 0,
+            page: filters.page,
+            limit: filters.limit,
+          })
+        }
       } catch (error) {
         console.error('Error fetching files:', error)
       } finally {
