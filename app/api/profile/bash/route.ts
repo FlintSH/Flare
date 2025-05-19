@@ -136,7 +136,6 @@ if [ $? -ne 0 ]; then
 fi
 
 # Parse the JSON response
-URL=\$(echo "$RESPONSE" | jq -r '.url')
 ERROR=\$(echo "$RESPONSE" | jq -r '.error // empty')
 
 if [ ! -z "$ERROR" ]; then
@@ -144,32 +143,40 @@ if [ ! -z "$ERROR" ]; then
   exit 1
 fi
 
-if [ "$URL" != "null" ] && [ ! -z "$URL" ]; then
-  # Try to copy to clipboard using various clipboard tools
-  if command -v wl-copy >/dev/null 2>&1; then
-    # Wayland
-    echo -n "$URL" | wl-copy
-  elif command -v xsel >/dev/null 2>&1; then
-    # X11 with xsel
-    echo -n "$URL" | xsel -ib
-  elif command -v xclip >/dev/null 2>&1; then
-    # X11 with xclip
-    echo -n "$URL" | xclip -selection clipboard
-  elif command -v pbcopy >/dev/null 2>&1; then
-    # macOS
-    echo -n "$URL" | pbcopy
-  else
-    echo "Note: No clipboard tool found. Install wl-copy, xsel, xclip, or pbcopy for automatic clipboard copy."
-  fi
-  
-  echo "File uploaded successfully!"
-  echo "URL: $URL"
-  echo "URL has been copied to clipboard (if a clipboard tool was available)"
-  exit 0
-else
-  echo "Upload failed: Invalid response format"
+# Try to extract URL using different possible response formats
+URL=\$(echo "$RESPONSE" | jq -r '.url // .data.url // empty')
+
+if [ -z "$URL" ]; then
+  # If URL is still empty, the response might be directly the upload response object
+  URL=\$(echo "$RESPONSE" | jq -r '. | if type=="object" then .url else empty end')
+fi
+
+if [ "$URL" == "null" ] || [ -z "$URL" ]; then
+  echo "Upload failed: Could not extract URL from response"
   echo "Debug info:"
   echo "$RESPONSE"
   exit 1
-fi`
+fi
+
+# Try to copy to clipboard using various clipboard tools
+if command -v wl-copy >/dev/null 2>&1; then
+  # Wayland
+  echo -n "$URL" | wl-copy
+elif command -v xsel >/dev/null 2>&1; then
+  # X11 with xsel
+  echo -n "$URL" | xsel -ib
+elif command -v xclip >/dev/null 2>&1; then
+  # X11 with xclip
+  echo -n "$URL" | xclip -selection clipboard
+elif command -v pbcopy >/dev/null 2>&1; then
+  # macOS
+  echo -n "$URL" | pbcopy
+else
+  echo "Note: No clipboard tool found. Install wl-copy, xsel, xclip, or pbcopy for automatic clipboard copy."
+fi
+
+echo "File uploaded successfully!"
+echo "URL: $URL"
+echo "URL has been copied to clipboard (if a clipboard tool was available)"
+exit 0`
 }

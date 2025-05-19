@@ -179,8 +179,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Parse the JSON response
-URL=\$(echo "$RESPONSE" | jq -r '.url')
-ERROR=\$(echo "$RESPONSE" | jq -r '.error // empty')
+ERROR=$(echo "$RESPONSE" | jq -r '.error // empty')
 
 if [ ! -z "$ERROR" ]; then
   echo "Upload failed: $ERROR"
@@ -188,16 +187,24 @@ if [ ! -z "$ERROR" ]; then
   exit 1
 fi
 
-if [ "$URL" != "null" ] && [ ! -z "$URL" ]; then
-  ${useWayland ? 'echo -n "$URL" | wl-copy' : 'echo -n "$URL" | xsel -ib'}
-  echo "Screenshot uploaded successfully: $URL"
-  ${useWayland ? 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"' : 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"'}
-  exit 0
-else
-  echo "Upload failed: Invalid response format"
+# Try to extract URL using different possible response formats
+URL=$(echo "$RESPONSE" | jq -r '.url // .data.url // empty')
+
+if [ -z "$URL" ]; then
+  # If URL is still empty, the response might be directly the upload response object
+  URL=$(echo "$RESPONSE" | jq -r '. | if type=="object" then .url else empty end')
+fi
+
+if [ "$URL" == "null" ] || [ -z "$URL" ]; then
+  echo "Upload failed: Could not extract URL from response"
   echo "Debug info:"
   echo "$RESPONSE"
-  notify-send "Screenshot Upload Failed" "Error: Invalid response format"
+  notify-send "Screenshot Upload Failed" "Error: Could not extract URL from response"
   exit 1
-fi`
+fi
+
+${useWayland ? 'echo -n "$URL" | wl-copy' : 'echo -n "$URL" | xsel -ib'}
+echo "Screenshot uploaded successfully: $URL"
+${useWayland ? 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"' : 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"'}
+exit 0`
 }

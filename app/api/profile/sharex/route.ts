@@ -63,6 +63,7 @@ export async function GET() {
       ThumbnailURL: '{json:url}',
       DeletionURL: '',
       ErrorMessage: '{json:error}',
+      RegexList: ['"url":"(.+?)"', '"data":{"url":"(.+?)"'],
     }
 
     // Use sanitized username for the filename
