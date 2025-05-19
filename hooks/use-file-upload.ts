@@ -53,11 +53,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   useEffect(() => {
     // Clean up preview URLs when component unmounts
     return () => {
-      files.forEach((file) => {
+      for (const file of files) {
         if (file.preview) {
           URL.revokeObjectURL(file.preview)
         }
-      })
+      }
     }
   }, [files])
 
@@ -74,11 +74,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   }
 
   const clearFiles = () => {
-    files.forEach((file) => {
+    for (const file of files) {
       if (file.preview) {
         URL.revokeObjectURL(file.preview)
       }
-    })
+    }
     setFiles([])
   }
 
@@ -269,7 +269,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        let response
+        let response: UploadResponse
 
         // Use chunked upload for files larger than 10MB
         if (file.size > 10 * 1024 * 1024) {

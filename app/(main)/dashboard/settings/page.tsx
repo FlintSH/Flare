@@ -45,7 +45,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import { FlareConfig } from '@/lib/config'
+import type { FlareConfig } from '@/lib/config'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -391,9 +391,17 @@ export default function SettingsPage() {
     const loadConfig = async () => {
       try {
         const response = await fetch('/api/settings')
-        const data = await response.json()
-        setSavedConfig(data)
-        setWorkingConfig(JSON.parse(JSON.stringify(data)))
+        const responseJson = await response.json()
+        if (responseJson?.data) {
+          const actualConfigData = responseJson.data
+          setSavedConfig(actualConfigData)
+          setWorkingConfig(JSON.parse(JSON.stringify(actualConfigData)))
+        } else {
+          console.error(
+            'Failed to load config: Invalid data structure received',
+            responseJson
+          )
+        }
       } catch (error) {
         console.error('Failed to load config:', error)
       }
@@ -402,16 +410,17 @@ export default function SettingsPage() {
   }, [])
 
   const handleStorageQuotaChange = (value: string) => {
-    const numValue = parseInt(value)
-    if (isNaN(numValue)) return
+    if (!workingConfig?.settings?.general?.storage) return
+    const numValue = Number.parseInt(value)
+    if (Number.isNaN(numValue)) return
 
     handleSettingChange('general', {
       storage: {
-        ...workingConfig!.settings.general.storage,
+        ...workingConfig.settings.general.storage,
         quotas: {
-          ...workingConfig!.settings.general.storage.quotas,
+          ...workingConfig.settings.general.storage.quotas,
           default: {
-            ...workingConfig!.settings.general.storage.quotas.default,
+            ...workingConfig.settings.general.storage.quotas.default,
             value: numValue,
           },
         },
@@ -420,14 +429,15 @@ export default function SettingsPage() {
   }
 
   const handleMaxUploadSizeChange = (value: string) => {
-    const numValue = parseInt(value)
-    if (isNaN(numValue)) return
+    if (!workingConfig?.settings?.general?.storage) return
+    const numValue = Number.parseInt(value)
+    if (Number.isNaN(numValue)) return
 
     handleSettingChange('general', {
       storage: {
-        ...workingConfig!.settings.general.storage,
+        ...workingConfig.settings.general.storage,
         maxUploadSize: {
-          ...workingConfig!.settings.general.storage.maxUploadSize,
+          ...workingConfig.settings.general.storage.maxUploadSize,
           value: numValue,
         },
       },
@@ -468,7 +478,12 @@ export default function SettingsPage() {
     return pendingFaviconFile !== null
   }, [pendingFaviconFile])
 
-  if (!workingConfig || !savedConfig) {
+  if (
+    !workingConfig ||
+    !savedConfig ||
+    !workingConfig.settings ||
+    !savedConfig.settings
+  ) {
     return <SettingsSkeleton />
   }
 

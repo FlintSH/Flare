@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { readFile, unlink } from 'fs/promises'
+import { FileUploadResponse } from '@/types/dto/file'
 import { getServerSession } from 'next-auth'
-import { join } from 'path'
+import { readFile, unlink } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
@@ -143,9 +144,21 @@ export async function POST(
       })
     }
 
-    return NextResponse.json({
-      data: { success: true },
-    })
+    // Ensure URL has protocol and handle trailing slashes
+    const baseUrl =
+      process.env.NODE_ENV === 'development'
+        ? 'http://localhost:3000'
+        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+    const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+
+    const responseData: FileUploadResponse = {
+      url: `${fullUrl}${metadata.urlPath}`,
+      name: metadata.filename,
+      size: metadata.totalSize, // metadata.totalSize is in bytes
+      type: metadata.mimeType,
+    }
+
+    return NextResponse.json(responseData)
   } catch (error) {
     console.error('Error completing upload:', error)
     return NextResponse.json(
