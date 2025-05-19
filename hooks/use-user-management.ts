@@ -58,9 +58,9 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         setIsLoading(true)
         const response = await fetch(`/api/users?page=${page}&limit=25`)
         if (!response.ok) throw new Error('Failed to fetch users')
-        const data: UsersResponse = await response.json()
-        setUsers(data.users)
-        setPagination(data.pagination)
+        const data = await response.json()
+        setUsers(data.data || [])
+        setPagination(data.pagination || null)
         setCurrentPage(page)
       } catch (error) {
         console.error('Error fetching users:', error)
