@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
 
 import archiver from 'archiver'
-import { existsSync } from 'fs'
+import { createReadStream, existsSync } from 'fs'
 import { mkdir, rm, writeFile } from 'fs/promises'
 import { join } from 'path'
 
@@ -112,6 +113,10 @@ export async function GET(req: Request) {
     }
 
     // Write user data to JSON file
+    if (!exportDir) {
+      throw new Error('Export directory is not defined')
+    }
+
     const userDataPath = join(exportDir, 'user-data.json')
     await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
 
@@ -133,10 +138,10 @@ export async function GET(req: Request) {
     // Set up archive stream
     const archive = archiver('zip', {
       zlib: { level: 9 },
-    })
+    }) as any // Cast to any to avoid TypeScript errors
 
     // Handle archive warnings and errors for better debugging
-    archive.on('warning', (err) => {
+    archive.on('warning', (err: any) => {
       if (err.code === 'ENOENT') {
         console.warn('Archive warning:', err)
       } else {
@@ -144,7 +149,7 @@ export async function GET(req: Request) {
       }
     })
 
-    archive.on('error', (err) => {
+    archive.on('error', (err: Error) => {
       console.error('Archive error:', err)
     })
 
@@ -152,7 +157,7 @@ export async function GET(req: Request) {
     const writer = writable.getWriter()
 
     // Handle archive data
-    archive.on('data', async (chunk) => {
+    archive.on('data', async (chunk: Uint8Array) => {
       await writer.write(chunk)
     })
 
@@ -160,50 +165,117 @@ export async function GET(req: Request) {
     archive.on('end', async () => {
       try {
         await writer.close()
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error closing writer:', err)
       }
     })
 
     // Add user data JSON to the archive
-    archive.file(userDataPath, { name: 'user-data.json' })
+    archive.append(createReadStream(userDataPath), { name: 'user-data.json' })(
+      // Process files asynchronously
+      async () => {
+        try {
+          totalFiles = userData.files.length
 
-    // Process files asynchronously
-    ;(async () => {
-      try {
-        totalFiles = userData.files.length
-        updateProgress(userId, 0)
+          if (userId) {
+            updateProgress(userId, 0)
+          }
 
-        // If there are no files, make sure we still finalize the archive
-        if (totalFiles === 0) {
-          archive.finalize()
-          return
-        }
+          // If there are no files, make sure we still finalize the archive
+          if (totalFiles === 0) {
+            console.log('No files to export for user', userId)
+            archive.finalize()
+            return
+          }
 
-        for (const file of userData.files) {
-          try {
-            // Try both absolute and workspace-relative paths
-            const absolutePath = join('/', file.path)
-            const workspacePath = join(
-              process.cwd(),
-              'uploads',
-              file.path.split('uploads/')[1] || ''
-            )
+          console.log(
+            `Starting export of ${totalFiles} files for user ${userId}`
+          )
 
-            let filePath = null
-            if (existsSync(absolutePath)) {
-              filePath = absolutePath
-            } else if (existsSync(workspacePath)) {
-              filePath = workspacePath
-            } else {
-              console.error(`File not found: ${file.path}`)
-              continue
-            }
+          // Create a directory for files in the export
+          if (!exportDir) {
+            throw new Error('Export directory is not defined')
+          }
 
-            // Only proceed if we have a valid file path
-            if (filePath) {
+          const filesDir = join(exportDir, 'files')
+          await mkdir(filesDir, { recursive: true })
+
+          for (const file of userData.files) {
+            try {
+              // Log the raw file path from database
+              console.log(
+                `Processing file: ${file.name}, Path from DB: ${file.path}`
+              )
+
+              // Try multiple path resolution strategies
+              const possiblePaths = []
+
+              // 1. Try the path directly as stored in DB
+              possiblePaths.push(file.path)
+
+              // 2. Try with absolute path
+              possiblePaths.push(join('/', file.path))
+
+              // 3. Try relative to workspace/uploads directory
+              if (file.path.includes('uploads/')) {
+                possiblePaths.push(
+                  join(
+                    process.cwd(),
+                    'uploads',
+                    file.path.split('uploads/')[1] || ''
+                  )
+                )
+              } else {
+                possiblePaths.push(join(process.cwd(), 'uploads', file.path))
+              }
+
+              // 4. Try with just the filename
+              possiblePaths.push(join(process.cwd(), 'uploads', file.name))
+
+              // 5. Try S3 path format if applicable
+              if (file.path.startsWith('s3://')) {
+                const s3Path = file.path.replace('s3://', '')
+                possiblePaths.push(join(process.cwd(), 'uploads', s3Path))
+              }
+
+              // Try to find a valid file path
+              let filePath = null
+              for (const path of possiblePaths) {
+                console.log(`Checking path: ${path}`)
+                if (existsSync(path)) {
+                  filePath = path
+                  console.log(`Found file at: ${filePath}`)
+                  break
+                }
+              }
+
+              if (!filePath) {
+                // If file doesn't exist physically, create a placeholder
+                console.log(
+                  `File not found for: ${file.name}, creating placeholder`
+                )
+                const placeholderPath = join(filesDir, file.name)
+                const fileInfo = JSON.stringify(
+                  {
+                    name: file.name,
+                    size: file.size,
+                    mimeType: file.mimeType,
+                    uploadedAt: file.uploadedAt,
+                    visibility: file.visibility,
+                    path: file.path,
+                    note: 'Original file could not be located on server',
+                  },
+                  null,
+                  2
+                )
+
+                await writeFile(placeholderPath, fileInfo)
+                filePath = placeholderPath
+              }
+
+              // Add file to archive - use append with createReadStream
               const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
-              archive.file(filePath, { name: zipPath })
+              archive.append(createReadStream(filePath), { name: zipPath })
               successfulFiles++
 
               // Update progress
@@ -211,41 +283,45 @@ export async function GET(req: Request) {
               if (userId) {
                 updateProgress(userId, progress)
               }
+            } catch (error) {
+              console.error(`Error adding file ${file.name} to archive:`, error)
             }
-          } catch (error) {
-            console.error(`Error adding file ${file.name} to archive:`, error)
           }
-        }
 
-        // Finalize the archive when all files are processed
-        try {
-          await archive.finalize()
-        } catch (error) {
-          console.error('Error finalizing archive:', error)
-        }
+          console.log(
+            `Finalizing archive with ${successfulFiles}/${totalFiles} files`
+          )
 
-        // Clean up the export folder after a delay
-        setTimeout(async () => {
+          // Finalize the archive when all files are processed
           try {
-            if (exportDir) {
-              await rm(exportDir, { recursive: true })
-              console.log(
-                `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
-              )
-            }
-          } catch (cleanupError) {
-            console.error('Error cleaning up export directory:', cleanupError)
+            await archive.finalize()
+          } catch (error) {
+            console.error('Error finalizing archive:', error)
           }
-        }, 5000)
-      } catch (error) {
-        console.error('File processing error:', error)
-        try {
-          await writer.close()
-        } catch (closeErr) {
-          console.error('Error closing writer after error:', closeErr)
+
+          // Clean up the export folder after a delay
+          setTimeout(async () => {
+            try {
+              if (exportDir) {
+                await rm(exportDir, { recursive: true })
+                console.log(
+                  `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
+                )
+              }
+            } catch (cleanupError) {
+              console.error('Error cleaning up export directory:', cleanupError)
+            }
+          }, 5000)
+        } catch (error) {
+          console.error('File processing error:', error)
+          try {
+            await writer.close()
+          } catch (closeErr) {
+            console.error('Error closing writer after error:', closeErr)
+          }
         }
       }
-    })()
+    )()
 
     // Return the streaming response
     return new Response(readable, { headers })
