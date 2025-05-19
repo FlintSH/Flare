@@ -173,7 +173,15 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                   completed++
                   chunkProgress.set(partNumber, chunk.size)
                   updateTotalProgress()
-                  resolve(JSON.parse(xhr.responseText))
+                  try {
+                    const response = JSON.parse(xhr.responseText)
+                    resolve({
+                      ETag: response.data.etag,
+                      PartNumber: partNumber,
+                    })
+                  } catch (error) {
+                    reject(new Error('Failed to parse response'))
+                  }
                 } else {
                   reject(new Error(`Upload failed: ${xhr.statusText}`))
                 }
@@ -183,8 +191,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 reject(new Error('Network error occurred'))
               })
 
-              xhr.open('POST', '/api/files/chunks/upload')
-              xhr.send(formData)
+              xhr.open(
+                'PUT',
+                `/api/files/chunks/${uploadId}/part/${partNumber}`
+              )
+              xhr.send(chunk)
             }
           ).then((response) => {
             uploadedParts.push(response)
@@ -195,19 +206,20 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       }
 
       // Complete the multipart upload
-      const completeResponse = await fetch('/api/files/chunks/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          uploadId,
-          key: fileKey,
-          parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
-          visibility,
-          password: password || undefined,
-        }),
-      })
+      const completeResponse = await fetch(
+        `/api/files/chunks/${uploadId}/complete`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
+            visibility,
+            password: password || null,
+          }),
+        }
+      )
 
       if (!completeResponse.ok) {
         throw new Error('Failed to complete upload')
