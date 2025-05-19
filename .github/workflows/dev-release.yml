@@ -2,7 +2,9 @@ name: Dev Release
 
 on:
   push:
-    branches-ignore: [ main ]
+    branches:
+      - main
+      - '**'
 
 jobs:
   create-dev-release:
@@ -40,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/flintsh/flare:dev
@@ -63,6 +65,8 @@ jobs:
             ```bash
             docker pull flintsh/flare:dev
             ```
+
+            **Note:** ARM builds are not automatically provided for development releases. If you require an ARM image, you will need to build it manually.
         run: |
           if ! git ls-remote --tags origin refs/tags/development | grep -q 'development'; then
             git tag -f development
