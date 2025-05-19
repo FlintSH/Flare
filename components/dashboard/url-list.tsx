@@ -81,7 +81,7 @@ export function URLList({ refreshTrigger = 0 }: URLListProps) {
       const response = await fetch('/api/urls')
       if (!response.ok) throw new Error('Failed to fetch URLs')
       const data = await response.json()
-      setUrls(data)
+      setUrls(data.data?.urls || [])
     } catch (error) {
       console.error('Failed to load URLs:', error)
       toast({
