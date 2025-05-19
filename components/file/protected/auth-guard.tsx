@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { sanitizeUrl } from '@/lib/utils/url'
 
 interface AuthGuardProps {
-  children: React.ReactNode
+  children: React.ReactNode | ((verifiedPassword?: string) => React.ReactNode)
   file: {
     userId: string
     password: string | null
@@ -81,12 +81,16 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
 
   // Clone children with the verified password prop
   // We need to use React.Children.map to pass the verifiedPassword to children
+  if (typeof children === 'function') {
+    return <>{children(verifiedPassword)}</>
+  }
+
   return (
     <>
       {React.Children.map(children, (child) => {
         // Check if child is a valid React element
         if (React.isValidElement(child)) {
-          // Clone the element with additional props
+          // Clone the element with additional props (original logic before the typeof child.type check)
           return React.cloneElement(child, {
             verifiedPassword,
           } as React.Attributes)

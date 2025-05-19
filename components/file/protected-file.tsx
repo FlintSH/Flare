@@ -25,7 +25,10 @@ interface ProtectedFileProps {
   verifiedPassword?: string
 }
 
-export function ProtectedFile({ file, verifiedPassword }: ProtectedFileProps) {
+export function ProtectedFile({
+  file,
+  verifiedPassword: initialVerifiedPassword,
+}: ProtectedFileProps) {
   const [codeContent] = useState<string>()
 
   const isTextBased = Boolean(
@@ -36,23 +39,34 @@ export function ProtectedFile({ file, verifiedPassword }: ProtectedFileProps) {
 
   return (
     <AuthGuard file={file}>
-      {/* File content */}
-      <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
-        <FileContent file={file} />
-      </div>
+      {(authGuardVerifiedPassword) => {
+        const currentVerifiedPassword =
+          authGuardVerifiedPassword || initialVerifiedPassword
+        return (
+          <>
+            {/* File content */}
+            <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
+              <FileContent
+                file={file}
+                verifiedPassword={currentVerifiedPassword}
+              />
+            </div>
 
-      {/* Actions */}
-      <div className="p-6 border-t bg-muted/50">
-        <FileActions
-          urlPath={sanitizeUrl(file.urlPath)}
-          name={file.name}
-          verifiedPassword={verifiedPassword}
-          showOcr={file.mimeType.startsWith('image/')}
-          isTextBased={isTextBased}
-          content={codeContent}
-          fileId={file.id}
-        />
-      </div>
+            {/* Actions */}
+            <div className="p-6 border-t bg-muted/50">
+              <FileActions
+                urlPath={sanitizeUrl(file.urlPath)}
+                name={file.name}
+                verifiedPassword={currentVerifiedPassword}
+                showOcr={file.mimeType.startsWith('image/')}
+                isTextBased={isTextBased}
+                content={codeContent}
+                fileId={file.id}
+              />
+            </div>
+          </>
+        )
+      }}
     </AuthGuard>
   )
 }
