@@ -48,7 +48,7 @@
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.2",
     "@hookform/resolvers": "^3.10.0",
-    "@prisma/client": "^6.6.0",
+    "@prisma/client": "^6.7.0",
     "@radix-ui/react-alert-dialog": "^1.1.11",
     "@radix-ui/react-avatar": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.7",
