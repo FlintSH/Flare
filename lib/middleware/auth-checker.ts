@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { requireAuth } from '../auth/api-auth'
+import { requireAuth } from '@/lib/auth/api-auth'
 
 import { FILE_URL_PATTERN } from './constants'
 
