@@ -12,7 +12,7 @@ export async function checkAuthentication(
     return null
   }
 
-  const { user, response } = await requireAuth(request)
+  const { user } = await requireAuth(request)
   if (!user) {
     return NextResponse.redirect(new URL(`/auth/login`, request.url))
   }
