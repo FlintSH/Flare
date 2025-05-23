@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getToken } from 'next-auth/jwt'
+import { requireAuth } from '../auth/api-auth'
 
 import { FILE_URL_PATTERN } from './constants'
 
@@ -12,8 +12,8 @@ export async function checkAuthentication(
     return null
   }
 
-  const token = await getToken({ req: request })
-  if (!token) {
+  const { user, response } = await requireAuth(request)
+  if (!user) {
     return NextResponse.redirect(new URL(`/auth/login`, request.url))
   }
 
