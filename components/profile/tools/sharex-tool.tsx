@@ -12,7 +12,7 @@ export function ShareXTool() {
 
   const handleShareXDownload = async () => {
     setIsLoading(true)
-  try {
+    try {
       const response = await fetch('/api/profile/sharex')
       if (!response.ok) {
         throw new Error('Failed to download ShareX config')
