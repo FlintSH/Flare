@@ -59,11 +59,10 @@ export async function GET() {
       },
       Body: 'MultipartFormData',
       FileFormName: 'file',
-      URL: '{json:url}',
-      ThumbnailURL: '{json:url}',
+      URL: '{json:data.url}',
+      ThumbnailURL: '{json:data.url}',
       DeletionURL: '',
       ErrorMessage: '{json:error}',
-      RegexList: ['"url":"(.+?)"', '"data":{"url":"(.+?)"'],
     }
 
     // Use sanitized username for the filename
