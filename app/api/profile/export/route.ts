@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 
 import archiver from 'archiver'
-import { existsSync } from 'fs'
-import { mkdir, rm, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { existsSync } from 'node:fs'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
 
 // This whole file could probably be improved at some point. The way progress is tracked is kinda jank, but it works for now.
@@ -62,6 +64,16 @@ export async function GET(req: Request) {
     const timestamp = Date.now()
     exportDir = join(process.cwd(), 'tmp', 'exports', `${userId}_${timestamp}`)
     await mkdir(exportDir, { recursive: true })
+
+    // Get storage provider
+    const storageProvider = await getStorageProvider()
+    const isS3Storage = storageProvider instanceof S3StorageProvider
+
+    if (isS3Storage) {
+      console.log('Using S3 storage provider for file exports')
+    } else {
+      console.log('Using local storage provider for file exports')
+    }
 
     // Get user data
     const userData = await prisma.user.findUnique({
@@ -182,34 +194,78 @@ export async function GET(req: Request) {
 
         for (const file of userData.files) {
           try {
-            // Try both absolute and workspace-relative paths
-            const absolutePath = join('/', file.path)
-            const workspacePath = join(
-              process.cwd(),
-              'uploads',
-              file.path.split('uploads/')[1] || ''
-            )
+            let fileData: Buffer | null = null
+            let filePath: string | null = null
 
-            let filePath = null
-            if (existsSync(absolutePath)) {
-              filePath = absolutePath
-            } else if (existsSync(workspacePath)) {
-              filePath = workspacePath
+            if (isS3Storage) {
+              // For S3 storage, download the file to the temp directory
+              try {
+                fileData = await getFileContentFromStorage(
+                  storageProvider,
+                  file.path
+                )
+
+                // Create a temporary file path
+                filePath = join(exportDir, file.name)
+                await writeFile(filePath, fileData)
+              } catch (downloadErr) {
+                console.error(
+                  `Error downloading file from S3: ${file.path}`,
+                  downloadErr
+                )
+                console.error(`Skipping file: ${file.name} (${file.path})`)
+                continue
+              }
             } else {
-              console.error(`File not found: ${file.path}`)
-              continue
+              // For local storage, try both absolute and workspace-relative paths
+              const absolutePath = join('/', file.path)
+              const workspacePath = join(
+                process.cwd(),
+                'uploads',
+                file.path.split('uploads/')[1] || ''
+              )
+
+              if (existsSync(absolutePath)) {
+                filePath = absolutePath
+              } else if (existsSync(workspacePath)) {
+                filePath = workspacePath
+              } else {
+                console.error(`File not found: ${file.path}`)
+                continue
+              }
             }
 
             // Only proceed if we have a valid file path
             if (filePath) {
               const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
-              archive.file(filePath, { name: zipPath })
-              successfulFiles++
+              try {
+                archive.file(filePath, { name: zipPath })
+                successfulFiles++
 
-              // Update progress
-              const progress = Math.round((successfulFiles / totalFiles) * 100)
-              if (userId) {
-                updateProgress(userId, progress)
+                // Update progress
+                const progress = Math.round(
+                  (successfulFiles / totalFiles) * 100
+                )
+                if (userId) {
+                  updateProgress(userId, progress)
+                }
+              } catch (archiveErr) {
+                console.error(
+                  `Error adding file to archive: ${file.name}`,
+                  archiveErr
+                )
+              }
+
+              // Clean up temporary file for S3 storage
+              if (isS3Storage && filePath.startsWith(exportDir)) {
+                try {
+                  await rm(filePath)
+                } catch (cleanupErr) {
+                  console.error(
+                    `Error cleaning up temp file: ${filePath}`,
+                    cleanupErr
+                  )
+                }
               }
             }
           } catch (error) {
@@ -267,5 +323,25 @@ export async function GET(req: Request) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  }
+}
+
+// Helper function to safely handle file retrieval
+async function getFileContentFromStorage(
+  storageProvider: StorageProvider,
+  filePath: string
+): Promise<Buffer> {
+  try {
+    const fileStream = await storageProvider.getFileStream(filePath)
+    const chunks: Buffer[] = []
+
+    for await (const chunk of fileStream) {
+      chunks.push(Buffer.from(chunk))
+    }
+
+    return Buffer.concat(chunks)
+  } catch (error) {
+    console.error(`Failed to retrieve file from storage: ${filePath}`, error)
+    throw error
   }
 }
