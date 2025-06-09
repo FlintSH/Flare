@@ -1,17 +1,17 @@
 # Stage 1: Dependencies
-FROM node:22-alpine AS deps
+FROM oven/bun:1-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json bun.lockb ./
 COPY prisma ./prisma
 
 # Install dependencies and generate Prisma Client
-RUN npm ci
-RUN npx prisma generate
+RUN bun install --frozen-lockfile
+RUN bunx prisma generate
 
 # Stage 2: Builder
-FROM node:22-alpine AS builder
+FROM oven/bun:1-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -22,10 +22,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # Build the application
-RUN npm run build
+RUN bun run build
 
 # Stage 3: Runner
-FROM node:22-alpine AS runner
+FROM oven/bun:1-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

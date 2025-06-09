@@ -8,7 +8,7 @@ wait_for_db() {
     
     while [ $counter -lt $max_retries ]
     do
-        if npx prisma migrate deploy 2>/dev/null; then
+        if bunx prisma migrate deploy 2>/dev/null; then
             echo "Database is ready!"
             return 0
         fi
@@ -32,25 +32,25 @@ fi
 
 # Run migrations
 echo "Running database migrations..."
-if ! npx prisma migrate deploy; then
+if ! bunx prisma migrate deploy; then
     echo "Failed to run migrations"
     exit 1
 fi
 
 # Generate Prisma Client if needed
 echo "Ensuring Prisma Client is generated..."
-if ! npx prisma generate; then
+if ! bunx prisma generate; then
     echo "Failed to generate Prisma Client"
     exit 1
 fi
 
 # Run config migrations
 echo "Running config migrations..."
-if ! node /app/scripts/migrate-config.js; then
+if ! bun run /app/scripts/migrate-config.js; then
     echo "Failed to run config migrations"
     exit 1
 fi
 
 # Start the application
 echo "Starting the application..."
-exec npm run start
+exec bun run start

@@ -16,24 +16,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
-          cache: 'npm'
+          bun-version: latest
 
       - name: Install dependencies
         uses: nick-fields/retry@v2
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: npm ci
+          command: bun install --frozen-lockfile
 
       - name: Type Check
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
       - name: Lint
-        run: npm run lint
+        run: bun run lint
 
       - name: Check formatting
-        run: npx prettier --check "**/*.{ts,tsx,js,jsx,json,md}"
+        run: bunx prettier --check "**/*.{ts,tsx,js,jsx,json,md}"

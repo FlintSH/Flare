@@ -3,14 +3,14 @@
 
 # Format staged files
 echo "🔍 Formatting staged files..."
-npx lint-staged
+bunx lint-staged
 
 # Stage the formatted files
 git add .
 
 # Run a final check
 echo "✨ Running final format check..."
-npx prettier --check "**/*.{ts,tsx,js,jsx,json,md}" || (
+bunx prettier --check "**/*.{ts,tsx,js,jsx,json,md}" || (
     echo "❌ Formatting check failed. Please commit again."
     exit 1
 )
