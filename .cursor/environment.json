@@ -1,6 +1,15 @@
 {
-  "snapshot": "snapshot-20250515-f39c7037-30aa-4504-8bf2-412b19532808",
+  "snapshot": "snapshot-20250624-d9f3476c-b59d-455c-924b-4b322dafb6d5",
   "install": "bun install",
   "start": "bun run dev",
-  "terminals": []
+  "terminals": [
+    {
+      "name": "build",
+      "command": "bun run build"
+    },
+    {
+      "name": "lint",
+      "command": "bun run lint"
+    }
+  ]
 }
