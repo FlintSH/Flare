@@ -61,6 +61,49 @@ export const configSchema = z.object({
         enabled: z.boolean().default(true),
       }),
     }),
+    logging: z
+      .object({
+        enabled: z.boolean().default(true),
+        level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+        console: z.object({
+          enabled: z.boolean().default(true),
+          format: z.enum(['json', 'pretty']).default('pretty'),
+        }),
+        file: z.object({
+          enabled: z.boolean().default(true),
+          path: z.string().default('./logs'),
+          maxSize: z.number().default(10),
+          maxFiles: z.number().default(5),
+          format: z.enum(['json', 'pretty']).default('json'),
+        }),
+        categories: z.object({
+          api: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+          }),
+          auth: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+          }),
+          upload: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+          }),
+          database: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('warn'),
+          }),
+          system: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+          }),
+          user: z.object({
+            enabled: z.boolean().default(true),
+            level: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+          }),
+        }),
+      })
+      .optional(),
     appearance: z.object({
       theme: z.string(),
       favicon: z.string().nullable(),
@@ -114,6 +157,29 @@ export const DEFAULT_CONFIG: FlareConfig = {
       },
       ocr: {
         enabled: true,
+      },
+    },
+    logging: {
+      enabled: true,
+      level: 'info' as const,
+      console: {
+        enabled: true,
+        format: 'pretty' as const,
+      },
+      file: {
+        enabled: true,
+        path: './logs',
+        maxSize: 10,
+        maxFiles: 5,
+        format: 'json' as const,
+      },
+      categories: {
+        api: { enabled: true, level: 'info' as const },
+        auth: { enabled: true, level: 'info' as const },
+        upload: { enabled: true, level: 'info' as const },
+        database: { enabled: true, level: 'warn' as const },
+        system: { enabled: true, level: 'info' as const },
+        user: { enabled: true, level: 'info' as const },
       },
     },
     appearance: {
@@ -236,6 +302,22 @@ export async function updateConfig(
           ocr: {
             ...currentConfig.settings.general.ocr,
             ...(newConfig.settings?.general?.ocr || {}),
+          },
+        },
+        logging: {
+          ...currentConfig.settings.logging,
+          ...(newConfig.settings?.logging || {}),
+          console: {
+            ...currentConfig.settings.logging?.console,
+            ...(newConfig.settings?.logging?.console || {}),
+          },
+          file: {
+            ...currentConfig.settings.logging?.file,
+            ...(newConfig.settings?.logging?.file || {}),
+          },
+          categories: {
+            ...currentConfig.settings.logging?.categories,
+            ...(newConfig.settings?.logging?.categories || {}),
           },
         },
         appearance: {

@@ -16,6 +16,8 @@ import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { createRequestLogger, logError, logger } from '@/lib/logging'
+import { extractUserContext } from '@/lib/logging/middleware'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
@@ -24,11 +26,27 @@ import { bytesToMB } from '@/lib/utils'
 // This has been moved to lib/auth/api-auth.ts
 
 export async function POST(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
   let filePath = ''
 
   try {
+    logger.uploadEvent('File upload started', '', {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+    })
+
     const { user, response } = await requireAuth(req)
-    if (response) return response
+    if (response) {
+      logger.uploadEvent('File upload failed - authentication required', '', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+      })
+      return response
+    }
 
     const formData = await req.formData()
 
@@ -38,6 +56,19 @@ export async function POST(req: Request) {
       (formData.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC'
     const password = formData.get('password') as string | null
 
+    logger.uploadEvent('File upload request parsed', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileName: uploadedFile.name,
+        fileSize: uploadedFile.size,
+        mimeType: uploadedFile.type,
+        visibility,
+        hasPassword: !!password,
+      },
+    })
+
     const result = FileUploadFormDataSchema.safeParse({
       file: uploadedFile,
       visibility,
@@ -45,6 +76,16 @@ export async function POST(req: Request) {
     })
 
     if (!result.success) {
+      logger.uploadEvent('File upload failed - validation error', user.id, {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileName: uploadedFile.name,
+          validationError: result.error.issues[0].message,
+        },
+      })
+      requestLogger.complete(400, user.id)
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
 
@@ -57,6 +98,17 @@ export async function POST(req: Request) {
     const defaultQuota = config.settings.general.storage.quotas.default
 
     if (uploadedFile.size > maxBytes) {
+      logger.uploadEvent('File upload failed - file too large', user.id, {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileName: uploadedFile.name,
+          fileSize: uploadedFile.size,
+          maxAllowedSize: maxBytes,
+        },
+      })
+      requestLogger.complete(413, user.id)
       return apiError(
         `Maximum file size is ${maxSize.value}${maxSize.unit}`,
         HTTP_STATUS.PAYLOAD_TOO_LARGE
@@ -70,6 +122,18 @@ export async function POST(req: Request) {
       const fileSizeMB = bytesToMB(uploadedFile.size)
 
       if (user.storageUsed + fileSizeMB > quotaMB) {
+        logger.uploadEvent('File upload failed - quota exceeded', user.id, {
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: requestLogger.requestId,
+          metadata: {
+            fileName: uploadedFile.name,
+            fileSize: uploadedFile.size,
+            currentUsage: user.storageUsed,
+            quotaLimit: quotaMB,
+          },
+        })
+        requestLogger.complete(413, user.id)
         return apiError(
           `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
           HTTP_STATUS.PAYLOAD_TOO_LARGE
@@ -126,8 +190,23 @@ export async function POST(req: Request) {
 
     // If it's an image, trigger OCR processing in the background
     if (uploadedFile.type.startsWith('image/')) {
+      logger.uploadEvent('Starting OCR processing', user.id, {
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileName: displayName,
+          fileId: fileRecord.id,
+        },
+      })
+
       processImageOCR(filePath, fileRecord.id).catch((error) => {
-        console.error('Background OCR processing failed:', error)
+        logError('upload', 'Background OCR processing failed', error as Error, {
+          userId: user.id,
+          requestId: requestLogger.requestId,
+          metadata: {
+            fileName: displayName,
+            fileId: fileRecord.id,
+          },
+        })
       })
     }
 
@@ -145,32 +224,103 @@ export async function POST(req: Request) {
       type: uploadedFile.type,
     }
 
+    const responseTime = Date.now() - startTime
+
+    logger.uploadEvent('File upload successful', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileName: displayName,
+        fileId: fileRecord.id,
+        fileSize: uploadedFile.size,
+        mimeType: uploadedFile.type,
+        visibility,
+        hasPassword: !!password,
+        storageProvider: config.settings.general.storage.provider,
+      },
+    })
+
+    logger.userAction('File uploaded', user.id, {
+      ipAddress: context.ipAddress,
+      responseTime,
+      metadata: {
+        fileName: displayName,
+        fileSize: uploadedFile.size,
+        mimeType: uploadedFile.type,
+      },
+    })
+
+    requestLogger.complete(200, user.id, {
+      fileName: displayName,
+      fileSize: uploadedFile.size,
+    })
+
     return apiResponse<FileUploadResponse>(responseData)
   } catch (error) {
-    console.error('Upload error:', error)
+    const responseTime = Date.now() - startTime
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error'
+
+    logError('upload', 'File upload failed with error', error as Error, {
+      userId: context.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        filePath,
+      },
+    })
 
     // Clean up the file if it was created
     if (filePath) {
       try {
         const storageProvider = await getStorageProvider()
         await storageProvider.deleteFile(filePath)
-        console.log('Cleaned up file after error:', filePath)
+        logger.info('upload', 'File cleaned up after error', {
+          userId: context.userId,
+          requestId: requestLogger.requestId,
+          metadata: {
+            filePath,
+          },
+        })
       } catch (unlinkError) {
-        console.error('Failed to clean up file:', unlinkError)
+        logError(
+          'upload',
+          'Failed to clean up file after error',
+          unlinkError as Error,
+          {
+            userId: context.userId,
+            requestId: requestLogger.requestId,
+            metadata: {
+              filePath,
+            },
+          }
+        )
       }
     }
 
-    return apiError(
-      error instanceof Error ? error.message : 'An unexpected error occurred',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
+    requestLogger.complete(500, context.userId, {
+      error: errorMessage,
+    })
+
+    return apiError(errorMessage, HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function GET(request: Request) {
+  const requestLogger = createRequestLogger(request)
+  const context = await extractUserContext(request)
+  const startTime = Date.now()
+
   try {
     const { user, response } = await requireAuth(request)
-    if (response) return response
+    if (response) {
+      requestLogger.complete(401)
+      return response
+    }
 
     // parse pagination params from URL
     const { searchParams } = new URL(request.url)
@@ -300,9 +450,51 @@ export async function GET(request: Request) {
       limit,
     }
 
+    const responseTime = Date.now() - startTime
+
+    logger.info('api', 'Files retrieved successfully', {
+      userId: user.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        totalFiles: total,
+        page,
+        limit,
+        searchQuery: search,
+        filters: {
+          types,
+          dateFrom,
+          dateTo,
+          visibilityFilters,
+          sortBy,
+        },
+      },
+    })
+
+    requestLogger.complete(200, user.id, {
+      totalFiles: total,
+      page,
+      limit,
+    })
+
     return paginatedResponse<FileMetadata[]>(filesList, pagination)
   } catch (error) {
-    console.error('Error fetching files:', error)
+    const responseTime = Date.now() - startTime
+
+    logError('api', 'Failed to fetch files', error as Error, {
+      userId: context.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, context.userId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

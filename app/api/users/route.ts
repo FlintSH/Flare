@@ -10,17 +10,42 @@ import {
 } from '@/lib/api/response'
 import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { createRequestLogger, logError, logger } from '@/lib/logging'
+import { extractUserContext } from '@/lib/logging/middleware'
 import { getStorageProvider } from '@/lib/storage'
 
 export async function GET(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
+
   try {
-    const { response } = await requireAdmin()
-    if (response) return response
+    const { user: adminUser, response } = await requireAdmin()
+    if (response) {
+      logger.warn('user', 'Unauthorized access attempt to users list', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+      })
+      requestLogger.complete(403)
+      return response
+    }
 
     const { searchParams } = new URL(req.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '25')
     const skip = (page - 1) * limit
+
+    logger.info('user', 'Admin retrieving users list', {
+      userId: adminUser.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        page,
+        limit,
+      },
+    })
 
     // Get total count for pagination
     const total = await prisma.user.count()
@@ -55,33 +80,111 @@ export async function GET(req: Request) {
       limit,
     }
 
+    const responseTime = Date.now() - startTime
+
+    logger.info('user', 'Users list retrieved successfully', {
+      userId: adminUser.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        totalUsers: total,
+        page,
+        limit,
+      },
+    })
+
+    requestLogger.complete(200, adminUser.id, {
+      totalUsers: total,
+      page,
+      limit,
+    })
+
     return paginatedResponse<UserResponse[]>(users, pagination)
   } catch (error) {
-    console.error('Error fetching users:', error)
+    const responseTime = Date.now() - startTime
+
+    logError('user', 'Failed to retrieve users list', error as Error, {
+      userId: context.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, context.userId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function POST(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
+
   try {
-    const { response } = await requireAdmin()
-    if (response) return response
+    const { user: adminUser, response } = await requireAdmin()
+    if (response) {
+      logger.warn('user', 'Unauthorized access attempt to create user', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+      })
+      requestLogger.complete(403)
+      return response
+    }
 
     const json = await req.json()
 
     // Validate request body
     const result = UserSchema.safeParse(json)
     if (!result.success) {
+      logger.warn('user', 'User creation failed - validation error', {
+        userId: adminUser.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          validationError: result.error.issues[0].message,
+        },
+      })
+      requestLogger.complete(400, adminUser.id)
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
 
     const body = result.data
+
+    logger.info('user', 'Admin attempting to create user', {
+      userId: adminUser.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        targetEmail: body.email,
+        targetName: body.name,
+        targetRole: body.role,
+      },
+    })
 
     const exists = await prisma.user.findUnique({
       where: { email: body.email },
     })
 
     if (exists) {
+      logger.warn('user', 'User creation failed - user already exists', {
+        userId: adminUser.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          targetEmail: body.email,
+        },
+      })
+      requestLogger.complete(400, adminUser.id)
       return apiError('User already exists', HTTP_STATUS.BAD_REQUEST)
     }
 
@@ -132,9 +235,54 @@ export async function POST(req: Request) {
       },
     })
 
+    const responseTime = Date.now() - startTime
+
+    logger.info('user', 'User created successfully by admin', {
+      userId: adminUser.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        newUserId: user.id,
+        newUserEmail: user.email,
+        newUserName: user.name,
+        newUserRole: user.role,
+        urlId: user.urlId,
+      },
+    })
+
+    logger.userAction('Account created by admin', user.id, {
+      ipAddress: context.ipAddress,
+      responseTime,
+      metadata: {
+        createdByAdmin: adminUser.id,
+        email: user.email,
+        role: user.role,
+      },
+    })
+
+    requestLogger.complete(200, adminUser.id, {
+      newUserId: user.id,
+      newUserRole: user.role,
+    })
+
     return apiResponse<UserResponse>(user)
   } catch (error) {
-    console.error('Error creating user:', error)
+    const responseTime = Date.now() - startTime
+
+    logError('user', 'Failed to create user', error as Error, {
+      userId: context.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, context.userId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
