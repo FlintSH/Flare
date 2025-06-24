@@ -10,13 +10,13 @@ export interface ApiHandlerConfig {
   skipResponseLogging?: boolean
 }
 
-export function withLogging<T extends any[]>(
+export function withLogging<T extends unknown[]>(
   handler: (...args: T) => Promise<Response | NextResponse>,
   config: ApiHandlerConfig = {}
 ) {
   return async (...args: T): Promise<Response | NextResponse> => {
     const req = args[0] as Request
-    const { category = 'api', logLevel = 'info' } = config
+    const { category = 'api' } = config
 
     let requestLogger: ReturnType<typeof createRequestLogger> | null = null
     let userId: string | undefined
@@ -73,13 +73,17 @@ export function withLogging<T extends any[]>(
 
 export function createApiLogger(endpoint: string, method: string) {
   return {
-    info: (message: string, metadata?: Record<string, any>) => {
+    info: (message: string, metadata?: Record<string, unknown>) => {
       logger.info('api', message, { endpoint, method, ...metadata })
     },
-    warn: (message: string, metadata?: Record<string, any>) => {
+    warn: (message: string, metadata?: Record<string, unknown>) => {
       logger.warn('api', message, { endpoint, method, ...metadata })
     },
-    error: (message: string, error?: Error, metadata?: Record<string, any>) => {
+    error: (
+      message: string,
+      error?: Error,
+      metadata?: Record<string, unknown>
+    ) => {
       logger.error('api', message, {
         endpoint,
         method,
@@ -93,7 +97,7 @@ export function createApiLogger(endpoint: string, method: string) {
         ...metadata,
       })
     },
-    debug: (message: string, metadata?: Record<string, any>) => {
+    debug: (message: string, metadata?: Record<string, unknown>) => {
       logger.debug('api', message, { endpoint, method, ...metadata })
     },
   }
@@ -151,8 +155,8 @@ export function logApiError(
   context?: {
     userId?: string
     statusCode?: number
-    requestBody?: any
-    metadata?: Record<string, any>
+    requestBody?: unknown
+    metadata?: Record<string, unknown>
   }
 ) {
   logger.error('api', `${method} ${endpoint} failed`, {
@@ -175,7 +179,7 @@ export function logApiSuccess(
   responseTime: number,
   context?: {
     userId?: string
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   }
 ) {
   logger.info('api', `${method} ${endpoint} success`, {

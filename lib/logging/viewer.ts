@@ -61,7 +61,7 @@ export class LogViewer {
           try {
             const logEntry = JSON.parse(line) as LogEntry
             logs.push(logEntry)
-          } catch (parseError) {
+          } catch {
             // Skip invalid JSON lines
             console.warn('Failed to parse log line:', line)
           }

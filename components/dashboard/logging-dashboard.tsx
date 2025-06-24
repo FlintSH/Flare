@@ -38,11 +38,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import type { FlareConfig } from '@/lib/config'
 import type { LogCategory, LogEntry, LogLevel } from '@/lib/logging'
-import { logViewer } from '@/lib/logging/viewer'
 
 interface LoggingDashboardProps {
   config: FlareConfig
-  onSettingChange: (section: 'logging', value: any) => void
+  onSettingChange: <T extends keyof FlareConfig['settings']>(
+    section: T,
+    value: Partial<FlareConfig['settings'][T]>
+  ) => void
   getFieldClasses: (
     section: keyof FlareConfig['settings'],
     fieldPath: string[]
@@ -115,11 +117,55 @@ export default function LoggingDashboard({
     try {
       setRefreshing(true)
 
-      // Simulate API calls to get log data
-      // In a real implementation, these would be actual API calls
-      const stats = logViewer.getLogStats()
-      const apiStatsData = logViewer.getApiStats(24)
-      const errors = logViewer.getRecentErrors(5)
+      // Mock data for development
+      // In a real implementation, these would be API calls to server endpoints
+      const stats: LogStats = {
+        totalLogs: 1234,
+        errorCount: 12,
+        warnCount: 45,
+        infoCount: 890,
+        debugCount: 287,
+        categoryCounts: {
+          api: 567,
+          auth: 123,
+          upload: 234,
+          database: 45,
+          system: 178,
+          user: 87,
+        },
+        timeRange: {
+          start: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          end: new Date(),
+        },
+      }
+
+      const apiStatsData: ApiStats = {
+        totalRequests: 2456,
+        errorRate: 2.3,
+        slowestEndpoints: [
+          { endpoint: '/api/files/upload', avgResponseTime: 1234, count: 45 },
+          { endpoint: '/api/auth/login', avgResponseTime: 567, count: 123 },
+          { endpoint: '/api/users', avgResponseTime: 345, count: 67 },
+        ],
+        statusCodes: { 200: 2234, 400: 45, 404: 123, 500: 54 },
+      }
+
+      const errors: LogEntry[] = [
+        {
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          category: 'api',
+          message: 'Database connection failed',
+          error: { name: 'ConnectionError', message: 'Connection timeout' },
+        },
+        {
+          timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          level: 'error',
+          category: 'upload',
+          message: 'File upload validation failed',
+          userId: 'user_123',
+        },
+      ]
 
       setLogStats(stats)
       setApiStats(apiStatsData)
@@ -136,10 +182,11 @@ export default function LoggingDashboard({
     loadDashboardData()
   }, [])
 
-  const handleLoggingSettingChange = (path: string[], value: any) => {
+  const handleLoggingSettingChange = (path: string[], value: unknown) => {
     if (!config.settings.logging) return
 
     const newLoggingConfig = { ...config.settings.logging }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let current = newLoggingConfig as any
 
     // Navigate to the parent of the field to update
@@ -150,7 +197,7 @@ export default function LoggingDashboard({
     // Set the value
     current[path[path.length - 1]] = value
 
-    onSettingChange('logging', newLoggingConfig)
+    onSettingChange('logging', { ...newLoggingConfig })
   }
 
   if (loading) {

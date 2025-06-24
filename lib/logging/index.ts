@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'fs'
+import { appendFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
 import { getConfig } from '@/lib/config'
@@ -17,7 +17,7 @@ export interface LogEntry {
   level: LogLevel
   category: LogCategory
   message: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   userId?: string
   sessionId?: string
   ipAddress?: string
@@ -106,7 +106,7 @@ class Logger {
       }
       this.initialized = true
       this.ensureLogDirectory()
-    } catch (error) {
+    } catch {
       // Fallback to default config if can't load from database
       this.initialized = true
       this.ensureLogDirectory()
@@ -364,7 +364,7 @@ export function createRequestLogger(req: Request) {
     complete: (
       statusCode: number,
       userId?: string,
-      metadata?: Record<string, any>
+      metadata?: Record<string, unknown>
     ) => {
       const responseTime = Date.now() - startTime
       logger.apiResponse(method, endpoint, statusCode, responseTime, {

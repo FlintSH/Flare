@@ -123,7 +123,7 @@ export async function PATCH(request: Request) {
     const originalSectionConfig = config.settings[section]
 
     // Handle theme customization
-    if (section === 'appearance' && 'customColors' in data) {
+    if (section === 'appearance' && data && 'customColors' in data) {
       const customColors = data.customColors
       if (customColors) {
         logger.info('system', 'Theme customization applied', {

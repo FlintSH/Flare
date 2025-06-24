@@ -14,7 +14,7 @@ export async function PUT(req: Request) {
   const requestLogger = createRequestLogger(req)
   const context = await extractUserContext(req)
   const startTime = Date.now()
-  let user: any = null
+  let user: { id: string } | null = null
 
   try {
     const authResult = await requireAuth(req)
@@ -175,14 +175,14 @@ export async function PUT(req: Request) {
     const responseTime = Date.now() - startTime
 
     logError('user', 'Profile update failed', error as Error, {
-      userId: user.id,
+      userId: user?.id,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
       responseTime,
       requestId: requestLogger.requestId,
     })
 
-    requestLogger.complete(500, user.id, {
+    requestLogger.complete(500, user?.id, {
       error: error instanceof Error ? error.message : 'Unknown error',
     })
 
@@ -194,7 +194,7 @@ export async function DELETE(req: Request) {
   const requestLogger = createRequestLogger(req)
   const context = await extractUserContext(req)
   const startTime = Date.now()
-  let user: any = null
+  let user: { id: string } | null = null
 
   try {
     const authResult = await requireAuth(req)
