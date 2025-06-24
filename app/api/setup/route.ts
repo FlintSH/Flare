@@ -6,6 +6,8 @@ import { z } from 'zod'
 
 import { updateConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { createRequestLogger, logError, logger } from '@/lib/logging'
+import { extractUserContext } from '@/lib/logging/middleware'
 
 // Generate a URL-safe ID that's 5 characters long
 function generateUrlId() {
@@ -40,10 +42,26 @@ const setupSchema = z.object({
 })
 
 export async function POST(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
+
   try {
+    logger.systemEvent('Initial setup attempt started', {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+    })
+
     // Check if setup is already complete
     const userCount = await prisma.user.count()
     if (userCount > 0) {
+      logger.systemEvent('Setup attempt blocked - already completed', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+      })
+      requestLogger.complete(400)
       return NextResponse.json(
         { error: 'Setup already completed' },
         { status: 400 }
@@ -52,6 +70,17 @@ export async function POST(req: Request) {
 
     const data = await req.json()
     const validatedData = setupSchema.parse(data)
+
+    logger.systemEvent('Setup data validated successfully', {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        adminEmail: validatedData.admin.email,
+        storageProvider: validatedData.storage.provider,
+        registrationsEnabled: validatedData.registrations.enabled,
+      },
+    })
 
     // Generate a unique URL ID for the admin user
     let urlId = generateUrlId()
@@ -78,6 +107,17 @@ export async function POST(req: Request) {
         emailVerified: new Date(), // Auto-verify admin email
         urlId, // Use the generated URL ID
         uploadToken: uuidv4(),
+      },
+    })
+
+    logger.systemEvent('Creating admin user', {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        adminEmail: validatedData.admin.email,
+        adminName: validatedData.admin.name,
+        urlId,
       },
     })
 
@@ -127,6 +167,39 @@ export async function POST(req: Request) {
       },
     })
 
+    const responseTime = Date.now() - startTime
+
+    logger.systemEvent('Initial setup completed successfully', {
+      userId: user.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        adminId: user.id,
+        adminEmail: user.email,
+        storageProvider: validatedData.storage.provider,
+        registrationsEnabled: validatedData.registrations.enabled,
+      },
+    })
+
+    logger.authEvent('Admin account created during setup', {
+      userId: user.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        email: user.email,
+        name: user.name,
+      },
+    })
+
+    requestLogger.complete(200, user.id, {
+      setupComplete: true,
+      adminCreated: true,
+    })
+
     return NextResponse.json({
       success: true,
       user: {
@@ -136,10 +209,35 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
-    console.error('Setup error:', error)
+    const responseTime = Date.now() - startTime
+
     if (error instanceof z.ZodError) {
+      logger.systemEvent('Setup failed - validation error', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        responseTime,
+        requestId: requestLogger.requestId,
+        metadata: {
+          validationErrors: error.issues,
+        },
+      })
+      requestLogger.complete(400, undefined, {
+        validationError: true,
+      })
       return NextResponse.json({ error: error.issues }, { status: 400 })
     }
+
+    logError('system', 'Initial setup failed', error as Error, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, undefined, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return NextResponse.json(
       { error: 'Failed to complete setup' },
       { status: 500 }

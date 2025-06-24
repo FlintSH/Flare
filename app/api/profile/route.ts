@@ -7,21 +7,52 @@ import { join } from 'path'
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { createRequestLogger, logError, logger } from '@/lib/logging'
+import { extractUserContext } from '@/lib/logging/middleware'
 
 export async function PUT(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
+  let user: any = null
+
   try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+    const authResult = await requireAuth(req)
+    if (authResult.response) {
+      requestLogger.complete(401)
+      return authResult.response
+    }
+    user = authResult.user
 
     const json = await req.json()
 
     // Validate request body
     const result = UpdateProfileSchema.safeParse(json)
     if (!result.success) {
+      logger.userAction('Profile update failed - validation error', user.id, {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          validationError: result.error.issues[0].message,
+        },
+      })
+      requestLogger.complete(400, user.id)
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
 
     const body = result.data
+
+    logger.userAction('Profile update attempt started', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fieldsToUpdate: Object.keys(body),
+        hasPasswordChange: !!body.newPassword,
+        hasEmailChange: !!body.email,
+      },
+    })
 
     // If email is being changed, check if it's already taken
     if (body.email) {
@@ -35,6 +66,19 @@ export async function PUT(req: Request) {
       })
 
       if (existingUser) {
+        logger.userAction(
+          'Profile update failed - email already taken',
+          user.id,
+          {
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            requestId: requestLogger.requestId,
+            metadata: {
+              attemptedEmail: body.email,
+            },
+          }
+        )
+        requestLogger.complete(400, user.id)
         return apiError('Email already taken', HTTP_STATUS.BAD_REQUEST)
       }
     }
@@ -42,6 +86,16 @@ export async function PUT(req: Request) {
     // If password is being changed, verify current password
     if (body.newPassword) {
       if (!body.currentPassword) {
+        logger.userAction(
+          'Profile update failed - missing current password',
+          user.id,
+          {
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            requestId: requestLogger.requestId,
+          }
+        )
+        requestLogger.complete(400, user.id)
         return apiError('Current password is required', HTTP_STATUS.BAD_REQUEST)
       }
 
@@ -51,6 +105,12 @@ export async function PUT(req: Request) {
       })
 
       if (!userData?.password) {
+        logger.userAction('Profile update failed - no password set', user.id, {
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: requestLogger.requestId,
+        })
+        requestLogger.complete(400, user.id)
         return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
       }
 
@@ -60,6 +120,13 @@ export async function PUT(req: Request) {
       )
 
       if (!isPasswordValid) {
+        logger.authEvent('Profile update failed - invalid current password', {
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          requestId: requestLogger.requestId,
+        })
+        requestLogger.complete(400, user.id)
         return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
       }
     }
@@ -85,17 +152,63 @@ export async function PUT(req: Request) {
       },
     })
 
+    const responseTime = Date.now() - startTime
+
+    logger.userAction('Profile updated successfully', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        updatedFields: Object.keys(updateData),
+        hasPasswordChange: !!body.newPassword,
+        hasEmailChange: !!body.email,
+      },
+    })
+
+    requestLogger.complete(200, user.id, {
+      updatedFields: Object.keys(updateData),
+    })
+
     return apiResponse<ProfileResponse>(updatedUser)
   } catch (error) {
-    console.error('Profile update error:', error)
+    const responseTime = Date.now() - startTime
+
+    logError('user', 'Profile update failed', error as Error, {
+      userId: user.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, user.id, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function DELETE(req: Request) {
+  const requestLogger = createRequestLogger(req)
+  const context = await extractUserContext(req)
+  const startTime = Date.now()
+  let user: any = null
+
   try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+    const authResult = await requireAuth(req)
+    if (authResult.response) {
+      requestLogger.complete(401)
+      return authResult.response
+    }
+    user = authResult.user
+
+    logger.userAction('Account deletion attempt started', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+    })
 
     // Get user's files to nuke them from storage
     const userData = await prisma.user.findUnique({
@@ -110,14 +223,40 @@ export async function DELETE(req: Request) {
     })
 
     if (!userData) {
+      logger.userAction('Account deletion failed - user not found', user.id, {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+      })
+      requestLogger.complete(404, user.id)
       return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
+
+    logger.userAction('Deleting user files from storage', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileCount: userData.files.length,
+      },
+    })
 
     for (const file of userData.files) {
       try {
         await unlink(join(process.cwd(), file.path))
       } catch (error) {
-        console.error(`Error deleting file ${file.path}:`, error)
+        logError(
+          'user',
+          `Error deleting file during account deletion: ${file.path}`,
+          error as Error,
+          {
+            userId: user.id,
+            requestId: requestLogger.requestId,
+            metadata: {
+              filePath: file.path,
+            },
+          }
+        )
       }
     }
 
@@ -126,7 +265,18 @@ export async function DELETE(req: Request) {
       try {
         await unlink(join(process.cwd(), 'public', userData.image))
       } catch (error) {
-        console.error('Error deleting avatar:', error)
+        logError(
+          'user',
+          'Error deleting avatar during account deletion',
+          error as Error,
+          {
+            userId: user.id,
+            requestId: requestLogger.requestId,
+            metadata: {
+              avatarPath: userData.image,
+            },
+          }
+        )
       }
     }
 
@@ -135,9 +285,41 @@ export async function DELETE(req: Request) {
       where: { id: user.id },
     })
 
+    const responseTime = Date.now() - startTime
+
+    logger.userAction('Account deleted successfully', user.id, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        email: userData.email,
+        filesDeleted: userData.files.length,
+      },
+    })
+
+    requestLogger.complete(204, user.id, {
+      accountDeleted: true,
+      filesDeleted: userData.files.length,
+    })
+
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
-    console.error('Account deletion error:', error)
+    const responseTime = Date.now() - startTime
+    const userId = user?.id || context.userId
+
+    logError('user', 'Account deletion failed', error as Error, {
+      userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+    })
+
+    requestLogger.complete(500, userId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

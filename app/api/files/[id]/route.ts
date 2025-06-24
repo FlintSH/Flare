@@ -6,14 +6,29 @@ import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { createRequestLogger, logError, logger } from '@/lib/logging'
+import { extractUserContext } from '@/lib/logging/middleware'
 import { getStorageProvider } from '@/lib/storage'
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const requestLogger = createRequestLogger(request)
+  const context = await extractUserContext(request)
+  const startTime = Date.now()
+  const { id } = await params
+
   try {
-    const { id } = await params
+    logger.info('api', 'File update attempt started', {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileId: id,
+      },
+    })
+
     const body = await request.json()
     const schema = z.object({
       visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
@@ -21,6 +36,16 @@ export async function PATCH(
     })
     const result = schema.safeParse(body)
     if (!result.success) {
+      logger.warn('api', 'File update failed - validation error', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileId: id,
+          validationError: result.error.issues[0].message,
+        },
+      })
+      requestLogger.complete(400)
       return NextResponse.json(
         { error: 'Invalid request body' },
         { status: 400 }
@@ -29,6 +54,15 @@ export async function PATCH(
 
     const session = await getServerSession(authOptions)
     if (!session?.user) {
+      logger.warn('api', 'File update failed - unauthorized', {
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileId: id,
+        },
+      })
+      requestLogger.complete(401)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -37,10 +71,31 @@ export async function PATCH(
     })
 
     if (!file) {
+      logger.warn('api', 'File update failed - file not found', {
+        userId: session.user.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileId: id,
+        },
+      })
+      requestLogger.complete(404, session.user.id)
       return NextResponse.json({ error: 'File not found' }, { status: 404 })
     }
 
     if (file.userId !== session.user.id) {
+      logger.warn('api', 'File update failed - unauthorized file access', {
+        userId: session.user.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        requestId: requestLogger.requestId,
+        metadata: {
+          fileId: id,
+          fileOwnerId: file.userId,
+        },
+      })
+      requestLogger.complete(401, session.user.id)
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -70,9 +125,57 @@ export async function PATCH(
       data: updates,
     })
 
+    const responseTime = Date.now() - startTime
+
+    logger.info('api', 'File updated successfully', {
+      userId: session.user.id,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileId: id,
+        fileName: updatedFile.name,
+        updates: Object.keys(updates),
+        newVisibility: updatedFile.visibility,
+        hasPassword: !!updatedFile.password,
+      },
+    })
+
+    logger.userAction('File settings updated', session.user.id, {
+      ipAddress: context.ipAddress,
+      responseTime,
+      metadata: {
+        fileId: id,
+        fileName: updatedFile.name,
+        updatedFields: Object.keys(updates),
+      },
+    })
+
+    requestLogger.complete(200, session.user.id, {
+      fileId: id,
+      updatedFields: Object.keys(updates),
+    })
+
     return NextResponse.json(updatedFile)
   } catch (error) {
-    console.error('File update error:', error)
+    const responseTime = Date.now() - startTime
+
+    logError('api', 'File update failed', error as Error, {
+      userId: context.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      responseTime,
+      requestId: requestLogger.requestId,
+      metadata: {
+        fileId: id,
+      },
+    })
+
+    requestLogger.complete(500, context.userId, {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
+
     return NextResponse.json(
       { error: 'Failed to update file' },
       { status: 500 }

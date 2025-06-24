@@ -21,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import LoggingDashboard from '@/components/dashboard/logging-dashboard'
 import { Icons } from '@/components/shared/icons'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -536,6 +537,17 @@ export default function SettingsPage() {
             {!deepEqual(
               savedConfig?.settings.advanced,
               workingConfig?.settings.advanced
+            ) && (
+              <span className="absolute -top-1 -right-1">
+                <Circle className="h-2 w-2 fill-primary text-primary" />
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="logging" className="relative">
+            Logging
+            {!deepEqual(
+              savedConfig?.settings.logging,
+              workingConfig?.settings.logging
             ) && (
               <span className="absolute -top-1 -right-1">
                 <Circle className="h-2 w-2 fill-primary text-primary" />
@@ -1431,6 +1443,16 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="logging" className="space-y-4">
+          <LoggingDashboard
+            config={workingConfig}
+            onSettingChange={handleSettingChange}
+            getFieldClasses={getFieldClasses}
+            isFieldChanged={isFieldChanged}
+            ChangeIndicator={ChangeIndicator}
+          />
         </TabsContent>
       </Tabs>
 
