@@ -67,7 +67,7 @@ export function FileGrid() {
           return
         }
         const data = await response.json()
-        setFileTypes(Array.isArray(data.types) ? data.types : []) // Ensure data.types is an array
+        setFileTypes(Array.isArray(data.data.types) ? data.data.types : []) // Ensure data.data.types is an array
       } catch (error) {
         console.error('Error fetching file types:', error)
         setFileTypes([]) // Ensure it's an array on exception
@@ -149,8 +149,8 @@ export function FileGrid() {
       return (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {Array.from({ length: 24 }).map((_, i) => (
-              <FileCardSkeleton key={i} />
+            {Array.from({ length: 24 }, (_, i) => (
+              <FileCardSkeleton key={`skeleton-${Date.now()}-${i}`} />
             ))}
           </div>
           <PaginationSkeleton />

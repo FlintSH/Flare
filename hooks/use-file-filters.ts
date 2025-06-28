@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { useRouter, useSearchParams } from 'next/navigation'
 
-import { FileFilter, FileFilterOptions } from '@/types/components/file'
+import {
+  FileFilter,
+  FileFilterOptions,
+  SortOption,
+} from '@/types/components/file'
 
 export function useFileFilters(
   options: {
@@ -22,7 +26,7 @@ export function useFileFilters(
     dateTo: searchParams.get('dateTo'),
     visibility:
       searchParams.get('visibility')?.split(',').filter(Boolean) || [],
-    sortBy: searchParams.get('sortBy') || 'newest',
+    sortBy: (searchParams.get('sortBy') as SortOption) || 'newest',
     page: parseInt(searchParams.get('page') || '1'),
     limit: parseInt(searchParams.get('limit') || defaultLimit.toString()),
   })
@@ -80,7 +84,7 @@ export function useFileFilters(
     setFilters((prev) => ({ ...prev, visibility, page: 1 }))
   }, [])
 
-  const setSortBy = useCallback((sortBy: string) => {
+  const setSortBy = useCallback((sortBy: SortOption) => {
     setFilters((prev) => ({ ...prev, sortBy, page: 1 }))
   }, [])
 
@@ -99,7 +103,7 @@ export function useFileFilters(
       dateFrom: null,
       dateTo: null,
       visibility: [],
-      sortBy: 'newest',
+      sortBy: 'newest' as SortOption,
       page: 1,
       limit: defaultLimit,
     })
