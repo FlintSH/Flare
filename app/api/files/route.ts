@@ -209,9 +209,9 @@ export async function GET(request: Request) {
       if (dateFrom) {
         const startDate = new Date(dateFrom)
         dateFilter.gte = startDate
-
-        // If dateTo is not provided, use the same date as end date
-        const endDate = dateTo ? new Date(dateTo) : new Date(dateFrom)
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo)
         endDate.setHours(23, 59, 59, 999)
         dateFilter.lte = endDate
       }

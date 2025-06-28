@@ -24,7 +24,7 @@ export interface FileFilterOptions {
   page: number
   limit: number
   search: string
-  sortBy: string
+  sortBy: SortOption
   types: string[]
   visibility: string[]
   dateFrom: string | null
