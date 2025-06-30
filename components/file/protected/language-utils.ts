@@ -1,68 +1,59 @@
-import { cpp } from '@codemirror/lang-cpp'
-import { css } from '@codemirror/lang-css'
-import { go } from '@codemirror/lang-go'
-import { html } from '@codemirror/lang-html'
-import { java } from '@codemirror/lang-java'
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { less } from '@codemirror/lang-less'
-import { markdown } from '@codemirror/lang-markdown'
-import { php } from '@codemirror/lang-php'
-import { python } from '@codemirror/lang-python'
-import { rust } from '@codemirror/lang-rust'
-import { sass } from '@codemirror/lang-sass'
-import { sql } from '@codemirror/lang-sql'
-import { wast } from '@codemirror/lang-wast'
-import { xml } from '@codemirror/lang-xml'
-import { yaml } from '@codemirror/lang-yaml'
+// Dynamic imports for CodeMirror language extensions to reduce bundle size
+// Only load the language extension when it's actually needed
 
-// Function to get the appropriate language extension for CodeMirror
-export function getLanguageExtension(language: string) {
+export async function getLanguageExtension(language: string) {
   switch (language) {
     case 'html':
-      return html()
+      return (await import('@codemirror/lang-html')).html()
     case 'css':
-      return css()
+      return (await import('@codemirror/lang-css')).css()
     case 'javascript':
-      return javascript()
+      return (await import('@codemirror/lang-javascript')).javascript()
     case 'json':
-      return json()
+      return (await import('@codemirror/lang-json')).json()
     case 'jsx':
-      return javascript({ jsx: true })
+      return (await import('@codemirror/lang-javascript')).javascript({
+        jsx: true,
+      })
     case 'typescript':
-      return javascript({ typescript: true })
+      return (await import('@codemirror/lang-javascript')).javascript({
+        typescript: true,
+      })
     case 'tsx':
-      return javascript({ jsx: true, typescript: true })
+      return (await import('@codemirror/lang-javascript')).javascript({
+        jsx: true,
+        typescript: true,
+      })
     case 'python':
-      return python()
+      return (await import('@codemirror/lang-python')).python()
     case 'markdown':
-      return markdown()
+      return (await import('@codemirror/lang-markdown')).markdown()
     case 'yaml':
-      return yaml()
+      return (await import('@codemirror/lang-yaml')).yaml()
     case 'java':
-      return java()
+      return (await import('@codemirror/lang-java')).java()
     case 'sql':
-      return sql()
+      return (await import('@codemirror/lang-sql')).sql()
     case 'xml':
-      return xml()
+      return (await import('@codemirror/lang-xml')).xml()
     case 'wasm':
-      return wast()
+      return (await import('@codemirror/lang-wast')).wast()
     case 'c':
     case 'cpp':
-      return cpp()
+      return (await import('@codemirror/lang-cpp')).cpp()
     case 'rust':
-      return rust()
+      return (await import('@codemirror/lang-rust')).rust()
     case 'php':
-      return php()
+      return (await import('@codemirror/lang-php')).php()
     case 'go':
-      return go()
+      return (await import('@codemirror/lang-go')).go()
     case 'sass':
-      return sass()
+      return (await import('@codemirror/lang-sass')).sass()
     case 'scss':
-      return sass()
+      return (await import('@codemirror/lang-sass')).sass()
     case 'less':
-      return less()
+      return (await import('@codemirror/lang-less')).less()
     default:
-      return javascript() // Default to javascript for unknown languages
+      return (await import('@codemirror/lang-javascript')).javascript() // Default to javascript for unknown languages
   }
 }

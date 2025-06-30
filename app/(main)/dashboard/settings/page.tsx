@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import pkg from '@/package.json'
-import { css } from '@codemirror/lang-css'
-import { html } from '@codemirror/lang-html'
+import type { Extension } from '@codemirror/state'
 import CodeMirror from '@uiw/react-codemirror'
 import DOMPurify from 'dompurify'
 import { deepEqual } from 'fast-equals'
@@ -180,6 +179,8 @@ export default function SettingsPage() {
 
   const [cssEditorOpen, setCssEditorOpen] = useState(false)
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false)
+  const [cssExtension, setCssExtension] = useState<Extension | null>(null)
+  const [htmlExtension, setHtmlExtension] = useState<Extension | null>(null)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{
     hasUpdate: boolean
@@ -408,6 +409,32 @@ export default function SettingsPage() {
     }
     loadConfig()
   }, [])
+
+  // Load CSS extension when CSS editor is opened
+  useEffect(() => {
+    if (cssEditorOpen && !cssExtension) {
+      import('@codemirror/lang-css')
+        .then(({ css }) => {
+          setCssExtension(css())
+        })
+        .catch((error) => {
+          console.error('Failed to load CSS extension:', error)
+        })
+    }
+  }, [cssEditorOpen, cssExtension])
+
+  // Load HTML extension when HTML editor is opened
+  useEffect(() => {
+    if (htmlEditorOpen && !htmlExtension) {
+      import('@codemirror/lang-html')
+        .then(({ html }) => {
+          setHtmlExtension(html())
+        })
+        .catch((error) => {
+          console.error('Failed to load HTML extension:', error)
+        })
+    }
+  }, [htmlEditorOpen, htmlExtension])
 
   const handleStorageQuotaChange = (value: string) => {
     if (!workingConfig?.settings?.general?.storage) return
@@ -1360,7 +1387,7 @@ export default function SettingsPage() {
                       <CodeMirror
                         value={workingConfig.settings.advanced.customCSS}
                         height="200px"
-                        extensions={[css()]}
+                        extensions={cssExtension ? [cssExtension] : []}
                         onChange={(value) => {
                           handleSettingChange('advanced', { customCSS: value })
                         }}
@@ -1418,7 +1445,7 @@ export default function SettingsPage() {
                       <CodeMirror
                         value={workingConfig.settings.advanced.customHead}
                         height="200px"
-                        extensions={[html()]}
+                        extensions={htmlExtension ? [htmlExtension] : []}
                         onChange={(value) => {
                           handleSettingChange('advanced', { customHead: value })
                         }}
