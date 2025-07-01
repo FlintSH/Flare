@@ -33,8 +33,6 @@ interface PrismaFile {
   size: number
   uploadedAt: Date
   path: string
-  views?: number
-  downloads?: number
   user?: {
     name: string | null
     image: string | null
@@ -55,8 +53,6 @@ function prepareFileProps(file: PrismaFile) {
       size: file.size,
       uploadedAt: file.uploadedAt,
       path: file.path,
-      views: file.views,
-      downloads: file.downloads,
       user: {
         name: file.user?.name || '',
         image: file.user?.image || undefined,
@@ -76,8 +72,6 @@ function prepareFileProps(file: PrismaFile) {
     size: plainFile.size,
     uploadedAt: plainFile.uploadedAt,
     path: plainFile.path,
-    views: plainFile.views,
-    downloads: plainFile.downloads,
     user: plainFile.user,
   }
 }
@@ -343,8 +337,21 @@ export default async function FilePage({
     }
   }
 
-  // Use the new FileViewerV2 component
   return (
-    <FileViewerV2 file={serializedFile} verifiedPassword={providedPassword} />
+    <div className="relative">
+      {/* Header with logo - overlay on top */}
+      <div className="fixed top-6 left-6 z-40">
+        <Link
+          href="/dashboard"
+          className="flex items-center space-x-2.5 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2 border shadow-sm"
+        >
+          <Icons.logo className="h-6 w-6" />
+          <span className="flare-text text-lg">Flare</span>
+        </Link>
+      </div>
+
+      {/* New modern file viewer */}
+      <FileViewerV2 file={serializedFile} />
+    </div>
   )
 }

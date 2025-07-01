@@ -1,35 +1,32 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
+import DOMPurify from 'dompurify'
 import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
+  FileText,
+  ImageIcon,
   Link,
-  MoreHorizontal,
-  QrCode,
+  PlayCircle,
   ScanText,
-  Share2,
+  Share,
+  Volume2,
 } from 'lucide-react'
 
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 
 import { useFileActions } from '@/hooks/use-file-actions'
 import { useToast } from '@/hooks/use-toast'
@@ -37,26 +34,31 @@ import { useToast } from '@/hooks/use-toast'
 interface FileActionsV2Props {
   urlPath: string
   name: string
-  fileId: string
-  mimeType: string
   verifiedPassword?: string
+  showOcr?: boolean
+  isTextBased?: boolean
+  content?: string
+  fileId?: string
+  mimeType: string
 }
 
 export function FileActionsV2({
   urlPath,
   name,
+  verifiedPassword,
+  showOcr = false,
+  isTextBased = false,
+  content,
   fileId,
   mimeType,
-  verifiedPassword,
 }: FileActionsV2Props) {
   const { toast } = useToast()
-  const [showShareDialog, setShowShareDialog] = useState(false)
-  const [showQRCode, setShowQRCode] = useState(false)
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
   const [ocrText, setOcrText] = useState<string | null>(null)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [isLoadingOcr, setIsLoadingOcr] = useState(false)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
 
   const { copyUrl, download, openRaw } = useFileActions({
     urlPath,
@@ -65,52 +67,82 @@ export function FileActionsV2({
     verifiedPassword,
   })
 
-  const isImage = mimeType.startsWith('image/')
-  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  // Set up URLs when password changes
+  useEffect(() => {
+    const passwordParam = verifiedPassword
+      ? `?password=${encodeURIComponent(DOMPurify.sanitize(verifiedPassword))}`
+      : ''
+    const sanitizedUrlPath = DOMPurify.sanitize(urlPath)
+    const fileUrl = `/api/files${sanitizedUrlPath}${passwordParam}`
+    const rawUrl = `${sanitizedUrlPath}/raw${passwordParam}`
+    setUrls({ fileUrl, rawUrl })
+  }, [urlPath, verifiedPassword])
 
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: name,
-          url: currentUrl,
-        })
-      } catch {
-        // User cancelled sharing
-      }
-    } else {
-      setShowShareDialog(true)
-    }
-  }
-
-  const handleCopyLink = async () => {
+  const handleCopyText = async () => {
+    if (!urls) return
     try {
-      await navigator.clipboard.writeText(currentUrl)
-      toast({
-        title: 'Link copied',
-        description: 'File link has been copied to clipboard',
-      })
-      setShowShareDialog(false)
+      if (content) {
+        await navigator.clipboard.writeText(content)
+        toast({
+          title: 'Text copied',
+          description: 'File content has been copied to clipboard',
+        })
+      } else {
+        const response = await fetch(DOMPurify.sanitize(urls.fileUrl))
+        const text = await response.text()
+        await navigator.clipboard.writeText(text)
+        toast({
+          title: 'Text copied',
+          description: 'File content has been copied to clipboard',
+        })
+      }
     } catch {
       toast({
-        title: 'Failed to copy link',
+        title: 'Failed to copy text',
         description: 'Please try again',
         variant: 'destructive',
       })
     }
   }
 
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: name,
+          url: window.location.href,
+        })
+      } catch (error) {
+        // User cancelled sharing
+        if ((error as Error).name !== 'AbortError') {
+          copyUrl()
+        }
+      }
+    } else {
+      copyUrl()
+    }
+  }
+
   const handleOcr = async () => {
+    if (!fileId) {
+      toast({
+        title: 'Error',
+        description: 'File ID is required for OCR',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setIsLoadingOcr(true)
       setOcrError(null)
-
+      const sanitizedFileId = DOMPurify.sanitize(fileId)
       const passwordParam = verifiedPassword
-        ? `?password=${verifiedPassword}`
+        ? `?password=${DOMPurify.sanitize(verifiedPassword)}`
         : ''
-      const ocrUrl = `/api/files/${fileId}/ocr${passwordParam}`
+      const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
 
-      const response = await fetch(ocrUrl)
+      const response = await fetch(DOMPurify.sanitize(ocrUrl))
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -141,135 +173,113 @@ export function FileActionsV2({
     }
   }
 
-  const generateQRCode = (url: string) => {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`
+  const getFileTypeIcon = () => {
+    if (mimeType.startsWith('image/')) return <ImageIcon className="h-4 w-4" />
+    if (mimeType.startsWith('video/')) return <PlayCircle className="h-4 w-4" />
+    if (mimeType.startsWith('audio/')) return <Volume2 className="h-4 w-4" />
+    if (isTextBased) return <FileText className="h-4 w-4" />
+    return <Eye className="h-4 w-4" />
   }
+
+  if (!urls) return null
+
+  // Primary actions (always visible)
+  const primaryActions = [
+    {
+      icon: <Share className="h-4 w-4" />,
+      label: 'Share',
+      onClick: handleShare,
+    },
+    {
+      icon: <Download className="h-4 w-4" />,
+      label: 'Download',
+      onClick: download,
+    },
+  ]
+
+  // Secondary actions (in overflow menu on mobile)
+  const secondaryActions = [
+    {
+      icon: <Link className="h-4 w-4" />,
+      label: 'Copy URL',
+      onClick: copyUrl,
+    },
+    {
+      icon: <ExternalLink className="h-4 w-4" />,
+      label: 'View Raw',
+      onClick: openRaw,
+    },
+    ...(showOcr
+      ? [
+          {
+            icon: <ScanText className="h-4 w-4" />,
+            label: 'Extract Text (OCR)',
+            onClick: handleOcr,
+            disabled: isLoadingOcr,
+          },
+        ]
+      : []),
+    ...(isTextBased
+      ? [
+          {
+            icon: <Copy className="h-4 w-4" />,
+            label: 'Copy Text',
+            onClick: handleCopyText,
+          },
+        ]
+      : []),
+  ]
 
   return (
     <>
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {/* Primary Actions - Always Visible */}
-          <Button
-            onClick={download}
-            className="flex-1 min-w-[120px] sm:flex-none"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Download
-          </Button>
-
-          <Button
-            onClick={copyUrl}
-            variant="outline"
-            className="flex-1 min-w-[120px] sm:flex-none"
-          >
-            <Link className="h-4 w-4 mr-2" />
-            Copy Link
-          </Button>
-
-          <Button
-            onClick={openRaw}
-            variant="outline"
-            className="hidden sm:flex"
-          >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Raw View
-          </Button>
-
-          {/* Secondary Actions */}
-          <div className="flex gap-2">
-            <Button onClick={handleShare} variant="outline" size="sm">
-              <Share2 className="h-4 w-4" />
-              <span className="sr-only">Share</span>
+      <div className="flex items-center justify-between gap-2">
+        {/* Primary actions */}
+        <div className="flex gap-2">
+          {primaryActions.map((action) => (
+            <Button
+              key={action.label}
+              variant="default"
+              size="sm"
+              onClick={action.onClick}
+              className="flex-1 min-w-0"
+            >
+              {action.icon}
+              <span className="ml-2 hidden sm:inline">{action.label}</span>
             </Button>
-
-            {isImage && (
-              <Button
-                onClick={handleOcr}
-                variant="outline"
-                size="sm"
-                disabled={isLoadingOcr}
-              >
-                <ScanText className="h-4 w-4" />
-                <span className="sr-only">Extract Text</span>
-              </Button>
-            )}
-
-            {/* More Actions Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">More actions</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={openRaw} className="sm:hidden">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Raw View
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowQRCode(true)}>
-                  <QrCode className="h-4 w-4 mr-2" />
-                  QR Code
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() =>
-                    window.open(
-                      `https://www.google.com/search?q=${encodeURIComponent(name)}`,
-                      '_blank'
-                    )
-                  }
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Search Online
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          ))}
         </div>
-      </Card>
 
-      {/* Share Dialog */}
-      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Share File</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Input value={currentUrl} readOnly />
-              <Button onClick={handleCopyLink}>
-                <Copy className="h-4 w-4" />
-              </Button>
+        {/* More actions sheet */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="shrink-0">
+              {getFileTypeIcon()}
+              <span className="ml-2 hidden sm:inline">More</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[60vh]">
+            <SheetHeader>
+              <SheetTitle>File Actions</SheetTitle>
+              <SheetDescription>Additional actions for {name}</SheetDescription>
+            </SheetHeader>
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              {secondaryActions.map((action) => (
+                <Button
+                  key={action.label}
+                  variant="outline"
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  className="h-16 flex-col gap-2"
+                >
+                  {action.icon}
+                  <span className="text-xs">{action.label}</span>
+                </Button>
+              ))}
             </div>
-            <p className="text-sm text-muted-foreground">
-              Copy the link to share this file with others
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </SheetContent>
+        </Sheet>
+      </div>
 
-      {/* QR Code Dialog */}
-      <Dialog open={showQRCode} onOpenChange={setShowQRCode}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>QR Code</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center space-y-4">
-            <img
-              src={generateQRCode(currentUrl)}
-              alt="QR Code"
-              className="border rounded-lg"
-            />
-            <p className="text-sm text-muted-foreground text-center">
-              Scan this QR code to open the file on another device
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* OCR Dialog */}
       <OcrDialog
         isOpen={isOcrDialogOpen}
         onOpenChange={setIsOcrDialogOpen}
