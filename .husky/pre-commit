@@ -8,7 +8,14 @@ bunx lint-staged
 # Stage the formatted files
 git add .
 
-# Run a final check
+# Run a lint check
+echo "🧹 Running lint check..."
+bun lint || (
+    echo "❌ Lint check failed. Please fix the issues and commit again."
+    exit 1
+)
+
+# Run a final format check
 echo "✨ Running final format check..."
 bunx prettier --check "**/*.{ts,tsx,js,jsx,json,md}" || (
     echo "❌ Formatting check failed. Please commit again."
