@@ -12,10 +12,17 @@ export async function checkAuthentication(
     return null
   }
 
-  const token = await getToken({ req: request })
-  if (!token) {
+  try {
+    const token = await getToken({ req: request })
+
+    if (!token) {
+      return NextResponse.redirect(new URL(`/auth/login`, request.url))
+    }
+
+    return null
+  } catch (error) {
+    console.error('Authentication check failed:', error)
+    // On error, redirect to login to be safe
     return NextResponse.redirect(new URL(`/auth/login`, request.url))
   }
-
-  return null
 }

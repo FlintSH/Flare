@@ -4,6 +4,8 @@ import localFont from 'next/font/local'
 import { CustomHead } from '@/components/layout/custom-head'
 import { Footer } from '@/components/layout/footer'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { QueryProvider } from '@/components/providers/query-provider'
+import { SetupChecker } from '@/components/setup-checker'
 import { ThemeInitializer } from '@/components/theme/theme-initializer'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
@@ -76,10 +78,14 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <div className="flex-1">{children}</div>
-            {config.settings.general.credits.showFooter && <Footer />}
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <SetupChecker>
+                <div className="flex-1">{children}</div>
+                {config.settings.general.credits.showFooter && <Footer />}
+              </SetupChecker>
+            </AuthProvider>
+          </QueryProvider>
           <Toaster />
         </ThemeProvider>
       </body>
