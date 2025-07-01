@@ -201,20 +201,26 @@ export function FileGrid() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-4">
-        <SearchInput onSearch={setSearch} initialValue={filters.search} />
-        <FileFilters
-          sortBy={filters.sortBy as SortOption}
-          onSortChange={setSortBy}
-          selectedTypes={filters.types}
-          onTypesChange={setTypes}
-          fileTypes={fileTypes}
-          date={dateRangeValue}
-          onDateChange={handleDateChange}
-          visibility={filters.visibility}
-          onVisibilityChange={setVisibility}
-        />
+    <div className="space-y-6">
+      {/* Enhanced Controls Container */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
+        <div className="relative bg-background/40 backdrop-blur-xl border border-border/50 rounded-2xl p-4 shadow-lg shadow-black/5">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <SearchInput onSearch={setSearch} initialValue={filters.search} />
+            <FileFilters
+              sortBy={filters.sortBy as SortOption}
+              onSortChange={setSortBy}
+              selectedTypes={filters.types}
+              onTypesChange={setTypes}
+              fileTypes={fileTypes}
+              date={dateRangeValue}
+              onDateChange={handleDateChange}
+              visibility={filters.visibility}
+              onVisibilityChange={setVisibility}
+            />
+          </div>
+        </div>
       </div>
       {renderContent()}
     </div>

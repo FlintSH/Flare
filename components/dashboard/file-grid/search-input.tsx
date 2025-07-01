@@ -28,10 +28,10 @@ export const SearchInput = memo(function SearchInput({
 
   return (
     <div className="relative flex-1">
-      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground z-10" />
       <Input
         placeholder="Search files..."
-        className="pl-8"
+        className="pl-9 bg-background/60 backdrop-blur-sm border-border/50 focus:bg-background/80 transition-all duration-200"
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />

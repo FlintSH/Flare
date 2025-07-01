@@ -199,7 +199,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const isImage = file.mimeType.startsWith('image/')
 
   return (
-    <Card className="group relative overflow-hidden">
+    <Card className="group relative overflow-hidden bg-background/40 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-black/10 transition-all duration-300 hover:bg-background/60">
       {/* Preview Section */}
       <div className="relative">
         <Link href={sanitizeUrl(file.urlPath)} className="block">
@@ -366,7 +366,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                   {getRelativeTime(new Date(file.uploadedAt))}
                 </div>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent side="top" align="end" sideOffset={8}>
                 {new Date(file.uploadedAt).toLocaleDateString(undefined, {
                   weekday: 'long',
                   year: 'numeric',

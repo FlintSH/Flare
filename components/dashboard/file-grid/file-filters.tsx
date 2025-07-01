@@ -55,7 +55,10 @@ export const FileFilters = memo(function FileFilters({
     <div className="flex gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-[120px]">
+          <Button
+            variant="outline"
+            className="w-[120px] bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
+          >
             {sortBy === 'newest'
               ? 'Newest'
               : sortBy === 'oldest'
@@ -87,7 +90,7 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="min-w-[120px] flex items-center justify-between"
+            className="min-w-[120px] flex items-center justify-between bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
           >
             <span>Visibility</span>
             {visibility.length > 0 ? (
@@ -141,7 +144,7 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="min-w-[120px] flex items-center justify-between"
+            className="min-w-[120px] flex items-center justify-between bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
           >
             <span>File Type</span>
             {selectedTypes.length > 0 ? (
@@ -181,7 +184,7 @@ export const FileFilters = memo(function FileFilters({
           <Button
             variant="outline"
             className={cn(
-              'min-w-[120px] justify-start text-left font-normal',
+              'min-w-[120px] justify-start text-left font-normal bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200',
               !date && 'text-muted-foreground'
             )}
           >
