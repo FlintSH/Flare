@@ -6,8 +6,9 @@ import { notFound } from 'next/navigation'
 import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
-import { FileViewerV2 } from '@/components/file/file-viewer-v2'
+import { ProtectedFile } from '@/components/file/protected-file'
 import { Icons } from '@/components/shared/icons'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card } from '@/components/ui/card'
 
 import { authOptions } from '@/lib/auth'
@@ -337,21 +338,49 @@ export default async function FilePage({
     }
   }
 
+  const isImage = serializedFile.mimeType.startsWith('image/')
+  const isVideo = serializedFile.mimeType.startsWith('video/')
+  const isMediaFile = isImage || isVideo
+
   return (
-    <div className="relative">
-      {/* Header with logo - overlay on top */}
-      <div className="fixed top-6 left-6 z-40">
-        <Link
-          href="/dashboard"
-          className="flex items-center space-x-2.5 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2 border shadow-sm"
-        >
+    <div className="flex-1 relative">
+      <div className="absolute top-6 left-6">
+        <Link href="/dashboard" className="flex items-center space-x-2.5">
           <Icons.logo className="h-6 w-6" />
           <span className="flare-text text-lg">Flare</span>
         </Link>
       </div>
 
-      {/* New modern file viewer */}
-      <FileViewerV2 file={serializedFile} />
+      <div className="absolute top-6 right-6 flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Uploaded by</span>
+        <Avatar className="h-8 w-8">
+          <AvatarImage
+            src={serializedFile.user.image}
+            alt={serializedFile.user.name}
+          />
+          <AvatarFallback>
+            {serializedFile.user.name?.charAt(0) || '?'}
+          </AvatarFallback>
+        </Avatar>
+        <span className="text-sm font-medium">{serializedFile.user.name}</span>
+      </div>
+
+      <main className="flex items-center justify-center p-6 min-h-[calc(100vh-theme(spacing.16))]">
+        <Card
+          className={`overflow-hidden ${isMediaFile ? 'max-w-[95vw]' : 'max-w-[50vw]'}`}
+        >
+          <div className="p-6">
+            <h1 className="text-xl font-medium text-center truncate max-w-[800px] mx-auto">
+              {serializedFile.name}
+            </h1>
+            <p className="text-sm text-muted-foreground text-center mt-1">
+              {formatFileSize(serializedFile.size)}
+            </p>
+          </div>
+
+          <ProtectedFile file={serializedFile} />
+        </Card>
+      </main>
     </div>
   )
 }
