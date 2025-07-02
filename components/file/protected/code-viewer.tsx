@@ -14,7 +14,7 @@ export function CodeViewer({ content, language }: CodeViewerProps) {
     <div className="w-full max-h-[60vh] overflow-auto">
       <CodeMirror
         value={content}
-        width="40vw"
+        width="100%"
         extensions={[getLanguageExtension(language)]}
         editable={false}
         theme="dark"

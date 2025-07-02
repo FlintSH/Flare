@@ -50,21 +50,13 @@ export function VideoViewer({
   }
 
   return (
-    <div
-      className="w-full flex justify-center relative"
-      style={{ maxHeight: '60vh', maxWidth: '60vw' }}
-    >
-      <div
-        className="w-full max-w-full"
-        style={{ maxHeight: '60vh', maxWidth: '60vw' }}
-      >
+    <div className="w-full flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl">
         {directS3VideoUrl ? (
           <video
             src={DOMPurify.sanitize(directS3VideoUrl)}
             controls
-            width="100%"
-            height="100%"
-            style={{ maxHeight: '60vh' }}
+            className="w-full max-h-[60vh] object-contain"
             controlsList="nodownload"
             preload="metadata"
             muted={false}

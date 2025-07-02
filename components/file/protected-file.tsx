@@ -43,17 +43,23 @@ export function ProtectedFile({
         const currentVerifiedPassword =
           authGuardVerifiedPassword || initialVerifiedPassword
         return (
-          <>
-            {/* File content */}
-            <div className="bg-black/5 dark:bg-white/5 flex items-center justify-center">
-              <FileContent
-                file={file}
-                verifiedPassword={currentVerifiedPassword}
-              />
+          <div className="space-y-6">
+            {/* File content container */}
+            <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20 overflow-hidden">
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
+
+              {/* File content */}
+              <div className="relative bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                <FileContent
+                  file={file}
+                  verifiedPassword={currentVerifiedPassword}
+                />
+              </div>
             </div>
 
-            {/* Actions */}
-            <div className="p-6 border-t bg-muted/50">
+            {/* Actions section */}
+            <div className="relative">
               <FileActions
                 urlPath={sanitizeUrl(file.urlPath)}
                 name={file.name}
@@ -64,7 +70,7 @@ export function ProtectedFile({
                 fileId={file.id}
               />
             </div>
-          </>
+          </div>
         )
       }}
     </AuthGuard>

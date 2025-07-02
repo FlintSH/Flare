@@ -75,10 +75,10 @@ export function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
   if (error) {
     return (
       <div className="w-full flex flex-col items-center justify-center p-8 text-center">
-        <p className="text-muted-foreground mb-2">{error}</p>
+        <p className="text-muted-foreground mb-4">{error}</p>
         <iframe
           src={DOMPurify.sanitize(url)}
-          className="w-full h-full border-0 font-mono"
+          className="w-full h-[60vh] border-0 font-mono"
           title={title}
         />
       </div>

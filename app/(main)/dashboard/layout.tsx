@@ -1,12 +1,16 @@
 import { DashboardNav } from '@/components/dashboard/nav'
 import { UserNav } from '@/components/dashboard/user-nav'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
+import { Footer } from '@/components/layout/footer'
 
-export default function DashboardLayout({
+import { getConfig } from '@/lib/config'
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const config = await getConfig()
   return (
     <div className="relative flex flex-col flex-1 min-h-screen overflow-hidden">
       <DynamicBackground />
@@ -27,6 +31,7 @@ export default function DashboardLayout({
       <main className="flex-1 w-full pt-24 relative z-10">
         <div className="max-w-7xl mx-auto py-6 px-4">{children}</div>
       </main>
+      {config.settings.general.credits.showFooter && <Footer />}
     </div>
   )
 }

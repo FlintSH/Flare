@@ -12,7 +12,7 @@ export function PdfViewer({ url, title }: PdfViewerProps) {
     <div className="w-full">
       <iframe
         src={DOMPurify.sanitize(url)}
-        className="w-full h-[80vh]"
+        className="w-full h-[60vh]"
         title={title}
       />
     </div>

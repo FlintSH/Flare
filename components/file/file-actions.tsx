@@ -148,36 +148,68 @@ export function FileActions({
   if (!urls) return null
 
   return (
-    <div className="flex items-center justify-center flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={copyUrl}>
-        <Link className="h-4 w-4 mr-2" />
-        Copy URL
-      </Button>
-      <Button variant="outline" size="sm" onClick={download}>
-        <Download className="h-4 w-4 mr-2" />
-        Download
-      </Button>
-      <Button variant="outline" size="sm" onClick={openRaw}>
-        <ExternalLink className="h-4 w-4 mr-2" />
-        Raw
-      </Button>
-      {showOcr && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleOcr}
-          disabled={isLoadingOcr}
-        >
-          <ScanText className="h-4 w-4 mr-2" />
-          Extract Text (OCR)
-        </Button>
-      )}
-      {isTextBased && (
-        <Button variant="outline" size="sm" onClick={handleCopyText}>
-          <Copy className="h-4 w-4 mr-2" />
-          Copy Text
-        </Button>
-      )}
+    <div className="relative">
+      {/* Glassmorphic container */}
+      <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
+
+        {/* Content */}
+        <div className="relative p-6">
+          <div className="flex items-center justify-center flex-wrap gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyUrl}
+              className="backdrop-blur-sm"
+            >
+              <Link className="h-4 w-4 mr-2" />
+              Copy URL
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={download}
+              className="backdrop-blur-sm"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openRaw}
+              className="backdrop-blur-sm"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Raw
+            </Button>
+            {showOcr && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOcr}
+                disabled={isLoadingOcr}
+                className="backdrop-blur-sm"
+              >
+                <ScanText className="h-4 w-4 mr-2" />
+                Extract Text (OCR)
+              </Button>
+            )}
+            {isTextBased && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyText}
+                className="backdrop-blur-sm"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Text
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
 
       <OcrDialog
         isOpen={isOcrDialogOpen}
