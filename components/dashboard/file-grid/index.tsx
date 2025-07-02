@@ -201,20 +201,37 @@ export function FileGrid() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-4">
-        <SearchInput onSearch={setSearch} initialValue={filters.search} />
-        <FileFilters
-          sortBy={filters.sortBy as SortOption}
-          onSortChange={setSortBy}
-          selectedTypes={filters.types}
-          onTypesChange={setTypes}
-          fileTypes={fileTypes}
-          date={dateRangeValue}
-          onDateChange={handleDateChange}
-          visibility={filters.visibility}
-          onVisibilityChange={setVisibility}
-        />
+    <div className="space-y-6">
+      {/* Enhanced Controls Container with Header */}
+      <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
+        <div className="relative">
+          {/* Header Section */}
+          <div className="p-6 pb-4">
+            <h1 className="text-3xl font-bold">Your Files</h1>
+            <p className="text-muted-foreground mt-1">
+              View and manage your uploaded files
+            </p>
+          </div>
+
+          {/* Filters Section */}
+          <div className="px-6 pb-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <SearchInput onSearch={setSearch} initialValue={filters.search} />
+              <FileFilters
+                sortBy={filters.sortBy as SortOption}
+                onSortChange={setSortBy}
+                selectedTypes={filters.types}
+                onTypesChange={setTypes}
+                fileTypes={fileTypes}
+                date={dateRangeValue}
+                onDateChange={handleDateChange}
+                visibility={filters.visibility}
+                onVisibilityChange={setVisibility}
+              />
+            </div>
+          </div>
+        </div>
       </div>
       {renderContent()}
     </div>

@@ -148,16 +148,31 @@ export function FileActions({
   if (!urls) return null
 
   return (
-    <div className="flex items-center justify-center flex-wrap gap-2">
-      <Button variant="outline" size="sm" onClick={copyUrl}>
+    <div className="flex items-center justify-center flex-wrap gap-3">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={copyUrl}
+        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+      >
         <Link className="h-4 w-4 mr-2" />
         Copy URL
       </Button>
-      <Button variant="outline" size="sm" onClick={download}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={download}
+        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+      >
         <Download className="h-4 w-4 mr-2" />
         Download
       </Button>
-      <Button variant="outline" size="sm" onClick={openRaw}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={openRaw}
+        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+      >
         <ExternalLink className="h-4 w-4 mr-2" />
         Raw
       </Button>
@@ -167,13 +182,19 @@ export function FileActions({
           size="sm"
           onClick={handleOcr}
           disabled={isLoadingOcr}
+          className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
         >
           <ScanText className="h-4 w-4 mr-2" />
           Extract Text (OCR)
         </Button>
       )}
       {isTextBased && (
-        <Button variant="outline" size="sm" onClick={handleCopyText}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopyText}
+          className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+        >
           <Copy className="h-4 w-4 mr-2" />
           Copy Text
         </Button>

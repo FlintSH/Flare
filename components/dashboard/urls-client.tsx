@@ -13,14 +13,9 @@ export function URLsClient() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">URL Shortener</h1>
-        <div className="space-y-8">
-          <URLForm onUrlAdded={handleUrlAdded} />
-          <URLList refreshTrigger={refreshTrigger} />
-        </div>
-      </div>
+    <div className="space-y-6">
+      <URLForm onUrlAdded={handleUrlAdded} />
+      <URLList refreshTrigger={refreshTrigger} />
     </div>
   )
 }

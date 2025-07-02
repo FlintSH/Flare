@@ -2,7 +2,7 @@ import React from 'react'
 
 export function FileCardSkeleton() {
   return (
-    <div className="rounded-xl border bg-card text-card-foreground shadow">
+    <div className="rounded-xl border bg-background/40 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 text-card-foreground">
       {/* Preview Section */}
       <div className="relative">
         <div className="relative aspect-square bg-muted animate-pulse rounded-t-xl overflow-hidden" />

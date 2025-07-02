@@ -7,11 +7,16 @@ import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
 import { ProtectedFile } from '@/components/file/protected-file'
+import { DynamicBackground } from '@/components/layout/dynamic-background'
+import { Footer } from '@/components/layout/footer'
 import { Icons } from '@/components/shared/icons'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
 import { authOptions } from '@/lib/auth'
+import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -222,6 +227,7 @@ export default async function FilePage({
   searchParams,
 }: FilePageProps) {
   const session = await getServerSession(authOptions)
+  const config = await getConfig()
   const { userUrlId, filename } = await params
   const urlPath = `/${userUrlId}/${filename}`
   const providedPassword = (await searchParams).password as string | undefined
@@ -255,39 +261,55 @@ export default async function FilePage({
     const needsPassword = !providedPassword
     if (needsPassword) {
       return (
-        <div className="flex-1 relative">
-          <div className="absolute top-6 left-6">
-            <Link href="/dashboard" className="flex items-center space-x-2.5">
-              <Icons.logo className="h-6 w-6" />
-              <span className="flare-text text-lg">Flare</span>
-            </Link>
-          </div>
-          <main className="flex items-center justify-center p-6 min-h-[calc(100vh-theme(spacing.16))]">
-            <Card className="w-full max-w-md p-6">
-              <h1 className="text-xl font-medium text-center mb-4">
-                Password Protected File
-              </h1>
-              <p className="text-sm text-muted-foreground text-center mb-6">
-                This file requires a password to access
-              </p>
-              <form className="space-y-4" action={urlPath}>
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Enter password"
-                    className="w-full px-3 py-2 border rounded-md"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md"
+        <div className="flex-1 relative min-h-screen overflow-hidden">
+          <DynamicBackground />
+          <div className="absolute top-6 left-6 z-20">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
+              <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
+                <Link
+                  href="/dashboard"
+                  className="flex items-center space-x-2.5"
                 >
-                  Access File
-                </button>
-              </form>
-            </Card>
+                  <Icons.logo className="h-6 w-6" />
+                  <span className="flare-text text-lg">Flare</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+          <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
+              <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
+                <div className="p-6">
+                  <h1 className="text-xl font-medium text-center mb-4">
+                    Password Protected File
+                  </h1>
+                  <p className="text-sm text-muted-foreground text-center mb-6">
+                    This file requires a password to access
+                  </p>
+                  <form className="space-y-4" action={urlPath}>
+                    <div className="space-y-2">
+                      <Input
+                        type="password"
+                        name="password"
+                        placeholder="Enter password"
+                        className="bg-background/60 backdrop-blur-sm border-border/50"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Access File
+                    </Button>
+                  </form>
+                </div>
+              </Card>
+            </div>
+            {config.settings.general.credits.showFooter && (
+              <div className="fixed bottom-0 left-0 right-0 z-10">
+                <Footer />
+              </div>
+            )}
           </main>
         </div>
       )
@@ -299,39 +321,55 @@ export default async function FilePage({
     )
     if (!isPasswordValid) {
       return (
-        <div className="flex-1 relative">
-          <div className="absolute top-6 left-6">
-            <Link href="/dashboard" className="flex items-center space-x-2.5">
-              <Icons.logo className="h-6 w-6" />
-              <span className="flare-text text-lg">Flare</span>
-            </Link>
-          </div>
-          <main className="flex items-center justify-center p-6 min-h-[calc(100vh-theme(spacing.16))]">
-            <Card className="w-full max-w-md p-6">
-              <h1 className="text-xl font-medium text-center mb-4">
-                Incorrect Password
-              </h1>
-              <p className="text-sm text-muted-foreground text-center mb-6">
-                The password you entered is incorrect
-              </p>
-              <form className="space-y-4" action={urlPath}>
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Enter password"
-                    className="w-full px-3 py-2 border rounded-md"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md"
+        <div className="flex-1 relative min-h-screen overflow-hidden">
+          <DynamicBackground />
+          <div className="absolute top-6 left-6 z-20">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
+              <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
+                <Link
+                  href="/dashboard"
+                  className="flex items-center space-x-2.5"
                 >
-                  Try Again
-                </button>
-              </form>
-            </Card>
+                  <Icons.logo className="h-6 w-6" />
+                  <span className="flare-text text-lg">Flare</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+          <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
+              <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
+                <div className="p-6">
+                  <h1 className="text-xl font-medium text-center mb-4">
+                    Incorrect Password
+                  </h1>
+                  <p className="text-sm text-muted-foreground text-center mb-6">
+                    The password you entered is incorrect
+                  </p>
+                  <form className="space-y-4" action={urlPath}>
+                    <div className="space-y-2">
+                      <Input
+                        type="password"
+                        name="password"
+                        placeholder="Enter password"
+                        className="bg-background/60 backdrop-blur-sm border-border/50"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Try Again
+                    </Button>
+                  </form>
+                </div>
+              </Card>
+            </div>
+            {config.settings.general.credits.showFooter && (
+              <div className="fixed bottom-0 left-0 right-0 z-10">
+                <Footer />
+              </div>
+            )}
           </main>
         </div>
       )
@@ -343,43 +381,72 @@ export default async function FilePage({
   const isMediaFile = isImage || isVideo
 
   return (
-    <div className="flex-1 relative">
-      <div className="absolute top-6 left-6">
-        <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <Icons.logo className="h-6 w-6" />
-          <span className="flare-text text-lg">Flare</span>
-        </Link>
-      </div>
+    <div className="flex-1 relative min-h-screen overflow-hidden">
+      <DynamicBackground />
 
-      <div className="absolute top-6 right-6 flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Uploaded by</span>
-        <Avatar className="h-8 w-8">
-          <AvatarImage
-            src={serializedFile.user.image}
-            alt={serializedFile.user.name}
-          />
-          <AvatarFallback>
-            {serializedFile.user.name?.charAt(0) || '?'}
-          </AvatarFallback>
-        </Avatar>
-        <span className="text-sm font-medium">{serializedFile.user.name}</span>
-      </div>
-
-      <main className="flex items-center justify-center p-6 min-h-[calc(100vh-theme(spacing.16))]">
-        <Card
-          className={`overflow-hidden ${isMediaFile ? 'max-w-[95vw]' : 'max-w-[50vw]'}`}
-        >
-          <div className="p-6">
-            <h1 className="text-xl font-medium text-center truncate max-w-[800px] mx-auto">
-              {serializedFile.name}
-            </h1>
-            <p className="text-sm text-muted-foreground text-center mt-1">
-              {formatFileSize(serializedFile.size)}
-            </p>
+      <div className="absolute top-6 left-6 z-20">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
+          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
+            <Link href="/dashboard" className="flex items-center space-x-2.5">
+              <Icons.logo className="h-6 w-6" />
+              <span className="flare-text text-lg">Flare</span>
+            </Link>
           </div>
+        </div>
+      </div>
 
-          <ProtectedFile file={serializedFile} />
-        </Card>
+      <div className="absolute top-6 right-6 z-20">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
+          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Uploaded by</span>
+              <Avatar className="h-8 w-8">
+                <AvatarImage
+                  src={serializedFile.user.image}
+                  alt={serializedFile.user.name}
+                />
+                <AvatarFallback>
+                  {serializedFile.user.name?.charAt(0) || '?'}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm font-medium">
+                {serializedFile.user.name}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <main
+        className="flex items-center justify-center p-6 relative z-10"
+        style={{ minHeight: 'calc(100vh - 7rem)', paddingTop: '7rem' }}
+      >
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
+          <Card
+            className={`relative overflow-hidden bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 ${isMediaFile ? 'max-w-[95vw]' : 'max-w-[50vw]'}`}
+          >
+            <div className="px-6 pt-4 pb-2">
+              <div className="text-center space-y-1">
+                <h1 className="text-base font-medium text-foreground/90 truncate max-w-[600px] mx-auto">
+                  {serializedFile.name}
+                </h1>
+                <p className="text-xs text-muted-foreground/60 font-medium">
+                  {formatFileSize(serializedFile.size)}
+                </p>
+              </div>
+            </div>
+
+            <ProtectedFile file={serializedFile} />
+          </Card>
+        </div>
+        {config.settings.general.credits.showFooter && (
+          <div className="fixed bottom-0 left-0 right-0 z-10">
+            <Footer />
+          </div>
+        )}
       </main>
     </div>
   )

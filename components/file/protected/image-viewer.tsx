@@ -9,10 +9,12 @@ interface ImageViewerProps {
 
 export function ImageViewer({ url, alt }: ImageViewerProps) {
   return (
-    <img
-      src={DOMPurify.sanitize(url)}
-      alt={alt}
-      className="max-w-full max-h-[70vh] object-contain"
-    />
+    <div className="w-full flex items-center justify-center">
+      <img
+        src={DOMPurify.sanitize(url)}
+        alt={alt}
+        className="max-w-full max-h-[60vh] object-contain"
+      />
+    </div>
   )
 }

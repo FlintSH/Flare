@@ -76,11 +76,11 @@ export function DashboardNav() {
       <div className="flex items-center">
         <Link href="/dashboard" className="flex items-center space-x-2.5">
           <Icons.logo className="h-6 w-6" />
-          <span className="flare-text text-lg">Flare</span>
+          <span className="flare-text text-lg font-medium">Flare</span>
         </Link>
       </div>
 
-      <div className="flex md:hidden ml-auto pr-4">
+      <div className="flex md:hidden ml-auto">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon">
@@ -111,20 +111,29 @@ export function DashboardNav() {
       </div>
 
       <div className="hidden md:flex flex-1 justify-center">
-        <div className="flex items-center space-x-2">
-          {routes.map((route) => (
-            <Button
-              key={route.href}
-              variant={pathname === route.href ? 'default' : 'ghost'}
-              className="h-8"
-              asChild
-            >
-              <Link href={route.href}>
-                <route.icon className="mr-2 h-4 w-4" />
-                {route.label}
-              </Link>
-            </Button>
-          ))}
+        <div className="flex items-center space-x-1 bg-muted/20 backdrop-blur-sm rounded-xl p-1 border border-border/30">
+          {routes.map((route) => {
+            const isActive = pathname === route.href
+            return (
+              <Button
+                key={route.href}
+                variant="ghost"
+                className={`h-9 px-4 rounded-lg font-medium border transition-all duration-200 ${
+                  isActive
+                    ? 'bg-background text-foreground shadow-sm border-border/50'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50 border-transparent'
+                }`}
+                asChild
+              >
+                <Link href={route.href}>
+                  <route.icon
+                    className={`mr-2 h-4 w-4 ${isActive ? 'text-primary' : ''}`}
+                  />
+                  {route.label}
+                </Link>
+              </Button>
+            )
+          })}
         </div>
       </div>
     </nav>

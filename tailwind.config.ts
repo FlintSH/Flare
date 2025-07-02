@@ -60,6 +60,11 @@ export default {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'radial-gradient':
+          'radial-gradient(circle at center, var(--tw-gradient-stops))',
+      },
     },
   },
   plugins: [animate],
