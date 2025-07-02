@@ -202,23 +202,34 @@ export function FileGrid() {
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Controls Container */}
+      {/* Enhanced Controls Container with Header */}
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-        <div className="relative bg-background/40 backdrop-blur-xl border border-border/50 rounded-2xl p-4 shadow-lg shadow-black/5">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <SearchInput onSearch={setSearch} initialValue={filters.search} />
-            <FileFilters
-              sortBy={filters.sortBy as SortOption}
-              onSortChange={setSortBy}
-              selectedTypes={filters.types}
-              onTypesChange={setTypes}
-              fileTypes={fileTypes}
-              date={dateRangeValue}
-              onDateChange={handleDateChange}
-              visibility={filters.visibility}
-              onVisibilityChange={setVisibility}
-            />
+        <div className="relative bg-background/40 backdrop-blur-xl border border-border/50 rounded-2xl shadow-lg shadow-black/5">
+          {/* Header Section */}
+          <div className="p-6 pb-4">
+            <h1 className="text-3xl font-bold">Your Files</h1>
+            <p className="text-muted-foreground mt-1">
+              View and manage your uploaded files
+            </p>
+          </div>
+
+          {/* Filters Section */}
+          <div className="px-6 pb-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <SearchInput onSearch={setSearch} initialValue={filters.search} />
+              <FileFilters
+                sortBy={filters.sortBy as SortOption}
+                onSortChange={setSortBy}
+                selectedTypes={filters.types}
+                onTypesChange={setTypes}
+                fileTypes={fileTypes}
+                date={dateRangeValue}
+                onDateChange={handleDateChange}
+                visibility={filters.visibility}
+                onVisibilityChange={setVisibility}
+              />
+            </div>
           </div>
         </div>
       </div>
