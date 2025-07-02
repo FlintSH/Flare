@@ -50,7 +50,7 @@ export function VideoViewer({
   }
 
   return (
-    <div className="w-full flex items-center justify-center p-4">
+    <div className="w-full flex items-center justify-center">
       <div className="w-full max-w-4xl">
         {directS3VideoUrl ? (
           <video

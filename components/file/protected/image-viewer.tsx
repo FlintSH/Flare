@@ -9,7 +9,7 @@ interface ImageViewerProps {
 
 export function ImageViewer({ url, alt }: ImageViewerProps) {
   return (
-    <div className="w-full flex items-center justify-center p-4">
+    <div className="w-full flex items-center justify-center">
       <img
         src={DOMPurify.sanitize(url)}
         alt={alt}

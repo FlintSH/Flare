@@ -428,13 +428,15 @@ export default async function FilePage({
           <Card
             className={`relative overflow-hidden bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 ${isMediaFile ? 'max-w-[95vw]' : 'max-w-[50vw]'}`}
           >
-            <div className="p-6">
-              <h1 className="text-xl font-medium text-center truncate max-w-[800px] mx-auto">
-                {serializedFile.name}
-              </h1>
-              <p className="text-sm text-muted-foreground text-center mt-1">
-                {formatFileSize(serializedFile.size)}
-              </p>
+            <div className="px-6 pt-4 pb-2">
+              <div className="text-center space-y-1">
+                <h1 className="text-base font-medium text-foreground/90 truncate max-w-[600px] mx-auto">
+                  {serializedFile.name}
+                </h1>
+                <p className="text-xs text-muted-foreground/60 font-medium">
+                  {formatFileSize(serializedFile.size)}
+                </p>
+              </div>
             </div>
 
             <ProtectedFile file={serializedFile} />

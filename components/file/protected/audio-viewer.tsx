@@ -9,7 +9,7 @@ interface AudioViewerProps {
 
 export function AudioViewer({ url, mimeType }: AudioViewerProps) {
   return (
-    <div className="w-full flex items-center justify-center p-8">
+    <div className="w-full flex items-center justify-center py-4">
       <audio
         src={DOMPurify.sanitize(url)}
         controls
