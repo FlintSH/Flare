@@ -36,6 +36,12 @@ export class S3StorageProvider implements StorageProvider {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
       },
+      requestHandler: {
+        requestTimeout: 300000, // 5 minutes for requests
+        connectionTimeout: 30000, // 30 seconds for connections
+      },
+      maxAttempts: 3, // Retry up to 3 times
+      retryMode: 'adaptive', // Use adaptive retry mode
       ...(config.endpoint && {
         endpoint: config.endpoint,
         forcePathStyle: config.forcePathStyle ?? false,
@@ -80,22 +86,53 @@ export class S3StorageProvider implements StorageProvider {
       options.Range = `bytes=${range.start || 0}-${typeof range.end !== 'undefined' ? range.end : ''}`
     }
 
-    const response = await this.client.send(
-      new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ...options,
-      })
-    )
+    const maxRetries = 3
+    let lastError: Error | null = null
 
-    if (!response.Body) {
-      throw new Error('No file body returned from S3')
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            ...options,
+          })
+        )
+
+        if (!response.Body) {
+          throw new Error('No file body returned from S3')
+        }
+
+        const stream = response.Body as Readable
+
+        // Add error handling to the stream
+        stream.on('error', (error) => {
+          console.error(`S3 stream error for ${key}:`, error)
+        })
+
+        return stream
+      } catch (error) {
+        lastError = error as Error
+        console.error(
+          `S3 getFileStream attempt ${attempt} failed for ${key}:`,
+          error
+        )
+
+        if (attempt === maxRetries) {
+          throw lastError
+        }
+
+        // Wait before retrying (exponential backoff)
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.pow(2, attempt) * 1000)
+        )
+      }
     }
 
-    return response.Body as Readable
+    throw lastError || new Error('Failed to get file stream after retries')
   }
 
-  async getFileUrl(path: string): Promise<string> {
+  async getFileUrl(path: string, expiresIn: number = 3600): Promise<string> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     if (key.startsWith('avatars/')) {
@@ -110,7 +147,27 @@ export class S3StorageProvider implements StorageProvider {
       Key: key,
     })
 
-    return await getSignedUrl(this.client, command, { expiresIn: 3600 })
+    // For downloads, use longer expiration time (6 hours) to avoid URL expiration during download
+    const downloadExpiresIn = expiresIn > 3600 ? expiresIn : 21600 // 6 hours default for downloads
+
+    return await getSignedUrl(this.client, command, {
+      expiresIn: downloadExpiresIn,
+    })
+  }
+
+  async getDownloadUrl(path: string, filename?: string): Promise<string> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ResponseContentDisposition: filename
+        ? `attachment; filename="${filename}"`
+        : undefined,
+    })
+
+    // Use long expiration for downloads (6 hours)
+    return await getSignedUrl(this.client, command, { expiresIn: 21600 })
   }
 
   async getFileSize(path: string): Promise<number> {

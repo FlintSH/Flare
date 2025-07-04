@@ -64,6 +64,17 @@ export async function GET(
     })
 
     const storageProvider = await getStorageProvider()
+
+    // For S3 storage, use direct presigned URLs for better reliability
+    if ('getDownloadUrl' in storageProvider && storageProvider.getDownloadUrl) {
+      const downloadUrl = await storageProvider.getDownloadUrl(
+        file.path,
+        file.name
+      )
+      return Response.redirect(downloadUrl, 302)
+    }
+
+    // Fallback to proxied download for local storage or S3 without getDownloadUrl
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
@@ -163,6 +174,17 @@ export async function POST(
     })
 
     const storageProvider = await getStorageProvider()
+
+    // For S3 storage, use direct presigned URLs for better reliability
+    if ('getDownloadUrl' in storageProvider && storageProvider.getDownloadUrl) {
+      const downloadUrl = await storageProvider.getDownloadUrl(
+        file.path,
+        file.name
+      )
+      return Response.redirect(downloadUrl, 302)
+    }
+
+    // Fallback to proxied download for local storage or S3 without getDownloadUrl
     const size = await storageProvider.getFileSize(file.path)
 
     const stream = await storageProvider.getFileStream(file.path)
