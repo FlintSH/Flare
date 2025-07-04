@@ -38,7 +38,6 @@ export const metadata: Metadata = {
   },
 }
 
-// This needs to be dynamic because config isn't always available during build
 export const dynamic = 'force-dynamic'
 
 export default async function RootLayout({
@@ -50,7 +49,6 @@ export default async function RootLayout({
   const hasCustomFont =
     config.settings.advanced.customCSS.includes('font-family')
 
-  // Update metadata icons if custom favicon exists
   if (config.settings.appearance.favicon) {
     metadata.icons = {
       icon: [

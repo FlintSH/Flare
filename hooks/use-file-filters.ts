@@ -18,7 +18,6 @@ export function useFileFilters(
   const router = useRouter()
   const defaultLimit = options.defaultLimit || 24
 
-  // Initialize filters from URL search params
   const [filters, setFilters] = useState<FileFilterOptions>({
     search: searchParams.get('search') || '',
     types: searchParams.get('types')?.split(',').filter(Boolean) || [],
@@ -31,7 +30,6 @@ export function useFileFilters(
     limit: parseInt(searchParams.get('limit') || defaultLimit.toString()),
   })
 
-  // Update URL when filters change
   useEffect(() => {
     const params = new URLSearchParams()
 
@@ -46,7 +44,6 @@ export function useFileFilters(
     if (filters.limit !== defaultLimit)
       params.set('limit', filters.limit.toString())
 
-    // Only update URL if user navigated to a new page or changed filters
     const newParamsString = params.toString()
     const currentParamsString = new URLSearchParams(
       window.location.search
@@ -64,7 +61,6 @@ export function useFileFilters(
     }
   }, [filters, router, defaultLimit, options])
 
-  // Helper functions to update filters
   const setSearch = useCallback((search: string) => {
     setFilters((prev) => ({ ...prev, search, page: 1 }))
   }, [])

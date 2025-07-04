@@ -7,7 +7,6 @@ import { z } from 'zod'
 import { updateConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 
-// Generate a URL-safe ID that's 5 characters long
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
   return Array.from({ length: 5 }, () => {
@@ -15,7 +14,6 @@ function generateUrlId() {
   }).join('')
 }
 
-// Setup data validation schema
 const setupSchema = z.object({
   admin: z.object({
     name: z.string().min(1),
@@ -41,7 +39,6 @@ const setupSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    // Check if setup is already complete
     const userCount = await prisma.user.count()
     if (userCount > 0) {
       return NextResponse.json(
@@ -53,7 +50,6 @@ export async function POST(req: Request) {
     const data = await req.json()
     const validatedData = setupSchema.parse(data)
 
-    // Generate a unique URL ID for the admin user
     let urlId = generateUrlId()
     let isUnique = false
     while (!isUnique) {
@@ -67,7 +63,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Create admin user
     const hashedPassword = await hash(validatedData.admin.password, 10)
     const user = await prisma.user.create({
       data: {
@@ -75,13 +70,12 @@ export async function POST(req: Request) {
         email: validatedData.admin.email,
         password: hashedPassword,
         role: 'ADMIN',
-        emailVerified: new Date(), // Auto-verify admin email
-        urlId, // Use the generated URL ID
+        emailVerified: new Date(),
+        urlId,
         uploadToken: uuidv4(),
       },
     })
 
-    // Update config with storage and registration settings
     await updateConfig({
       settings: {
         general: {

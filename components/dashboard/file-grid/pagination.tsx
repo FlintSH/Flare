@@ -50,7 +50,6 @@ export function FileGridPagination({
               </PaginationItem>
               {Array.from({ length: paginationInfo.pageCount }).map((_, i) => {
                 const pageNumber = i + 1
-                // Show first page, last page, and 2 pages around current page
                 if (
                   pageNumber === 1 ||
                   pageNumber === paginationInfo.pageCount ||
@@ -72,7 +71,6 @@ export function FileGridPagination({
                     </PaginationItem>
                   )
                 } else if (
-                  // Show ellipsis only when there's a gap
                   (pageNumber === 2 && paginationInfo.page - 2 > 2) ||
                   (pageNumber === paginationInfo.pageCount - 1 &&
                     paginationInfo.page + 2 < paginationInfo.pageCount - 1)
@@ -109,7 +107,6 @@ export function FileGridPagination({
   )
 }
 
-// Add skeleton pagination component
 export function PaginationSkeleton() {
   return (
     <div className="flex justify-center mt-8">

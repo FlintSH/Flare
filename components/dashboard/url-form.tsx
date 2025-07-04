@@ -28,10 +28,8 @@ export function URLForm({ onUrlAdded }: URLFormProps) {
     setIsLoading(true)
 
     try {
-      // Validate URL
       const validatedData = urlSchema.parse({ url })
 
-      // Submit to API
       const response = await fetch('/api/urls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -44,16 +42,13 @@ export function URLForm({ onUrlAdded }: URLFormProps) {
 
       await response.json()
 
-      // Show success message
       toast({
         title: 'URL shortened',
         description: 'Your shortened URL has been created',
       })
 
-      // Reset form
       setUrl('')
 
-      // Notify parent of new URL
       onUrlAdded?.()
     } catch (error) {
       if (error instanceof z.ZodError) {

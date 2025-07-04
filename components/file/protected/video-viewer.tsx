@@ -20,7 +20,6 @@ export function VideoViewer({
   const [directS3VideoUrl, setDirectS3VideoUrl] = useState<string>()
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch direct S3 URL for video files
   useEffect(() => {
     const fetchDirectUrl = async () => {
       try {

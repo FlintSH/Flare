@@ -1,16 +1,10 @@
 import { z } from 'zod'
 
-/**
- * User DTO Types
- */
-
-// User roles
 export enum UserRole {
   ADMIN = 'ADMIN',
   USER = 'USER',
 }
 
-// Create/Update user request schema
 export const UserSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2),
@@ -26,7 +20,6 @@ export const UserSchema = z.object({
 export type CreateUserRequest = Omit<z.infer<typeof UserSchema>, 'id'>
 export type UpdateUserRequest = z.infer<typeof UserSchema>
 
-// User response
 export interface UserResponse {
   id: string
   name: string | null
@@ -41,7 +34,6 @@ export interface UserResponse {
   }
 }
 
-// User list response
 export interface UserListResponse {
   users: UserResponse[]
   pagination: {

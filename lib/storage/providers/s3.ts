@@ -98,7 +98,6 @@ export class S3StorageProvider implements StorageProvider {
   async getFileUrl(path: string): Promise<string> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
-    // For avatars, return a public URL
     if (key.startsWith('avatars/')) {
       if (this.endpoint) {
         return `${this.endpoint}/${this.bucket}/${key}`
@@ -106,7 +105,6 @@ export class S3StorageProvider implements StorageProvider {
       return `https://${this.bucket}.s3.amazonaws.com/${key}`
     }
 
-    // For other files, use signed URLs to prevent direct S3 access
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -212,7 +210,6 @@ export class S3StorageProvider implements StorageProvider {
     const { PassThrough } = await import('stream')
     const passThrough = new PassThrough()
 
-    // Start multipart upload
     const createResponse = await this.client.send(
       new CreateMultipartUploadCommand({
         Bucket: this.bucket,
@@ -226,7 +223,6 @@ export class S3StorageProvider implements StorageProvider {
       throw new Error('Failed to create multipart upload')
     }
 
-    // Track upload state
     let currentPartBuffer = Buffer.alloc(0)
     let currentPartNumber = 1
     let totalBytesUploaded = 0
@@ -234,11 +230,10 @@ export class S3StorageProvider implements StorageProvider {
     let hasEnded = false
     let uploadError: Error | null = null
     const parts: { ETag: string; PartNumber: number }[] = []
-    const maxPartSize = 5 * 1024 * 1024 // 5MB minimum for S3
+    const maxPartSize = 5 * 1024 * 1024
     const maxConcurrentUploads = 3
     let activeUploads = 0
 
-    // Helper to get presigned URL for part upload
     const getPresignedUrl = async (partNumber: number): Promise<string> => {
       const command = new UploadPartCommand({
         Bucket: this.bucket,
@@ -249,7 +244,6 @@ export class S3StorageProvider implements StorageProvider {
       return getSignedUrl(this.client, command, { expiresIn: 3600 })
     }
 
-    // Helper to upload a part using presigned URL
     const uploadPart = async (data: Buffer, partNum: number): Promise<void> => {
       try {
         activeUploads++
@@ -273,7 +267,7 @@ export class S3StorageProvider implements StorageProvider {
         }
 
         parts.push({
-          ETag: etag.replace(/['"]/g, ''), // Remove quotes from ETag
+          ETag: etag.replace(/['"]/g, ''),
           PartNumber: partNum,
         })
 
@@ -297,7 +291,6 @@ export class S3StorageProvider implements StorageProvider {
       }
     }
 
-    // Handle incoming data
     passThrough.on('data', async (chunk: Buffer) => {
       if (uploadError) {
         passThrough.destroy(uploadError)
@@ -306,7 +299,6 @@ export class S3StorageProvider implements StorageProvider {
 
       currentPartBuffer = Buffer.concat([currentPartBuffer, chunk])
 
-      // Upload part when it reaches minimum size
       while (
         currentPartBuffer.length >= maxPartSize &&
         activeUploads < maxConcurrentUploads &&
@@ -324,7 +316,6 @@ export class S3StorageProvider implements StorageProvider {
       }
     })
 
-    // Handle stream end
     passThrough.on('end', () => {
       hasEnded = true
       if (activeUploads === 0) {
@@ -334,24 +325,19 @@ export class S3StorageProvider implements StorageProvider {
       }
     })
 
-    // Handle upload completion
     const completeUpload = async () => {
       try {
-        // Upload any remaining data as final part
         if (currentPartBuffer.length > 0) {
           await uploadPart(currentPartBuffer, currentPartNumber)
           currentPartBuffer = Buffer.alloc(0)
         }
 
-        // Wait for any remaining uploads
         while (activeUploads > 0) {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
 
-        // Sort parts by part number
         const sortedParts = parts.sort((a, b) => a.PartNumber - b.PartNumber)
 
-        // Complete the multipart upload
         await this.client.send(
           new CompleteMultipartUploadCommand({
             Bucket: this.bucket,
@@ -363,7 +349,6 @@ export class S3StorageProvider implements StorageProvider {
           })
         )
 
-        // Verify the file exists
         await this.client.send(
           new HeadObjectCommand({
             Bucket: this.bucket,
@@ -388,7 +373,6 @@ export class S3StorageProvider implements StorageProvider {
       }
     }
 
-    // Handle stream errors
     passThrough.on('error', async (error) => {
       console.error('Stream error:', error)
       try {
@@ -431,7 +415,6 @@ export class S3StorageProvider implements StorageProvider {
       const response = await this.client.send(listCommand)
       const objects = response.Contents || []
 
-      // Copy each object to the new location
       await Promise.all(
         objects.map(async (object) => {
           if (!object.Key) return
@@ -445,7 +428,6 @@ export class S3StorageProvider implements StorageProvider {
             })
           )
 
-          // Delete the old object
           await this.client.send(
             new DeleteObjectCommand({
               Bucket: this.bucket,

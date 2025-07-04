@@ -366,7 +366,6 @@ export function UserList() {
   const [isFileDeleteDialogOpen, setIsFileDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
 
-  // Memoize callback functions to prevent unnecessary re-renders
   const fetchUserFiles = useCallback(
     async (userId: string, page: number) => {
       try {
@@ -441,7 +440,7 @@ export function UserList() {
     if (viewingUser) {
       const timer = setTimeout(() => {
         fetchUserFiles(viewingUser.id, 1)
-      }, 300) // Debounce for 300ms
+      }, 300)
 
       return () => clearTimeout(timer)
     }
@@ -451,16 +450,14 @@ export function UserList() {
     if (viewingUser) {
       const timer = setTimeout(() => {
         fetchUserUrls(viewingUser.id, 1)
-      }, 300) // Debounce for 300ms
+      }, 300)
 
       return () => clearTimeout(timer)
     }
   }, [urlSearch, viewingUser, fetchUserUrls])
 
-  // Add function to notify user of session changes
   const notifyUserOfChanges = async (userId: string) => {
     try {
-      // Call the login endpoint which will trigger a session refresh for the user
       await fetch(`/api/users/${userId}/login`, {
         method: 'POST',
       })
@@ -595,7 +592,6 @@ export function UserList() {
         description: 'File deleted successfully',
       })
 
-      // Refresh the files list
       fetchUserFiles(viewingUser.id, filePage)
     } catch (error) {
       console.error('Error deleting file:', error)
@@ -627,7 +623,6 @@ export function UserList() {
         description: 'URL deleted successfully',
       })
 
-      // Refresh the URLs list
       fetchUserUrls(viewingUser.id, urlPage)
     } catch (error) {
       console.error('Error deleting URL:', error)
@@ -664,7 +659,6 @@ export function UserList() {
         description: 'File settings updated successfully',
       })
 
-      // Refresh the files list
       fetchUserFiles(viewingUser.id, filePage)
     } catch (error) {
       console.error('Error updating file settings:', error)
@@ -686,7 +680,6 @@ export function UserList() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      // First, invalidate all sessions for the user
       const invalidateResponse = await fetch(`/api/users/${userId}/sessions`, {
         method: 'DELETE',
       })

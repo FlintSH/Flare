@@ -174,7 +174,6 @@ export function useUserContent(
 
         const updatedFile = await response.json()
 
-        // Update file in the list
         setUserFiles((prevFiles) =>
           prevFiles.map((file) => (file.id === fileId ? updatedFile : file))
         )
@@ -213,7 +212,6 @@ export function useUserContent(
           throw new Error('Failed to delete file')
         }
 
-        // Remove file from list
         setUserFiles((prevFiles) =>
           prevFiles.filter((file) => file.id !== fileId)
         )
@@ -258,7 +256,6 @@ export function useUserContent(
           throw new Error('Failed to delete URL')
         }
 
-        // Remove URL from list
         setUserUrls((prevUrls) => prevUrls.filter((url) => url.id !== urlId))
 
         if (urlPagination) {

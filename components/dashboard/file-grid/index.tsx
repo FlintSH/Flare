@@ -30,7 +30,6 @@ export function FileGrid() {
     limit: 24,
   })
 
-  // Use the useFileFilters hook
   const {
     filters,
     setSearch,
@@ -41,7 +40,6 @@ export function FileGrid() {
     setPage,
   } = useFileFilters()
 
-  // Handle date range changes with the DateRange object
   const handleDateChange = useCallback(
     (range: DateRange | undefined) => {
       if (range?.from) {
@@ -56,21 +54,20 @@ export function FileGrid() {
     [setDateRange]
   )
 
-  // Fetch file types
   useEffect(() => {
     async function fetchFileTypes() {
       try {
         const response = await fetch('/api/files/types')
         if (!response.ok) {
           console.error('Failed to fetch file types, status:', response.status)
-          setFileTypes([]) // Ensure it's an array on HTTP error
+          setFileTypes([])
           return
         }
         const data = await response.json()
-        setFileTypes(Array.isArray(data.data.types) ? data.data.types : []) // Ensure data.data.types is an array
+        setFileTypes(Array.isArray(data.data.types) ? data.data.types : [])
       } catch (error) {
         console.error('Error fetching file types:', error)
-        setFileTypes([]) // Ensure it's an array on exception
+        setFileTypes([])
       }
     }
     fetchFileTypes()
@@ -108,7 +105,6 @@ export function FileGrid() {
             limit: filters.limit,
           })
         } else {
-          // Handle missing pagination gracefully
           setPaginationInfo({
             total: 0,
             pageCount: 0,
@@ -135,7 +131,6 @@ export function FileGrid() {
     }))
   }
 
-  // Create derived values for UI components
   const dateRangeValue =
     filters.dateFrom || filters.dateTo
       ? {
@@ -202,11 +197,11 @@ export function FileGrid() {
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Controls Container with Header */}
+      {}
       <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
         <div className="relative">
-          {/* Header Section */}
+          {}
           <div className="p-6 pb-4">
             <h1 className="text-3xl font-bold">Your Files</h1>
             <p className="text-muted-foreground mt-1">
@@ -214,7 +209,7 @@ export function FileGrid() {
             </p>
           </div>
 
-          {/* Filters Section */}
+          {}
           <div className="px-6 pb-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <SearchInput onSearch={setSearch} initialValue={filters.search} />

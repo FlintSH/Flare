@@ -59,7 +59,6 @@ export function useUrlShortener(options: UseUrlShortenerOptions = {}) {
       setIsLoading(true)
 
       let finalUrl = url.trim()
-      // Add https:// if protocol is missing
       if (!/^https?:\/\//i.test(finalUrl)) {
         finalUrl = 'https://' + finalUrl
       }
@@ -79,13 +78,10 @@ export function useUrlShortener(options: UseUrlShortenerOptions = {}) {
 
       const newUrl = await response.json()
 
-      // Add to state
       setUrls((prevUrls) => [newUrl, ...prevUrls])
 
-      // Reset input
       setUrl('')
 
-      // Callback
       if (options.onUrlCreated) {
         options.onUrlCreated(newUrl)
       }
@@ -122,10 +118,8 @@ export function useUrlShortener(options: UseUrlShortenerOptions = {}) {
           throw new Error('Failed to delete URL')
         }
 
-        // Remove from state
         setUrls((prevUrls) => prevUrls.filter((url) => url.id !== id))
 
-        // Callback
         if (options.onUrlDeleted) {
           options.onUrlDeleted(id)
         }

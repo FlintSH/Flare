@@ -9,20 +9,17 @@ import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
-// Generate a 6-character random code
 function generateShortCode() {
   return nanoid(6)
 }
 
 export async function POST(req: Request) {
   try {
-    // Use standardized auth handler
     const { user, response } = await requireAuth(req)
     if (response) return response
 
     const json = await req.json()
 
-    // Validate request body
     const result = CreateUrlSchema.safeParse(json)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
@@ -30,7 +27,6 @@ export async function POST(req: Request) {
 
     const { url } = result.data
 
-    // Generate a unique short code
     let shortCode = generateShortCode()
     let isUnique = false
     while (!isUnique) {
@@ -52,7 +48,6 @@ export async function POST(req: Request) {
       },
     })
 
-    // Return typed response
     return apiResponse<CreateUrlResponse>(shortenedUrl)
   } catch (error) {
     console.error('URL creation error:', error)
@@ -62,7 +57,6 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    // Use standardized auth handler
     const { user, response } = await requireAuth(req)
     if (response) return response
 
@@ -75,7 +69,6 @@ export async function GET(req: Request) {
       },
     })
 
-    // Return typed response
     return apiResponse<UrlListResponse>({ urls })
   } catch (error) {
     console.error('URL list error:', error)

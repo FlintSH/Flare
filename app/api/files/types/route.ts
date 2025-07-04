@@ -9,7 +9,6 @@ export async function GET(request: Request) {
     const { user, response } = await requireAuth(request)
     if (response) return response
 
-    // Get unique mime types for the user
     const files = await prisma.file.findMany({
       where: { userId: user.id },
       select: { mimeType: true },

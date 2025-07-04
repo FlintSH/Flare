@@ -47,7 +47,6 @@ export async function GET() {
 
     const releases: GitHubRelease[] = await response.json()
 
-    // Filter out prereleases and drafts, and sort by version number
     const stableReleases = releases
       .filter((release) => !release.prerelease && !release.draft)
       .sort((a, b) => compareVersions(b.tag_name, a.tag_name))

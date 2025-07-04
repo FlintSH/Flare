@@ -16,11 +16,8 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Await the params
     const { id } = await params
 
-    // Since we're using JWT strategy, we only need to increment the sessionVersion
-    // to invalidate all sessions for this user
     await prisma.user.update({
       where: { id },
       data: {

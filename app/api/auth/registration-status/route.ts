@@ -10,7 +10,6 @@ export async function GET() {
       message: config.settings.general.registrations.disabledMessage,
     })
   } catch {
-    // If we can't verify the config, return disabled for safety
     return NextResponse.json({
       enabled: false,
       message: 'Registration is currently unavailable.',

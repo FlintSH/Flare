@@ -11,8 +11,6 @@ import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
 
-// This whole file could probably be improved at some point. The way progress is tracked is kinda jank, but it works for now.
-
 type FileData = {
   name: string
   mimeType: string
@@ -57,15 +55,12 @@ export async function GET(req: Request) {
 
     userId = user.id
 
-    // Initialize progress
     updateProgress(userId, 0)
 
-    // Create temporary directory for export with timestamp
     const timestamp = Date.now()
     exportDir = join(process.cwd(), 'tmp', 'exports', `${userId}_${timestamp}`)
     await mkdir(exportDir, { recursive: true })
 
-    // Get storage provider
     const storageProvider = await getStorageProvider()
     const isS3Storage = storageProvider instanceof S3StorageProvider
 
@@ -75,7 +70,6 @@ export async function GET(req: Request) {
       console.log('Using local storage provider for file exports')
     }
 
-    // Get user data
     const userData = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -112,7 +106,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Create user data JSON
     const userDataForExport: UserData = {
       id: userData.id,
       name: userData.name,
@@ -123,11 +116,9 @@ export async function GET(req: Request) {
       shortenedUrls: userData.shortenedUrls,
     }
 
-    // Write user data to JSON file
     const userDataPath = join(exportDir, 'user-data.json')
     await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
 
-    // Set up response headers
     const headers = new Headers()
     headers.set('Content-Type', 'application/zip')
     headers.set(
@@ -139,15 +130,12 @@ export async function GET(req: Request) {
       'no-store, no-cache, must-revalidate, proxy-revalidate'
     )
 
-    // Create a transform stream for tracking download progress
     const { readable, writable } = new TransformStream()
 
-    // Set up archive stream
     const archive = archiver('zip', {
       zlib: { level: 9 },
     })
 
-    // Handle archive warnings and errors for better debugging
     archive.on('warning', (err) => {
       if (err.code === 'ENOENT') {
         console.warn('Archive warning:', err)
@@ -160,15 +148,12 @@ export async function GET(req: Request) {
       console.error('Archive error:', err)
     })
 
-    // Pipe archive data to the writable stream
     const writer = writable.getWriter()
 
-    // Handle archive data
     archive.on('data', async (chunk) => {
       await writer.write(chunk)
     })
 
-    // Close the writable stream when the archive is done
     archive.on('end', async () => {
       try {
         await writer.close()
@@ -177,16 +162,12 @@ export async function GET(req: Request) {
       }
     })
 
-    // Add user data JSON to the archive
     archive.file(userDataPath, { name: 'user-data.json' })
-
-    // Process files asynchronously
     ;(async () => {
       try {
         totalFiles = userData.files.length
         updateProgress(userId, 0)
 
-        // If there are no files, make sure we still finalize the archive
         if (totalFiles === 0) {
           archive.finalize()
           return
@@ -198,14 +179,12 @@ export async function GET(req: Request) {
             let filePath: string | null = null
 
             if (isS3Storage) {
-              // For S3 storage, download the file to the temp directory
               try {
                 fileData = await getFileContentFromStorage(
                   storageProvider,
                   file.path
                 )
 
-                // Create a temporary file path
                 filePath = join(exportDir, file.name)
                 await writeFile(filePath, fileData)
               } catch (downloadErr) {
@@ -217,7 +196,6 @@ export async function GET(req: Request) {
                 continue
               }
             } else {
-              // For local storage, try both absolute and workspace-relative paths
               const absolutePath = join('/', file.path)
               const workspacePath = join(
                 process.cwd(),
@@ -235,14 +213,12 @@ export async function GET(req: Request) {
               }
             }
 
-            // Only proceed if we have a valid file path
             if (filePath) {
               const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
               try {
                 archive.file(filePath, { name: zipPath })
                 successfulFiles++
 
-                // Update progress
                 const progress = Math.round(
                   (successfulFiles / totalFiles) * 100
                 )
@@ -256,7 +232,6 @@ export async function GET(req: Request) {
                 )
               }
 
-              // Clean up temporary file for S3 storage
               if (isS3Storage && filePath.startsWith(exportDir)) {
                 try {
                   await rm(filePath)
@@ -273,14 +248,12 @@ export async function GET(req: Request) {
           }
         }
 
-        // Finalize the archive when all files are processed
         try {
           await archive.finalize()
         } catch (error) {
           console.error('Error finalizing archive:', error)
         }
 
-        // Clean up the export folder after a delay
         setTimeout(async () => {
           try {
             if (exportDir) {
@@ -303,10 +276,8 @@ export async function GET(req: Request) {
       }
     })()
 
-    // Return the streaming response
     return new Response(readable, { headers })
   } catch (error) {
-    // Clean up on error
     if (userId) {
       clearProgress(userId)
     }
@@ -326,7 +297,6 @@ export async function GET(req: Request) {
   }
 }
 
-// Helper function to safely handle file retrieval
 async function getFileContentFromStorage(
   storageProvider: StorageProvider,
   filePath: string

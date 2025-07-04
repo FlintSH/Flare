@@ -15,7 +15,6 @@ interface RouteParams {
   uploadId: string
 }
 
-// Get user from either session or upload token
 async function getAuthenticatedUser(req: Request) {
   const session = await getServerSession(authOptions)
   if (session?.user) {
@@ -39,7 +38,6 @@ async function getAuthenticatedUser(req: Request) {
   return null
 }
 
-// Get upload metadata from temp file
 async function getUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
@@ -57,7 +55,6 @@ async function getUploadMetadata(localId: string) {
   }
 }
 
-// Delete upload metadata file
 async function deleteUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
@@ -103,7 +100,6 @@ export async function POST(
       parts
     )
 
-    // Create db record
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({
         data: {
@@ -134,17 +130,14 @@ export async function POST(
       return file
     })
 
-    // Clean up metadata
     await deleteUploadMetadata(localId)
 
-    // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
         console.error('Background OCR processing failed:', error)
       })
     }
 
-    // Ensure URL has protocol and handle trailing slashes
     const baseUrl =
       process.env.NODE_ENV === 'development'
         ? 'http://localhost:3000'
@@ -154,7 +147,7 @@ export async function POST(
     const responseData: FileUploadResponse = {
       url: `${fullUrl}${metadata.urlPath}`,
       name: metadata.filename,
-      size: metadata.totalSize, // metadata.totalSize is in bytes
+      size: metadata.totalSize,
       type: metadata.mimeType,
     }
 

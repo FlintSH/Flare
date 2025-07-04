@@ -118,7 +118,6 @@ export function URLList({ refreshTrigger = 0 }: URLListProps) {
       })
       if (!response.ok) throw new Error('Failed to delete URL')
 
-      // Remove from state
       setUrls(urls.filter((url) => url.id !== id))
 
       toast({

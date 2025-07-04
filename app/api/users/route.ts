@@ -22,7 +22,6 @@ export async function GET(req: Request) {
     const limit = parseInt(searchParams.get('limit') || '25')
     const skip = (page - 1) * limit
 
-    // Get total count for pagination
     const total = await prisma.user.count()
 
     const users = await prisma.user.findMany({
@@ -69,7 +68,6 @@ export async function POST(req: Request) {
 
     const json = await req.json()
 
-    // Validate request body
     const result = UserSchema.safeParse(json)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
@@ -85,7 +83,6 @@ export async function POST(req: Request) {
       return apiError('User already exists', HTTP_STATUS.BAD_REQUEST)
     }
 
-    // Generate a unique URL ID (5 characters)
     const generateUrlId = () =>
       Array.from({ length: 5 }, () => {
         const chars =
@@ -146,7 +143,6 @@ export async function PUT(req: Request) {
 
     const json = await req.json()
 
-    // Validate request body
     const result = UserSchema.safeParse(json)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
@@ -166,7 +162,6 @@ export async function PUT(req: Request) {
       return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
 
-    // Check if the URL ID is already in use by another user
     if (body.urlId) {
       const existingUrlId = await prisma.user.findUnique({
         where: { urlId: body.urlId },
@@ -176,7 +171,6 @@ export async function PUT(req: Request) {
       }
     }
 
-    // Only update fields that are provided and handle password separately
     const updateData = {
       updatedAt: new Date(),
       ...(body.name !== undefined && { name: body.name }),
@@ -186,7 +180,6 @@ export async function PUT(req: Request) {
       ...(body.urlId && { urlId: body.urlId }),
     }
 
-    // If URL ID is changing, we need to rename the user's upload folder
     if (body.urlId && body.urlId !== existingUser.urlId) {
       try {
         const storageProvider = await getStorageProvider()
@@ -194,13 +187,11 @@ export async function PUT(req: Request) {
         const newPath = `uploads/${body.urlId}`
         await storageProvider.renameFolder(oldPath, newPath)
 
-        // Update file paths in the database
         const files = await prisma.file.findMany({
           where: { userId: body.id },
           select: { id: true, path: true, urlPath: true },
         })
 
-        // Update each file's paths
         for (const file of files) {
           await prisma.file.update({
             where: { id: file.id },

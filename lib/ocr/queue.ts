@@ -15,7 +15,6 @@ class OCRQueue {
   private activeProcesses: number = 0
 
   async add(task: OCRTask, force: boolean = false) {
-    // Check if OCR is enabled in settings, unless force is true
     if (!force) {
       const config = await getConfig()
       if (!config.settings.general.ocr.enabled) {
@@ -61,7 +60,6 @@ class OCRQueue {
 
     this.processing = false
 
-    // If there are still items in the queue and we're under the limit, continue processing
     if (this.queue.length > 0 && this.activeProcesses < this.concurrentLimit) {
       this.processQueue()
     }
@@ -76,8 +74,6 @@ class OCRQueue {
   }
 }
 
-// Create a singleton instance of the queue
 export const ocrQueue = new OCRQueue()
 
-// Export the OCRTask type for use in other files
 export type { OCRTask }

@@ -59,7 +59,6 @@ export function RegisterForm() {
         throw new Error(data.error || 'Failed to register')
       }
 
-      // Sign in if registration is successful
       const result = await signIn('credentials', {
         email,
         password,

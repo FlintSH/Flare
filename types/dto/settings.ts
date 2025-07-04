@@ -1,10 +1,5 @@
 import { FlareConfig } from '@/lib/config'
 
-/**
- * Settings DTO Types
- */
-
-// Public settings visible to non-admin users
 export interface PublicSettings {
   version: string
   settings: {
@@ -26,7 +21,6 @@ export interface PublicSettings {
   }
 }
 
-// Request to update a specific section of settings
 export interface UpdateSettingSectionRequest<
   T extends keyof FlareConfig['settings'],
 > {
@@ -34,7 +28,6 @@ export interface UpdateSettingSectionRequest<
   data: Partial<FlareConfig['settings'][T]>
 }
 
-// Response for settings update
 export interface SettingsUpdateResponse {
   message: string
 }

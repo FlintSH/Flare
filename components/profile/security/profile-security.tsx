@@ -30,7 +30,6 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const { toast } = useToast()
   const router = useRouter()
 
-  // Refs for password form inputs
   const currentPasswordRef = useRef<HTMLInputElement>(null)
   const newPasswordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
@@ -64,10 +63,8 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         throw new Error(data.error || 'Failed to update password')
       }
 
-      // Force a session refresh after password change
       await updateSession()
 
-      // Call the onUpdate callback
       onUpdate()
 
       toast({
@@ -75,7 +72,6 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         description: 'Password updated successfully',
       })
 
-      // Clear password fields
       if (currentPasswordRef.current) currentPasswordRef.current.value = ''
       if (newPasswordRef.current) newPasswordRef.current.value = ''
       if (confirmPasswordRef.current) confirmPasswordRef.current.value = ''

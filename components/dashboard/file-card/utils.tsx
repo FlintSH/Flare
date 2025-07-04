@@ -12,13 +12,11 @@ import {
 } from 'lucide-react'
 
 export function getFileIcon(mimeType: string, className?: string) {
-  // Common file type checks
   if (mimeType.startsWith('image/')) return <ImageIcon className={className} />
   if (mimeType.startsWith('video/')) return <Video className={className} />
   if (mimeType.startsWith('audio/')) return <Music className={className} />
   if (mimeType === 'application/pdf') return <FileText className={className} />
 
-  // Code and text files
   if (
     mimeType.includes('javascript') ||
     mimeType.includes('typescript') ||
@@ -34,7 +32,6 @@ export function getFileIcon(mimeType: string, className?: string) {
     return <FileCode className={className} />
   }
 
-  // Spreadsheets and data files
   if (
     mimeType.includes('csv') ||
     mimeType.includes('spreadsheet') ||
@@ -44,7 +41,6 @@ export function getFileIcon(mimeType: string, className?: string) {
     return <Table className={className} />
   }
 
-  // Archives
   if (
     mimeType.includes('zip') ||
     mimeType.includes('tar') ||
@@ -55,7 +51,6 @@ export function getFileIcon(mimeType: string, className?: string) {
     return <Archive className={className} />
   }
 
-  // Text files
   if (
     mimeType.startsWith('text/') ||
     mimeType.includes('json') ||
@@ -64,6 +59,5 @@ export function getFileIcon(mimeType: string, className?: string) {
     return <FileText className={className} />
   }
 
-  // Default fallback
   return <File className={className} />
 }

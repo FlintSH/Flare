@@ -92,7 +92,6 @@ export async function generateMetadata({
   const session = await getServerSession(authOptions)
   const providedPassword = (await searchParams).password as string | undefined
 
-  // Skip metadata for /raw requests
   const path = headersList.get('x-invoke-path') || ''
   if (path.endsWith('/raw')) {
     return {}
@@ -110,7 +109,6 @@ export async function generateMetadata({
   const isOwner = session?.user?.id === file.userId
   const isPrivate = file.visibility === 'PRIVATE' && !isOwner
 
-  // Return minimal metadata if file is private or needs password
   if (isPrivate || (file.password && !isOwner)) {
     return {
       title: 'Protected File - Flare',
@@ -118,7 +116,6 @@ export async function generateMetadata({
     }
   }
 
-  // If password protected, verify password is correct
   if (file.password && !isOwner) {
     if (!providedPassword) {
       return {
@@ -163,7 +160,6 @@ export async function generateMetadata({
   const baseUrl = `${protocol}://${host}`
   const rawUrl = `${baseUrl}${urlPath}/raw`
 
-  // For videos, get direct URL to avoid NS_BINDING_ABORTED issues in Firefox
   let videoUrl = rawUrl
   if (isVideo) {
     const storageProvider = await getStorageProvider()
@@ -241,7 +237,6 @@ export default async function FilePage({
     notFound()
   }
 
-  // Increment view count
   await prisma.file.update({
     where: { id: file.id },
     data: { views: { increment: 1 } },
@@ -256,7 +251,6 @@ export default async function FilePage({
     notFound()
   }
 
-  // Check password if set
   if (serializedFile.password && !isOwner) {
     const needsPassword = !providedPassword
     if (needsPassword) {

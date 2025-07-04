@@ -21,19 +21,16 @@ export function useSetupStatus(enabled = true) {
     queryKey: SETUP_STATUS_QUERY_KEY,
     queryFn: fetchSetupStatus,
     enabled,
-    // Setup status is critical for app functionality
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
-    // Refetch on window focus to ensure fresh status
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     refetchOnReconnect: true,
   })
 }
 
-// Hook to manage setup status updates
 export function useSetupStatusMutations() {
   const queryClient = useQueryClient()
 

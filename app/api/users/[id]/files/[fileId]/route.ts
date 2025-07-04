@@ -18,7 +18,6 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Get the file first to get its size and path
     const file = await prisma.file.findUnique({
       where: {
         id: fileId,
@@ -30,7 +29,6 @@ export async function DELETE(
       return new NextResponse('File not found', { status: 404 })
     }
 
-    // Delete file from storage
     try {
       const storageProvider = await getStorageProvider()
       await storageProvider.deleteFile(file.path)
@@ -38,7 +36,6 @@ export async function DELETE(
       console.error('Error deleting file from storage:', error)
     }
 
-    // Delete from database and update storage usage
     await prisma.$transaction(async (tx) => {
       await tx.file.delete({
         where: {
@@ -79,7 +76,6 @@ export async function PATCH(
     const body = await request.json()
     const { visibility, password } = body
 
-    // Update the file
     const file = await prisma.file.update({
       where: {
         id: fileId,

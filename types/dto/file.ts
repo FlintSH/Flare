@@ -1,16 +1,10 @@
 import { z } from 'zod'
 
-/**
- * File DTO Types
- */
-
-// File visibility enum
 export enum FileVisibility {
   PUBLIC = 'PUBLIC',
   PRIVATE = 'PRIVATE',
 }
 
-// File upload request schema
 export const FileUploadSchema = z.object({
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional().default('PUBLIC'),
   password: z.string().optional().nullable(),
@@ -18,7 +12,6 @@ export const FileUploadSchema = z.object({
 
 export type FileUploadRequest = z.infer<typeof FileUploadSchema>
 
-// File upload form data schema
 export const FileUploadFormDataSchema = z.object({
   file: z.instanceof(File, { message: 'No file provided' }),
   visibility: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
@@ -27,7 +20,6 @@ export const FileUploadFormDataSchema = z.object({
 
 export type FileUploadFormData = z.infer<typeof FileUploadFormDataSchema>
 
-// File metadata response
 export interface FileMetadata {
   id: string
   name: string
@@ -41,7 +33,6 @@ export interface FileMetadata {
   hasPassword: boolean
 }
 
-// File upload response
 export interface FileUploadResponse {
   url: string
   name: string
@@ -49,7 +40,6 @@ export interface FileUploadResponse {
   type: string
 }
 
-// File list query parameters schema
 export const FileListQuerySchema = z.object({
   page: z
     .string()
@@ -77,7 +67,6 @@ export const FileListQuerySchema = z.object({
 
 export type FileListQuery = z.infer<typeof FileListQuerySchema>
 
-// File list response
 export interface FileListResponse {
   files: FileMetadata[]
   pagination: {
@@ -88,7 +77,6 @@ export interface FileListResponse {
   }
 }
 
-// File types response
 export interface FileTypesResponse {
   types: string[]
 }

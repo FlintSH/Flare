@@ -54,15 +54,12 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 function hexToHSL(hex: string): string {
-  // Remove the hash if it exists
   hex = hex.replace('#', '')
 
-  // Convert hex to RGB
   const r = parseInt(hex.substring(0, 2), 16) / 255
   const g = parseInt(hex.substring(2, 4), 16) / 255
   const b = parseInt(hex.substring(4, 6), 16) / 255
 
-  // Find greatest and smallest channel values
   const cmin = Math.min(r, g, b)
   const cmax = Math.max(r, g, b)
   const delta = cmax - cmin
@@ -70,7 +67,6 @@ function hexToHSL(hex: string): string {
   let s = 0
   let l = 0
 
-  // Calculate hue
   if (delta === 0) h = 0
   else if (cmax === r) h = ((g - b) / delta) % 6
   else if (cmax === g) h = (b - r) / delta + 2
@@ -79,13 +75,10 @@ function hexToHSL(hex: string): string {
   h = Math.round(h * 60)
   if (h < 0) h += 360
 
-  // Calculate lightness
   l = (cmax + cmin) / 2
 
-  // Calculate saturation
   s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1))
 
-  // Convert to percentages
   s = +(s * 100).toFixed(1)
   l = +(l * 100).toFixed(1)
 
@@ -99,16 +92,13 @@ function parseColor(color: string): string {
     return color
   }
 
-  // Handle HSL values
   const parts = color.split(' ')
   if (parts.length === 1) {
-    // Single number value (hue)
     const h = parseFloat(parts[0])
     if (!isNaN(h)) {
-      return hslToHex(h, 100, 50) // Default to 100% saturation and 50% lightness
+      return hslToHex(h, 100, 50)
     }
   } else if (parts.length === 3) {
-    // Full HSL value
     const [h, s, l] = parts.map((part) => parseFloat(part.replace('%', '')))
     if (!isNaN(h) && !isNaN(s) && !isNaN(l)) {
       return hslToHex(h, s, l)
@@ -159,7 +149,7 @@ function SimpleThemeCustomizer({
   onColorChange,
   initialColors,
 }: ThemeCustomizerProps) {
-  const [baseHue, setBaseHue] = useState(222.2) // Default hue
+  const [baseHue, setBaseHue] = useState(222.2)
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
     foreground: '',
@@ -198,11 +188,8 @@ function SimpleThemeCustomizer({
   const handleHueChange = (newHue: number) => {
     setBaseHue(newHue)
 
-    // Update all colors with the new hue while maintaining their original saturation and lightness
-    // except for destructive colors
     const newColors: Partial<ColorConfig> = {}
     Object.entries(DEFAULT_COLORS).forEach(([key, value]) => {
-      // Skip destructive colors
       if (key === 'destructive' || key === 'destructiveForeground') {
         newColors[key as keyof ColorConfig] = value
         return
@@ -211,18 +198,15 @@ function SimpleThemeCustomizer({
       newColors[key as keyof ColorConfig] = `${newHue} ${s} ${l}`
     })
 
-    // Update preview
     Object.entries(newColors).forEach(([key, value]) => {
       const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
       document.documentElement.style.setProperty(`--${cssKey}`, value)
     })
 
-    // Immediately notify parent of color changes
     onColorChange(newColors)
   }
 
   const handleReset = () => {
-    // Update preview
     Object.entries(DEFAULT_COLORS).forEach(([key, value]) => {
       const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
       document.documentElement.style.setProperty(`--${cssKey}`, value)
@@ -230,7 +214,6 @@ function SimpleThemeCustomizer({
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
 
-    // Notify parent of reset
     onColorChange(DEFAULT_COLORS)
   }
 
@@ -247,12 +230,10 @@ function SimpleThemeCustomizer({
       }
     }
 
-    // Update preview only
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
     setColors((prev) => ({ ...prev, [key]: value }))
 
-    // Immediately notify parent of color change
     onColorChange({ [key]: value })
   }
 

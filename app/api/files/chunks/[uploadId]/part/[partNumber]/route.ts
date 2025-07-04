@@ -11,7 +11,6 @@ interface RouteParams {
   partNumber: string
 }
 
-// Get upload metadata from temp file
 async function getUploadMetadata(localId: string) {
   try {
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
@@ -95,10 +94,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get the chunk data from the request
     const chunk = await req.arrayBuffer()
 
-    // Upload the chunk to S3
     const storageProvider = await getStorageProvider()
     const response = await storageProvider.uploadPart(
       metadata.fileKey,

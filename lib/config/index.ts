@@ -3,7 +3,6 @@ import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
 
-// Config schema
 export const configSchema = z.object({
   version: z.string(),
   settings: z.object({
@@ -166,7 +165,6 @@ export async function initConfig(): Promise<FlareConfig> {
 
     return configSchema.parse(config.value)
   } catch (error) {
-    // If database is not accessible (e.g., during build), return default config
     console.warn('Could not access database for config, using default:', error)
     return DEFAULT_CONFIG
   }
@@ -184,7 +182,6 @@ export async function getConfig(): Promise<FlareConfig> {
 
     return configSchema.parse(config.value)
   } catch (error) {
-    // If database is not accessible (e.g., during build), return default config
     console.warn('Could not access database for config, using default:', error)
     return DEFAULT_CONFIG
   }
@@ -268,7 +265,6 @@ export async function updateConfig(
 
     return validatedConfig
   } catch (error) {
-    // If database is not accessible, return the merged config without saving
     console.warn('Could not save config to database:', error)
     return newConfig as FlareConfig
   }

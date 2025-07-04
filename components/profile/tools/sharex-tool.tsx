@@ -22,7 +22,6 @@ export function ShareXTool() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      // Get filename from Content-Disposition header
       const filename =
         response.headers
           .get('content-disposition')

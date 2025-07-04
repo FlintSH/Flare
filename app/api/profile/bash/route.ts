@@ -24,24 +24,20 @@ export async function GET() {
       )
     }
 
-    // Get base URL from NEXTAUTH_URL or use localhost in dev mode
     const baseUrl =
       process.env.NODE_ENV === 'development'
         ? 'http://localhost:3000'
         : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
 
-    // Generate the bash upload script
     const script = generateBashScript({
       uploadToken: user.uploadToken,
       baseUrl,
     })
 
-    // Use sanitized username for the filename
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
 
-    // Return the script as a downloadable file
     return new NextResponse(script, {
       headers: {
         'Content-Type': 'text/plain',

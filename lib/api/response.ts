@@ -7,9 +7,6 @@ import {
   PaginationMeta,
 } from '@/types/dto/api-responses'
 
-/**
- * Create a successful API response
- */
 export function apiResponse<T>(data: T): NextResponse<ApiResponse<T>> {
   return NextResponse.json({
     data,
@@ -17,9 +14,6 @@ export function apiResponse<T>(data: T): NextResponse<ApiResponse<T>> {
   })
 }
 
-/**
- * Create a paginated API response
- */
 export function paginatedResponse<T>(
   data: T,
   pagination: PaginationMeta
@@ -31,9 +25,6 @@ export function paginatedResponse<T>(
   })
 }
 
-/**
- * Create an error API response
- */
 export function apiError(
   message: string,
   status: number = 400
@@ -47,7 +38,6 @@ export function apiError(
   )
 }
 
-// HTTP status codes
 export const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,

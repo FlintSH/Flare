@@ -23,7 +23,6 @@ export async function GET() {
       const interval = setInterval(() => {
         const progress = getProgress(session.user.id)
 
-        // Only send updates when progress changes or heartbeat (every ~2 seconds)
         if (progress !== lastProgress || inactivityCounter >= 20) {
           const data = encoder.encode(
             `data: ${JSON.stringify({ progress })}\n\n`
@@ -35,11 +34,9 @@ export async function GET() {
           inactivityCounter++
         }
 
-        // If progress is 100 or we haven't seen progress in 10 seconds, close the stream
         if (progress === 100 || inactivityCounter > 100) {
           clearInterval(interval)
 
-          // Send final 100% if needed
           if (lastProgress !== 100) {
             const finalData = encoder.encode(
               `data: ${JSON.stringify({ progress: 100 })}\n\n`

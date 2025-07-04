@@ -12,15 +12,12 @@ import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
-// Store upload metadata in a temp file
 const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
 
-// Create temp directory if it doesn't exist
 if (!existsSync(TEMP_DIR)) {
   mkdir(TEMP_DIR, { recursive: true }).catch(console.error)
 }
 
-// Clean up stale uploads every hour (honestly could be done better, PRs welcome)
 setInterval(
   async () => {
     try {
@@ -57,10 +54,9 @@ interface UploadMetadata {
   password: string | null
   lastActivity: number
   urlPath: string
-  s3UploadId: string // Store the actual S3 uploadId separately
+  s3UploadId: string
 }
 
-// Generate a short, random ID for local metadata files
 function generateLocalId(): string {
   return Math.random().toString(36).substring(2, 15)
 }
@@ -100,7 +96,6 @@ async function deleteUploadMetadata(localId: string) {
   }
 }
 
-// Initialize multipart upload
 export async function POST(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
@@ -109,7 +104,6 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { filename, mimeType, size } = body
 
-    // Validate required fields
     if (!filename || !mimeType || !size) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -117,7 +111,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Get config to check max upload size and quotas
     const config = await getConfig()
     const maxSize = config.settings.general.storage.maxUploadSize
     const maxBytes =
@@ -125,7 +118,6 @@ export async function POST(req: Request) {
     const quotasEnabled = config.settings.general.storage.quotas.enabled
     const defaultQuota = config.settings.general.storage.quotas.default
 
-    // Validate total size
     if (size > maxBytes) {
       return NextResponse.json(
         {
@@ -135,7 +127,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Check quota if enabled (skip for admins)
     if (quotasEnabled && user.role !== 'ADMIN') {
       const quotaMB =
         defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
@@ -151,14 +142,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // Get unique filename and paths
     const { urlSafeName, displayName } = await getUniqueFilename(
       join('uploads', user.urlId),
       filename,
       user.randomizeFileUrls
     )
 
-    // Construct paths with validation
     let filePath: string
     let urlPath: string
     try {
@@ -172,17 +161,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
     }
 
-    // Initialize multipart upload
     const storageProvider = await getStorageProvider()
     const s3UploadId = await storageProvider.initializeMultipartUpload(
       filePath,
       mimeType
     )
 
-    // Generate a shorter local ID for metadata
     const localId = generateLocalId()
 
-    // Store metadata in temp file
     const metadata: UploadMetadata = {
       fileKey: filePath,
       filename: displayName,
@@ -218,7 +204,6 @@ export async function POST(req: Request) {
   }
 }
 
-// Get presigned URL for part upload
 export async function GET(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
@@ -238,7 +223,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Use the actual S3 uploadId stored in metadata
     const storageProvider = await getStorageProvider()
     const presignedUrl = await storageProvider.getPresignedPartUploadUrl(
       metadata.fileKey,
@@ -246,7 +230,6 @@ export async function GET(req: Request) {
       partNumber
     )
 
-    // Update last activity
     metadata.lastActivity = Date.now()
     await saveUploadMetadata(localId, metadata)
 
@@ -265,7 +248,6 @@ export async function GET(req: Request) {
   }
 }
 
-// Complete multipart upload
 export async function PUT(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
@@ -294,7 +276,6 @@ export async function PUT(req: Request) {
       uploadedParts
     )
 
-    // Create database record
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({
         data: {
@@ -325,10 +306,8 @@ export async function PUT(req: Request) {
       return file
     })
 
-    // Clean up metadata file
     await deleteUploadMetadata(localId)
 
-    // Process OCR if it's an image
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
         console.error('Background OCR processing failed:', error)

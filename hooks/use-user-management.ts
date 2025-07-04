@@ -95,10 +95,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
 
         const newUser = await response.json()
 
-        // Update the users list
         setUsers((prevUsers) => [newUser, ...prevUsers])
 
-        // Update pagination total
         if (pagination) {
           setPagination({
             ...pagination,
@@ -152,7 +150,6 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
 
         const updatedUser = await response.json()
 
-        // Update the users list
         setUsers((prevUsers) =>
           prevUsers.map((user) => (user.id === userId ? updatedUser : user))
         )
@@ -195,10 +192,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           throw new Error('Failed to delete user')
         }
 
-        // Update the users list
         setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userId))
 
-        // Update pagination total
         if (pagination) {
           setPagination({
             ...pagination,
@@ -243,7 +238,6 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           throw new Error('Failed to remove avatar')
         }
 
-        // Update the users list to remove the avatar
         setUsers((prevUsers) =>
           prevUsers.map((user) =>
             user.id === userId ? { ...user, image: null } : user

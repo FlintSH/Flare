@@ -34,7 +34,6 @@ export async function POST(req: Request) {
     const { user, response } = await requireAuth(req)
     if (response) return response
 
-    // Generate new upload token using UUID
     const userData = await prisma.user.update({
       where: { id: user.id },
       data: { uploadToken: randomUUID() },

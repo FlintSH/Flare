@@ -51,7 +51,6 @@ export function useFileActions(options: FileActionsOptions = {}) {
     const baseUrl = window.location.origin
     let url: string
 
-    // Use the dedicated download endpoint if fileId is available
     if (options.fileId) {
       url = `${baseUrl}/api/files/${options.fileId}/download`
 
@@ -59,7 +58,6 @@ export function useFileActions(options: FileActionsOptions = {}) {
         url += `?password=${encodeURIComponent(options.verifiedPassword)}`
       }
     } else if (options.urlPath) {
-      // Fallback to raw endpoint if no fileId
       url = `${baseUrl}${options.urlPath}/raw`
 
       if (options.verifiedPassword) {
@@ -69,7 +67,6 @@ export function useFileActions(options: FileActionsOptions = {}) {
       return
     }
 
-    // Create a temporary link and trigger download
     const link = document.createElement('a')
     link.href = url
     link.download = options.name

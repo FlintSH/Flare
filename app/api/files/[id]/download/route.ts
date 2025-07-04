@@ -7,11 +7,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 
-// Helper function to encode filename for Content-Disposition header
 function encodeFilename(filename: string): string {
-  // First encode as URI component to handle special characters
   const encoded = encodeURIComponent(filename)
-  // Then wrap in quotes and escape quotes and backslashes in filename
   return `"${encoded.replace(/["\\]/g, '\\$&')}"`
 }
 
@@ -25,7 +22,6 @@ export async function GET(
     const url = new URL(request.url)
     const providedPassword = url.searchParams.get('password')
 
-    // Find the file
     const file = await prisma.file.findUnique({
       where: { id: fileId },
       select: {
@@ -44,7 +40,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check if file is accessible
     const isOwner = session?.user?.id === file.userId
     const isPrivate = file.visibility === 'PRIVATE' && !isOwner
 
@@ -52,7 +47,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check password if set
     if (file.password && !isOwner) {
       if (!providedPassword) {
         return new Response(null, { status: 401 })
@@ -64,7 +58,6 @@ export async function GET(
       }
     }
 
-    // Increment download count
     await prisma.file.update({
       where: { id: fileId },
       data: { downloads: { increment: 1 } },
@@ -74,7 +67,6 @@ export async function GET(
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
-    // Handle range requests
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-')
       const start = parseInt(parts[0], 10)
@@ -100,7 +92,6 @@ export async function GET(
       })
     }
 
-    // No range requested - serve full file
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Content-Type': file.mimeType,
@@ -124,16 +115,12 @@ export async function POST(
     const session = await getServerSession(authOptions)
     const { id: fileId } = await params
 
-    // Get password from request body for POST requests
     let providedPassword: string | null = null
     try {
       const body = await request.json()
       providedPassword = body.password || null
-    } catch {
-      // If no JSON body, that's fine - password might not be needed
-    }
+    } catch {}
 
-    // Find the file
     const file = await prisma.file.findUnique({
       where: { id: fileId },
       select: {
@@ -152,7 +139,6 @@ export async function POST(
       return new Response(null, { status: 404 })
     }
 
-    // Check if file is accessible
     const isOwner = session?.user?.id === file.userId
     const isPrivate = file.visibility === 'PRIVATE' && !isOwner
 
@@ -160,7 +146,6 @@ export async function POST(
       return new Response(null, { status: 404 })
     }
 
-    // Check password if set
     if (file.password && !isOwner) {
       if (!providedPassword) {
         return new Response(null, { status: 401 })
@@ -172,7 +157,6 @@ export async function POST(
       }
     }
 
-    // Increment download count
     await prisma.file.update({
       where: { id: fileId },
       data: { downloads: { increment: 1 } },
@@ -181,7 +165,6 @@ export async function POST(
     const storageProvider = await getStorageProvider()
     const size = await storageProvider.getFileSize(file.path)
 
-    // Serve full file for POST requests
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Content-Type': file.mimeType,

@@ -17,5 +17,4 @@ export async function processImageOCR(
   }
 }
 
-// Export the queue instance
 export { ocrQueue }

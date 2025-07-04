@@ -83,10 +83,8 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
       })
       if (!response.ok) throw new Error()
 
-      // Set local deleted state
       setIsDeleted(true)
 
-      // Call onDelete callback if provided
       if (onDelete) {
         onDelete(file.id)
       }
@@ -104,7 +102,6 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
     }
   }
 
-  // If file is deleted, don't render anything
   if (isDeleted) {
     return null
   }
@@ -200,7 +197,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
 
   return (
     <Card className="group relative overflow-hidden bg-background/40 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-black/10 transition-all duration-300 hover:bg-background/60">
-      {/* Preview Section */}
+      {}
       <div className="relative">
         <Link href={sanitizeUrl(file.urlPath)} className="block">
           {isImage ? (
@@ -232,16 +229,16 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           )}
         </Link>
 
-        {/* Overlay with quick actions */}
+        {}
         <div
           className={`absolute inset-0 bg-black/50 opacity-0 ${!isLoadingOcr && 'group-hover:opacity-100'} transition-opacity flex flex-col items-center justify-center gap-3`}
         >
-          {/* Primary View button */}
+          {}
           <Button variant="secondary" className="glass-hover" size="sm" asChild>
             <Link href={sanitizeUrl(file.urlPath)}>View</Link>
           </Button>
 
-          {/* Action buttons row */}
+          {}
           <div className="flex gap-1">
             <TooltipProvider delayDuration={150}>
               <Tooltip>
@@ -334,7 +331,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           </div>
         </div>
 
-        {/* Status badge */}
+        {}
         <div className="absolute bottom-2 left-2">
           <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-background/80 text-xs backdrop-blur-sm">
             {file.password ? (
@@ -356,7 +353,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           </div>
         </div>
 
-        {/* Upload time badge */}
+        {}
         <div className="absolute bottom-2 right-2">
           <TooltipProvider delayDuration={150}>
             <Tooltip>
@@ -379,7 +376,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </div>
       </div>
 
-      {/* File info section */}
+      {}
       <div className="p-3">
         <div className="flex items-center justify-between gap-2">
           <TooltipProvider delayDuration={150}>
@@ -413,7 +410,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </div>
       </div>
 
-      {/* Password Dialog */}
+      {}
       <Dialog
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}
@@ -448,7 +445,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Visibility Dialog */}
+      {}
       <Dialog
         open={isVisibilityDialogOpen}
         onOpenChange={setIsVisibilityDialogOpen}
@@ -500,7 +497,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -532,7 +529,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* OCR Dialog */}
+      {}
       <OcrDialog
         isOpen={isOcrDialogOpen}
         onOpenChange={setIsOcrDialogOpen}

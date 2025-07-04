@@ -67,7 +67,6 @@ export function FlameshotTool() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      // Get filename from Content-Disposition header
       const filename =
         response.headers
           .get('content-disposition')
@@ -122,7 +121,7 @@ export function FlameshotTool() {
               onSubmit={form.handleSubmit(handleFlameshotDownload)}
               className="space-y-6"
             >
-              {/* Dependencies Alert */}
+              {}
               <div className="flex items-start space-x-3 rounded-md bg-amber-50 dark:bg-amber-950/50 p-3 text-amber-600 dark:text-amber-400">
                 <Terminal className="mt-0.5 h-5 w-5 flex-shrink-0" />
                 <div className="space-y-1">

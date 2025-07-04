@@ -22,7 +22,6 @@ export function useFileDownload(options: UseFileDownloadOptions = {}) {
       const blob = await response.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
 
-      // Extract filename from Content-Disposition header or use custom/default
       let filename = customFilename || ''
       const contentDisposition = response.headers.get('content-disposition')
       if (contentDisposition && !customFilename) {
@@ -34,14 +33,11 @@ export function useFileDownload(options: UseFileDownloadOptions = {}) {
         }
       }
 
-      // If no filename was found, use a default
       if (!filename) {
-        // Try to determine from URL
         const urlParts = url.split('/')
         filename = urlParts[urlParts.length - 1] || 'download'
       }
 
-      // Create a download link and trigger it
       const a = document.createElement('a')
       a.href = downloadUrl
       a.download = filename

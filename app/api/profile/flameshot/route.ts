@@ -33,19 +33,16 @@ export async function POST(req: Request) {
       )
     }
 
-    // Generate the Flameshot upload script
     const script = generateFlameshotScript({
       uploadToken: user.uploadToken,
       useWayland: body.useWayland,
       useCompositor: body.useCompositor,
     })
 
-    // Use sanitized username for the filename
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
 
-    // Return the script as a downloadable file
     return new NextResponse(script, {
       headers: {
         'Content-Type': 'text/plain',
@@ -79,7 +76,6 @@ function generateFlameshotScript({
   useWayland,
   useCompositor,
 }: ScriptOptions): string {
-  // Get base URL from NEXTAUTH_URL or use localhost in dev mode
   const baseUrl =
     process.env.NODE_ENV === 'development'
       ? 'http://localhost:3000'

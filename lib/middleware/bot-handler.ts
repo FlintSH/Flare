@@ -24,7 +24,6 @@ export function handleBotRequest(request: NextRequest): NextResponse | null {
     return null
   }
 
-  // Don't redirect video files - let them get the OpenGraph metadata
   const fileExt = request.nextUrl.pathname.split('.').pop()?.toLowerCase()
   const isVideo = fileExt && VIDEO_EXTENSIONS.includes(fileExt)
   const isDirectPath = request.nextUrl.pathname.endsWith('/direct')

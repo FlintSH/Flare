@@ -6,7 +6,6 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 
 import { prisma } from '@/lib/database/prisma'
 
-// Define the user select type
 const userSelect = {
   id: true,
   email: true,
@@ -19,7 +18,6 @@ const userSelect = {
 
 type UserWithSession = Prisma.UserGetPayload<{ select: typeof userSelect }>
 
-// Extend the built-in types
 declare module 'next-auth' {
   interface Session {
     user: {
@@ -99,18 +97,15 @@ export const authOptions: NextAuthOptions = {
         token.email = sessionUser.email
       }
 
-      // Fetch fresh user data from database
       const freshUser = await prisma.user.findUnique({
         where: { id: token.id },
         select: userSelect,
       })
 
       if (!freshUser) {
-        // User was deleted, trigger a sign out by throwing a specific error
         throw new Error('Session invalidated: User not found')
       }
 
-      // Check if session version matches
       if (
         token.sessionVersion &&
         token.sessionVersion !== freshUser.sessionVersion
@@ -118,7 +113,6 @@ export const authOptions: NextAuthOptions = {
         throw new Error('Session invalidated: Version mismatch')
       }
 
-      // Update token with fresh data
       token.role = freshUser.role
       token.image = freshUser.image
       token.name = freshUser.name
@@ -144,7 +138,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
   cookies: {
     sessionToken: {

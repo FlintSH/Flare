@@ -36,7 +36,6 @@ export async function GET(
         : {}),
     }
 
-    // Get total count for pagination
     const total = await prisma.shortenedUrl.count({ where })
 
     const urls = await prisma.shortenedUrl.findMany({

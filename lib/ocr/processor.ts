@@ -7,25 +7,21 @@ import type { OCRTask } from './queue'
 
 export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
   try {
-    // Get the file content
     const storageProvider = await getStorageProvider()
     const stream = await storageProvider.getFileStream(filePath)
 
-    // Convert stream to buffer
     const chunks: Buffer[] = []
     for await (const chunk of stream) {
       chunks.push(Buffer.from(chunk))
     }
     const fileBuffer = Buffer.concat(chunks)
 
-    // Create a worker and recognize text
     const worker = await createWorker()
     const {
       data: { text, confidence },
     } = await worker.recognize(fileBuffer)
     await worker.terminate()
 
-    // Update the database with OCR results
     await prisma.file.update({
       where: { id: fileId },
       data: {
@@ -40,7 +36,6 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
   } catch (error) {
     console.error(`OCR processing failed for file ${filePath}:`, error)
 
-    // Mark the file as processed even if it failed, to prevent retries
     await prisma.file.update({
       where: { id: fileId },
       data: {

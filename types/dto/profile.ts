@@ -1,10 +1,5 @@
 import { z } from 'zod'
 
-/**
- * Profile DTO Types
- */
-
-// Profile update request schema
 export const UpdateProfileSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
@@ -16,7 +11,6 @@ export const UpdateProfileSchema = z.object({
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
 
-// Profile response
 export interface ProfileResponse {
   id: string
   name: string | null

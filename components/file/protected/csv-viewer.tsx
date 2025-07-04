@@ -30,7 +30,6 @@ export function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
         )
         const response = await fetch(sanitizedUrl)
 
-        // Check file size
         const contentLength = response.headers.get('content-length')
         if (contentLength && parseInt(contentLength) > MAX_CSV_SIZE) {
           setError('File is too large for preview. Please download to view.')
@@ -52,8 +51,8 @@ export function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
           },
           header: false,
           skipEmptyLines: true,
-          delimiter: ',', // Explicitly set delimiter
-          newline: '\n', // Explicitly set newline
+          delimiter: ',',
+          newline: '\n',
         })
       } catch {
         setError('Failed to load CSV file')

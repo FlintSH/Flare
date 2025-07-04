@@ -45,12 +45,10 @@ export function FileActions({
     verifiedPassword,
   })
 
-  // Sanitize a URL
   const sanitizeUrl = (url: string): string => {
     return DOMPurify.sanitize(url)
   }
 
-  // Set up URLs when password changes
   useEffect(() => {
     const passwordParam = verifiedPassword
       ? `?password=${encodeURIComponent(DOMPurify.sanitize(verifiedPassword))}`

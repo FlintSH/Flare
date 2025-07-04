@@ -21,7 +21,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { toast } = useToast()
   const router = useRouter()
 
-  // Refs for form inputs
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -49,7 +48,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       const { url } = await response.json()
 
-      // Update the session with new avatar URL and wait for it to complete
       await updateSession({
         user: {
           ...user,
@@ -57,10 +55,8 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         },
       })
 
-      // Force a router refresh to update all components
       router.refresh()
 
-      // Call the onUpdate callback
       onUpdate()
 
       toast({
@@ -77,7 +73,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
       })
     } finally {
       setIsLoading(false)
-      // Reset the file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -106,7 +101,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       const data = await response.json()
 
-      // Update the session with new profile data and force a refresh
       await updateSession({
         user: {
           ...user,
@@ -115,10 +109,8 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         },
       })
 
-      // Force a router refresh to update all components
       router.refresh()
 
-      // Call the onUpdate callback
       onUpdate()
 
       toast({
@@ -155,10 +147,8 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         throw new Error(data.error || 'Failed to update settings')
       }
 
-      // Force a router refresh to update all components
       router.refresh()
 
-      // Call the onUpdate callback
       onUpdate()
 
       toast({

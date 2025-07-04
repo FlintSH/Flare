@@ -39,10 +39,8 @@ export async function GET(
 
     const skip = (page - 1) * limit
 
-    // Get the user ID from params after awaiting
     const { id } = await params
 
-    // Build where clause based on filters
     const where = {
       userId: id,
       ...(search
@@ -57,10 +55,8 @@ export async function GET(
       ...(type ? { mimeType: { startsWith: type } } : {}),
     }
 
-    // Get total count for pagination
     const total = await prisma.file.count({ where })
 
-    // Get paginated files
     const files = await prisma.file.findMany({
       where,
       orderBy: { uploadedAt: 'desc' },
@@ -79,7 +75,6 @@ export async function GET(
       },
     })
 
-    // show protected as visibility when password exists
     const transformedFiles = files.map(({ password, ...file }: FileData) => ({
       ...file,
       visibility: password ? 'PROTECTED' : file.visibility,

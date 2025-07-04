@@ -7,11 +7,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 
-// Helper function to encode filename for Content-Disposition header
 function encodeFilename(filename: string): string {
-  // First encode as URI component to handle special characters
   const encoded = encodeURIComponent(filename)
-  // Then wrap in quotes and escape quotes and backslashes in filename
   return `"${encoded.replace(/["\\]/g, '\\$&')}"`
 }
 
@@ -27,7 +24,6 @@ export async function GET(
     const providedPassword = url.searchParams.get('password')
     const isDownloadRequest = url.searchParams.get('download') === 'true'
 
-    // Find the file
     const file = await prisma.file.findUnique({
       where: { urlPath },
     })
@@ -36,7 +32,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check if file is accessible
     const isOwner = session?.user?.id === file.userId
     const isPrivate = file.visibility === 'PRIVATE' && !isOwner
 
@@ -44,7 +39,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check password if set
     if (file.password && !isOwner) {
       if (!providedPassword) {
         return new Response(null, { status: 401 })
@@ -56,7 +50,6 @@ export async function GET(
       }
     }
 
-    // Increment download count if requested
     if (isDownloadRequest) {
       await prisma.file.update({
         where: { id: file.id },
@@ -69,7 +62,6 @@ export async function GET(
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
-    // Handle range requests (especially important for video files)
     if (range) {
       const parts = range.replace(/bytes=/, '').split('-')
       const start = parseInt(parts[0], 10)
@@ -96,7 +88,6 @@ export async function GET(
       })
     }
 
-    // No range requested
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Content-Type': file.mimeType,

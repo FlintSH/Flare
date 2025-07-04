@@ -19,7 +19,6 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Get user's files to delete them from storage
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
@@ -35,10 +34,8 @@ export async function DELETE(
       return new NextResponse('User not found', { status: 404 })
     }
 
-    // Get storage provider
     const storageProvider = await getStorageProvider()
 
-    // Delete user's files from storage
     for (const file of user.files) {
       try {
         await storageProvider.deleteFile(file.path)
@@ -47,7 +44,6 @@ export async function DELETE(
       }
     }
 
-    // Delete user's avatar if exists
     if (user.image?.startsWith('/api/avatars/')) {
       try {
         const avatarPath = join(
@@ -61,7 +57,6 @@ export async function DELETE(
       }
     }
 
-    // Nuke user from database
     await prisma.user.delete({
       where: { id },
     })

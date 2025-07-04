@@ -41,7 +41,6 @@ export function PasteForm() {
     setIsSubmitting(true)
 
     try {
-      // Create a text file from the content
       const file = new File([content], filename || 'paste.txt', {
         type: 'text/plain',
       })
@@ -59,26 +58,21 @@ export function PasteForm() {
       if (!response.ok) {
         let errorDescription = 'Failed to create paste'
         try {
-          // Attempt to get a more specific error message from the server response
           const errorData = await response.json()
           if (errorData?.message) {
             errorDescription = errorData.message
           }
         } catch (jsonError) {
-          // If the error response isn't JSON or can't be parsed, use the generic message
           console.warn('Could not parse error response JSON:', jsonError)
         }
         throw new Error(errorDescription)
       }
 
-      // If response.ok is true, the paste creation was successful on the server side.
       toast({
         title: 'Success',
         description: 'Paste created successfully',
       })
 
-      // Attempt to parse the response and redirect.
-      // This part is now separated so its failure doesn't negate the success of paste creation.
       try {
         const responseData = await response.json()
         if (responseData?.data?.url) {
@@ -89,20 +83,15 @@ export function PasteForm() {
             'Paste created, but no redirect URL found in response:',
             responseData
           )
-          // Optionally, redirect to a generic page or handle as needed
-          router.push('/dashboard') // Default redirect to dashboard
+          router.push('/dashboard')
         }
       } catch (jsonError) {
         console.error(
           'Paste created, but failed to parse response JSON for redirect URL:',
           jsonError
         )
-        // Handle cases where response.json() might fail (e.g., empty response body)
-        // Optionally, redirect to a generic page or handle as needed
-        // router.push('/dashboard'); // Example
       }
     } catch (error) {
-      // This catch block now handles network errors or errors explicitly thrown for non-ok responses.
       toast({
         title: 'Error',
         description:

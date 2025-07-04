@@ -97,7 +97,6 @@ export function useProfile(options: UseProfileOptions = {}) {
           description: 'Your profile picture has been updated successfully',
         })
 
-        // Refresh data
         router.refresh()
       } catch (error) {
         console.error('Avatar upload error:', error)
@@ -108,7 +107,6 @@ export function useProfile(options: UseProfileOptions = {}) {
         })
       } finally {
         setIsLoading(false)
-        // Clear the file input
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }
@@ -196,7 +194,6 @@ export function useProfile(options: UseProfileOptions = {}) {
       const success = await updateProfile(data)
 
       if (success) {
-        // Clear password fields
         if (currentPasswordRef.current) currentPasswordRef.current.value = ''
         if (newPasswordRef.current) newPasswordRef.current.value = ''
       }

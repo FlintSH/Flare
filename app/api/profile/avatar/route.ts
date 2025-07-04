@@ -23,7 +23,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       return NextResponse.json(
         { error: 'File must be an image' },
@@ -31,7 +30,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Get user's current storage usage and quota if enabled
     const config = await getConfig()
     const quotasEnabled = config.settings.general.storage.quotas.enabled
     const defaultQuota = config.settings.general.storage.quotas.default
@@ -61,13 +59,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // Get current user to check for existing avatar
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { image: true },
     })
 
-    // process the image to be 256x256
     const bytes = await file.arrayBuffer()
     const processedImage = await sharp(Buffer.from(bytes))
       .resize(256, 256, {
@@ -81,7 +77,6 @@ export async function POST(req: Request) {
     const avatarPath = join('avatars', avatarFilename)
     let publicPath = `/api/avatars/${avatarFilename}`
 
-    // Delete old avatar if it exists
     if (user?.image?.startsWith('/api/avatars/')) {
       try {
         const oldFilename = user.image.split('/').pop()
@@ -94,15 +89,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // Upload new avatar
     await storageProvider.uploadFile(processedImage, avatarPath, 'image/jpeg')
 
-    // If using S3, get the direct URL
     if (storageProvider instanceof S3StorageProvider) {
       publicPath = await storageProvider.getFileUrl(avatarPath)
     }
 
-    // Update user record with the public URL
     await prisma.user.update({
       where: { id: session.user.id },
       data: {

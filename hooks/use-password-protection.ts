@@ -39,7 +39,6 @@ export function usePasswordProtection(options: PasswordProtectionOptions = {}) {
       )
 
       if (response.ok) {
-        // Password verified
         if (options.onVerify) {
           options.onVerify(password)
         }

@@ -12,7 +12,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's upload token and name
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { uploadToken: true, name: true },
@@ -34,11 +33,9 @@ export async function GET() {
       )
     }
 
-    // Normalize the base URL to remove trailing slashes
     const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
 
     try {
-      // Validate the URL is properly formatted
       new URL(normalizedBaseUrl)
     } catch {
       return NextResponse.json(
@@ -47,7 +44,6 @@ export async function GET() {
       )
     }
 
-    // Generate ShareX configuration
     const config = {
       Version: '15.0.0',
       Name: 'Flare',
@@ -65,12 +61,10 @@ export async function GET() {
       ErrorMessage: '{json:error}',
     }
 
-    // Use sanitized username for the filename
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
       .replace(/[^a-z0-9-]/g, '-')
 
-    // Return the configuration file
     return new NextResponse(JSON.stringify(config, null, 2), {
       headers: {
         'Content-Disposition': `attachment; filename="${sanitizedName}-sharex.sxcu"`,

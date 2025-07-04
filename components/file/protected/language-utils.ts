@@ -16,7 +16,6 @@ import { wast } from '@codemirror/lang-wast'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
 
-// Function to get the appropriate language extension for CodeMirror
 export function getLanguageExtension(language: string) {
   switch (language) {
     case 'html':
@@ -63,6 +62,6 @@ export function getLanguageExtension(language: string) {
     case 'less':
       return less()
     default:
-      return javascript() // Default to javascript for unknown languages
+      return javascript()
   }
 }

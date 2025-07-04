@@ -40,18 +40,15 @@ export async function GET(
       return new NextResponse('Not an image', { status: 400 })
     }
 
-    // Get the file from storage provider
     const storageProvider = await getStorageProvider()
     const fileStream = await storageProvider.getFileStream(file.path)
 
-    // Convert stream to buffer
     const chunks: Buffer[] = []
     for await (const chunk of fileStream) {
       chunks.push(Buffer.from(chunk))
     }
     const fileBuffer = Buffer.concat(chunks)
 
-    // Generate thumbnail
     const imageBuffer = await sharp(fileBuffer)
       .resize(400, 400, {
         fit: 'cover',
@@ -59,7 +56,6 @@ export async function GET(
       })
       .toBuffer()
 
-    // Return the optimized image with appropriate headers
     return new NextResponse(imageBuffer, {
       headers: {
         'Content-Type': file.mimeType,

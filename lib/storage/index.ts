@@ -36,7 +36,6 @@ export async function getStorageProvider(): Promise<StorageProvider> {
   return storageProvider
 }
 
-// Reset the storage provider when settings change
 export function invalidateStorageProvider(): void {
   storageProvider = null
 }

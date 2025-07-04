@@ -11,7 +11,6 @@ export function useUploadToken(): UploadToken {
   const { toast } = useToast()
 
   useEffect(() => {
-    // Fetch upload token on component mount
     const fetchToken = async () => {
       try {
         const response = await fetch('/api/profile/upload-token')

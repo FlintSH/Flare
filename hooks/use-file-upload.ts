@@ -51,7 +51,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   }, [])
 
   useEffect(() => {
-    // Clean up preview URLs when component unmounts
     return () => {
       for (const file of files) {
         if (file.preview) {
@@ -94,7 +93,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
   const uploadFileInChunks = async (file: FileWithPreview, index: number) => {
     try {
-      // Initialize multipart upload
       const initResponse = await fetch('/api/files/chunks', {
         method: 'POST',
         headers: {
@@ -119,12 +117,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         throw new Error('Failed to initialize upload')
       }
 
-      const chunkSize = 5 * 1024 * 1024 // 5MB minimum for S3
+      const chunkSize = 5 * 1024 * 1024
       const chunks: Blob[] = []
       const totalChunks = Math.ceil(file.size / chunkSize)
       const chunkProgress = new Map<number, number>()
 
-      // Split file into chunks
       for (let i = 0; i < totalChunks; i++) {
         const start = i * chunkSize
         const end = Math.min(start + chunkSize, file.size)
@@ -139,7 +136,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         updateFileProgress(index, totalUploaded, Date.now())
       }
 
-      // Upload chunks in batches of 3
       const uploadedParts: { ETag: string; PartNumber: number }[] = []
       const batchSize = 3
       let completed = 0
@@ -157,7 +153,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           formData.append('key', fileKey)
           formData.append('chunk', chunk)
 
-          // Track chunk upload progress
           const xhr = new XMLHttpRequest()
           await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
@@ -205,7 +200,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         await Promise.all(promises)
       }
 
-      // Complete the multipart upload
       const completeResponse = await fetch(
         `/api/files/chunks/${uploadId}/complete`,
         {
@@ -283,7 +277,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         const file = files[i]
         let response: UploadResponse
 
-        // Use chunked upload for files larger than 10MB
         if (file.size > 10 * 1024 * 1024) {
           response = await uploadFileInChunks(file, i)
         } else {

@@ -160,10 +160,8 @@ function SettingsSkeleton() {
   )
 }
 
-// Safe URL validation function
 const isSafeUrl = (url: string | null): url is string => {
   if (!url) return false
-  // Only allow blob URLs created by URL.createObjectURL
   return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
 }
 
@@ -197,7 +195,6 @@ export default function SettingsPage() {
     try {
       setIsSaving(true)
 
-      // Check if we have a pending favicon file to upload
       if (pendingFaviconFile) {
         const formData = new FormData()
         formData.append('file', pendingFaviconFile)
@@ -211,12 +208,10 @@ export default function SettingsPage() {
           throw new Error('Failed to upload favicon')
         }
 
-        // Update the working config with the new favicon path
         const newConfig = { ...workingConfig }
         newConfig.settings.appearance.favicon = '/api/favicon'
         setWorkingConfig(newConfig)
 
-        // Update the favicon in the browser
         const link = document.querySelector(
           "link[rel*='icon']"
         ) as HTMLLinkElement
@@ -225,7 +220,6 @@ export default function SettingsPage() {
           link.type = 'image/png'
         }
 
-        // Clear the pending favicon and preview
         setPendingFaviconFile(null)
         if (faviconPreviewUrl) {
           URL.revokeObjectURL(faviconPreviewUrl)
@@ -243,7 +237,6 @@ export default function SettingsPage() {
 
       if (!response.ok) throw new Error()
 
-      // Update the saved config to match the working config
       setSavedConfig(JSON.parse(JSON.stringify(workingConfig)))
 
       toast({
@@ -265,16 +258,13 @@ export default function SettingsPage() {
   const discardChanges = () => {
     if (!savedConfig) return
 
-    // If there was a pending favicon preview, revoke it
     if (faviconPreviewUrl) {
       URL.revokeObjectURL(faviconPreviewUrl)
       setFaviconPreviewUrl(null)
     }
 
-    // Clear pending favicon
     setPendingFaviconFile(null)
 
-    // Reset working config to match saved config
     setWorkingConfig(JSON.parse(JSON.stringify(savedConfig)))
 
     toast({
@@ -504,7 +494,7 @@ export default function SettingsPage() {
   return (
     <div className="container mx-auto py-8 px-4 pb-32">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/*  header */}
+        {}
         <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
           <div className="relative p-8">
@@ -515,7 +505,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/*  settings container */}
+        {}
         <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
           <div className="relative p-8">
@@ -1316,7 +1306,6 @@ export default function SettingsPage() {
                                 return
                               }
 
-                              // Validate file type to ensure it's an image/png
                               if (file.type !== 'image/png') {
                                 toast({
                                   title: 'Invalid file type',
@@ -1327,16 +1316,13 @@ export default function SettingsPage() {
                               }
 
                               try {
-                                // If there was a previous preview, revoke it
                                 if (faviconPreviewUrl) {
                                   URL.revokeObjectURL(faviconPreviewUrl)
                                 }
 
-                                // Create a preview URL for the new favicon
                                 const previewUrl = URL.createObjectURL(file)
                                 setFaviconPreviewUrl(previewUrl)
 
-                                // Store the file for upload on save
                                 setPendingFaviconFile(file)
 
                                 toast({

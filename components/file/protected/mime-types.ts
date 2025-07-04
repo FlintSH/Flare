@@ -1,11 +1,8 @@
-// Comprehensive MIME type mappings
 export const CODE_FILE_TYPES: Record<string, string> = {
-  // Web Technologies
   'text/html': 'html',
   'application/html': 'html',
   'text/css': 'css',
   'application/css': 'css',
-  // JavaScript and variants
   'text/javascript': 'javascript',
   'application/javascript': 'javascript',
   'application/x-javascript': 'javascript',
@@ -15,7 +12,6 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'text/jsx': 'jsx',
   'application/jsx': 'jsx',
   'text/x-jsx': 'jsx',
-  // TypeScript and variants
   'application/typescript': 'typescript',
   'text/typescript': 'typescript',
   'text/x-typescript': 'typescript',
@@ -24,26 +20,21 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'application/tsx': 'tsx',
   'text/x-tsx': 'tsx',
   'application/x-tiled-tsx': 'tsx',
-  // JSON and variants
   'application/json': 'json',
   'text/json': 'json',
   'application/x-json': 'json',
   'application/manifest+json': 'json',
   'application/ld+json': 'json',
-  // Python
   'text/x-python': 'python',
   'application/x-python': 'python',
   'application/x-python-code': 'python',
   'text/x-python-script': 'python',
-  // PHP
   'application/x-httpd-php': 'php',
   'text/x-php': 'php',
   'application/php': 'php',
-  // Ruby
   'text/x-ruby': 'ruby',
   'application/x-ruby': 'ruby',
   'text/ruby': 'ruby',
-  // System/Low Level
   'text/x-sh': 'bash',
   'text/x-shellscript': 'shell',
   'application/x-sh': 'bash',
@@ -69,7 +60,6 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'application/x-perl': 'perl',
   'text/x-lua': 'lua',
   'application/x-lua': 'lua',
-  // Data/Config
   'text/xml': 'xml',
   'application/xml': 'xml',
   'text/x-yaml': 'yaml',
@@ -81,16 +71,13 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'text/ini': 'ini',
   'text/x-properties': 'properties',
   'text/x-java-properties': 'properties',
-  // CSV
   'text/csv': 'csv',
   'application/csv': 'csv',
   'text/x-csv': 'csv',
-  // Database
   'text/x-sql': 'sql',
   'application/sql': 'sql',
   'text/x-mysql': 'sql',
   'text/x-pgsql': 'sql',
-  // Markup
   'text/markdown': 'markdown',
   'text/x-markdown': 'markdown',
   'text/md': 'markdown',
@@ -99,7 +86,6 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'text/x-latex': 'latex',
   'application/x-latex': 'latex',
   'application/x-tex': 'latex',
-  // Other Languages
   'text/x-haskell': 'haskell',
   'text/x-literate-haskell': 'haskell',
   'text/x-erlang': 'erlang',
@@ -115,29 +101,22 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'text/x-groovy': 'groovy',
   'text/groovy': 'groovy',
   'text/x-julia': 'julia',
-  // Web Assembly
   'text/x-wasm': 'wasm',
   'application/wasm': 'wasm',
-  // GraphQL
   'application/graphql': 'graphql',
   'text/x-graphql': 'graphql',
-  // Protocol Buffers
   'text/x-protobuf': 'protobuf',
   'application/x-protobuf': 'protobuf',
-  // Docker
   'text/x-dockerfile': 'dockerfile',
   'application/vnd.docker.dockerfile': 'dockerfile',
-  // Git
   'text/x-git-config': 'git',
   'text/x-git': 'git',
-  // CSS Variants
   'text/x-scss': 'scss',
   'text/scss': 'scss',
   'text/x-sass': 'sass',
   'text/sass': 'sass',
   'text/x-less': 'less',
   'text/less': 'less',
-  // Template Languages
   'text/x-handlebars': 'handlebars',
   'text/x-mustache': 'mustache',
   'text/x-ejs': 'javascript',
@@ -154,7 +133,6 @@ export const CODE_FILE_TYPES: Record<string, string> = {
   'text/jinja': 'jinja2',
   'text/x-velocity': 'velocity',
   'text/velocity': 'velocity',
-  // Assembly
   'text/x-asm': 'asm6502',
   'text/x-nasm': 'nasm',
   'text/x-masm': 'nasm',
@@ -187,5 +165,4 @@ export const AUDIO_FILE_TYPES = [
   'audio/x-wav',
 ]
 
-// Constants
-export const MAX_CSV_SIZE = 1024 * 1024 // 1MB limit for CSV preview
+export const MAX_CSV_SIZE = 1024 * 1024

@@ -4,7 +4,6 @@ export async function ThemeInitializer() {
   const config = await getConfig()
   const customColors = config.settings.appearance.customColors || {}
 
-  // Convert the colors to CSS custom properties
   const cssVariables = Object.entries(customColors)
     .map(([key, value]) => {
       const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)

@@ -40,7 +40,6 @@ export async function GET(
       )
     }
 
-    // make sure its an image
     if (!file.mimeType.startsWith('image/')) {
       return NextResponse.json(
         {
@@ -54,7 +53,6 @@ export async function GET(
     const session = await getServerSession(authOptions)
     const isOwner = session?.user?.id === file.userId
 
-    // Check access permissions
     if (file.visibility === 'PRIVATE' && !isOwner) {
       return NextResponse.json(
         {
@@ -65,7 +63,6 @@ export async function GET(
       )
     }
 
-    // Check password if set and user is not the owner
     if (file.password && !isOwner) {
       if (!providedPassword) {
         return NextResponse.json(
@@ -89,11 +86,9 @@ export async function GET(
       }
     }
 
-    // If OCR hasn't been processed yet or was processed but failed (no text), process it now
     if (!file.isOcrProcessed || (file.isOcrProcessed && !file.ocrText)) {
       const result = await processImageOCR(file.path, id)
 
-      // Only update DB if OCR was successful
       if (result.success && result.text) {
         await prisma.file.update({
           where: { id },
@@ -108,7 +103,6 @@ export async function GET(
       return NextResponse.json(result)
     }
 
-    // Return existing OCR text
     return NextResponse.json({
       success: true,
       text: file.ocrText,

@@ -20,9 +20,6 @@ import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
-// Helper function to get user from either session or upload token
-// This has been moved to lib/auth/api-auth.ts
-
 export async function POST(req: Request) {
   let filePath = ''
 
@@ -32,7 +29,6 @@ export async function POST(req: Request) {
 
     const formData = await req.formData()
 
-    // Parse and validate form data
     const uploadedFile = formData.get('file') as File
     const visibility =
       (formData.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC'
@@ -48,7 +44,6 @@ export async function POST(req: Request) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
 
-    // Get config to check max upload size and quotas
     const config = await getConfig()
     const maxSize = config.settings.general.storage.maxUploadSize
     const maxBytes =
@@ -63,7 +58,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Check quota if enabled (skip for admins)
     if (quotasEnabled && user.role !== 'ADMIN') {
       const quotaMB =
         defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
@@ -77,18 +71,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Get unique filename
     const { urlSafeName, displayName } = await getUniqueFilename(
       join('uploads', user.urlId),
       uploadedFile.name,
       user.randomizeFileUrls
     )
 
-    // Construct paths
     filePath = join('uploads', user.urlId, urlSafeName)
     const urlPath = `/${user.urlId}/${urlSafeName}`
 
-    // Get storage provider and upload file
     const storageProvider = await getStorageProvider()
     const bytes = await uploadedFile.arrayBuffer()
     await storageProvider.uploadFile(
@@ -97,7 +88,6 @@ export async function POST(req: Request) {
       uploadedFile.type
     )
 
-    // Create database record and update storage usage in a transaction
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({
         data: {
@@ -124,14 +114,12 @@ export async function POST(req: Request) {
       return file
     })
 
-    // If it's an image, trigger OCR processing in the background
     if (uploadedFile.type.startsWith('image/')) {
       processImageOCR(filePath, fileRecord.id).catch((error) => {
         console.error('Background OCR processing failed:', error)
       })
     }
 
-    // Ensure URL has protocol and handle trailing slashes
     const baseUrl =
       process.env.NODE_ENV === 'development'
         ? 'http://localhost:3000'
@@ -149,7 +137,6 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('Upload error:', error)
 
-    // Clean up the file if it was created
     if (filePath) {
       try {
         const storageProvider = await getStorageProvider()
@@ -172,7 +159,6 @@ export async function GET(request: Request) {
     const { user, response } = await requireAuth(request)
     if (response) return response
 
-    // parse pagination params from URL
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '24')
@@ -184,7 +170,6 @@ export async function GET(request: Request) {
     const visibilityFilters = searchParams.get('visibility')?.split(',') || []
     const offset = (page - 1) * limit
 
-    // Build where clause for filtering
     const where: Prisma.FileWhereInput = {
       userId: user.id,
     }
@@ -225,7 +210,6 @@ export async function GET(request: Request) {
         if (filter === 'hasPassword') {
           visibilityConditions.push({ password: { not: null } })
         } else {
-          // Convert visibility filter to uppercase to match Prisma enum
           visibilityConditions.push({
             visibility: filter.toUpperCase() as 'PUBLIC' | 'PRIVATE',
           })
@@ -235,12 +219,10 @@ export async function GET(request: Request) {
       conditions.push({ OR: visibilityConditions })
     }
 
-    // Add conditions to where clause if any exist
     if (conditions.length > 0) {
       where.AND = conditions
     }
 
-    // Build orderBy based on sortBy parameter
     const orderBy: Prisma.FileOrderByWithRelationInput = {}
     switch (sortBy) {
       case 'oldest':
@@ -255,14 +237,12 @@ export async function GET(request: Request) {
       case 'name':
         orderBy.name = 'asc'
         break
-      default: // "newest"
+      default:
         orderBy.uploadedAt = 'desc'
     }
 
-    // Get total count for pagination
     const total = await prisma.file.count({ where })
 
-    // Get files with pagination
     const files = await prisma.file.findMany({
       where,
       orderBy,
@@ -287,7 +267,6 @@ export async function GET(request: Request) {
       },
     })
 
-    // Transform response to match expected type
     const filesList = files.map((file) => ({
       ...file,
       hasPassword: Boolean(file.password),

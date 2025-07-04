@@ -13,17 +13,13 @@ import { isAbsolute, join, normalize } from 'path'
 
 import type { RangeOptions, StorageProvider } from '../types'
 
-// Utility function to validate storage paths
 function validateStoragePath(path: string): string {
-  // Normalize the path and convert to forward slashes
   const normalizedPath = normalize(path).replace(/\\/g, '/')
 
-  // Ensure the path is relative and doesn't try to traverse up
   if (isAbsolute(normalizedPath) || normalizedPath.includes('..')) {
     throw new Error('Invalid storage path: Path traversal detected')
   }
 
-  // Ensure the path is within the allowed storage directories
   if (
     !normalizedPath.startsWith('uploads/') &&
     !normalizedPath.startsWith('public/')
@@ -45,7 +41,6 @@ export class LocalStorageProvider implements StorageProvider {
     }
   >()
 
-  // Track multipart uploads in memory
   private multipartUploads = new Map<
     string,
     {
@@ -65,13 +60,10 @@ export class LocalStorageProvider implements StorageProvider {
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
 
-    // Generate a unique upload ID
     const uploadId = `local-${Date.now()}-${Math.random().toString(36).substring(2)}`
 
-    // Initialize the write stream
     const stream = createWriteStream(fullPath)
 
-    // Store upload metadata
     this.multipartUploads.set(uploadId, {
       path: fullPath,
       mimeType,
@@ -93,20 +85,16 @@ export class LocalStorageProvider implements StorageProvider {
       throw new Error('Upload not found')
     }
 
-    // Store the part in memory
     upload.parts.set(partNumber, data)
 
-    // Generate an etag for the part
     const etag = `"${uploadId}-${partNumber}-${data.length}"`
 
-    // Write all consecutive parts that are available
     const parts = Array.from(upload.parts.entries()).sort(([a], [b]) => a - b)
 
     let nextExpectedPart = 1
     for (const [partNum, partData] of parts) {
       if (partNum !== nextExpectedPart) break
 
-      // Write the part to the file
       await new Promise<void>((resolve, reject) => {
         upload.stream.write(partData, (error) => {
           if (error) reject(error)
@@ -114,7 +102,6 @@ export class LocalStorageProvider implements StorageProvider {
         })
       })
 
-      // Remove the part from memory after writing
       upload.parts.delete(partNum)
       nextExpectedPart++
     }
@@ -127,14 +114,12 @@ export class LocalStorageProvider implements StorageProvider {
     uploadId: string,
     partNumber: number
   ): Promise<string> {
-    // Just returning a dummy url for now (since local storage doesn't need it)
     return `local://${uploadId}/${partNumber}`
   }
 
   async completeMultipartUpload(
     path: string,
     uploadId: string,
-    /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
     _parts: { ETag: string; PartNumber: number }[]
   ): Promise<void> {
     const upload = this.multipartUploads.get(uploadId)
@@ -143,7 +128,6 @@ export class LocalStorageProvider implements StorageProvider {
     }
 
     try {
-      // Ensure all parts have been written
       if (upload.parts.size > 0) {
         const remainingParts = Array.from(upload.parts.entries()).sort(
           ([a], [b]) => a - b
@@ -159,7 +143,6 @@ export class LocalStorageProvider implements StorageProvider {
         }
       }
 
-      // Close the write stream
       await new Promise<void>((resolve, reject) => {
         upload.stream.end((error: Error | null | undefined) => {
           if (error) reject(error)
@@ -167,7 +150,6 @@ export class LocalStorageProvider implements StorageProvider {
         })
       })
     } finally {
-      // Clean up
       this.multipartUploads.delete(uploadId)
     }
   }
@@ -175,7 +157,7 @@ export class LocalStorageProvider implements StorageProvider {
   async uploadFile(
     file: Buffer,
     path: string,
-    mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
+    _mimeType: string
   ): Promise<void> {
     const validPath = validateStoragePath(path)
     const fullPath = join(process.cwd(), validPath)
@@ -227,7 +209,7 @@ export class LocalStorageProvider implements StorageProvider {
   async uploadChunkedFile(
     chunksDir: string,
     targetPath: string,
-    _mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
+    _mimeType: string
   ): Promise<void> {
     const fullPath = targetPath.startsWith('public/')
       ? targetPath
@@ -288,7 +270,7 @@ export class LocalStorageProvider implements StorageProvider {
 
   async createWriteStream(
     path: string,
-    mimeType: string /* eslint-disable-line @typescript-eslint/no-unused-vars */
+    _mimeType: string
   ): Promise<NodeWritable> {
     const validPath = validateStoragePath(path)
     const fullPath = join(process.cwd(), validPath)
@@ -305,10 +287,8 @@ export class LocalStorageProvider implements StorageProvider {
       ? newPath
       : join(process.cwd(), newPath)
 
-    // Create the new directory if it doesn't exist
     await mkdir(fullNewPath, { recursive: true })
 
-    // Move the directory
     await rename(fullOldPath, fullNewPath)
   }
 }

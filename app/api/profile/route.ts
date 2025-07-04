@@ -15,7 +15,6 @@ export async function PUT(req: Request) {
 
     const json = await req.json()
 
-    // Validate request body
     const result = UpdateProfileSchema.safeParse(json)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
@@ -23,7 +22,6 @@ export async function PUT(req: Request) {
 
     const body = result.data
 
-    // If email is being changed, check if it's already taken
     if (body.email) {
       const existingUser = await prisma.user.findUnique({
         where: {
@@ -39,7 +37,6 @@ export async function PUT(req: Request) {
       }
     }
 
-    // If password is being changed, verify current password
     if (body.newPassword) {
       if (!body.currentPassword) {
         return apiError('Current password is required', HTTP_STATUS.BAD_REQUEST)
@@ -64,7 +61,6 @@ export async function PUT(req: Request) {
       }
     }
 
-    // Update user data
     const updateData: Prisma.UserUpdateInput = {}
     if (body.name) updateData.name = body.name
     if (body.email) updateData.email = body.email
@@ -97,7 +93,6 @@ export async function DELETE(req: Request) {
     const { user, response } = await requireAuth(req)
     if (response) return response
 
-    // Get user's files to nuke them from storage
     const userData = await prisma.user.findUnique({
       where: { id: user.id },
       include: {
@@ -121,7 +116,6 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // Delete user's avatar if they have one
     if (userData.image?.startsWith('/avatars/')) {
       try {
         await unlink(join(process.cwd(), 'public', userData.image))
@@ -130,7 +124,6 @@ export async function DELETE(req: Request) {
       }
     }
 
-    // Delete user from database and all their data
     await prisma.user.delete({
       where: { id: user.id },
     })

@@ -7,11 +7,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 
-// Helper function to encode filename for Content-Disposition header
 function encodeFilename(filename: string): string {
-  // First encode as URI component to handle special characters
   const encoded = encodeURIComponent(filename)
-  // Then wrap in quotes and escape quotes and backslashes in filename
   return `"${encoded.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
@@ -26,7 +23,6 @@ export async function GET(
     const url = new URL(req.url)
     const providedPassword = url.searchParams.get('password')
 
-    // Find the file
     const file = await prisma.file.findUnique({
       where: { urlPath },
     })
@@ -35,7 +31,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check if file is accessible
     const isOwner = session?.user?.id === file.userId
     const isPrivate = file.visibility === 'PRIVATE' && !session?.user
 
@@ -43,7 +38,6 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    // Check password if set
     if (file.password && !isOwner) {
       if (!providedPassword) {
         return new Response(null, { status: 401 })
@@ -58,7 +52,6 @@ export async function GET(
     const storageProvider = await getStorageProvider()
     const range = req.headers.get('range')
 
-    // Get file size for range calculations
     const size = await storageProvider.getFileSize(file.path)
 
     if (range) {
@@ -68,7 +61,6 @@ export async function GET(
       const chunkSize = end - start + 1
 
       if (storageProvider instanceof S3StorageProvider) {
-        // For S3, we'll still use direct URLs but include the range header
         const fileUrl = await storageProvider.getFileUrl(file.path)
         const response = await fetch(fileUrl, {
           headers: {
@@ -109,7 +101,6 @@ export async function GET(
       })
     }
 
-    // No range requested
     if (storageProvider instanceof S3StorageProvider) {
       const stream = await storageProvider.getFileStream(file.path)
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -122,7 +113,6 @@ export async function GET(
       })
     }
 
-    // For local files, serve entire file
     const stream = await storageProvider.getFileStream(file.path)
     const headers = {
       'Accept-Ranges': 'bytes',

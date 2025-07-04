@@ -44,7 +44,7 @@ export function ProtectedFile({
           authGuardVerifiedPassword || initialVerifiedPassword
         return (
           <div className="space-y-4">
-            {/* File content - natural sizing */}
+            {}
             <div className="flex items-center justify-center px-2">
               <FileContent
                 file={file}
@@ -52,7 +52,7 @@ export function ProtectedFile({
               />
             </div>
 
-            {/* Actions section - positioned close to content */}
+            {}
             <div className="flex items-center justify-center px-6 pb-4">
               <FileActions
                 urlPath={sanitizeUrl(file.urlPath)}

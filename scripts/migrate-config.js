@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
@@ -82,7 +81,6 @@ async function migrateConfig() {
       where: { key: 'flare_config' },
     })
 
-    // If no config exists, create default
     if (!config) {
       console.log('No config found, creating default config...')
       await prisma.config.create({
@@ -95,7 +93,6 @@ async function migrateConfig() {
       return
     }
 
-    // Add OCR settings if they don't exist
     const currentConfig = config.value
     if (!currentConfig.settings?.general?.ocr) {
       currentConfig.settings.general.ocr = {

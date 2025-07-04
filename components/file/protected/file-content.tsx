@@ -35,7 +35,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     rawUrl: string
   }>()
 
-  // Set up URLs when password changes
   useEffect(() => {
     const fileUrl = DOMPurify.sanitize(
       `/api/files${sanitizeUrl(file.urlPath)}${verifiedPassword ? `?password=${verifiedPassword}` : ''}`
@@ -46,7 +45,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     setFileUrls({ fileUrl, rawUrl })
   }, [file.urlPath, verifiedPassword])
 
-  // Fetch code content for syntax highlighting if needed
   const fetchCodeContent = useCallback(async () => {
     if (CODE_FILE_TYPES[file.mimeType] && !codeContent && fileUrls) {
       try {
@@ -59,7 +57,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     }
   }, [file.mimeType, codeContent, fileUrls])
 
-  // Fetch plain text content
   useEffect(() => {
     if (TEXT_FILE_TYPES.includes(file.mimeType) && !codeContent && fileUrls) {
       fetch(fileUrls.fileUrl)
@@ -69,7 +66,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     }
   }, [file.mimeType, codeContent, fileUrls])
 
-  // Call fetchCodeContent when dependencies change
   useEffect(() => {
     if (CODE_FILE_TYPES[file.mimeType] && fileUrls) {
       fetchCodeContent()
@@ -86,12 +82,10 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
 
   const { fileUrl } = fileUrls
 
-  // Image files
   if (file.mimeType.startsWith('image/')) {
     return <ImageViewer url={fileUrl} alt={file.name} />
   }
 
-  // CSV files
   if (
     file.mimeType.includes('csv') ||
     file.name.toLowerCase().endsWith('.csv')
@@ -105,12 +99,10 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     )
   }
 
-  // PDF files
   if (file.mimeType === 'application/pdf') {
     return <PdfViewer url={fileUrl} title={file.name} />
   }
 
-  // Video files
   if (VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
     return (
       <VideoViewer
@@ -121,12 +113,10 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     )
   }
 
-  // Audio files
   if (AUDIO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
     return <AudioViewer url={fileUrl} mimeType={file.mimeType} />
   }
 
-  // Code files
   if (CODE_FILE_TYPES[file.mimeType]) {
     if (!codeContent) {
       return (
@@ -143,7 +133,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     )
   }
 
-  // Text files
   if (TEXT_FILE_TYPES.includes(file.mimeType)) {
     if (!codeContent) {
       return (
@@ -155,7 +144,6 @@ export function FileContent({ file, verifiedPassword }: FileContentProps) {
     return <CodeViewer content={codeContent} language="text" />
   }
 
-  // Default fallback for unsupported file types
   return (
     <div className="w-full flex flex-col items-center justify-center p-8 text-center">
       <p className="text-muted-foreground mb-2">

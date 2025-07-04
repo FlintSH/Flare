@@ -31,7 +31,6 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
   const isOwner = session?.user?.id === file.userId
   const isPrivate = file.visibility === 'PRIVATE' && !session?.user
 
-  // Check URL parameters for password
   useEffect(() => {
     if (!isOwner && file.password) {
       const searchParams = new URLSearchParams(window.location.search)
@@ -47,10 +46,10 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
   if (isPrivate) {
     return (
       <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
-        {/* Gradient overlay */}
+        {}
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
 
-        {/* Content */}
+        {}
         <div className="relative flex flex-col items-center justify-center gap-4 p-8">
           <LockIcon className="h-12 w-12 text-muted-foreground" />
           <p className="text-center text-muted-foreground">
@@ -64,7 +63,6 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
     )
   }
 
-  // Only show password prompt if not owner and password is required
   if (file.password && !isOwner && !isVerified) {
     const verifyPassword = async (password: string) => {
       const sanitizedPassword = DOMPurify.sanitize(password)
@@ -85,8 +83,6 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
     )
   }
 
-  // Clone children with the verified password prop
-  // We need to use React.Children.map to pass the verifiedPassword to children
   if (typeof children === 'function') {
     return <>{children(verifiedPassword)}</>
   }
@@ -94,9 +90,7 @@ export function AuthGuard({ children, file }: AuthGuardProps) {
   return (
     <>
       {React.Children.map(children, (child) => {
-        // Check if child is a valid React element
         if (React.isValidElement(child)) {
-          // Clone the element with additional props (original logic before the typeof child.type check)
           return React.cloneElement(child, {
             verifiedPassword,
           } as React.Attributes)

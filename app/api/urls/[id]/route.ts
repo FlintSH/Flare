@@ -12,7 +12,6 @@ export async function DELETE(
 
     const { id } = await params
 
-    // Find the URL and check ownership
     const url = await prisma.shortenedUrl.findUnique({
       where: { id },
       select: { userId: true },
@@ -26,12 +25,10 @@ export async function DELETE(
       return apiError('Unauthorized', HTTP_STATUS.FORBIDDEN)
     }
 
-    // Delete the URL
     await prisma.shortenedUrl.delete({
       where: { id },
     })
 
-    // Return 204 No Content
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
     console.error('URL deletion error:', error)

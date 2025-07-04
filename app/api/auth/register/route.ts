@@ -14,13 +14,11 @@ const registerSchema = z.object({
   name: z.string().min(2),
 })
 
-// Generate a URL-safe ID that's 5 characters long
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
   return nanoid(5)
     .split('')
     .map((char) => {
-      // map to our custom one
       const index = Math.floor((alphabet.length * char.charCodeAt(0)) / 256)
       return alphabet[index]
     })
@@ -29,7 +27,6 @@ function generateUrlId() {
 
 export async function POST(req: Request) {
   try {
-    // Check if registrations are enabled
     const config = await getConfig()
     if (!config.settings.general.registrations.enabled) {
       return new NextResponse(null, { status: 404 })
@@ -64,7 +61,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check if this is the first user
     const userCount = await prisma.user.count()
     const isFirstUser = userCount === 0
 

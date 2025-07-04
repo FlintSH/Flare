@@ -103,7 +103,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Delete file from storage first
     try {
       const storageProvider = await getStorageProvider()
       await storageProvider.deleteFile(file.path)
@@ -111,7 +110,6 @@ export async function DELETE(
       console.error('Error deleting file from storage:', error)
     }
 
-    // Delete from database and update storage usage in a transaction (regardless of if storage deletion worked or not)
     await prisma.$transaction(async (tx) => {
       await tx.file.delete({
         where: { id: fileId },

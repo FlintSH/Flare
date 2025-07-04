@@ -13,13 +13,9 @@ export type AuthenticatedUser = {
   randomizeFileUrls: boolean
 }
 
-/**
- * Get authenticated user from session or upload token
- */
 export async function getAuthenticatedUser(
   req: Request
 ): Promise<AuthenticatedUser | null> {
-  // First try session auth
   const session = await getServerSession(authOptions)
   if (session?.user) {
     const user = await prisma.user.findUnique({
@@ -35,7 +31,6 @@ export async function getAuthenticatedUser(
     return user
   }
 
-  // Then try token auth
   const authHeader = req.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
@@ -55,9 +50,6 @@ export async function getAuthenticatedUser(
   return null
 }
 
-/**
- * Ensure user is authenticated
- */
 export async function requireAuth(req: Request) {
   const user = await getAuthenticatedUser(req)
   if (!user) {
@@ -69,9 +61,6 @@ export async function requireAuth(req: Request) {
   return { user, response: null }
 }
 
-/**
- * Ensure user is admin
- */
 export async function requireAdmin() {
   const session = await getServerSession(authOptions)
 
