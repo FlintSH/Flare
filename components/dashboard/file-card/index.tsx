@@ -266,7 +266,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                     asChild
                   >
                     <a
-                      href={`/api/files${sanitizeUrl(file.urlPath)}?download=true`}
+                      href={`/api/files/${file.id}/download`}
                       download={file.name}
                     >
                       <Download className="h-4 w-4" />

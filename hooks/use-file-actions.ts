@@ -46,13 +46,27 @@ export function useFileActions(options: FileActionsOptions = {}) {
   }
 
   const download = () => {
-    if (!options.urlPath || !options.name) return
+    if (!options.name) return
 
     const baseUrl = window.location.origin
-    let url = `${baseUrl}${options.urlPath}/raw`
+    let url: string
 
-    if (options.verifiedPassword) {
-      url += `?password=${encodeURIComponent(options.verifiedPassword)}`
+    // Use the dedicated download endpoint if fileId is available
+    if (options.fileId) {
+      url = `${baseUrl}/api/files/${options.fileId}/download`
+
+      if (options.verifiedPassword) {
+        url += `?password=${encodeURIComponent(options.verifiedPassword)}`
+      }
+    } else if (options.urlPath) {
+      // Fallback to raw endpoint if no fileId
+      url = `${baseUrl}${options.urlPath}/raw`
+
+      if (options.verifiedPassword) {
+        url += `?password=${encodeURIComponent(options.verifiedPassword)}`
+      }
+    } else {
+      return
     }
 
     // Create a temporary link and trigger download
@@ -62,14 +76,6 @@ export function useFileActions(options: FileActionsOptions = {}) {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-
-    // Register download if fileId provided
-    if (options.fileId) {
-      // Track download asynchronously, don't wait for response
-      fetch(`/api/files/${options.fileId}/download`, { method: 'POST' }).catch(
-        (err) => console.error('Failed to track download:', err)
-      )
-    }
   }
 
   const openRaw = () => {
