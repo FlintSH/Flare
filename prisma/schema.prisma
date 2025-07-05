@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,53 +8,53 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          UserRole  @default(USER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  storageUsed   Float     @default(0)  // Total storage used in megabytes
-  sessionVersion Int      @default(1)   // Used to invalidate all sessions
-  files         File[]
-  vanityId      String?   @unique // TODO: For custom URLs
-  urlId         String    @unique // 5-character random ID for URLs
-  shortenedUrls ShortenedUrl[]
-  uploadToken   String    @unique // Permanent token for upload authentication
-  randomizeFileUrls Boolean @default(false) // Whether to randomize file URLs
+  id                String         @id @default(cuid())
+  name              String?
+  email             String?        @unique
+  emailVerified     DateTime?
+  image             String?
+  password          String?
+  role              UserRole       @default(USER)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  storageUsed       Float          @default(0)
+  sessionVersion    Int            @default(1)
+  vanityId          String?        @unique
+  urlId             String         @unique
+  uploadToken       String         @unique
+  randomizeFileUrls Boolean        @default(false)
+  files             File[]
+  shortenedUrls     ShortenedUrl[]
 }
 
 model File {
-  id            String    @id @default(cuid())
-  name          String    // Original filename with extension
-  urlPath       String    @unique // Full URL path: /{userUrlId}/{filename}
-  mimeType      String
-  size          Float     // File size in megabytes
-  views         Int       @default(0)
-  downloads     Int       @default(0)
-  visibility    FileVisibility @default(PUBLIC)
-  uploadedAt    DateTime  @default(now())
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  path          String    // Storage path
-  isOcrProcessed Boolean @default(false)
-  ocrText       String?   @db.Text
-  password      String?   // Optional password protection
-  isPaste       Boolean   @default(false)  // Whether this is a paste entry
-  ocrConfidence Float?
+  id             String         @id @default(cuid())
+  name           String
+  urlPath        String         @unique
+  mimeType       String
+  size           Float
+  visibility     FileVisibility @default(PUBLIC)
+  uploadedAt     DateTime       @default(now())
+  userId         String
+  path           String
+  isOcrProcessed Boolean        @default(false)
+  ocrText        String?
+  password       String?
+  isPaste        Boolean        @default(false)
+  ocrConfidence  Float?
+  views          Int            @default(0)
+  downloads      Int            @default(0)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ShortenedUrl {
-  id          String   @id @default(cuid())
-  shortCode   String   @unique
-  targetUrl   String
-  clicks      Int      @default(0)
-  createdAt   DateTime @default(now())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  shortCode String   @unique
+  targetUrl String
+  clicks    Int      @default(0)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Config {
@@ -77,4 +74,4 @@ enum UserRole {
 enum FileVisibility {
   PUBLIC
   PRIVATE
-} 
+}

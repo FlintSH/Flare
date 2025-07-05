@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-import { prisma } from '@/lib/database/prisma'
+import { checkSetupCompletion } from '@/lib/middleware/auth-checker'
 
 export async function GET() {
   const headersList = await headers()
@@ -13,8 +13,8 @@ export async function GET() {
   }
 
   try {
-    const userCount = await prisma.user.count()
-    return NextResponse.json({ completed: userCount > 0 })
+    const completed = await checkSetupCompletion()
+    return NextResponse.json({ completed })
   } catch (error) {
     console.error('Setup check error:', error)
     return NextResponse.json({ completed: false })

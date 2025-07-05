@@ -35,7 +35,6 @@ export interface StorageProvider {
     uploadId: string,
     parts: { ETag: string; PartNumber: number }[]
   ): Promise<void>
-  // Optional method for direct download URLs (S3 specific)
   getDownloadUrl?(path: string, filename?: string): Promise<string>
 }
 
