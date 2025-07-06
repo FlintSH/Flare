@@ -18,7 +18,15 @@ export interface PaginationInfo {
   limit: number
 }
 
-export type SortOption = 'newest' | 'oldest' | 'largest' | 'smallest'
+export type SortOption =
+  | 'newest'
+  | 'oldest'
+  | 'largest'
+  | 'smallest'
+  | 'most-viewed'
+  | 'least-viewed'
+  | 'most-downloaded'
+  | 'least-downloaded'
 
 export interface FileFilterOptions {
   page: number

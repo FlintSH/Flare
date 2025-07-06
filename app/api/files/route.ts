@@ -234,6 +234,18 @@ export async function GET(request: Request) {
       case 'smallest':
         orderBy.size = 'asc'
         break
+      case 'most-viewed':
+        orderBy.views = 'desc'
+        break
+      case 'least-viewed':
+        orderBy.views = 'asc'
+        break
+      case 'most-downloaded':
+        orderBy.downloads = 'desc'
+        break
+      case 'least-downloaded':
+        orderBy.downloads = 'asc'
+        break
       case 'name':
         orderBy.name = 'asc'
         break
