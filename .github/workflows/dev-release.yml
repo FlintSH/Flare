@@ -172,12 +172,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create rolling tag (force update if exists)
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f rolling
-          git push origin rolling --force
-          
           # Release notes
           cat << 'EOF' > release_notes.md
           **Rolling Release** - Latest commit: `${{ needs.get-commit-info.outputs.sha }}` (${{ needs.get-commit-info.outputs.date }})
@@ -199,10 +193,12 @@ jobs:
             gh release edit rolling \
               --title "Rolling Release (${{ needs.get-commit-info.outputs.sha }})" \
               --notes-file release_notes.md \
-              --prerelease
+              --prerelease \
+              --target ${{ github.sha }}
           else
             gh release create rolling \
               --title "Rolling Release (${{ needs.get-commit-info.outputs.sha }})" \
               --notes-file release_notes.md \
-              --prerelease
+              --prerelease \
+              --target ${{ github.sha }}
           fi 
