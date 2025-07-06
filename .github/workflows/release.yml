@@ -43,10 +43,96 @@ jobs:
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
 
-  docker:
-    name: Build and Push Docker Image
+  docker-amd64:
+    name: Build and Push Docker Image (AMD64)
     runs-on: ubuntu-latest
     needs: [check-version]
+    if: needs.check-version.outputs.should_release == 'true'
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker images (AMD64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-amd64
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:latest-amd64
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
+
+  docker-arm64:
+    name: Build and Push Docker Image (ARM64)
+    runs-on: ubuntu-24.04-arm
+    needs: [check-version]
+    if: needs.check-version.outputs.should_release == 'true'
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker images (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-arm64
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:latest-arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+  docker-manifest:
+    name: Create Multi-Architecture Manifest
+    runs-on: ubuntu-latest
+    needs: [check-version, docker-amd64, docker-arm64]
     if: needs.check-version.outputs.should_release == 'true'
     permissions:
       packages: write
@@ -56,15 +142,6 @@ jobs:
       ghcr_tags: ${{ steps.ghcr_meta.outputs.tags }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -96,23 +173,30 @@ jobs:
             type=raw,value=${{ needs.check-version.outputs.version }}
             type=raw,value=latest
 
-      - name: Build and push Docker images (multi-platform)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            ${{ steps.ghcr_meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create and push multi-arch manifests
+        run: |
+          # Docker Hub manifests
+          docker buildx imagetools create -t ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }} \
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64 \
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
+          
+          docker buildx imagetools create -t ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest \
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-amd64 \
+            ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-arm64
+          
+          # GitHub Container Registry manifests
+          docker buildx imagetools create -t ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }} \
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64 \
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
+          
+          docker buildx imagetools create -t ${{ env.GHCR_REGISTRY }}/flintsh/flare:latest \
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:latest-amd64 \
+            ${{ env.GHCR_REGISTRY }}/flintsh/flare:latest-arm64
 
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [check-version, docker]
+    needs: [check-version, docker-manifest]
     if: needs.check-version.outputs.should_release == 'true'
     permissions:
       contents: write
