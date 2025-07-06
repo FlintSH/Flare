@@ -1,37 +1,42 @@
 ---
-name: Bug report
+name: Bug Report
 about: Create a report to help Flare improve
 title: '[BUG] '
-labels: ''
+labels: ['bug']
 assignees: ''
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## Bug Description
 
-**To Reproduce**
-Steps to reproduce the behavior:
+<!-- Explain what the bug is, and how it effects Flare -->
+
+## Reproduction Steps
+
+<!-- Steps to reproduce the behavior -->
 
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
 4. See error
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## Expected Behavior
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+<!-- A clear and concise description of what you expected to happen -->
 
-**Desktop (please complete the following information):**
+## Actual Behavior
 
-- Browser [e.g. chrome, safari]
-- Version [e.g. 22]
+<!-- A clear and concise description of what actually happened -->
 
-**Flare Configuration (please complete this):**
+## Screenshots
 
-- Storage Provider [e.g. s3, local storage]
-- Version of Flare [found in settings]
+<!-- If applicable, add screenshots to help explain your problem -->
 
-**Additional context**
-Add any other context about the problem here.
+## 🌍 Environment
+
+<!-- Please complete the following information -->
+
+- **OS**: [e.g. Windows 10, macOS 12.0, Ubuntu 20.04]
+- **Browser**: [e.g. Chrome 96, Firefox 95, Safari 15]
+- **Flare Version**: [e.g. 1.4.2]
+- **Deployment Method**: [e.g. Docker, Railway, Manual]
+- **Storage Method**: [e.g. S3, local storage]
