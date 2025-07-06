@@ -21,7 +21,7 @@ Contributing to the app is pretty simple, I try to keep the rules pretty straigh
 
 Given that AI written code is such a contentious topic in 2025, I want to make it explicitly clear for this repository: **AI written code is totally fine for Flare, just be responsible.**
 
-\***\*Being responsible means\*\***:
+**Being responsible means**:
 
 - Only using AI to generate code you could have written and understood yourself
 - Carefully reviewing and modifying any AI generated code before submitting
