@@ -85,13 +85,19 @@ export interface EventFilter {
 }
 
 export type EventTypeMap = {
-  // todo: add event types for expiring files
-  // 'file.uploaded': {
-  //   fileId: string
-  //   userId: string
-  //   fileName: string
-  //   timestamp: Date
-  // }
+  'file.schedule-expiration': {
+    fileId: string
+    userId: string
+    fileName: string
+    expiresAt: Date
+  }
+  'file.expired': {
+    fileId: string
+    userId: string
+    fileName: string
+    filePath: string
+    size: number
+  }
 }
 
 export type EventType = keyof EventTypeMap
