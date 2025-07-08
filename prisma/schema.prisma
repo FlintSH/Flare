@@ -66,6 +66,42 @@ model Config {
   @@index([key])
 }
 
+model Event {
+  id          String      @id @default(cuid())
+  type        String
+  payload     Json
+  status      EventStatus @default(PENDING)
+  priority    Int         @default(0)
+  scheduledAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  processedAt DateTime?
+  failedAt    DateTime?
+  retryCount  Int         @default(0)
+  maxRetries  Int         @default(3)
+  error       String?
+  metadata    Json?
+
+  @@index([type])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdAt])
+  @@index([priority, scheduledAt])
+}
+
+model EventHandler {
+  id        String   @id @default(cuid())
+  eventType String
+  handler   String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventType, handler])
+  @@index([eventType])
+  @@index([enabled])
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -74,4 +110,12 @@ enum UserRole {
 enum FileVisibility {
   PUBLIC
   PRIVATE
+}
+
+enum EventStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SCHEDULED
 }
