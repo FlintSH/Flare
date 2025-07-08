@@ -6,6 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { FileType } from '@/types/components/file'
+import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow, isBefore } from 'date-fns'
 import {
   Clock,
@@ -197,7 +198,10 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
     }
   }
 
-  const handleExpiryUpdate = async (expiresAt: Date | null) => {
+  const handleExpiryUpdate = async (
+    expiresAt: Date | null,
+    action?: ExpiryAction
+  ) => {
     try {
       if (expiresAt) {
         const response = await fetch(`/api/files/${file.id}/expiry`, {
@@ -205,7 +209,10 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ expiresAt: expiresAt.toISOString() }),
+          body: JSON.stringify({
+            expiresAt: expiresAt.toISOString(),
+            action: action || ExpiryAction.DELETE,
+          }),
         })
 
         if (!response.ok) throw new Error()

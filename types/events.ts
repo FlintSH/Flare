@@ -84,12 +84,18 @@ export interface EventFilter {
   offset?: number
 }
 
+export enum ExpiryAction {
+  DELETE = 'DELETE',
+  SET_PRIVATE = 'SET_PRIVATE',
+}
+
 export type EventTypeMap = {
   'file.schedule-expiration': {
     fileId: string
     userId: string
     fileName: string
     expiresAt: Date
+    action: ExpiryAction
   }
   'file.expired': {
     fileId: string
@@ -97,6 +103,7 @@ export type EventTypeMap = {
     fileName: string
     filePath: string
     size: number
+    action: ExpiryAction
   }
 }
 

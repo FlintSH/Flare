@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { ExpiryAction } from '@/types/events'
 import { format } from 'date-fns'
 import { CalendarIcon, Loader2 } from 'lucide-react'
 
@@ -21,14 +22,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { cn } from '@/lib/utils'
 
 interface ExpiryModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (expiresAt: Date | null) => Promise<void>
+  onConfirm: (expiresAt: Date | null, action?: ExpiryAction) => Promise<void>
   initialDate?: Date | null
+  initialAction?: ExpiryAction
   title?: string
   description?: string
 }
@@ -38,23 +41,26 @@ export function ExpiryModal({
   onOpenChange,
   onConfirm,
   initialDate,
+  initialAction = ExpiryAction.DELETE,
   title = 'Configure Expiration',
-  description = 'Set when this file should be automatically deleted',
+  description = 'Set when this file should expire',
 }: ExpiryModalProps) {
   const [expiresAt, setExpiresAt] = useState<Date | null>(initialDate || null)
+  const [action, setAction] = useState<ExpiryAction>(initialAction)
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setExpiresAt(initialDate || null)
+      setAction(initialAction)
       setIsLoading(false)
     }
-  }, [isOpen, initialDate])
+  }, [isOpen, initialDate, initialAction])
 
   const handleConfirm = async () => {
     setIsLoading(true)
     try {
-      await onConfirm(expiresAt)
+      await onConfirm(expiresAt, action)
       onOpenChange(false)
     } catch {
     } finally {
@@ -64,6 +70,7 @@ export function ExpiryModal({
 
   const handleCancel = () => {
     setExpiresAt(initialDate || null)
+    setAction(initialAction)
     onOpenChange(false)
   }
 
@@ -109,6 +116,41 @@ export function ExpiryModal({
         </DialogHeader>
 
         <div className="space-y-4">
+          {}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">When file expires</Label>
+            <RadioGroup
+              value={action}
+              onValueChange={(value) => setAction(value as ExpiryAction)}
+              className="grid grid-cols-1 gap-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value={ExpiryAction.DELETE} id="delete" />
+                <Label
+                  htmlFor="delete"
+                  className="flex flex-col gap-1 cursor-pointer"
+                >
+                  <span className="font-medium">Delete file</span>
+                  <span className="text-xs text-muted-foreground">
+                    Permanently remove the file and free up storage space
+                  </span>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value={ExpiryAction.SET_PRIVATE} id="private" />
+                <Label
+                  htmlFor="private"
+                  className="flex flex-col gap-1 cursor-pointer"
+                >
+                  <span className="font-medium">Set to private</span>
+                  <span className="text-xs text-muted-foreground">
+                    Keep the file but make it only accessible to you
+                  </span>
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
           {}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Quick Options</Label>
@@ -419,12 +461,15 @@ export function ExpiryModal({
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                 <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                  Auto-delete scheduled
+                  {action === ExpiryAction.DELETE
+                    ? 'Auto-delete scheduled'
+                    : 'Auto-private scheduled'}
                 </p>
               </div>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                File will be permanently deleted on{' '}
-                {format(expiresAt, 'PPPP p')}
+                {action === ExpiryAction.DELETE
+                  ? `File will be permanently deleted on ${format(expiresAt, 'PPPP p')}`
+                  : `File will be set to private on ${format(expiresAt, 'PPPP p')}`}
               </p>
             </div>
           )}

@@ -1,3 +1,5 @@
+import { ExpiryAction } from '@/types/events'
+
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
@@ -47,7 +49,7 @@ export async function POST(
     if (response) return response
 
     const { id } = await params
-    const { expiresAt } = await req.json()
+    const { expiresAt, action = ExpiryAction.DELETE } = await req.json()
 
     if (!expiresAt) {
       return apiError('Expiration date is required', HTTP_STATUS.BAD_REQUEST)
@@ -72,7 +74,7 @@ export async function POST(
 
     await cancelFileExpiration(id)
 
-    await scheduleFileExpiration(id, user.id, file.name, expirationDate)
+    await scheduleFileExpiration(id, user.id, file.name, expirationDate, action)
 
     return apiResponse({
       message: 'File expiration scheduled successfully',

@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import Image from 'next/image'
 
+import { ExpiryAction } from '@/types/events'
 import { format } from 'date-fns'
 import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
@@ -212,10 +213,11 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
       <ExpiryModal
         isOpen={isExpiryModalOpen}
         onOpenChange={setIsExpiryModalOpen}
-        onConfirm={async (date) => {
+        onConfirm={async (date, _action) => {
           setExpiresAt(date)
         }}
         initialDate={expiresAt}
+        initialAction={ExpiryAction.DELETE}
         title="Set File Expiration"
         description="Configure when uploaded files should be automatically deleted"
       />
