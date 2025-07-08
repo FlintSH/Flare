@@ -22,7 +22,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { cn } from '@/lib/utils'
 
@@ -119,44 +118,32 @@ export function ExpiryModal({
           {}
           <div className="space-y-2">
             <Label className="text-sm font-medium">When file expires</Label>
-            <RadioGroup
-              value={action}
-              onValueChange={(value) => setAction(value as ExpiryAction)}
-              className="grid grid-cols-2 gap-2"
-            >
-              <Label
-                htmlFor="delete"
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAction(ExpiryAction.DELETE)}
                 className={cn(
-                  'flex items-center justify-center cursor-pointer rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                  action === ExpiryAction.DELETE
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'border-input hover:bg-accent hover:text-accent-foreground'
+                  action === ExpiryAction.DELETE &&
+                    'bg-primary/10 border-primary'
                 )}
               >
-                <RadioGroupItem
-                  value={ExpiryAction.DELETE}
-                  id="delete"
-                  className="sr-only"
-                />
                 Delete file
-              </Label>
-              <Label
-                htmlFor="private"
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
-                  'flex items-center justify-center cursor-pointer rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                  action === ExpiryAction.SET_PRIVATE
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'border-input hover:bg-accent hover:text-accent-foreground'
+                  action === ExpiryAction.SET_PRIVATE &&
+                    'bg-primary/10 border-primary'
                 )}
               >
-                <RadioGroupItem
-                  value={ExpiryAction.SET_PRIVATE}
-                  id="private"
-                  className="sr-only"
-                />
                 Set to private
-              </Label>
-            </RadioGroup>
+              </Button>
+            </div>
           </div>
 
           {}
