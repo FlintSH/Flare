@@ -6,6 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { FileType } from '@/types/components/file'
+import { format, formatDistanceToNow, isBefore } from 'date-fns'
 import {
   Clock,
   Download,
@@ -16,10 +17,12 @@ import {
   Link as LinkIcon,
   Lock,
   ScanText,
+  Timer,
   Trash2,
 } from 'lucide-react'
 
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
+import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Icons } from '@/components/shared/icons'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
@@ -66,6 +69,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
 
   const handleCopyLink = () => {
     const safeUrl = sanitizeUrl(file.urlPath)
@@ -190,6 +194,49 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
       })
     } finally {
       setIsLoadingOcr(false)
+    }
+  }
+
+  const handleExpiryUpdate = async (expiresAt: Date | null) => {
+    try {
+      if (expiresAt) {
+        const response = await fetch(`/api/files/${file.id}/expiry`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ expiresAt: expiresAt.toISOString() }),
+        })
+
+        if (!response.ok) throw new Error()
+
+        toast({
+          title: 'Expiration set',
+          description: 'File expiration has been updated successfully',
+        })
+      } else {
+        const response = await fetch(`/api/files/${file.id}/expiry`, {
+          method: 'DELETE',
+        })
+
+        if (!response.ok) throw new Error()
+
+        toast({
+          title: 'Expiration removed',
+          description: 'File expiration has been removed',
+        })
+      }
+
+      setFile((prev) => ({
+        ...prev,
+        expiresAt: expiresAt?.toISOString() || null,
+      }))
+    } catch {
+      toast({
+        title: 'Failed to update expiration',
+        description: 'Please try again',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -320,6 +367,19 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                     variant="secondary"
                     size="icon"
                     className="h-8 w-8 glass-hover"
+                    onClick={() => setIsExpiryModalOpen(true)}
+                  >
+                    <Timer className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Manage expiration</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="h-8 w-8 glass-hover"
                     onClick={() => setIsDeleteDialogOpen(true)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -352,6 +412,44 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
             )}
           </div>
         </div>
+
+        {}
+        {file.expiresAt && (
+          <div className="absolute top-2 right-2">
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`flex items-center gap-1 px-2 py-1 rounded-md backdrop-blur-sm text-xs ${
+                      isBefore(
+                        new Date(file.expiresAt),
+                        new Date(Date.now() + 24 * 60 * 60 * 1000)
+                      )
+                        ? 'bg-red-500/90 text-white'
+                        : isBefore(
+                              new Date(file.expiresAt),
+                              new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                            )
+                          ? 'bg-orange-500/90 text-white'
+                          : 'bg-amber-500/90 text-white'
+                    }`}
+                  >
+                    <Timer className="h-3 w-3" />
+                    {formatDistanceToNow(new Date(file.expiresAt), {
+                      addSuffix: true,
+                    })}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end" sideOffset={8}>
+                  <div className="text-center">
+                    <p className="font-medium">Auto-delete scheduled</p>
+                    <p>{format(new Date(file.expiresAt), 'PPP p')}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
 
         {}
         <div className="absolute bottom-2 right-2">
@@ -537,6 +635,16 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         error={ocrError}
         confidence={ocrConfidence}
         filename={file.name}
+      />
+
+      {}
+      <ExpiryModal
+        isOpen={isExpiryModalOpen}
+        onOpenChange={setIsExpiryModalOpen}
+        onConfirm={handleExpiryUpdate}
+        initialDate={file.expiresAt ? new Date(file.expiresAt) : null}
+        title="Manage File Expiration"
+        description="Set when this file should be automatically deleted"
       />
     </Card>
   )

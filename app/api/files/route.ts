@@ -15,6 +15,10 @@ import {
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import {
+  getFileExpirationInfo,
+  scheduleFileExpiration,
+} from '@/lib/events/handlers/file-expiry'
 import { getUniqueFilename } from '@/lib/files/filename'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
@@ -33,12 +37,24 @@ export async function POST(req: Request) {
     const visibility =
       (formData.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC'
     const password = formData.get('password') as string | null
+    const expiresAt = formData.get('expiresAt') as string | null
 
     const result = FileUploadFormDataSchema.safeParse({
       file: uploadedFile,
       visibility,
       password,
     })
+
+    let expirationDate: Date | null = null
+    if (expiresAt) {
+      expirationDate = new Date(expiresAt)
+      if (isNaN(expirationDate.getTime()) || expirationDate <= new Date()) {
+        return apiError(
+          'Invalid expiration date. Must be in the future.',
+          HTTP_STATUS.BAD_REQUEST
+        )
+      }
+    }
 
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
@@ -118,6 +134,22 @@ export async function POST(req: Request) {
       processImageOCR(filePath, fileRecord.id).catch((error) => {
         console.error('Background OCR processing failed:', error)
       })
+    }
+
+    if (expirationDate) {
+      try {
+        await scheduleFileExpiration(
+          fileRecord.id,
+          user.id,
+          displayName,
+          expirationDate
+        )
+        console.log(
+          `File expiration scheduled for ${displayName} at ${expirationDate}`
+        )
+      } catch (error) {
+        console.error('Failed to schedule file expiration:', error)
+      }
     }
 
     const baseUrl =
@@ -279,10 +311,16 @@ export async function GET(request: Request) {
       },
     })
 
-    const filesList = files.map((file) => ({
-      ...file,
-      hasPassword: Boolean(file.password),
-    })) as FileMetadata[]
+    const filesList = (await Promise.all(
+      files.map(async (file) => {
+        const expiresAt = await getFileExpirationInfo(file.id)
+        return {
+          ...file,
+          hasPassword: Boolean(file.password),
+          expiresAt,
+        }
+      })
+    )) as (FileMetadata & { expiresAt: Date | null })[]
 
     const pagination = {
       total,

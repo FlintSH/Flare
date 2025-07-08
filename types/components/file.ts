@@ -9,6 +9,7 @@ export interface FileType {
   uploadedAt: string
   views: number
   downloads: number
+  expiresAt?: string | null
 }
 
 export interface PaginationInfo {

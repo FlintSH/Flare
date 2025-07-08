@@ -37,11 +37,11 @@ export class S3StorageProvider implements StorageProvider {
         secretAccessKey: config.secretAccessKey,
       },
       requestHandler: {
-        requestTimeout: 600000, // 10 minutes for requests (large files)
-        connectionTimeout: 60000, // 60 seconds for connections
+        requestTimeout: 600000,
+        connectionTimeout: 60000,
       },
-      maxAttempts: 5, // Retry up to 5 times
-      retryMode: 'adaptive', // Use adaptive retry mode
+      maxAttempts: 5,
+      retryMode: 'adaptive',
       ...(config.endpoint && {
         endpoint: config.endpoint,
         forcePathStyle: config.forcePathStyle ?? false,
@@ -105,15 +105,12 @@ export class S3StorageProvider implements StorageProvider {
 
         const stream = response.Body as Readable
 
-        // Configure stream for better reliability
-        stream.pause() // Start paused to allow proper setup
+        stream.pause()
 
-        // Add comprehensive error handling
         stream.on('error', (error) => {
           console.error(`S3 stream error for ${key}:`, error)
         })
 
-        // Resume the stream after setup
         process.nextTick(() => {
           stream.resume()
         })
@@ -130,7 +127,6 @@ export class S3StorageProvider implements StorageProvider {
           throw lastError
         }
 
-        // Wait before retrying (exponential backoff)
         await new Promise((resolve) =>
           setTimeout(resolve, Math.pow(2, attempt) * 1000)
         )
@@ -155,8 +151,7 @@ export class S3StorageProvider implements StorageProvider {
       Key: key,
     })
 
-    // For downloads, use longer expiration time (6 hours) to avoid URL expiration during download
-    const downloadExpiresIn = expiresIn > 3600 ? expiresIn : 21600 // 6 hours default for downloads
+    const downloadExpiresIn = expiresIn > 3600 ? expiresIn : 21600
 
     return await getSignedUrl(this.client, command, {
       expiresIn: downloadExpiresIn,
@@ -174,7 +169,6 @@ export class S3StorageProvider implements StorageProvider {
         : undefined,
     })
 
-    // Use long expiration for downloads (6 hours)
     return await getSignedUrl(this.client, command, { expiresIn: 21600 })
   }
 

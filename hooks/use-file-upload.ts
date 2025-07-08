@@ -21,6 +21,7 @@ export type FileUploadOptions = {
   maxSize?: number
   visibility?: 'PUBLIC' | 'PRIVATE'
   password?: string
+  expiresAt?: Date | null
   onUploadComplete?: (responses: UploadResponse[]) => void
   onUploadError?: (error: string) => void
 }
@@ -34,6 +35,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     options.visibility || 'PUBLIC'
   )
   const [password, setPassword] = useState(options.password || '')
+  const [expiresAt, setExpiresAt] = useState<Date | null>(
+    options.expiresAt || null
+  )
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles((prev) => [
@@ -211,6 +215,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
             visibility,
             password: password || null,
+            expiresAt: expiresAt?.toISOString() || null,
           }),
         }
       )
@@ -231,6 +236,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     formData.append('file', file)
     formData.append('visibility', visibility)
     if (password) formData.append('password', password)
+    if (expiresAt) formData.append('expiresAt', expiresAt.toISOString())
 
     const xhr = new XMLHttpRequest()
     return await new Promise<UploadResponse>((resolve, reject) => {
@@ -327,5 +333,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setVisibility,
     password,
     setPassword,
+    expiresAt,
+    setExpiresAt,
   }
 }

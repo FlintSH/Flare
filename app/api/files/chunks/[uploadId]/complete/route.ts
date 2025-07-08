@@ -7,6 +7,7 @@ import { join } from 'node:path'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { scheduleFileExpiration } from '@/lib/events/handlers/file-expiry'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
@@ -87,7 +88,7 @@ export async function POST(
     }
 
     const body = await req.json()
-    const { parts } = body
+    const { parts, expiresAt } = body
 
     if (!Array.isArray(parts)) {
       return NextResponse.json({ error: 'Invalid parts data' }, { status: 400 })
@@ -136,6 +137,25 @@ export async function POST(
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
         console.error('Background OCR processing failed:', error)
       })
+    }
+
+    if (expiresAt) {
+      try {
+        const expirationDate = new Date(expiresAt)
+        if (!isNaN(expirationDate.getTime()) && expirationDate > new Date()) {
+          await scheduleFileExpiration(
+            fileRecord.id,
+            user.id,
+            metadata.filename,
+            expirationDate
+          )
+          console.log(
+            `File expiration scheduled for ${metadata.filename} at ${expirationDate}`
+          )
+        }
+      } catch (error) {
+        console.error('Failed to schedule file expiration:', error)
+      }
     }
 
     const baseUrl =

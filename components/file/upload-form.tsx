@@ -1,10 +1,14 @@
 'use client'
 
+import { useState } from 'react'
+
 import Image from 'next/image'
 
-import { FileIcon, UploadIcon, XIcon } from 'lucide-react'
+import { format } from 'date-fns'
+import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -30,6 +34,7 @@ interface UploadFormProps {
 
 export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
   const { toast } = useToast()
+  const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
 
   const {
     files,
@@ -41,6 +46,8 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
     setVisibility,
     password,
     setPassword,
+    expiresAt,
+    setExpiresAt,
   } = useFileUpload({
     maxSize,
     onUploadComplete: (responses) => {
@@ -160,6 +167,38 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
           />
         </div>
 
+        <div className="space-y-2">
+          <Label>File Expiration (Optional)</Label>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-start text-left font-normal"
+            onClick={() => setIsExpiryModalOpen(true)}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {expiresAt ? (
+              <span>Expires: {format(expiresAt, 'PPP p')}</span>
+            ) : (
+              'Set expiration date'
+            )}
+          </Button>
+
+          {expiresAt && (
+            <div className="rounded-md bg-orange-50 dark:bg-orange-950/20 p-3 border border-orange-200 dark:border-orange-800/50">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                  Auto-delete scheduled
+                </p>
+              </div>
+              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                File will be permanently deleted on{' '}
+                {format(expiresAt, 'PPPP p')}
+              </p>
+            </div>
+          )}
+        </div>
+
         <Button
           className="w-full"
           size="lg"
@@ -169,6 +208,17 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
           {isUploading ? 'Uploading...' : 'Upload Files'}
         </Button>
       </div>
+
+      <ExpiryModal
+        isOpen={isExpiryModalOpen}
+        onOpenChange={setIsExpiryModalOpen}
+        onConfirm={async (date) => {
+          setExpiresAt(date)
+        }}
+        initialDate={expiresAt}
+        title="Set File Expiration"
+        description="Configure when uploaded files should be automatically deleted"
+      />
     </div>
   )
 }

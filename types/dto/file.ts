@@ -31,6 +31,7 @@ export interface FileMetadata {
   views: number
   downloads: number
   hasPassword: boolean
+  expiresAt?: Date | null
 }
 
 export interface FileUploadResponse {
