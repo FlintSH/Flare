@@ -117,37 +117,45 @@ export function ExpiryModal({
 
         <div className="space-y-4">
           {}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label className="text-sm font-medium">When file expires</Label>
             <RadioGroup
               value={action}
               onValueChange={(value) => setAction(value as ExpiryAction)}
-              className="grid grid-cols-1 gap-3"
+              className="grid grid-cols-2 gap-2"
             >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value={ExpiryAction.DELETE} id="delete" />
-                <Label
-                  htmlFor="delete"
-                  className="flex flex-col gap-1 cursor-pointer"
-                >
-                  <span className="font-medium">Delete file</span>
-                  <span className="text-xs text-muted-foreground">
-                    Permanently remove the file and free up storage space
-                  </span>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value={ExpiryAction.SET_PRIVATE} id="private" />
-                <Label
-                  htmlFor="private"
-                  className="flex flex-col gap-1 cursor-pointer"
-                >
-                  <span className="font-medium">Set to private</span>
-                  <span className="text-xs text-muted-foreground">
-                    Keep the file but make it only accessible to you
-                  </span>
-                </Label>
-              </div>
+              <Label
+                htmlFor="delete"
+                className={cn(
+                  'flex items-center justify-center cursor-pointer rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                  action === ExpiryAction.DELETE
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-input hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <RadioGroupItem
+                  value={ExpiryAction.DELETE}
+                  id="delete"
+                  className="sr-only"
+                />
+                Delete file
+              </Label>
+              <Label
+                htmlFor="private"
+                className={cn(
+                  'flex items-center justify-center cursor-pointer rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                  action === ExpiryAction.SET_PRIVATE
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-input hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <RadioGroupItem
+                  value={ExpiryAction.SET_PRIVATE}
+                  id="private"
+                  className="sr-only"
+                />
+                Set to private
+              </Label>
             </RadioGroup>
           </div>
 
