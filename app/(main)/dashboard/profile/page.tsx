@@ -9,7 +9,6 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { formatFileSize } from '@/lib/utils'
 
-// Client component for logout button
 import { LogoutButton } from './logout-button'
 
 export default async function ProfilePage() {

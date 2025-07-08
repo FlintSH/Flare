@@ -15,9 +15,16 @@ bun lint || (
     exit 1
 )
 
-# Run a final format check
-echo "✨ Running final format check..."
+# Run formatter and auto-fix any issues
+echo "✨ Running formatter and auto-fixing..."
+bunx prettier --write "**/*.{ts,tsx,js,jsx,json,md}"
+
+# Stage any newly formatted files
+git add .
+
+# Run a final format check to ensure everything is properly formatted
+echo "🔍 Verifying format..."
 bunx prettier --check "**/*.{ts,tsx,js,jsx,json,md}" || (
-    echo "❌ Formatting check failed. Please commit again."
+    echo "❌ Formatting verification failed. Please commit again."
     exit 1
 )

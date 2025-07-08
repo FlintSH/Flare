@@ -2,14 +2,66 @@ import { NextResponse } from 'next/server'
 
 import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
+import { Readable } from 'stream'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 
 function encodeFilename(filename: string): string {
   const encoded = encodeURIComponent(filename)
   return `"${encoded.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function createRobustStream(nodeStream: Readable): ReadableStream {
+  let streamClosed = false
+  let controller: ReadableStreamDefaultController | null = null
+
+  return new ReadableStream({
+    start(ctrl) {
+      controller = ctrl
+
+      nodeStream.on('data', (chunk) => {
+        if (!streamClosed) {
+          try {
+            controller?.enqueue(new Uint8Array(chunk))
+          } catch (error) {
+            console.error('Error enqueueing chunk:', error)
+            if (!streamClosed) {
+              controller?.error(error)
+              streamClosed = true
+            }
+          }
+        }
+      })
+
+      nodeStream.on('end', () => {
+        if (!streamClosed) {
+          try {
+            controller?.close()
+          } catch (error) {
+            console.error('Error closing stream:', error)
+          }
+          streamClosed = true
+        }
+      })
+
+      nodeStream.on('error', (error) => {
+        console.error('Node stream error:', error)
+        if (!streamClosed) {
+          controller?.error(error)
+          streamClosed = true
+        }
+      })
+    },
+
+    cancel() {
+      streamClosed = true
+      if (nodeStream.destroyed === false) {
+        nodeStream.destroy()
+      }
+    },
+  })
 }
 
 export async function GET(
@@ -60,28 +112,6 @@ export async function GET(
       const end = parts[1] ? parseInt(parts[1], 10) : size - 1
       const chunkSize = end - start + 1
 
-      if (storageProvider instanceof S3StorageProvider) {
-        const fileUrl = await storageProvider.getFileUrl(file.path)
-        const response = await fetch(fileUrl, {
-          headers: {
-            Range: `bytes=${start}-${end}`,
-          },
-        })
-
-        const headers = {
-          'Content-Range': `bytes ${start}-${end}/${size}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunkSize.toString(),
-          'Content-Type': file.mimeType,
-          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
-        }
-
-        return new NextResponse(response.body, {
-          status: 206,
-          headers,
-        })
-      }
-
       const stream = await storageProvider.getFileStream(file.path, {
         start,
         end,
@@ -93,23 +123,13 @@ export async function GET(
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
         'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+        Connection: 'keep-alive',
+        'Keep-Alive': 'timeout=300, max=1000',
       }
 
-      return new NextResponse(stream as unknown as ReadableStream, {
+      return new NextResponse(createRobustStream(stream), {
         status: 206,
         headers,
-      })
-    }
-
-    if (storageProvider instanceof S3StorageProvider) {
-      const stream = await storageProvider.getFileStream(file.path)
-      return new NextResponse(stream as unknown as ReadableStream, {
-        headers: {
-          'Accept-Ranges': 'bytes',
-          'Content-Length': size.toString(),
-          'Content-Type': file.mimeType,
-          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
-        },
       })
     }
 
@@ -119,11 +139,16 @@ export async function GET(
       'Content-Length': size.toString(),
       'Content-Type': file.mimeType,
       'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+      Connection: 'keep-alive',
+      'Keep-Alive': 'timeout=300, max=1000',
     }
 
-    return new NextResponse(stream as unknown as ReadableStream, { headers })
+    return new NextResponse(createRobustStream(stream), { headers })
   } catch (error) {
     console.error('File serve error:', error)
+    if (error instanceof Error && error.message.includes('NoSuchKey')) {
+      return new Response(null, { status: 404 })
+    }
     return new Response(null, { status: 500 })
   }
 }

@@ -37,10 +37,10 @@ export class S3StorageProvider implements StorageProvider {
         secretAccessKey: config.secretAccessKey,
       },
       requestHandler: {
-        requestTimeout: 300000, // 5 minutes for requests
-        connectionTimeout: 30000, // 30 seconds for connections
+        requestTimeout: 600000, // 10 minutes for requests (large files)
+        connectionTimeout: 60000, // 60 seconds for connections
       },
-      maxAttempts: 3, // Retry up to 3 times
+      maxAttempts: 5, // Retry up to 5 times
       retryMode: 'adaptive', // Use adaptive retry mode
       ...(config.endpoint && {
         endpoint: config.endpoint,
@@ -86,7 +86,7 @@ export class S3StorageProvider implements StorageProvider {
       options.Range = `bytes=${range.start || 0}-${typeof range.end !== 'undefined' ? range.end : ''}`
     }
 
-    const maxRetries = 3
+    const maxRetries = 5
     let lastError: Error | null = null
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -105,9 +105,17 @@ export class S3StorageProvider implements StorageProvider {
 
         const stream = response.Body as Readable
 
-        // Add error handling to the stream
+        // Configure stream for better reliability
+        stream.pause() // Start paused to allow proper setup
+
+        // Add comprehensive error handling
         stream.on('error', (error) => {
           console.error(`S3 stream error for ${key}:`, error)
+        })
+
+        // Resume the stream after setup
+        process.nextTick(() => {
+          stream.resume()
         })
 
         return stream

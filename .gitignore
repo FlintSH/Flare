@@ -53,9 +53,11 @@ next-env.d.ts
 # tmp
 /tmp/
 
-# IDE
+# dev tooling
 .idea/
 .vscode/
+.cursor/
+CLAUDE.md
 *.swp
 *.swo
 
