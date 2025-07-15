@@ -76,7 +76,7 @@ Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) f
 
 ## 📝 Configuration
 
-Flare is built to be really configurable. Head to `/dashboard/settings` to tweak different settings like:
+Flare is built to be as configurable as possible. Head to `/dashboard/settings` to tweak different settings like:
 
 - Setting storage quotas and file size limits for users
 - Defining upload rules and restrictions
