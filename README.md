@@ -84,8 +84,6 @@ Flare is built to be really configurable. Head to `/dashboard/settings` to tweak
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 
-For more details on each setting, visit the [Docs](https://flare.fl1nt.dev) (coming soon).
-
 ## 📜 License
 
-Flare is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Flare is licensed under the MIT License.
