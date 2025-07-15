@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-import {
-  checkAuthentication,
-  checkSetupCompletion,
-} from './lib/middleware/auth-checker'
+import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
 import { PUBLIC_PATHS } from './lib/middleware/constants'
 
@@ -35,16 +32,6 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/setup') ||
     request.nextUrl.pathname.startsWith('/api/setup')
   ) {
-    if (!request.nextUrl.pathname.startsWith('/api/')) {
-      const setupComplete = await checkSetupCompletion()
-
-      if (setupComplete) {
-        const authResponse = await checkAuthentication(request)
-        if (authResponse) return authResponse
-
-        return NextResponse.redirect(new URL('/dashboard', request.url))
-      }
-    }
     return NextResponse.next()
   }
 

@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-import { checkSetupCompletion } from '@/lib/middleware/auth-checker'
+import { checkSetupCompletion } from '@/lib/database/setup'
 
 export async function GET() {
   const headersList = await headers()
