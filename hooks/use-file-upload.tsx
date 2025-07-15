@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
+
+import { ToastAction } from '@/components/ui/toast'
 
 import { useToast } from './use-toast'
 
@@ -224,7 +226,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         throw new Error('Failed to complete upload')
       }
 
-      return await completeResponse.json()
+      const result = await completeResponse.json()
+      return result.data || result
     } catch (error) {
       console.error('Error in chunk upload:', error)
       throw error
@@ -249,7 +252,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           updateFileProgress(index, file.size, Date.now())
-          resolve(JSON.parse(xhr.responseText))
+          const response = JSON.parse(xhr.responseText)
+          resolve(response.data || response)
         } else {
           if (xhr.status === 413) {
             reject(
@@ -292,12 +296,55 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         responses.push(response)
       }
 
-      toast({
-        title: 'Upload Complete',
-        description: `Successfully uploaded ${files.length} file${
-          files.length === 1 ? '' : 's'
-        }`,
-      })
+      if (responses.length === 1) {
+        const file = responses[0]
+        toast({
+          title: 'Upload Complete',
+          description: `Successfully uploaded ${file.name}`,
+          action: (
+            <div className="flex gap-2">
+              <ToastAction
+                altText="Open file"
+                onClick={() => window.open(file.url, '_blank')}
+              >
+                Open
+              </ToastAction>
+              <ToastAction
+                altText="Copy link"
+                onClick={() => {
+                  navigator.clipboard.writeText(file.url)
+                  toast({
+                    title: 'Link copied',
+                    description: 'File link copied to clipboard',
+                  })
+                }}
+              >
+                Copy Link
+              </ToastAction>
+            </div>
+          ),
+        })
+      } else {
+        toast({
+          title: 'Upload Complete',
+          description: `Successfully uploaded ${responses.length} files`,
+          action: (
+            <ToastAction
+              altText="Copy all links"
+              onClick={() => {
+                const links = responses.map((r) => r.url).join('\n')
+                navigator.clipboard.writeText(links)
+                toast({
+                  title: 'Links copied',
+                  description: 'All file links copied to clipboard',
+                })
+              }}
+            >
+              Copy All Links
+            </ToastAction>
+          ),
+        })
+      }
 
       if (options.onUploadComplete) {
         options.onUploadComplete(responses)

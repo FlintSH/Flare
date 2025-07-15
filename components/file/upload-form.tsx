@@ -26,7 +26,6 @@ import {
 import { formatBytes } from '@/lib/utils'
 
 import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
-import { useToast } from '@/hooks/use-toast'
 
 interface UploadFormProps {
   maxSize: number
@@ -34,7 +33,6 @@ interface UploadFormProps {
 }
 
 export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
-  const { toast } = useToast()
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
 
   const {
@@ -51,14 +49,6 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
     setExpiresAt,
   } = useFileUpload({
     maxSize,
-    onUploadComplete: (responses) => {
-      toast({
-        title: 'All files uploaded successfully',
-        description: `Successfully uploaded ${responses.length} file${
-          responses.length === 1 ? '' : 's'
-        }`,
-      })
-    },
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
