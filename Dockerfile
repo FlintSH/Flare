@@ -8,8 +8,15 @@ COPY prisma ./prisma
 
 # Install dependencies
 RUN npm ci
-# Install sharp specifically for Alpine ARM64
-RUN npm install --cpu=arm64 --os=linux --libc=musl sharp
+
+# Detect architecture and install sharp with appropriate flags
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+      npm install --cpu=arm64 --os=linux --libc=musl sharp; \
+    else \
+      npm install --cpu=x64 --os=linux --libc=musl sharp; \
+    fi
+
 RUN npx prisma generate
 
 # Stage 2: Builder
