@@ -6,9 +6,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 
-# Install dependencies and rebuild sharp for musl/arm64
+# Install dependencies
 RUN npm ci
-RUN npm rebuild --arch=arm64 --platform=linux --libc=musl sharp
+# Install sharp specifically for Alpine ARM64
+RUN npm install --cpu=arm64 --os=linux --libc=musl sharp
 RUN npx prisma generate
 
 # Stage 2: Builder
