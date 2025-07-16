@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
+import { Progress } from '@/components/ui/progress'
 import { ToastAction } from '@/components/ui/toast'
 
 import { useToast } from './use-toast'
@@ -40,6 +41,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const [expiresAt, setExpiresAt] = useState<Date | null>(
     options.expiresAt || null
   )
+  const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles((prev) => [
@@ -95,6 +97,24 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       file.uploaded = uploaded
       return [...newFiles]
     })
+
+    if (progressToastRef.current && files[index]) {
+      const progress = Math.min(
+        100,
+        Math.round((uploaded / files[index].size) * 100)
+      )
+      progressToastRef.current.update({
+        id: progressToastRef.current.id,
+        title: 'Uploading...',
+        description: (
+          <div className="space-y-2">
+            <p className="text-sm">{files[index].name}</p>
+            <Progress value={progress} className="h-2" />
+            <p className="text-xs text-muted-foreground">{progress}%</p>
+          </div>
+        ),
+      })
+    }
   }
 
   const uploadFileInChunks = async (file: FileWithPreview, index: number) => {
@@ -287,6 +307,18 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         const file = files[i]
         let response: UploadResponse
 
+        progressToastRef.current = toast({
+          title: 'Uploading...',
+          description: (
+            <div className="space-y-2">
+              <p className="text-sm">{file.name}</p>
+              <Progress value={0} className="h-2" />
+              <p className="text-xs text-muted-foreground">0%</p>
+            </div>
+          ),
+          duration: Infinity,
+        })
+
         if (file.size > 10 * 1024 * 1024) {
           response = await uploadFileInChunks(file, i)
         } else {
@@ -294,6 +326,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         }
 
         responses.push(response)
+
+        progressToastRef.current?.dismiss()
+        progressToastRef.current = null
       }
 
       if (responses.length === 1) {
