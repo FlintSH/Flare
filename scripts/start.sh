@@ -46,11 +46,11 @@ fi
 
 # Run config migrations
 echo "Running config migrations..."
-if ! bun run /app/scripts/migrate-config.js; then
+if ! node /app/scripts/migrate-config.js; then
     echo "Failed to run config migrations"
     exit 1
 fi
 
 # Start the application
 echo "Starting the application..."
-exec bun run start
+exec npm run start

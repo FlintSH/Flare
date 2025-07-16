@@ -12,11 +12,11 @@
     "url": "https://github.com/FlintSH/flare/issues"
   },
   "scripts": {
-    "dev": "bun --bun run next dev --turbopack",
+    "dev": "next dev --turbopack",
     "postinstall": "bunx prisma generate",
-    "build": "bun --bun run next build",
-    "start": "bun --bun run next start",
-    "lint": "bun --bun run next lint",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
     "format": "bunx prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "bunx prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install",

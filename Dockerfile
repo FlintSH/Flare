@@ -1,7 +1,10 @@
 # Stage 1: Dependencies
-FROM oven/bun:1-alpine AS deps
+FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
+
+# Install Bun for package management
+RUN npm install -g bun@latest
 
 COPY package.json bun.lock ./
 COPY prisma ./prisma
@@ -11,8 +14,12 @@ RUN bun install --frozen-lockfile
 RUN bunx prisma generate
 
 # Stage 2: Builder
-FROM oven/bun:1-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Install Bun for package management
+RUN npm install -g bun@latest
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY . .
@@ -22,10 +29,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # Build the application
-RUN bun run build
+RUN npm run build
 
 # Stage 3: Runner
-FROM oven/bun:1-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -34,8 +41,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck and OpenSSL for Prisma
+# Install curl for healthcheck, OpenSSL for Prisma, and Bun for package management
 RUN apk add --no-cache curl openssl
+RUN npm install -g bun@latest
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
@@ -79,4 +87,4 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 
 # The entrypoint script runs as root but switches to nextjs user
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["/app/start.sh"] 
+CMD ["/app/start.sh"]
