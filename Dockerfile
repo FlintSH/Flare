@@ -1,17 +1,18 @@
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 
-# Install dependencies and generate Prisma Client
-RUN npm ci
+# Install dependencies including platform-specific Sharp binaries
+RUN npm ci --include=optional
 RUN npx prisma generate
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -35,8 +36,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck and OpenSSL for Prisma
-RUN apk add --no-cache curl openssl
+# Install curl for healthcheck, OpenSSL for Prisma, and dependencies for Sharp
+RUN apk add --no-cache curl openssl libc6-compat
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
