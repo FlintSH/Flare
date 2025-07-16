@@ -1,27 +1,18 @@
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat curl bash
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install Bun using the official installation script
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
-
-COPY package.json bun.lock ./
+COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 
-# Install dependencies without running postinstall, then generate Prisma Client
-RUN /root/.bun/bin/bun install --frozen-lockfile --ignore-scripts
-RUN /root/.bun/bin/bunx prisma generate
+# Install dependencies and generate Prisma Client
+RUN npm ci
+RUN npx prisma generate
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install Bun using the official installation script
-RUN apk add --no-cache curl bash
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -44,12 +35,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck, OpenSSL for Prisma, bash and Bun for package management
-RUN apk add --no-cache curl openssl bash
-RUN curl -fsSL https://bun.sh/install | bash && \
-    mv /root/.bun /opt/bun && \
-    chown -R nextjs:nodejs /opt/bun
-ENV PATH="/opt/bun/bin:${PATH}"
+# Install curl for healthcheck and OpenSSL for Prisma
+RUN apk add --no-cache curl openssl
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
@@ -73,7 +60,6 @@ RUN chmod +x /app/start.sh
 
 # Create the entrypoint script that will run as root
 RUN echo '#!/bin/sh' > /entrypoint.sh && \
-    echo 'export PATH="/opt/bun/bin:${PATH}"' >> /entrypoint.sh && \
     echo 'mkdir -p /app/uploads' >> /entrypoint.sh && \
     echo 'chown -R nextjs:nodejs /app/uploads' >> /entrypoint.sh && \
     echo 'chmod 775 /app/uploads' >> /entrypoint.sh && \

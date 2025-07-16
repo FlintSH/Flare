@@ -13,19 +13,19 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "postinstall": "bunx prisma generate",
+    "postinstall": "npx prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "format": "bunx prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "bunx prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format": "npx prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "npx prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install",
-    "knip": "bunx knip",
-    "knip:exports": "bunx knip --exports",
-    "knip:deps": "bunx knip --dependencies",
-    "knip:files": "bunx knip --files",
-    "knip:prod": "bunx knip --production",
-    "knip:fix": "bunx knip --fix"
+    "knip": "npx knip",
+    "knip:exports": "npx knip --exports",
+    "knip:deps": "npx knip --dependencies",
+    "knip:files": "npx knip --files",
+    "knip:prod": "npx knip --production",
+    "knip:fix": "npx knip --fix"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.840.0",
