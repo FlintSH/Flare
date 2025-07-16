@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     reactCompiler: true,
   },
-  serverExternalPackages: ['tesseract.js'],
+  serverExternalPackages: ['tesseract.js', 'sharp'],
   outputFileTracingIncludes: {
     '/api/**/*': ['./node_modules/**/*.wasm', './node_modules/**/*.proto'],
   },
