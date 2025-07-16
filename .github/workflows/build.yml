@@ -31,28 +31,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
         uses: nick-fields/retry@v2
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: bun install --frozen-lockfile
+          command: npm ci
 
       - name: Generate Prisma Client
-        run: bunx prisma generate
+        run: npx prisma generate
 
       - name: Run Prisma Migrations
-        run: bunx prisma migrate deploy
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flare_test
 
       - name: Build
-        run: bun run build
+        run: npm run build
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flare_test
           NEXTAUTH_SECRET: test-secret

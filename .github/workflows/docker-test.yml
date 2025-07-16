@@ -75,7 +75,7 @@ jobs:
             --network flare-network \
             -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
             flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }} \
-            bunx prisma migrate deploy
+            npx prisma migrate deploy
 
           # Start the application
           docker run --name flare-test -d \
