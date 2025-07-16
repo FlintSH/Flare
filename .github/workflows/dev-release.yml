@@ -9,6 +9,8 @@ jobs:
   get-commit-info:
     name: Get Commit Info
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       sha: ${{ steps.commit_info.outputs.sha }}
       date: ${{ steps.commit_info.outputs.date }}

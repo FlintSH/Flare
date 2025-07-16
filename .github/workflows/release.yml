@@ -13,6 +13,8 @@ jobs:
   check-version:
     name: Check Version Change
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.get_version.outputs.version }}
       should_release: ${{ steps.check_version.outputs.should_release }}
