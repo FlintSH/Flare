@@ -4,17 +4,15 @@ RUN apk add --no-cache libc6-compat curl bash
 WORKDIR /app
 
 # Install Bun using the official installation script
-RUN curl -fsSL https://bun.sh/install | bash && \
-    mv /root/.bun /usr/local/bun && \
-    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
-    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
 # Install dependencies without running postinstall, then generate Prisma Client
-RUN bun install --frozen-lockfile --ignore-scripts
-RUN bunx prisma generate
+RUN /root/.bun/bin/bun install --frozen-lockfile --ignore-scripts
+RUN /root/.bun/bin/bunx prisma generate
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
@@ -22,10 +20,8 @@ WORKDIR /app
 
 # Install Bun using the official installation script
 RUN apk add --no-cache curl bash
-RUN curl -fsSL https://bun.sh/install | bash && \
-    mv /root/.bun /usr/local/bun && \
-    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
-    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -51,9 +47,9 @@ RUN adduser --system --uid 1001 nextjs
 # Install curl for healthcheck, OpenSSL for Prisma, bash and Bun for package management
 RUN apk add --no-cache curl openssl bash
 RUN curl -fsSL https://bun.sh/install | bash && \
-    mv /root/.bun /usr/local/bun && \
-    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
-    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
+    mv /root/.bun /opt/bun && \
+    chown -R nextjs:nodejs /opt/bun
+ENV PATH="/opt/bun/bin:${PATH}"
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
@@ -77,6 +73,7 @@ RUN chmod +x /app/start.sh
 
 # Create the entrypoint script that will run as root
 RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'export PATH="/opt/bun/bin:${PATH}"' >> /entrypoint.sh && \
     echo 'mkdir -p /app/uploads' >> /entrypoint.sh && \
     echo 'chown -R nextjs:nodejs /app/uploads' >> /entrypoint.sh && \
     echo 'chmod 775 /app/uploads' >> /entrypoint.sh && \
