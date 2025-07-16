@@ -6,12 +6,14 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 
-# Install dependencies
+# Install dependencies and rebuild sharp for musl/arm64
 RUN npm ci
+RUN npm rebuild --arch=arm64 --platform=linux --libc=musl sharp
 RUN npx prisma generate
 
 # Stage 2: Builder
 FROM node:22-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -35,7 +37,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Install curl for healthcheck and OpenSSL for Prisma
-RUN apk add --no-cache curl openssl
+RUN apk add --no-cache curl openssl libc6-compat
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
