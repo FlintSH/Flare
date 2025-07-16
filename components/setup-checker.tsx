@@ -17,8 +17,7 @@ export function SetupChecker({ children }: SetupCheckerProps) {
   const router = useRouter()
   const pathname = usePathname()
 
-  const shouldCheckSetup =
-    !pathname.startsWith('/setup') && !pathname.startsWith('/api/')
+  const shouldCheckSetup = !pathname.startsWith('/api/')
 
   const {
     data: setupStatus,
