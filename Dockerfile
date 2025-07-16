@@ -1,10 +1,11 @@
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat curl bash
 WORKDIR /app
 
-# Install Bun for package management
-RUN npm install -g bun@latest
+# Install Bun using the official installation script
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 COPY package.json bun.lock ./
 COPY prisma ./prisma
@@ -17,8 +18,10 @@ RUN bunx prisma generate
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install Bun for package management
-RUN npm install -g bun@latest
+# Install Bun using the official installation script
+RUN apk add --no-cache curl bash
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -41,9 +44,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck, OpenSSL for Prisma, and Bun for package management
-RUN apk add --no-cache curl openssl
-RUN npm install -g bun@latest
+# Install curl for healthcheck, OpenSSL for Prisma, bash and Bun for package management
+RUN apk add --no-cache curl openssl bash
+RUN curl -fsSL https://bun.sh/install | bash && \
+    mv /root/.bun /usr/local/bun && \
+    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
+    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
