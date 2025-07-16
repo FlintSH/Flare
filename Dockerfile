@@ -4,14 +4,16 @@ RUN apk add --no-cache libc6-compat curl bash
 WORKDIR /app
 
 # Install Bun using the official installation script
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
+RUN curl -fsSL https://bun.sh/install | bash && \
+    mv /root/.bun /usr/local/bun && \
+    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
+    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
 
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
-# Install dependencies and generate Prisma Client
-RUN bun install --frozen-lockfile
+# Install dependencies without running postinstall, then generate Prisma Client
+RUN bun install --frozen-lockfile --ignore-scripts
 RUN bunx prisma generate
 
 # Stage 2: Builder
@@ -20,8 +22,10 @@ WORKDIR /app
 
 # Install Bun using the official installation script
 RUN apk add --no-cache curl bash
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
+RUN curl -fsSL https://bun.sh/install | bash && \
+    mv /root/.bun /usr/local/bun && \
+    ln -s /usr/local/bun/bin/bun /usr/local/bin/bun && \
+    ln -s /usr/local/bun/bin/bunx /usr/local/bin/bunx
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
