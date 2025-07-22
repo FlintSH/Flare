@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator'
 import { BashTool } from './bash-tool'
 import { FlameshotTool } from './flameshot-tool'
 import { ShareXTool } from './sharex-tool'
+import { SpectacleTool } from './spectacle-tool'
 import { UploadToken } from './upload-token'
 
 export function ProfileTools() {
@@ -27,6 +28,10 @@ export function ProfileTools() {
         <Separator />
 
         <FlameshotTool />
+
+        <Separator />
+
+        <SpectacleTool />
 
         <Separator />
 

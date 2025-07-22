@@ -9,4 +9,3 @@ export async function checkSetupCompletion(): Promise<boolean> {
     return false
   }
 }
-// a
