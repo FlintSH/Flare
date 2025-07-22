@@ -122,22 +122,22 @@ export function FlameshotTool() {
               className="space-y-6"
             >
               {}
-              <div className="flex items-start space-x-3 rounded-md bg-amber-50 dark:bg-amber-950/50 p-3 text-amber-600 dark:text-amber-400">
+              <div className="flex items-start space-x-3 rounded-md bg-blue-50 dark:bg-blue-950/50 p-3 text-blue-600 dark:text-blue-400">
                 <Terminal className="mt-0.5 h-5 w-5 flex-shrink-0" />
                 <div className="space-y-1">
                   <div className="text-sm opacity-90">
                     Make sure you have these installed:
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center rounded-md bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
                         flameshot
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
                         curl
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
                         jq
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
                         xsel
                       </span>
                     </div>
