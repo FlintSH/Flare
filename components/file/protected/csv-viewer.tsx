@@ -14,7 +14,7 @@ interface CsvViewerProps {
   verifiedPassword?: string
 }
 
-export function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
+export function CsvViewer({ url, verifiedPassword }: CsvViewerProps) {
   const [csvData, setCsvData] = useState<string[][]>([])
   const [error, setError] = useState<string>()
   const [isLoading, setIsLoading] = useState(true)
@@ -75,11 +75,9 @@ export function CsvViewer({ url, title, verifiedPassword }: CsvViewerProps) {
     return (
       <div className="w-full flex flex-col items-center justify-center p-8 text-center">
         <p className="text-muted-foreground mb-4">{error}</p>
-        <iframe
-          src={DOMPurify.sanitize(url)}
-          className="w-full h-[60vh] border-0 font-mono"
-          title={title}
-        />
+        <p className="text-sm text-muted-foreground">
+          Use the download button above to view this file.
+        </p>
       </div>
     )
   }
