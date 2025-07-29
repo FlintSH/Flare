@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { FileUploadResponse } from '@/types/dto/file'
+import { hash } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 import { readFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -110,7 +111,9 @@ export async function POST(
           size: bytesToMB(metadata.totalSize),
           path: metadata.fileKey,
           visibility: metadata.visibility,
-          password: metadata.password,
+          password: metadata.password
+            ? await hash(metadata.password, 10)
+            : null,
           user: {
             connect: {
               id: metadata.userId,

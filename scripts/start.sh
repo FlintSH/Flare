@@ -51,6 +51,13 @@ if ! node /app/scripts/migrate-config.js; then
     exit 1
 fi
 
+# Run password migrations
+echo "Running password migrations..."
+if ! node /app/scripts/hash-file-passwords.js; then
+    echo "Failed to run password migrations"
+    exit 1
+fi
+
 # Start the application
 echo "Starting the application..."
 exec npm run start

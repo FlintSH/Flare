@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { hash } from 'bcryptjs'
 import { existsSync } from 'fs'
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
@@ -285,7 +286,9 @@ export async function PUT(req: Request) {
           size: bytesToMB(metadata.totalSize),
           path: metadata.fileKey,
           visibility: metadata.visibility,
-          password: metadata.password,
+          password: metadata.password
+            ? await hash(metadata.password, 10)
+            : null,
           user: {
             connect: {
               id: metadata.userId,

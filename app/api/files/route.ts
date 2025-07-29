@@ -4,6 +4,7 @@ import {
   FileUploadResponse,
 } from '@/types/dto/file'
 import { Prisma } from '@prisma/client'
+import { hash } from 'bcryptjs'
 import { join } from 'path'
 
 import {
@@ -113,7 +114,7 @@ export async function POST(req: Request) {
           size: bytesToMB(uploadedFile.size),
           path: filePath,
           visibility: visibility,
-          password: password,
+          password: password ? await hash(password, 10) : null,
           userId: user.id,
         },
       })
