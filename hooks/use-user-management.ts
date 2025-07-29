@@ -93,7 +93,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           throw new Error(data.error || 'Failed to create user')
         }
 
-        const newUser = await response.json()
+        const responseData = await response.json()
+        const newUser = responseData.data
 
         setUsers((prevUsers) => [newUser, ...prevUsers])
 
@@ -148,7 +149,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           throw new Error(data.error || 'Failed to update user')
         }
 
-        const updatedUser = await response.json()
+        const responseData = await response.json()
+        const updatedUser = responseData.data
 
         setUsers((prevUsers) =>
           prevUsers.map((user) => (user.id === userId ? updatedUser : user))
