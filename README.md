@@ -10,13 +10,13 @@
 [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
 
 </div>
-Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX and Flameshot. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
+Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX, Flameshot, and KDE Spectacle. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
 
 ## ✨ Features
 
 - 🚀 **Universal Screenshot Integration**
-  - ShareX, Flameshot, and Bash Script support
-  - One-click configuration downloads
+  - ShareX, Flameshot, KDE Spectacle, and Bash Script upload support
+  - One-click configuration/script downloads
 - 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
