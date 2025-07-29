@@ -1,23 +1,22 @@
-'use client'
+import { useFileViewer } from '../context'
 
-import DOMPurify from 'dompurify'
+export function AudioViewer() {
+  const { file, state } = useFileViewer()
 
-interface AudioViewerProps {
-  url: string
-  mimeType: string
-}
+  if (!state.urls) {
+    return null
+  }
 
-export function AudioViewer({ url, mimeType }: AudioViewerProps) {
   return (
     <div className="w-full flex items-center justify-center py-4">
       <audio
-        src={DOMPurify.sanitize(url)}
+        src={state.urls.fileUrl}
         controls
         className="w-full max-w-2xl"
         controlsList="nodownload"
         preload="metadata"
       >
-        <source src={DOMPurify.sanitize(url)} type={mimeType} />
+        <source src={state.urls.fileUrl} type={file.mimeType} />
         Your browser does not support the audio tag.
       </audio>
     </div>

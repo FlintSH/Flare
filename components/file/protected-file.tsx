@@ -4,11 +4,11 @@ import { useState } from 'react'
 
 import { FileActions } from '@/components/file/file-actions'
 import { AuthGuard } from '@/components/file/protected/auth-guard'
-import { FileContent } from '@/components/file/protected/file-content'
 import {
   CODE_FILE_TYPES,
   TEXT_FILE_TYPES,
 } from '@/components/file/protected/mime-types'
+import { FileViewer } from '@/components/file/viewer'
 
 import { sanitizeUrl } from '@/lib/utils/url'
 
@@ -45,12 +45,10 @@ export function ProtectedFile({
         return (
           <div className="space-y-4">
             {}
-            <div className="flex items-center justify-center px-2">
-              <FileContent
-                file={file}
-                verifiedPassword={currentVerifiedPassword}
-              />
-            </div>
+            <FileViewer
+              file={file}
+              verifiedPassword={currentVerifiedPassword}
+            />
 
             {}
             <div className="flex items-center justify-center px-6 pb-4">
