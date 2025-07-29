@@ -1,6 +1,13 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 
 import DOMPurify from 'dompurify'
 
@@ -44,7 +51,7 @@ export function FileViewerProvider({
     }
   }, [file.urlPath, verifiedPassword])
 
-  const fetchContent = async () => {
+  const fetchContent = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: undefined }))
 
     try {
@@ -67,9 +74,9 @@ export function FileViewerProvider({
         isLoading: false,
       }))
     }
-  }
+  }, [urls.fileUrl, urls])
 
-  const fetchDirectUrl = async () => {
+  const fetchDirectUrl = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: undefined }))
 
     try {
@@ -98,7 +105,7 @@ export function FileViewerProvider({
         isLoading: false,
       }))
     }
-  }
+  }, [file.urlPath, verifiedPassword, urls])
 
   useEffect(() => {
     setState((prev) => ({ ...prev, urls, isLoading: false }))
