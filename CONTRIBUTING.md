@@ -32,11 +32,11 @@ Given that AI written code is such a contentious topic in 2025, I want to make i
 
 ## Setting up Local Dev
 
-Flare is (by design) pretty easy to develop for. Since the backend and frontend are bundled together as one Next.JS server, everything is pretty plug and play. To get going you just need a Postgres instance running, Docker and Bun.
+Flare is (by design) pretty easy to develop for. Since the backend and frontend are bundled together as one Next.JS server, everything is pretty plug and play. To get going you just need a Postgres instance running, Docker and Node.js.
 
 ```bash
 # intall deps
-bun install
+npm install
 
 # setup db (using docker, optional)
 docker run --name flare-db -e POSTGRES_PASSWORD=postgres -d -p 5432:5432 postgres:16
@@ -46,10 +46,10 @@ cp .env.example .env
 # edit .env with your connection string and a auth secret
 
 # run any db migrations
-bunx prisma migrate dev
+npx prisma migrate dev
 
 # start flare dev server
-bun dev
+npm run dev
 ```
 
 ## Making Commits
