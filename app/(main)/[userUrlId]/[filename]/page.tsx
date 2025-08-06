@@ -97,10 +97,19 @@ export async function generateMetadata({
     return {}
   }
 
-  const file = await prisma.file.findUnique({
+  let file = await prisma.file.findUnique({
     where: { urlPath },
     include: { user: true },
   })
+
+  if (!file && filename.includes(' ')) {
+    const urlSafeFilename = filename.replace(/ /g, '-')
+    const urlSafePath = `/${userUrlId}/${urlSafeFilename}`
+    file = await prisma.file.findUnique({
+      where: { urlPath: urlSafePath },
+      include: { user: true },
+    })
+  }
 
   if (!file || !file.user) {
     return {}
@@ -228,10 +237,19 @@ export default async function FilePage({
   const urlPath = `/${userUrlId}/${filename}`
   const providedPassword = (await searchParams).password as string | undefined
 
-  const file = await prisma.file.findUnique({
+  let file = await prisma.file.findUnique({
     where: { urlPath },
     include: { user: true },
   })
+
+  if (!file && filename.includes(' ')) {
+    const urlSafeFilename = filename.replace(/ /g, '-')
+    const urlSafePath = `/${userUrlId}/${urlSafeFilename}`
+    file = await prisma.file.findUnique({
+      where: { urlPath: urlSafePath },
+      include: { user: true },
+    })
+  }
 
   if (!file) {
     notFound()

@@ -24,9 +24,16 @@ export async function GET(
     const providedPassword = url.searchParams.get('password')
     const isDownloadRequest = url.searchParams.get('download') === 'true'
 
-    const file = await prisma.file.findUnique({
+    let file = await prisma.file.findUnique({
       where: { urlPath },
     })
+
+    if (!file && urlPath.includes(' ')) {
+      const urlSafePath = urlPath.replace(/ /g, '-')
+      file = await prisma.file.findUnique({
+        where: { urlPath: urlSafePath },
+      })
+    }
 
     if (!file) {
       return new Response(null, { status: 404 })

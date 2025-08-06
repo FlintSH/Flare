@@ -58,6 +58,7 @@ next-env.d.ts
 .vscode/
 .cursor/
 CLAUDE.md
+AGENTS.md
 *.swp
 *.swo
 
