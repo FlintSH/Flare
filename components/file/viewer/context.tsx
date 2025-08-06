@@ -74,7 +74,7 @@ export function FileViewerProvider({
         isLoading: false,
       }))
     }
-  }, [urls.fileUrl, urls])
+  }, [urls])
 
   const fetchDirectUrl = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: undefined }))

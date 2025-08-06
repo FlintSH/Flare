@@ -111,7 +111,7 @@ export function useDataExport() {
         throw new Error('No data received from server')
       }
 
-      const blob = new Blob(chunks, { type: 'application/zip' })
+      const blob = new Blob(chunks as BlobPart[], { type: 'application/zip' })
 
       if (blob.size === 0) {
         throw new Error('Generated blob is empty')

@@ -311,7 +311,7 @@ export class S3StorageProvider implements StorageProvider {
 
         const response = await fetch(presignedUrl, {
           method: 'PUT',
-          body: data,
+          body: data as BodyInit,
         })
 
         if (!response.ok) {

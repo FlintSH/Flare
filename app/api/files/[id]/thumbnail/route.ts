@@ -56,7 +56,7 @@ export async function GET(
       })
       .toBuffer()
 
-    return new NextResponse(imageBuffer, {
+    return new NextResponse(imageBuffer as unknown as BodyInit, {
       headers: {
         'Content-Type': file.mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
