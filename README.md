@@ -31,6 +31,7 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 🔗 **URL Shortener** - Custom short URLs under your domain with click tracking
 - 📝 **Pastebin** - Code and text sharing with syntax highlighting
 - 🤖 **OCR Processing** - Automatic text extraction from images uploaded
+- 🗜️ **Automatic Compression** - Smart image & video compression with user-configurable settings
 - 🔌 **Rich Embeds** - Content embeds naturally on all your social media platforms.
 
 ## 🚀 Quick Start
@@ -83,6 +84,16 @@ Flare is built to be as configurable as possible. Head to `/dashboard/settings` 
 - Configuring registration options and user permissions
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
+
+### Video Compression Support
+
+Flare includes automatic video compression support:
+
+- **Docker**: FFmpeg is included by default in the Docker image
+- **Manual Installation**: If not using Docker, install FFmpeg:
+  - Ubuntu/Debian: `sudo apt install ffmpeg`
+  - macOS: `brew install ffmpeg`
+  - Windows: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
 
 ## 📜 License
 

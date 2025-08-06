@@ -9,7 +9,7 @@ services:
     # image: flintsh/flare:latest
     restart: always
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - DATABASE_URL=postgresql://flare:flarepassword@postgres:5432/flare?schema=public
       - NEXTAUTH_URL=http://localhost:3000
@@ -27,10 +27,10 @@ services:
       - POSTGRES_PASSWORD=flarepassword
       - POSTGRES_DB=flare
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
-  uploads: 
+  uploads:

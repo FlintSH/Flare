@@ -1,11 +1,17 @@
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { CompressionSettings } from '@prisma/client'
-import ffmpeg from 'fluent-ffmpeg'
+import { exec } from 'child_process'
+import { createWriteStream } from 'fs'
 import fs from 'fs/promises'
+import os from 'os'
 import path from 'path'
 import sharp from 'sharp'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import { promisify } from 'util'
 
-ffmpeg.setFfmpegPath(ffmpegInstaller.path)
+import { getStorageProvider } from '@/lib/storage'
+
+const execAsync = promisify(exec)
 
 export interface CompressionOptions {
   settings: CompressionSettings
@@ -53,50 +59,114 @@ export class CompressionService {
     if (!settings.enabled || !settings.autoCompress) {
       return {
         success: false,
-        originalSize: (await fs.stat(inputPath)).size,
+        originalSize: 0,
         error: 'Compression is disabled',
       }
     }
 
-    const fileStats = await fs.stat(inputPath)
-    const originalSize = fileStats.size
+    // Download file from storage to temp directory for processing
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'flare-compress-'))
+    const tempInputPath = path.join(tempDir, path.basename(inputPath))
 
-    if (
-      settings.compressionThreshold &&
-      originalSize < settings.compressionThreshold
-    ) {
-      return {
-        success: false,
-        originalSize,
-        error: 'File size below compression threshold',
+    try {
+      const storageProvider = await getStorageProvider()
+
+      // Get file size from storage
+      const originalSize = await storageProvider.getFileSize(inputPath)
+
+      if (
+        settings.compressionThreshold &&
+        originalSize < settings.compressionThreshold
+      ) {
+        await fs.rmdir(tempDir, { recursive: true })
+        return {
+          success: false,
+          originalSize,
+          error: 'File size below compression threshold',
+        }
       }
-    }
 
-    if (
-      this.SUPPORTED_IMAGE_FORMATS.includes(mimeType) &&
-      settings.imageCompression
-    ) {
-      return this.compressImage(options)
-    }
+      // Download file to temp location
+      const fileStream = await storageProvider.getFileStream(inputPath)
+      const writeStream = createWriteStream(tempInputPath)
+      await pipeline(fileStream, writeStream)
 
-    if (
-      this.SUPPORTED_VIDEO_FORMATS.includes(mimeType) &&
-      settings.videoCompression
-    ) {
-      return this.compressVideo(options)
-    }
+      // Process compression based on file type
+      let result: CompressionResult
 
-    return {
-      success: false,
-      originalSize,
-      error: 'Unsupported file format for compression',
+      if (
+        this.SUPPORTED_IMAGE_FORMATS.includes(mimeType) &&
+        settings.imageCompression
+      ) {
+        result = await this.compressImage({
+          ...options,
+          inputPath: tempInputPath,
+        })
+      } else if (
+        this.SUPPORTED_VIDEO_FORMATS.includes(mimeType) &&
+        settings.videoCompression
+      ) {
+        result = await this.compressVideo({
+          ...options,
+          inputPath: tempInputPath,
+        })
+      } else {
+        await fs.rmdir(tempDir, { recursive: true })
+        return {
+          success: false,
+          originalSize,
+          error: 'Unsupported file format for compression',
+        }
+      }
+
+      // If compression was successful, upload the compressed file back to storage
+      if (result.success && result.outputPath) {
+        const compressedBuffer = await fs.readFile(result.outputPath)
+
+        if (settings.keepOriginal) {
+          // Save original with _original suffix
+          const ext = path.extname(inputPath)
+          const baseName = path.basename(inputPath, ext)
+          const dir = path.dirname(inputPath)
+          const originalBackupPath = path.join(
+            dir,
+            `${baseName}_original${ext}`
+          )
+
+          // Move original to backup location
+          const originalStream = await storageProvider.getFileStream(inputPath)
+          const originalBuffer = await streamToBuffer(originalStream)
+          await storageProvider.uploadFile(
+            originalBuffer,
+            originalBackupPath,
+            mimeType
+          )
+        }
+
+        // Upload compressed file to original location
+        await storageProvider.uploadFile(compressedBuffer, inputPath, mimeType)
+
+        result.outputPath = inputPath
+      }
+
+      // Clean up temp directory
+      await fs.rmdir(tempDir, { recursive: true })
+
+      return result
+    } catch (error) {
+      // Clean up temp directory on error
+      try {
+        await fs.rmdir(tempDir, { recursive: true })
+      } catch {}
+
+      throw error
     }
   }
 
   private static async compressImage(
     options: CompressionOptions
   ): Promise<CompressionResult> {
-    const { settings, inputPath, outputPath, keepOriginal } = options
+    const { settings, inputPath } = options
     const fileStats = await fs.stat(inputPath)
     const originalSize = fileStats.size
 
@@ -105,8 +175,7 @@ export class CompressionService {
       const baseName = path.basename(inputPath, ext)
       const dir = path.dirname(inputPath)
 
-      const compressedPath =
-        outputPath || path.join(dir, `${baseName}_compressed${ext}`)
+      const compressedPath = path.join(dir, `${baseName}_compressed${ext}`)
       const tempPath = `${compressedPath}.tmp`
 
       let pipeline = sharp(inputPath)
@@ -164,35 +233,15 @@ export class CompressionService {
         }
       }
 
-      if (keepOriginal) {
-        const originalBackupPath = path.join(dir, `${baseName}_original${ext}`)
-        await fs.rename(inputPath, originalBackupPath)
-        await fs.rename(tempPath, inputPath)
-
-        return {
-          success: true,
-          outputPath: inputPath,
-          originalSize,
-          compressedSize,
-          compressionRatio: Number(
-            ((1 - compressedSize / originalSize) * 100).toFixed(2)
-          ),
-        }
-      } else {
-        await fs.rename(tempPath, compressedPath)
-        if (compressedPath !== inputPath) {
-          await fs.unlink(inputPath)
-        }
-
-        return {
-          success: true,
-          outputPath: compressedPath,
-          originalSize,
-          compressedSize,
-          compressionRatio: Number(
-            ((1 - compressedSize / originalSize) * 100).toFixed(2)
-          ),
-        }
+      // Return the temp path for upload
+      return {
+        success: true,
+        outputPath: tempPath,
+        originalSize,
+        compressedSize,
+        compressionRatio: Number(
+          ((1 - compressedSize / originalSize) * 100).toFixed(2)
+        ),
       }
     } catch (error) {
       return {
@@ -209,120 +258,88 @@ export class CompressionService {
   private static async compressVideo(
     options: CompressionOptions
   ): Promise<CompressionResult> {
-    const { settings, inputPath, outputPath, keepOriginal } = options
+    const { settings, inputPath } = options
     const fileStats = await fs.stat(inputPath)
     const originalSize = fileStats.size
 
-    return new Promise((resolve) => {
-      try {
-        const ext = path.extname(inputPath)
-        const baseName = path.basename(inputPath, ext)
-        const dir = path.dirname(inputPath)
-
-        const compressedPath =
-          outputPath || path.join(dir, `${baseName}_compressed.mp4`)
-        const tempPath = `${compressedPath}.tmp`
-
-        const quality = Math.max(1, Math.min(100, settings.videoQuality || 80))
-        const crf = Math.round(51 - quality * 0.51)
-
-        let command = ffmpeg(inputPath)
-          .videoCodec(settings.videoCodec || 'libx264')
-          .outputOptions([
-            `-crf ${crf}`,
-            '-preset medium',
-            '-movflags +faststart',
-          ])
-
-        if (settings.videoBitrate) {
-          command = command.videoBitrate(settings.videoBitrate)
-        }
-
-        if (settings.maxWidth || settings.maxHeight) {
-          const width = settings.maxWidth || -2
-          const height = settings.maxHeight || -2
-          command = command.size(`${width}x${height}`)
-        }
-
-        command
-          .on('end', async () => {
-            try {
-              const compressedStats = await fs.stat(tempPath)
-              const compressedSize = compressedStats.size
-
-              if (compressedSize >= originalSize) {
-                await fs.unlink(tempPath)
-                resolve({
-                  success: false,
-                  originalSize,
-                  error: 'Compressed file is larger than original',
-                })
-                return
-              }
-
-              if (keepOriginal) {
-                const originalBackupPath = path.join(
-                  dir,
-                  `${baseName}_original${ext}`
-                )
-                await fs.rename(inputPath, originalBackupPath)
-                await fs.rename(tempPath, inputPath)
-
-                resolve({
-                  success: true,
-                  outputPath: inputPath,
-                  originalSize,
-                  compressedSize,
-                  compressionRatio: Number(
-                    ((1 - compressedSize / originalSize) * 100).toFixed(2)
-                  ),
-                })
-              } else {
-                await fs.rename(tempPath, compressedPath)
-                if (compressedPath !== inputPath) {
-                  await fs.unlink(inputPath)
-                }
-
-                resolve({
-                  success: true,
-                  outputPath: compressedPath,
-                  originalSize,
-                  compressedSize,
-                  compressionRatio: Number(
-                    ((1 - compressedSize / originalSize) * 100).toFixed(2)
-                  ),
-                })
-              }
-            } catch (error) {
-              resolve({
-                success: false,
-                originalSize,
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : 'Unknown error after video compression',
-              })
-            }
-          })
-          .on('error', (error) => {
-            resolve({
-              success: false,
-              originalSize,
-              error: error.message,
-            })
-          })
-          .save(tempPath)
-      } catch (error) {
-        resolve({
+    try {
+      const ffmpegAvailable = await this.checkFFmpegAvailable()
+      if (!ffmpegAvailable) {
+        return {
           success: false,
           originalSize,
           error:
-            error instanceof Error
-              ? error.message
-              : 'Unknown error during video compression',
-        })
+            'FFmpeg is not installed on the server. Video compression is unavailable.',
+        }
       }
-    })
+
+      const ext = path.extname(inputPath)
+      const baseName = path.basename(inputPath, ext)
+      const dir = path.dirname(inputPath)
+
+      const compressedPath = path.join(dir, `${baseName}_compressed.mp4`)
+      const tempPath = `${compressedPath}.tmp`
+
+      const quality = Math.max(1, Math.min(100, settings.videoQuality || 80))
+      const crf = Math.round(51 - quality * 0.51)
+
+      let ffmpegCommand = `ffmpeg -i "${inputPath}" -c:v ${settings.videoCodec || 'libx264'} -crf ${crf} -preset medium -movflags +faststart`
+
+      if (settings.videoBitrate) {
+        ffmpegCommand += ` -b:v ${settings.videoBitrate}`
+      }
+
+      if (settings.maxWidth || settings.maxHeight) {
+        const width = settings.maxWidth || -2
+        const height = settings.maxHeight || -2
+        ffmpegCommand += ` -vf scale=${width}:${height}`
+      }
+
+      ffmpegCommand += ` -y "${tempPath}"`
+
+      await execAsync(ffmpegCommand)
+
+      const compressedStats = await fs.stat(tempPath)
+      const compressedSize = compressedStats.size
+
+      if (compressedSize >= originalSize) {
+        await fs.unlink(tempPath)
+        return {
+          success: false,
+          originalSize,
+          error: 'Compressed file is larger than original',
+        }
+      }
+
+      // Return the temp path for upload
+      return {
+        success: true,
+        outputPath: tempPath,
+        originalSize,
+        compressedSize,
+        compressionRatio: Number(
+          ((1 - compressedSize / originalSize) * 100).toFixed(2)
+        ),
+      }
+    } catch (error) {
+      return {
+        success: false,
+        originalSize,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error during video compression',
+      }
+    }
+  }
+
+  private static async checkFFmpegAvailable(): Promise<boolean> {
+    try {
+      await execAsync('ffmpeg -version')
+      return true
+    } catch {
+      return false
+    }
   }
 
   private static async hasTransparency(imagePath: string): Promise<boolean> {
@@ -350,4 +367,13 @@ export class CompressionService {
       compressionThreshold: 1048576, // 1MB
     }
   }
+}
+
+// Helper function to convert stream to buffer
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
 }

@@ -44,8 +44,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck and OpenSSL for Prisma
-RUN apk add --no-cache curl openssl libc6-compat
+# Install curl for healthcheck, OpenSSL for Prisma, and FFmpeg for video compression
+RUN apk add --no-cache curl openssl libc6-compat ffmpeg
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
