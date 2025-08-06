@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { ProfileAccount } from './account'
+import { ProfileCompression } from './compression/profile-compression'
 import { ProfileExport } from './export'
 import { ProfileSecurity } from './security'
 import { ProfileStorage } from './storage'
@@ -30,6 +31,7 @@ export function ProfileClient({
       <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
         <TabsTrigger value="profile">Profile</TabsTrigger>
         <TabsTrigger value="security">Security</TabsTrigger>
+        <TabsTrigger value="compression">Compression</TabsTrigger>
         <TabsTrigger value="data">Data</TabsTrigger>
       </TabsList>
 
@@ -78,6 +80,10 @@ export function ProfileClient({
             <ProfileSecurity onUpdate={handleRefresh} />
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <TabsContent value="compression" className="space-y-6">
+        <ProfileCompression />
       </TabsContent>
 
       <TabsContent value="data" className="space-y-6">

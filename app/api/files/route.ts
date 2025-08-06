@@ -14,6 +14,7 @@ import {
   paginatedResponse,
 } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
+import { compressionQueue } from '@/lib/compression/queue'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import {
@@ -135,6 +136,27 @@ export async function POST(req: Request) {
       processImageOCR(filePath, fileRecord.id).catch((error) => {
         console.error('Background OCR processing failed:', error)
       })
+    }
+
+    const userWithSettings = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { compressionSettings: true },
+    })
+
+    if (
+      userWithSettings?.compressionSettings?.enabled &&
+      userWithSettings.compressionSettings.autoCompress
+    ) {
+      compressionQueue
+        .addJob({
+          fileId: fileRecord.id,
+          userId: user.id,
+          inputPath: filePath,
+          mimeType: uploadedFile.type,
+        })
+        .catch((error) => {
+          console.error('Failed to queue compression job:', error)
+        })
     }
 
     if (expirationDate) {

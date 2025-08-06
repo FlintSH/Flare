@@ -105,6 +105,18 @@ export type EventTypeMap = {
     size: number
     action: ExpiryAction
   }
+  'file.compressed': {
+    fileId: string
+    userId: string
+    originalSize: number
+    compressedSize: number
+    compressionRatio: number
+  }
+  'file.compression.failed': {
+    fileId: string
+    userId: string
+    error: string
+  }
 }
 
 export type EventType = keyof EventTypeMap

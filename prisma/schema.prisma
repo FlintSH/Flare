@@ -23,6 +23,7 @@ model User {
   urlId             String         @unique
   uploadToken       String         @unique
   randomizeFileUrls Boolean        @default(false)
+  compressionSettings CompressionSettings?
   files             File[]
   shortenedUrls     ShortenedUrl[]
 }
@@ -33,10 +34,12 @@ model File {
   urlPath        String         @unique
   mimeType       String
   size           Float
+  originalSize   Float?
   visibility     FileVisibility @default(PUBLIC)
   uploadedAt     DateTime       @default(now())
   userId         String
   path           String
+  originalPath   String?
   isOcrProcessed Boolean        @default(false)
   ocrText        String?
   password       String?
@@ -44,6 +47,8 @@ model File {
   ocrConfidence  Float?
   views          Int            @default(0)
   downloads      Int            @default(0)
+  isCompressed   Boolean        @default(false)
+  compressionRatio Float?
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -110,6 +115,27 @@ enum UserRole {
 enum FileVisibility {
   PUBLIC
   PRIVATE
+}
+
+model CompressionSettings {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  enabled           Boolean  @default(false)
+  imageCompression  Boolean  @default(true)
+  imageQuality      Int      @default(85) // 1-100
+  imageFormat       String?  // webp, jpeg, png, auto
+  videoCompression  Boolean  @default(true)
+  videoQuality      Int      @default(80) // 1-100
+  videoBitrate      String?  // e.g., "1M", "2M"
+  videoCodec        String?  // h264, h265, vp9
+  maxWidth          Int?     // Max width for images
+  maxHeight         Int?     // Max height for images
+  keepOriginal      Boolean  @default(true)
+  autoCompress      Boolean  @default(true)
+  compressionThreshold Float? @default(1048576) // Files above this size in bytes
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum EventStatus {
