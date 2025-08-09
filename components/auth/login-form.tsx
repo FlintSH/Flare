@@ -12,14 +12,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { SSOButtons } from './sso-buttons'
+
 interface LoginFormProps {
   registrationsEnabled: boolean
   disabledMessage: string
+  providers?: Record<string, unknown>
 }
 
 export function LoginForm({
   registrationsEnabled,
   disabledMessage,
+  providers,
 }: LoginFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -130,6 +134,8 @@ export function LoginForm({
           )}
         </Button>
       </div>
+
+      <SSOButtons providers={providers} />
     </form>
   )
 }

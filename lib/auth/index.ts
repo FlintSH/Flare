@@ -1,8 +1,13 @@
+import { PrismaAdapter } from '@auth/prisma-adapter'
 import { Prisma, UserRole } from '@prisma/client'
 import { compare } from 'bcryptjs'
+import { nanoid } from 'nanoid'
 import { NextAuthOptions, Session } from 'next-auth'
 import { JWT } from 'next-auth/jwt'
+import AzureADProvider from 'next-auth/providers/azure-ad'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import GitHubProvider from 'next-auth/providers/github'
+import GoogleProvider from 'next-auth/providers/google'
 
 import { prisma } from '@/lib/database/prisma'
 
@@ -42,6 +47,7 @@ declare module 'next-auth/jwt' {
 }
 
 export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -84,40 +90,132 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? [
+          GitHubProvider({
+            clientId: process.env.GITHUB_CLIENT_ID,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+    ...(process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_CLIENT_SECRET
+      ? [
+          AzureADProvider({
+            clientId: process.env.AZURE_AD_CLIENT_ID,
+            clientSecret: process.env.AZURE_AD_CLIENT_SECRET,
+            tenantId: process.env.AZURE_AD_TENANT_ID,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === 'credentials') {
+        return true
+      }
+
+      if (!user.email) {
+        return false
+      }
+
+      try {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        })
+
+        if (existingUser) {
+          const existingAccount = await prisma.account.findFirst({
+            where: {
+              userId: existingUser.id,
+              provider: account?.provider,
+            },
+          })
+
+          if (!existingAccount && account) {
+            await prisma.account.create({
+              data: {
+                userId: existingUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                refresh_token: account.refresh_token,
+                access_token: account.access_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+                session_state: account.session_state,
+              },
+            })
+          }
+
+          user.id = existingUser.id
+          return true
+        }
+
+        if (account?.provider !== 'credentials') {
+          const newUser = await prisma.user.create({
+            data: {
+              email: user.email,
+              name: user.name || profile?.name || user.email.split('@')[0],
+              image: user.image || profile?.image,
+              emailVerified: new Date(),
+              urlId: nanoid(8),
+              uploadToken: nanoid(32),
+              role: 'USER',
+            },
+          })
+          user.id = newUser.id
+        }
+
+        return true
+      } catch (error) {
+        console.error('Sign in error:', error)
+        return false
+      }
+    },
     async jwt({ token, user }): Promise<JWT> {
       if (user) {
         const sessionUser = user as UserWithSession
-        token.id = sessionUser.id
+        token.id = sessionUser.id || user.id
         token.role = sessionUser.role
-        token.image = sessionUser.image
+        token.image = sessionUser.image || user.image
         token.sessionVersion = sessionUser.sessionVersion
-        token.name = sessionUser.name
-        token.email = sessionUser.email
+        token.name = sessionUser.name || user.name
+        token.email = sessionUser.email || user.email
       }
 
-      const freshUser = await prisma.user.findUnique({
-        where: { id: token.id },
-        select: userSelect,
-      })
+      if (token.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: userSelect,
+        })
 
-      if (!freshUser) {
-        throw new Error('Session invalidated: User not found')
+        if (!freshUser) {
+          throw new Error('Session invalidated: User not found')
+        }
+
+        if (
+          token.sessionVersion &&
+          token.sessionVersion !== freshUser.sessionVersion
+        ) {
+          throw new Error('Session invalidated: Version mismatch')
+        }
+
+        token.role = freshUser.role
+        token.image = freshUser.image
+        token.name = freshUser.name
+        token.email = freshUser.email
+        token.sessionVersion = freshUser.sessionVersion
       }
-
-      if (
-        token.sessionVersion &&
-        token.sessionVersion !== freshUser.sessionVersion
-      ) {
-        throw new Error('Session invalidated: Version mismatch')
-      }
-
-      token.role = freshUser.role
-      token.image = freshUser.image
-      token.name = freshUser.name
-      token.email = freshUser.email
-      token.sessionVersion = freshUser.sessionVersion
 
       return token
     },

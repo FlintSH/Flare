@@ -1,3 +1,5 @@
+import { getProviders } from 'next-auth/react'
+
 import { LoginForm } from '@/components/auth/login-form'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
@@ -9,6 +11,7 @@ export const dynamic = 'force-dynamic'
 export default async function LoginPage() {
   const config = await getConfig()
   const registrationsEnabled = config.settings.general.registrations.enabled
+  const providers = await getProviders()
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden">
@@ -36,6 +39,7 @@ export default async function LoginPage() {
                 disabledMessage={
                   config.settings.general.registrations.disabledMessage
                 }
+                providers={providers || undefined}
               />
             </div>
           </div>
