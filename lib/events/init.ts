@@ -31,7 +31,3 @@ export async function initializeEventSystem() {
     throw error
   }
 }
-
-export function isEventSystemInitialized(): boolean {
-  return initialized
-}

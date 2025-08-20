@@ -6,7 +6,7 @@ import { prisma } from '@/lib/database/prisma'
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: { accountId: string } }
+  { params }: { params: Promise<{ accountId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -15,7 +15,7 @@ export async function DELETE(
       return apiError('Unauthorized', 401)
     }
 
-    const { accountId } = params
+    const { accountId } = await params
 
     // Check if the account belongs to the user
     const account = await prisma.account.findFirst({
