@@ -3,6 +3,7 @@
   "version": "1.5.2",
   "license": "MIT",
   "author": "fl1nt.dev",
+  "_hotfix_trigger": "1.5.2",
   "homepage": "https://github.com/FlintSH/flare",
   "repository": {
     "type": "git",
