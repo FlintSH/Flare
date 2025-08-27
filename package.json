@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.855.0",
-    "@aws-sdk/s3-request-presigner": "^3.855.0",
+    "@aws-sdk/s3-request-presigner": "^3.859.0",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-go": "^6.0.1",
