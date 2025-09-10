@@ -10,6 +10,9 @@ import { EventStatus } from '@/types/events'
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.events.getChildLogger('emitter')
 
 export class EventEmitter {
   private static instance: EventEmitter | null = null
@@ -47,7 +50,12 @@ export class EventEmitter {
       },
     })
 
-    console.log(`Event emitted: ${type} (${event.id})`)
+    logger.debug('Event emitted', {
+      type,
+      eventId: event.id,
+      priority: event.priority,
+      status: event.status,
+    })
 
     return event as BaseEvent
   }
@@ -82,7 +90,7 @@ export class EventEmitter {
       data: eventData,
     })
 
-    console.log(`${createdEvents.count} events emitted`)
+    logger.debug('Multiple events emitted', { count: createdEvents.count })
 
     const result = await prisma.event.findMany({
       where: {
@@ -215,7 +223,7 @@ export class EventEmitter {
       })
       return true
     } catch (error) {
-      console.error('Failed to delete event:', error)
+      logger.error('Failed to delete event', error as Error, { eventId: id })
       return false
     }
   }

@@ -14,7 +14,11 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
 
+import { loggers } from '@/lib/logger'
+
 import type { RangeOptions, S3Config, StorageProvider } from '../types'
+
+const logger = loggers.storage.getChildLogger('s3')
 
 export class S3StorageProvider implements StorageProvider {
   private client: S3Client
@@ -108,7 +112,7 @@ export class S3StorageProvider implements StorageProvider {
         stream.pause()
 
         stream.on('error', (error) => {
-          console.error(`S3 stream error for ${key}:`, error)
+          logger.error(`S3 stream error for ${key}`, error as Error, { key })
         })
 
         process.nextTick(() => {
@@ -118,10 +122,12 @@ export class S3StorageProvider implements StorageProvider {
         return stream
       } catch (error) {
         lastError = error as Error
-        console.error(
-          `S3 getFileStream attempt ${attempt} failed for ${key}:`,
-          error
-        )
+        logger.warn(`S3 getFileStream attempt ${attempt} failed`, {
+          error,
+          key,
+          attempt,
+          maxRetries,
+        })
 
         if (attempt === maxRetries) {
           throw lastError
@@ -364,8 +370,8 @@ export class S3StorageProvider implements StorageProvider {
         !isUploading
       ) {
         isUploading = true
-        const partData = currentPartBuffer.slice(0, maxPartSize)
-        currentPartBuffer = currentPartBuffer.slice(maxPartSize)
+        const partData = currentPartBuffer.subarray(0, maxPartSize)
+        currentPartBuffer = currentPartBuffer.subarray(maxPartSize)
 
         try {
           await uploadPart(partData, currentPartNumber++)
@@ -425,7 +431,10 @@ export class S3StorageProvider implements StorageProvider {
             })
           )
         } catch (abortError) {
-          console.error('Error aborting multipart upload:', abortError)
+          logger.error('Error aborting multipart upload', abortError as Error, {
+            key,
+            uploadId,
+          })
         }
         uploadError = error as Error
         passThrough.destroy(error as Error)
@@ -433,7 +442,9 @@ export class S3StorageProvider implements StorageProvider {
     }
 
     passThrough.on('error', async (error) => {
-      console.error('Stream error:', error)
+      logger.error('Stream error during multipart upload', error as Error, {
+        key,
+      })
       try {
         await this.client.send(
           new AbortMultipartUploadCommand({
@@ -443,7 +454,14 @@ export class S3StorageProvider implements StorageProvider {
           })
         )
       } catch (abortError) {
-        console.error('Error aborting multipart upload:', abortError)
+        logger.error(
+          'Error aborting multipart upload after stream error',
+          abortError as Error,
+          {
+            key,
+            uploadId,
+          }
+        )
       }
     })
 

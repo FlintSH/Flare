@@ -1,7 +1,10 @@
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 
 import { processImageOCRTask } from './processor'
+
+const logger = loggers.ocr
 
 interface OCRTask {
   filePath: string
@@ -18,7 +21,9 @@ class OCRQueue {
     if (!force) {
       const config = await getConfig()
       if (!config.settings.general.ocr.enabled) {
-        console.log('OCR processing is disabled in settings, skipping queue')
+        logger.debug('OCR processing is disabled in settings, skipping queue', {
+          fileId: task.fileId,
+        })
         await prisma.file.update({
           where: { id: task.fileId },
           data: {
@@ -52,7 +57,13 @@ class OCRQueue {
       try {
         await processImageOCRTask(task)
       } catch (error) {
-        console.error(`OCR processing failed for file ${task.filePath}:`, error)
+        logger.error(
+          `OCR processing failed for file ${task.filePath}`,
+          error as Error,
+          {
+            fileId: task.fileId,
+          }
+        )
       } finally {
         this.activeProcesses--
       }

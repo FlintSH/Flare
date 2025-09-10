@@ -21,15 +21,20 @@ import {
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
+const logger = loggers.files
+
 export async function POST(req: Request) {
   let filePath = ''
+  let userId: string | undefined
 
   try {
     const { user, response } = await requireAuth(req)
+    userId = user?.id
     if (response) return response
 
     const formData = await req.formData()
@@ -133,7 +138,10 @@ export async function POST(req: Request) {
 
     if (uploadedFile.type.startsWith('image/')) {
       processImageOCR(filePath, fileRecord.id).catch((error) => {
-        console.error('Background OCR processing failed:', error)
+        logger.error('Background OCR processing failed', error as Error, {
+          fileId: fileRecord.id,
+          filePath,
+        })
       })
     }
 
@@ -145,11 +153,15 @@ export async function POST(req: Request) {
           displayName,
           expirationDate
         )
-        console.log(
-          `File expiration scheduled for ${displayName} at ${expirationDate}`
-        )
+        logger.info('File expiration scheduled', {
+          fileId: fileRecord.id,
+          fileName: displayName,
+          expirationDate,
+        })
       } catch (error) {
-        console.error('Failed to schedule file expiration:', error)
+        logger.error('Failed to schedule file expiration', error as Error, {
+          fileId: fileRecord.id,
+        })
       }
     }
 
@@ -168,15 +180,19 @@ export async function POST(req: Request) {
 
     return apiResponse<FileUploadResponse>(responseData)
   } catch (error) {
-    console.error('Upload error:', error)
+    logger.error('Upload error', error as Error, {
+      userId,
+    })
 
     if (filePath) {
       try {
         const storageProvider = await getStorageProvider()
         await storageProvider.deleteFile(filePath)
-        console.log('Cleaned up file after error:', filePath)
+        logger.info('Cleaned up file after error', { filePath })
       } catch (unlinkError) {
-        console.error('Failed to clean up file:', unlinkError)
+        logger.error('Failed to clean up file', unlinkError as Error, {
+          filePath,
+        })
       }
     }
 
@@ -332,7 +348,7 @@ export async function GET(request: Request) {
 
     return paginatedResponse<FileMetadata[]>(filesList, pagination)
   } catch (error) {
-    console.error('Error fetching files:', error)
+    logger.error('Error fetching files', error as Error)
     return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

@@ -2,18 +2,24 @@ import type { EventPayload } from '@/types/events'
 import { EventStatus, ExpiryAction } from '@/types/events'
 
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
 import { events } from '../index'
+
+const logger = loggers.events.getChildLogger('file-expiry')
 
 export async function registerFileExpiryHandlers() {
   await events.on(
     'file.schedule-expiration',
     'queue-deletion',
     async (payload: EventPayload<'file.schedule-expiration'>) => {
-      console.log(
-        `Scheduling file ${payload.action.toLowerCase()}: ${payload.fileName} at ${payload.expiresAt}`
-      )
+      logger.info('Scheduling file expiration', {
+        fileId: payload.fileId,
+        fileName: payload.fileName,
+        action: payload.action,
+        expiresAt: payload.expiresAt,
+      })
 
       await events.schedule(
         'file.expired',
@@ -35,23 +41,27 @@ export async function registerFileExpiryHandlers() {
     'process-expired-file',
     async (payload: EventPayload<'file.expired'>) => {
       try {
-        console.log(
-          `Processing file expiration: ${payload.fileName} (${payload.fileId}) - Action: ${payload.action}`
-        )
+        logger.info('Processing file expiration', {
+          fileId: payload.fileId,
+          fileName: payload.fileName,
+          action: payload.action,
+        })
 
         const file = await prisma.file.findUnique({
           where: { id: payload.fileId },
         })
 
         if (!file) {
-          console.warn(`File not found for expiration: ${payload.fileId}`)
+          logger.warn('File not found for expiration', {
+            fileId: payload.fileId,
+          })
           return
         }
 
         if (payload.action === ExpiryAction.DELETE) {
           const storageProvider = await getStorageProvider()
           await storageProvider.deleteFile(file.path)
-          console.log(`Deleted file from storage: ${file.path}`)
+          logger.info('Deleted file from storage', { path: file.path })
 
           await prisma.user.update({
             where: { id: file.userId },
@@ -61,14 +71,15 @@ export async function registerFileExpiryHandlers() {
               },
             },
           })
-          console.log(
-            `Updated storage quota for user ${file.userId}: -${file.size} bytes`
-          )
+          logger.info('Updated storage quota for user', {
+            userId: file.userId,
+            sizeFreed: file.size,
+          })
 
           await prisma.file.delete({
             where: { id: payload.fileId },
           })
-          console.log(`Deleted file from database: ${payload.fileId}`)
+          logger.info('Deleted file from database', { fileId: payload.fileId })
         } else if (payload.action === ExpiryAction.SET_PRIVATE) {
           await prisma.file.update({
             where: { id: payload.fileId },
@@ -76,19 +87,18 @@ export async function registerFileExpiryHandlers() {
               visibility: 'PRIVATE',
             },
           })
-          console.log(`Set file to private: ${payload.fileId}`)
+          logger.info('Set file to private', { fileId: payload.fileId })
         }
       } catch (error) {
-        console.error(
-          `Failed to process expired file ${payload.fileId}:`,
-          error
-        )
+        logger.error(`Failed to process expired file`, error as Error, {
+          fileId: payload.fileId,
+        })
         throw error
       }
     }
   )
 
-  console.log('File expiry event handlers registered')
+  logger.debug('File expiry event handlers registered')
 }
 
 export async function scheduleFileExpiration(

@@ -6,7 +6,10 @@ import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 export async function PATCH(
   request: Request,
@@ -72,7 +75,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedFile)
   } catch (error) {
-    console.error('File update error:', error)
+    logger.error('File update error', error as Error)
     return NextResponse.json(
       { error: 'Failed to update file' },
       { status: 500 }
@@ -107,7 +110,10 @@ export async function DELETE(
       const storageProvider = await getStorageProvider()
       await storageProvider.deleteFile(file.path)
     } catch (error) {
-      console.error('Error deleting file from storage:', error)
+      logger.error('Error deleting file from storage', error as Error, {
+        fileId,
+        filePath: file.path,
+      })
     }
 
     await prisma.$transaction(async (tx) => {
@@ -127,7 +133,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('File delete error:', error)
+    logger.error('File delete error', error as Error)
     return NextResponse.json(
       { error: 'Failed to delete file' },
       { status: 500 }

@@ -9,8 +9,11 @@ import type {
 import { EventStatus } from '@/types/events'
 
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 
 import { eventEmitter } from './emitter'
+
+const logger = loggers.events.getChildLogger('consumer')
 
 export class EventConsumer {
   private static instance: EventConsumer | null = null
@@ -62,7 +65,11 @@ export class EventConsumer {
       },
     })
 
-    console.log(`Event handler registered: ${handlerKey}`)
+    logger.info('Event handler registered', {
+      eventType,
+      handlerName,
+      enabled: options.enabled ?? true,
+    })
 
     return registration as EventHandlerRegistration
   }
@@ -86,10 +93,13 @@ export class EventConsumer {
         },
       })
 
-      console.log(`Event handler unregistered: ${handlerKey}`)
+      logger.info('Event handler unregistered', { eventType, handlerName })
       return true
     } catch (error) {
-      console.error(`Failed to unregister handler ${handlerKey}:`, error)
+      logger.error('Failed to unregister handler', error as Error, {
+        eventType,
+        handlerName,
+      })
       return false
     }
   }
@@ -119,10 +129,13 @@ export class EventConsumer {
         },
       })
 
-      console.log(`Event handler enabled: ${handlerKey}`)
+      logger.info('Event handler enabled', { eventType, handlerName })
       return true
     } catch (error) {
-      console.error(`Failed to enable handler ${handlerKey}:`, error)
+      logger.error('Failed to enable handler', error as Error, {
+        eventType,
+        handlerName,
+      })
       return false
     }
   }
@@ -152,10 +165,13 @@ export class EventConsumer {
         },
       })
 
-      console.log(`Event handler disabled: ${handlerKey}`)
+      logger.info('Event handler disabled', { eventType, handlerName })
       return true
     } catch (error) {
-      console.error(`Failed to disable handler ${handlerKey}:`, error)
+      logger.error('Failed to disable handler', error as Error, {
+        eventType,
+        handlerName,
+      })
       return false
     }
   }
@@ -178,7 +194,10 @@ export class EventConsumer {
       })
 
       if (eventHandlers.length === 0) {
-        console.warn(`No handlers found for event type: ${event.type}`)
+        logger.warn('No handlers found for event type', {
+          eventType: event.type,
+          eventId: event.id,
+        })
         await eventEmitter.updateEventStatus(event.id, EventStatus.COMPLETED)
         return { success: true }
       }
@@ -268,24 +287,34 @@ export class EventConsumer {
     const event = await eventEmitter.getEvent(eventId)
 
     if (!event) {
-      console.error(`Event not found: ${eventId}`)
+      logger.error('Event not found for retry', { eventId })
       return false
     }
 
     if (event.status !== EventStatus.FAILED) {
-      console.error(`Event is not in failed state: ${eventId}`)
+      logger.error('Event is not in failed state', {
+        eventId,
+        currentStatus: event.status,
+      })
       return false
     }
 
     if (event.retryCount >= event.maxRetries) {
-      console.error(`Event has exceeded max retries: ${eventId}`)
+      logger.warn('Event has exceeded max retries', {
+        eventId,
+        retryCount: event.retryCount,
+        maxRetries: event.maxRetries,
+      })
       return false
     }
 
     await eventEmitter.incrementRetryCount(eventId)
     await eventEmitter.updateEventStatus(eventId, EventStatus.PENDING)
 
-    console.log(`Event queued for retry: ${eventId}`)
+    logger.info('Event queued for retry', {
+      eventId,
+      retryCount: event.retryCount + 1,
+    })
     return true
   }
 

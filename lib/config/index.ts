@@ -2,6 +2,9 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.config
 
 export const configSchema = z.object({
   version: z.string(),
@@ -165,7 +168,9 @@ export async function initConfig(): Promise<FlareConfig> {
 
     return configSchema.parse(config.value)
   } catch (error) {
-    console.warn('Could not access database for config, using default:', error)
+    logger.warn('Could not access database for config, using default', {
+      error,
+    })
     return DEFAULT_CONFIG
   }
 }
@@ -182,7 +187,9 @@ export async function getConfig(): Promise<FlareConfig> {
 
     return configSchema.parse(config.value)
   } catch (error) {
-    console.warn('Could not access database for config, using default:', error)
+    logger.warn('Could not access database for config, using default', {
+      error,
+    })
     return DEFAULT_CONFIG
   }
 }
@@ -263,9 +270,10 @@ export async function updateConfig(
       },
     })
 
+    logger.info('Configuration updated successfully')
     return validatedConfig
   } catch (error) {
-    console.warn('Could not save config to database:', error)
+    logger.warn('Could not save config to database', { error })
     return newConfig as FlareConfig
   }
 }
@@ -286,7 +294,8 @@ export async function updateConfigSection<
       },
     }
     await updateConfig(updatedConfig)
+    logger.debug('Config section updated', { section })
   } catch (error) {
-    console.warn('Could not update config section:', error)
+    logger.warn('Could not update config section', { section, error })
   }
 }

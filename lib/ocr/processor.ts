@@ -1,9 +1,12 @@
 import { createWorker } from 'tesseract.js'
 
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
 import type { OCRTask } from './queue'
+
+const logger = loggers.ocr
 
 export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
   try {
@@ -31,10 +34,17 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
       },
     })
 
-    console.log(`OCR completed for file ${filePath}`)
+    logger.info('OCR processing completed', {
+      filePath,
+      fileId,
+      confidence,
+      textLength: text.trim().length,
+    })
     return { success: true, text: text.trim(), confidence }
   } catch (error) {
-    console.error(`OCR processing failed for file ${filePath}:`, error)
+    logger.error(`OCR processing failed for file ${filePath}`, error as Error, {
+      fileId,
+    })
 
     await prisma.file.update({
       where: { id: fileId },
