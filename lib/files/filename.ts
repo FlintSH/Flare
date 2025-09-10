@@ -11,10 +11,21 @@ function validateAndNormalizePath(basePath: string, filename: string): string {
     throw new Error('Invalid path: Directory traversal not allowed')
   }
 
-  const cleanBase = normalizedBase.replace(/^\/+/, '').replace(/\/+$/, '')
-  const cleanFilename = normalizedFilename
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
+  let cleanBase = normalizedBase
+  while (cleanBase.startsWith('/')) {
+    cleanBase = cleanBase.slice(1)
+  }
+  while (cleanBase.endsWith('/')) {
+    cleanBase = cleanBase.slice(0, -1)
+  }
+
+  let cleanFilename = normalizedFilename
+  while (cleanFilename.startsWith('/')) {
+    cleanFilename = cleanFilename.slice(1)
+  }
+  while (cleanFilename.endsWith('/')) {
+    cleanFilename = cleanFilename.slice(0, -1)
+  }
 
   const fullPath = join(cleanBase, cleanFilename)
   if (!fullPath.startsWith(cleanBase)) {
