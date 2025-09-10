@@ -8,6 +8,9 @@ import { nanoid } from 'nanoid'
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.api
 
 function generateShortCode() {
   return nanoid(6)
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
 
     return apiResponse<CreateUrlResponse>(shortenedUrl)
   } catch (error) {
-    console.error('URL creation error:', error)
+    logger.error('URL creation error', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -71,7 +74,7 @@ export async function GET(req: Request) {
 
     return apiResponse<UrlListResponse>({ urls })
   } catch (error) {
-    console.error('URL list error:', error)
+    logger.error('URL list error', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

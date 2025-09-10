@@ -7,8 +7,11 @@ import sharp from 'sharp'
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
+
+const logger = loggers.users
 
 export async function POST(req: Request) {
   try {
@@ -85,7 +88,10 @@ export async function POST(req: Request) {
           await storageProvider.deleteFile(oldPath)
         }
       } catch (error) {
-        console.error('Failed to delete old avatar:', error)
+        logger.error('Failed to delete old avatar', error as Error, {
+          userId: session.user.id,
+          oldPath: user.image,
+        })
       }
     }
 
@@ -104,7 +110,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, url: publicPath })
   } catch (error) {
-    console.error('Avatar upload error:', error)
+    logger.error('Avatar upload error', error as Error)
     return NextResponse.json(
       { error: 'Failed to upload avatar' },
       { status: 500 }

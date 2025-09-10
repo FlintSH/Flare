@@ -1,6 +1,9 @@
 import { HTTP_STATUS, apiError } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.api
 
 export async function DELETE(
   req: Request,
@@ -31,7 +34,7 @@ export async function DELETE(
 
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
-    console.error('URL deletion error:', error)
+    logger.error('URL deletion error', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

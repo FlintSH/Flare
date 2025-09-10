@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { join } from 'path'
 
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 export async function GET(
   request: NextRequest,
@@ -29,7 +32,9 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Avatar serve error:', error)
+    logger.error('Avatar serve error', error as Error, {
+      filename: (await params).filename,
+    })
     return new Response(null, { status: 500 })
   }
 }
