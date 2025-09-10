@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 import { PaginationInfo } from '@/types/components/file'
 
+import { Input } from '@/components/ui/input'
 import {
   Pagination,
   PaginationContent,
@@ -15,6 +16,79 @@ import {
 interface FileGridPaginationProps {
   paginationInfo: PaginationInfo
   setPage: (page: number) => void
+}
+
+interface InteractiveEllipsisProps {
+  onPageSelect: (page: number) => void
+  maxPage: number
+}
+
+function InteractiveEllipsis({
+  onPageSelect,
+  maxPage,
+}: InteractiveEllipsisProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [inputValue, setInputValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [isEditing])
+
+  const handleSubmit = () => {
+    const pageNum = parseInt(inputValue, 10)
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= maxPage) {
+      onPageSelect(pageNum)
+      setIsEditing(false)
+      setInputValue('')
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit()
+    } else if (e.key === 'Escape') {
+      setIsEditing(false)
+      setInputValue('')
+    }
+  }
+
+  const handleBlur = () => {
+    setIsEditing(false)
+    setInputValue('')
+  }
+
+  if (isEditing) {
+    return (
+      <div className="flex h-9 w-12 items-center justify-center">
+        <Input
+          ref={inputRef}
+          type="number"
+          min="1"
+          max={maxPage}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          placeholder="#"
+          className="h-8 w-12 px-1 text-center text-sm"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => setIsEditing(true)}
+      className="flex h-9 w-9 items-center justify-center hover:bg-accent hover:text-accent-foreground rounded-md transition-colors cursor-pointer"
+      title={`Go to page (1-${maxPage})`}
+      aria-label={`Enter page number between 1 and ${maxPage}`}
+    >
+      <PaginationEllipsis />
+    </button>
+  )
 }
 
 export function FileGridPagination({
@@ -77,7 +151,10 @@ export function FileGridPagination({
                 ) {
                   return (
                     <PaginationItem key={pageNumber}>
-                      <PaginationEllipsis />
+                      <InteractiveEllipsis
+                        onPageSelect={setPage}
+                        maxPage={paginationInfo.pageCount}
+                      />
                     </PaginationItem>
                   )
                 }
