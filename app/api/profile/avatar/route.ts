@@ -74,14 +74,14 @@ export async function POST(req: Request) {
 
     const storageProvider = await getStorageProvider()
     const avatarFilename = `${session.user.id}.jpg`
-    const avatarPath = join('avatars', avatarFilename)
+    const avatarPath = join('uploads', 'avatars', avatarFilename)
     let publicPath = `/api/avatars/${avatarFilename}`
 
     if (user?.image?.startsWith('/api/avatars/')) {
       try {
         const oldFilename = user.image.split('/').pop()
         if (oldFilename) {
-          const oldPath = join('avatars', oldFilename)
+          const oldPath = join('uploads', 'avatars', oldFilename)
           await storageProvider.deleteFile(oldPath)
         }
       } catch (error) {

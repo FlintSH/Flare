@@ -33,7 +33,7 @@ export async function DELETE(
         const storageProvider = await getStorageProvider()
         const filename = user.image.split('/').pop()
         if (filename) {
-          const avatarPath = join('avatars', filename)
+          const avatarPath = join('uploads', 'avatars', filename)
           await storageProvider.deleteFile(avatarPath)
         }
       } catch (error) {
