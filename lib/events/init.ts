@@ -1,16 +1,20 @@
+import { loggers } from '@/lib/logger'
+
 import { registerFileExpiryHandlers } from './handlers/file-expiry'
 import { events } from './index'
+
+const logger = loggers.events
 
 let initialized = false
 
 export async function initializeEventSystem() {
   if (initialized) {
-    console.log('Event system already initialized')
+    logger.debug('Event system already initialized')
     return
   }
 
   try {
-    console.log('Initializing event system...')
+    logger.info('Initializing event system...')
 
     await registerFileExpiryHandlers()
 
@@ -22,12 +26,12 @@ export async function initializeEventSystem() {
     })
 
     initialized = true
-    console.log('Event system initialized successfully')
+    logger.info('Event system initialized successfully')
 
     const stats = await events.getStats()
-    console.log('Event queue stats:', stats)
+    logger.info('Event queue stats', { stats })
   } catch (error) {
-    console.error('Failed to initialize event system:', error)
+    logger.error('Failed to initialize event system', error as Error)
     throw error
   }
 }

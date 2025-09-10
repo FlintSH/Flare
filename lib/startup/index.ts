@@ -1,4 +1,7 @@
 import { initializeEventSystem } from '@/lib/events/init'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.startup
 
 let startupComplete = false
 
@@ -7,15 +10,18 @@ export async function runStartupTasks() {
     return
   }
 
+  const startTime = Date.now()
+
   try {
-    console.log('Running startup tasks...')
+    logger.info('Running startup tasks...')
 
     await initializeEventSystem()
 
     startupComplete = true
-    console.log('Startup tasks completed successfully')
+    const duration = Date.now() - startTime
+    logger.info('Startup tasks completed successfully', { duration })
   } catch (error) {
-    console.error('Startup tasks failed:', error)
+    logger.error('Startup tasks failed', error as Error)
   }
 }
 

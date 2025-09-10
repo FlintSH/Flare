@@ -1,8 +1,12 @@
 import type { BaseEvent, EventWorkerOptions } from '@/types/events'
 import { EventStatus } from '@/types/events'
 
+import { loggers } from '@/lib/logger'
+
 import { eventConsumer } from './consumer'
 import { eventEmitter } from './emitter'
+
+const logger = loggers.events.getChildLogger('worker')
 
 interface WorkerStats {
   isRunning: boolean
@@ -44,7 +48,7 @@ export class EventWorker {
 
   async start(options: EventWorkerOptions = {}): Promise<void> {
     if (this.running) {
-      console.warn('Event worker is already running')
+      logger.warn('Event worker is already running')
       return
     }
 
@@ -59,7 +63,7 @@ export class EventWorker {
     this.stats.isRunning = true
     this.stats.startedAt = new Date()
 
-    console.log('Starting event worker with options:', {
+    logger.info('Starting event worker', {
       batchSize,
       pollInterval,
       maxConcurrency,
@@ -74,16 +78,16 @@ export class EventWorker {
           await this.activateScheduledEvents()
         }
       } catch (error) {
-        console.error('Error in event worker:', error)
+        logger.error('Error in event worker', error as Error)
       }
     }, pollInterval)
 
-    console.log('Event worker started successfully')
+    logger.info('Event worker started successfully')
   }
 
   async stop(): Promise<void> {
     if (!this.running) {
-      console.warn('Event worker is not running')
+      logger.warn('Event worker is not running')
       return
     }
 
@@ -95,7 +99,7 @@ export class EventWorker {
       this.intervalId = null
     }
 
-    console.log('Event worker stopped')
+    logger.info('Event worker stopped')
   }
 
   isRunning(): boolean {
@@ -152,7 +156,7 @@ export class EventWorker {
         }
       }
     } catch (error) {
-      console.error(`Failed to process event ${event.id}:`, error)
+      logger.error(`Failed to process event ${event.id}`, error as Error)
       this.stats.eventsFailed++
     }
   }
@@ -162,10 +166,10 @@ export class EventWorker {
       const activatedCount = await eventEmitter.activateScheduledEvents()
 
       if (activatedCount > 0) {
-        console.log(`Activated ${activatedCount} scheduled events`)
+        logger.debug(`Activated ${activatedCount} scheduled events`)
       }
     } catch (error) {
-      console.error('Error activating scheduled events:', error)
+      logger.error('Error activating scheduled events', error as Error)
     }
   }
 
@@ -194,7 +198,7 @@ export class EventWorker {
       await eventConsumer.retryFailedEvent(event.id)
     }
 
-    console.log(`Queued ${retryableEvents.length} events for retry`)
+    logger.info(`Queued ${retryableEvents.length} events for retry`)
   }
 
   async cleanupOldEvents(olderThanDays: number = 30): Promise<number> {
@@ -206,7 +210,7 @@ export class EventWorker {
       createdBefore: cutoffDate,
     })
 
-    console.log(`Cleaned up ${deletedCount} old completed events`)
+    logger.info(`Cleaned up ${deletedCount} old completed events`)
     return deletedCount
   }
 
@@ -219,7 +223,7 @@ export class EventWorker {
       createdBefore: cutoffDate,
     })
 
-    console.log(`Cleaned up ${deletedCount} old failed events`)
+    logger.info(`Cleaned up ${deletedCount} old failed events`)
     return deletedCount
   }
 
