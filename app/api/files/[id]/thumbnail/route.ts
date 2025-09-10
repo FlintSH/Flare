@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import { getServerSession } from 'next-auth'
-import sharp from 'sharp'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
@@ -46,27 +45,15 @@ export async function GET(
     const storageProvider = await getStorageProvider()
     const fileStream = await storageProvider.getFileStream(file.path)
 
-    const chunks: Buffer[] = []
-    for await (const chunk of fileStream) {
-      chunks.push(Buffer.from(chunk))
-    }
-    const fileBuffer = Buffer.concat(chunks)
-
-    const imageBuffer = await sharp(fileBuffer)
-      .resize(400, 400, {
-        fit: 'cover',
-        position: 'center',
-      })
-      .toBuffer()
-
-    return new NextResponse(imageBuffer as unknown as BodyInit, {
+    // Just serve the original image - let the browser/CSS handle sizing
+    return new NextResponse(fileStream as unknown as BodyInit, {
       headers: {
         'Content-Type': file.mimeType,
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     })
   } catch (error) {
-    logger.error('Error generating thumbnail:', error as Error)
-    return new NextResponse('Error generating thumbnail', { status: 500 })
+    logger.error('Error serving thumbnail:', error as Error)
+    return new NextResponse('Error serving thumbnail', { status: 500 })
   }
 }

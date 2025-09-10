@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 
 import { getServerSession } from 'next-auth'
 import { join } from 'path'
-import sharp from 'sharp'
 
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
@@ -68,12 +67,7 @@ export async function POST(req: Request) {
     })
 
     const bytes = await file.arrayBuffer()
-    const processedImage = await sharp(Buffer.from(bytes))
-      .resize(256, 256, {
-        fit: 'cover',
-        position: 'center',
-      })
-      .toBuffer()
+    const processedImage = Buffer.from(bytes)
 
     const storageProvider = await getStorageProvider()
     const avatarFilename = `${session.user.id}.jpg`

@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { join } from 'path'
-import sharp from 'sharp'
 
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
@@ -29,7 +28,8 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer())
 
-    const processedBuffer = await sharp(buffer).resize(32, 32).png().toBuffer()
+    // browsers can handle resizing (i think)
+    const processedBuffer = buffer
 
     const storageProvider = await getStorageProvider()
     const faviconPath = join('uploads', 'favicon.png')
