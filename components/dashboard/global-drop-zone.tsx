@@ -74,6 +74,11 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
       setDragCounter(0)
       setIsDragging(false)
 
+      // Skip handling if on upload page
+      if (window.location.pathname.includes('/upload')) {
+        return
+      }
+
       const droppedFiles = Array.from(e.dataTransfer?.files || [])
       if (droppedFiles.length === 0) return
 
