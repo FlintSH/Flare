@@ -1,6 +1,6 @@
 # Stage 1: Dependencies
 FROM node:22-alpine AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++ vips-dev
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -9,13 +9,9 @@ COPY prisma ./prisma
 # Install dependencies
 RUN npm ci
 
-# Detect architecture and install sharp with appropriate flags
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
-      npm install --cpu=arm64 --os=linux --libc=musl sharp; \
-    else \
-      npm install --cpu=x64 --os=linux --libc=musl sharp; \
-    fi
+# Reinstall sharp properly for Alpine
+RUN npm uninstall sharp && \
+    npm install sharp@0.34.3 --build-from-source
 
 RUN npx prisma generate
 
@@ -44,8 +40,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install curl for healthcheck and OpenSSL for Prisma
-RUN apk add --no-cache curl openssl libc6-compat
+# Install curl for healthcheck, OpenSSL for Prisma, and vips for Sharp
+RUN apk add --no-cache curl openssl libc6-compat vips
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
