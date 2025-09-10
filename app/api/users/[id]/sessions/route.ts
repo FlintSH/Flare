@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function DELETE(
   request: Request,
@@ -29,7 +32,7 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {
-    console.error('Error invalidating sessions:', error)
+    logger.error('Error invalidating sessions:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

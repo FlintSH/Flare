@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.storage
 
 export async function GET() {
   try {
@@ -9,7 +12,7 @@ export async function GET() {
       type: storageProvider instanceof S3StorageProvider ? 's3' : 'local',
     })
   } catch (error) {
-    console.error('Failed to get storage type:', error)
+    logger.error('Failed to get storage type:', error as Error)
     return NextResponse.json({ type: 'local' })
   }
 }

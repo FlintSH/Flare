@@ -4,7 +4,10 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 export async function DELETE(
   request: Request,
@@ -33,7 +36,7 @@ export async function DELETE(
       const storageProvider = await getStorageProvider()
       await storageProvider.deleteFile(file.path)
     } catch (error) {
-      console.error('Error deleting file from storage:', error)
+      logger.error('Error deleting file from storage:', error as Error)
     }
 
     await prisma.$transaction(async (tx) => {
@@ -56,7 +59,7 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {
-    console.error('Error deleting file:', error)
+    logger.error('Error deleting file:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }
@@ -89,7 +92,7 @@ export async function PATCH(
 
     return NextResponse.json(file)
   } catch (error) {
-    console.error('Error updating file:', error)
+    logger.error('Error updating file:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function GET(
   req: Request,
@@ -62,7 +65,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error fetching user URLs:', error)
+    logger.error('Error fetching user URLs:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

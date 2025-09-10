@@ -10,7 +10,10 @@ import {
 } from '@/lib/api/response'
 import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.users
 
 export async function GET(req: Request) {
   try {
@@ -56,7 +59,7 @@ export async function GET(req: Request) {
 
     return paginatedResponse<UserResponse[]>(users, pagination)
   } catch (error) {
-    console.error('Error fetching users:', error)
+    logger.error('Error fetching users', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -131,7 +134,7 @@ export async function POST(req: Request) {
 
     return apiResponse<UserResponse>(user)
   } catch (error) {
-    console.error('Error creating user:', error)
+    logger.error('Error creating user', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -205,7 +208,7 @@ export async function PUT(req: Request) {
           })
         }
       } catch (error) {
-        console.error('Error renaming user folder:', error)
+        logger.error('Error renaming user folder', error as Error)
         return apiError(
           'Failed to rename user folder',
           HTTP_STATUS.INTERNAL_SERVER_ERROR
@@ -235,7 +238,7 @@ export async function PUT(req: Request) {
 
     return apiResponse<UserResponse>(user)
   } catch (error) {
-    console.error('Error updating user:', error)
+    logger.error('Error updating user', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

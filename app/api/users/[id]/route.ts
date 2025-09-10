@@ -5,7 +5,10 @@ import { join } from 'path'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.users
 
 export async function DELETE(
   req: Request,
@@ -40,7 +43,7 @@ export async function DELETE(
       try {
         await storageProvider.deleteFile(file.path)
       } catch (error) {
-        console.error(`Error deleting file ${file.path}:`, error)
+        logger.error(`Error deleting file ${file.path}:`, error as Error)
       }
     }
 
@@ -53,7 +56,7 @@ export async function DELETE(
         )
         await storageProvider.deleteFile(avatarPath)
       } catch (error) {
-        console.error('Error deleting avatar:', error)
+        logger.error('Error deleting avatar:', error as Error)
       }
     }
 
@@ -63,7 +66,7 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {
-    console.error('Error deleting user:', error)
+    logger.error('Error deleting user:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 
 import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function POST(
   request: Request,
@@ -29,7 +32,7 @@ export async function POST(
 
     return NextResponse.json(user)
   } catch (error) {
-    console.error('Error getting user:', error)
+    logger.error('Error getting user:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

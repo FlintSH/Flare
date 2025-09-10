@@ -5,7 +5,10 @@ import sharp from 'sharp'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 export async function GET(
   request: Request,
@@ -63,7 +66,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error generating thumbnail:', error)
+    logger.error('Error generating thumbnail:', error as Error)
     return new NextResponse('Error generating thumbnail', { status: 500 })
   }
 }

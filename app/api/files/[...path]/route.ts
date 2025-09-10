@@ -5,7 +5,10 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 function encodeFilename(filename: string): string {
   const encoded = encodeURIComponent(filename)
@@ -106,7 +109,7 @@ export async function GET(
 
     return new NextResponse(stream as unknown as ReadableStream, { headers })
   } catch (error) {
-    console.error('File serve error:', error)
+    logger.error('File serve error:', error as Error)
     return new Response(null, { status: 404 })
   }
 }

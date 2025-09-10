@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function GET() {
   try {
@@ -45,7 +48,7 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('Error generating bash script:', error)
+    logger.error('Error generating bash script:', error as Error)
     return NextResponse.json(
       { error: 'Failed to generate bash script' },
       { status: 500 }

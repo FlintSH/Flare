@@ -4,6 +4,9 @@ import pkg from '@/package.json'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.api
 
 interface GitHubRelease {
   tag_name: string
@@ -74,7 +77,7 @@ export async function GET() {
         : 'Your instance is up to date',
     })
   } catch (error) {
-    console.error('Update check error:', error)
+    logger.error('Update check error:', error as Error)
     return NextResponse.json(
       { error: 'Failed to check for updates' },
       { status: 500 }

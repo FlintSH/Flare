@@ -7,9 +7,12 @@ import { join } from 'node:path'
 
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
+
+const logger = loggers.users
 
 type FileData = {
   name: string
@@ -65,9 +68,9 @@ export async function GET(req: Request) {
     const isS3Storage = storageProvider instanceof S3StorageProvider
 
     if (isS3Storage) {
-      console.log('Using S3 storage provider for file exports')
+      logger.info('Using S3 storage provider for file exports')
     } else {
-      console.log('Using local storage provider for file exports')
+      logger.info('Using local storage provider for file exports')
     }
 
     const userData = await prisma.user.findUnique({
@@ -138,14 +141,14 @@ export async function GET(req: Request) {
 
     archive.on('warning', (err) => {
       if (err.code === 'ENOENT') {
-        console.warn('Archive warning:', err)
+        logger.warn('Archive warning', { error: err.message })
       } else {
-        console.error('Archive error:', err)
+        logger.error('Archive error', err as Error)
       }
     })
 
     archive.on('error', (err) => {
-      console.error('Archive error:', err)
+      logger.error('Archive error:', err as Error)
     })
 
     const writer = writable.getWriter()
@@ -158,7 +161,7 @@ export async function GET(req: Request) {
       try {
         await writer.close()
       } catch (err) {
-        console.error('Error closing writer:', err)
+        logger.error('Error closing writer:', err as Error)
       }
     })
 
@@ -188,11 +191,11 @@ export async function GET(req: Request) {
                 filePath = join(exportDir, file.name)
                 await writeFile(filePath, fileData)
               } catch (downloadErr) {
-                console.error(
+                logger.error(
                   `Error downloading file from S3: ${file.path}`,
-                  downloadErr
+                  downloadErr as Error
                 )
-                console.error(`Skipping file: ${file.name} (${file.path})`)
+                logger.info(`Skipping file: ${file.name} (${file.path})`)
                 continue
               }
             } else {
@@ -208,7 +211,10 @@ export async function GET(req: Request) {
               } else if (existsSync(workspacePath)) {
                 filePath = workspacePath
               } else {
-                console.error(`File not found: ${file.path}`)
+                logger.error(
+                  'File not found',
+                  new Error(`File not found: ${file.path}`)
+                )
                 continue
               }
             }
@@ -226,9 +232,9 @@ export async function GET(req: Request) {
                   updateProgress(userId, progress)
                 }
               } catch (archiveErr) {
-                console.error(
+                logger.error(
                   `Error adding file to archive: ${file.name}`,
-                  archiveErr
+                  archiveErr as Error
                 )
               }
 
@@ -236,42 +242,47 @@ export async function GET(req: Request) {
                 try {
                   await rm(filePath)
                 } catch (cleanupErr) {
-                  console.error(
-                    `Error cleaning up temp file: ${filePath}`,
-                    cleanupErr
-                  )
+                  logger.debug(`Error cleaning up temp file: ${filePath}`, {
+                    error: cleanupErr,
+                  })
                 }
               }
             }
           } catch (error) {
-            console.error(`Error adding file ${file.name} to archive:`, error)
+            logger.error(
+              `Error adding file ${file.name} to archive:`,
+              error as Error
+            )
           }
         }
 
         try {
           await archive.finalize()
         } catch (error) {
-          console.error('Error finalizing archive:', error)
+          logger.error('Error finalizing archive:', error as Error)
         }
 
         setTimeout(async () => {
           try {
             if (exportDir) {
               await rm(exportDir, { recursive: true })
-              console.log(
+              logger.info(
                 `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
               )
             }
           } catch (cleanupError) {
-            console.error('Error cleaning up export directory:', cleanupError)
+            logger.error(
+              'Error cleaning up export directory:',
+              cleanupError as Error
+            )
           }
         }, 5000)
       } catch (error) {
-        console.error('File processing error:', error)
+        logger.error('File processing error:', error as Error)
         try {
           await writer.close()
         } catch (closeErr) {
-          console.error('Error closing writer after error:', closeErr)
+          logger.error('Error closing writer after error:', closeErr as Error)
         }
       }
     })()
@@ -285,11 +296,14 @@ export async function GET(req: Request) {
       try {
         await rm(exportDir, { recursive: true })
       } catch (cleanupError) {
-        console.error('Error cleaning up export directory:', cleanupError)
+        logger.error(
+          'Error cleaning up export directory:',
+          cleanupError as Error
+        )
       }
     }
 
-    console.error('Data export error:', error)
+    logger.error('Data export error:', error as Error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -311,7 +325,10 @@ async function getFileContentFromStorage(
 
     return Buffer.concat(chunks)
   } catch (error) {
-    console.error(`Failed to retrieve file from storage: ${filePath}`, error)
+    logger.error(
+      `Failed to retrieve file from storage: ${filePath}`,
+      error as Error
+    )
     throw error
   }
 }

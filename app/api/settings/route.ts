@@ -12,7 +12,10 @@ import {
   updateConfig,
   updateConfigSection,
 } from '@/lib/config'
+import { loggers } from '@/lib/logger'
 import { invalidateStorageProvider } from '@/lib/storage'
+
+const logger = loggers.config
 
 export async function GET(req: Request) {
   try {
@@ -72,7 +75,7 @@ export async function GET(req: Request) {
 
     return apiResponse<FlareConfig>(config)
   } catch (error) {
-    console.error('Failed to get config:', error)
+    logger.error('Failed to get config', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -113,7 +116,7 @@ export async function PATCH(request: Request) {
     const updatedConfig = await getConfig()
     return apiResponse<FlareConfig>(updatedConfig)
   } catch (error) {
-    console.error('Failed to update config:', error)
+    logger.error('Failed to update config', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -143,7 +146,7 @@ export async function POST(req: Request) {
 
     return apiResponse<SettingsUpdateResponse>(responseData)
   } catch (error) {
-    console.error('Error updating settings:', error)
+    logger.error('Error updating settings', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

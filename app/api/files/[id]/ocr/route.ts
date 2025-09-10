@@ -5,7 +5,10 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+
+const logger = loggers.files
 
 export async function GET(
   req: Request,
@@ -109,7 +112,7 @@ export async function GET(
       confidence: file.ocrConfidence,
     })
   } catch (error) {
-    console.error('OCR fetch error:', error)
+    logger.error('OCR fetch error:', error as Error)
     return NextResponse.json(
       {
         success: false,

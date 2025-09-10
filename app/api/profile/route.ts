@@ -7,6 +7,9 @@ import { join } from 'path'
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function PUT(req: Request) {
   try {
@@ -83,7 +86,7 @@ export async function PUT(req: Request) {
 
     return apiResponse<ProfileResponse>(updatedUser)
   } catch (error) {
-    console.error('Profile update error:', error)
+    logger.error('Profile update error:', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
@@ -112,7 +115,7 @@ export async function DELETE(req: Request) {
       try {
         await unlink(join(process.cwd(), file.path))
       } catch (error) {
-        console.error(`Error deleting file ${file.path}:`, error)
+        logger.error(`Error deleting file ${file.path}:`, error as Error)
       }
     }
 
@@ -120,7 +123,7 @@ export async function DELETE(req: Request) {
       try {
         await unlink(join(process.cwd(), 'public', userData.image))
       } catch (error) {
-        console.error('Error deleting avatar:', error)
+        logger.error('Error deleting avatar:', error as Error)
       }
     }
 
@@ -130,7 +133,7 @@ export async function DELETE(req: Request) {
 
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
-    console.error('Account deletion error:', error)
+    logger.error('Account deletion error:', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }

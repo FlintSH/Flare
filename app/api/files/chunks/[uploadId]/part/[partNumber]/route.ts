@@ -4,7 +4,10 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
+import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 interface RouteParams {
   uploadId: string
@@ -19,10 +22,9 @@ async function getUploadMetadata(localId: string) {
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
-      console.error(
-        `Error reading metadata for upload ${localId}:`,
-        error.message
-      )
+      logger.debug(`Error reading metadata for upload ${localId}`, {
+        error: error.message,
+      })
     }
     return null
   }
@@ -60,7 +62,7 @@ export async function GET(
       data: { url },
     })
   } catch (error) {
-    console.error('Error getting presigned URL:', error)
+    logger.error('Error getting presigned URL:', error as Error)
     return NextResponse.json(
       {
         error:
@@ -108,7 +110,7 @@ export async function PUT(
       data: { etag: response.ETag },
     })
   } catch (error) {
-    console.error('Error uploading part:', error)
+    logger.error('Error uploading part:', error as Error)
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to upload part',

@@ -5,6 +5,9 @@ import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 const flameshotSchema = z.object({
   useWayland: z.boolean(),
@@ -57,7 +60,7 @@ export async function POST(req: Request) {
       )
     }
 
-    console.error('Error generating Flameshot script:', error)
+    logger.error('Error generating Flameshot script:', error as Error)
     return NextResponse.json(
       { error: 'Failed to generate Flameshot script' },
       { status: 500 }

@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 
 import { join } from 'path'
 
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 export async function GET() {
   try {
@@ -23,7 +26,7 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('Favicon serve error:', error)
+    logger.error('Favicon serve error:', error as Error)
     return new Response(null, { status: 500 })
   }
 }

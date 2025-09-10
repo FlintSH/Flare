@@ -7,7 +7,10 @@ import sharp from 'sharp'
 
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
+import { loggers } from '@/lib/logger'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+
+const logger = loggers.files
 
 const prisma = new PrismaClient()
 
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
         const oldPath = join('uploads', 'favicon.png')
         await storageProvider.deleteFile(oldPath)
       } catch (error) {
-        console.error('Failed to delete old favicon:', error)
+        logger.error('Failed to delete old favicon:', error as Error)
       }
     }
 
@@ -63,7 +66,7 @@ export async function POST(req: Request) {
 
     return new NextResponse('Favicon updated successfully', { status: 200 })
   } catch (error) {
-    console.error('Error updating favicon:', error)
+    logger.error('Error updating favicon:', error as Error)
     return new NextResponse('Internal server error', { status: 500 })
   }
 }

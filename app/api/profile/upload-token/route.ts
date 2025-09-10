@@ -4,6 +4,9 @@ import { randomUUID } from 'crypto'
 
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 export async function GET(req: Request) {
   try {
@@ -21,7 +24,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ uploadToken: userData.uploadToken })
   } catch (error) {
-    console.error('Error fetching upload token:', error)
+    logger.error('Error fetching upload token:', error as Error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -42,7 +45,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ uploadToken: userData.uploadToken })
   } catch (error) {
-    console.error('Error refreshing upload token:', error)
+    logger.error('Error refreshing upload token:', error as Error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -5,6 +5,9 @@ import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.users
 
 const spectacleSchema = z.object({
   scriptType: z.enum(['screenshot', 'recording']),
@@ -60,7 +63,7 @@ export async function POST(req: Request) {
       )
     }
 
-    console.error('Error generating Spectacle script:', error)
+    logger.error('Error generating Spectacle script:', error as Error)
     return NextResponse.json(
       { error: 'Failed to generate Spectacle script' },
       { status: 500 }

@@ -4,6 +4,9 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.files
 
 type FileVisibility = 'PUBLIC' | 'PRIVATE'
 
@@ -90,7 +93,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error fetching user files:', error)
+    logger.error('Error fetching user files:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

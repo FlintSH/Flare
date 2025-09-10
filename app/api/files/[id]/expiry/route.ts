@@ -8,6 +8,9 @@ import {
   getFileExpirationInfo,
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.files
 
 export async function GET(
   req: Request,
@@ -32,7 +35,7 @@ export async function GET(
 
     return apiResponse({ expiresAt })
   } catch (error) {
-    console.error('Error getting file expiry:', error)
+    logger.error('Error getting file expiry:', error as Error)
     return apiError(
       'Failed to get file expiry',
       HTTP_STATUS.INTERNAL_SERVER_ERROR
@@ -81,7 +84,7 @@ export async function POST(
       expiresAt: expirationDate,
     })
   } catch (error) {
-    console.error('Error scheduling file expiry:', error)
+    logger.error('Error scheduling file expiry:', error as Error)
     return apiError(
       'Failed to schedule file expiry',
       HTTP_STATUS.INTERNAL_SERVER_ERROR
@@ -115,7 +118,7 @@ export async function DELETE(
       cancelled,
     })
   } catch (error) {
-    console.error('Error cancelling file expiry:', error)
+    logger.error('Error cancelling file expiry:', error as Error)
     return apiError(
       'Failed to cancel file expiry',
       HTTP_STATUS.INTERNAL_SERVER_ERROR
