@@ -6,6 +6,9 @@ import { z } from 'zod'
 
 import { updateConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
+
+const logger = loggers.startup
 
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -130,7 +133,7 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
-    console.error('Setup error:', error)
+    logger.error('Setup error', error as Error)
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues }, { status: 400 })
     }

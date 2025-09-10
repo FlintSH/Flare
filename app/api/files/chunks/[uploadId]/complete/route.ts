@@ -9,9 +9,12 @@ import { join } from 'node:path'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { scheduleFileExpiration } from '@/lib/events/handlers/file-expiry'
+import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
+
+const logger = loggers.files
 
 interface RouteParams {
   uploadId: string
@@ -48,10 +51,9 @@ async function getUploadMetadata(localId: string) {
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
-      console.error(
-        `Error reading metadata for upload ${localId}:`,
-        error.message
-      )
+      logger.debug(`Error reading metadata for upload ${localId}`, {
+        error: error.message,
+      })
     }
     return null
   }
@@ -63,7 +65,9 @@ async function deleteUploadMetadata(localId: string) {
     const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     await unlink(metadataPath)
   } catch (err) {
-    console.error(`Error deleting metadata for upload ${localId}:`, err)
+    logger.debug(`Error deleting metadata for upload ${localId}`, {
+      error: err,
+    })
   }
 }
 
@@ -138,7 +142,10 @@ export async function POST(
 
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
-        console.error('Background OCR processing failed:', error)
+        logger.error('Background OCR processing failed', error, {
+          fileId: fileRecord.id,
+          fileKey: metadata.fileKey,
+        })
       })
     }
 
@@ -152,12 +159,16 @@ export async function POST(
             metadata.filename,
             expirationDate
           )
-          console.log(
-            `File expiration scheduled for ${metadata.filename} at ${expirationDate}`
-          )
+          logger.info('File expiration scheduled', {
+            fileId: fileRecord.id,
+            fileName: metadata.filename,
+            expirationDate,
+          })
         }
       } catch (error) {
-        console.error('Failed to schedule file expiration:', error)
+        logger.error('Failed to schedule file expiration', error as Error, {
+          fileId: fileRecord.id,
+        })
       }
     }
 
@@ -176,7 +187,7 @@ export async function POST(
 
     return NextResponse.json(responseData)
   } catch (error) {
-    console.error('Error completing upload:', error)
+    logger.error('Error completing upload', error as Error)
     return NextResponse.json(
       {
         error:

@@ -9,14 +9,19 @@ import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
+const logger = loggers.files
+
 const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
 
 if (!existsSync(TEMP_DIR)) {
-  mkdir(TEMP_DIR, { recursive: true }).catch(console.error)
+  mkdir(TEMP_DIR, { recursive: true }).catch((error) => {
+    logger.error('Failed to create temp directory', error as Error)
+  })
 }
 
 setInterval(
@@ -35,11 +40,11 @@ setInterval(
             await unlink(metadataPath)
           }
         } catch (error) {
-          console.error(`Error cleaning up file ${file}:`, error)
+          logger.error(`Error cleaning up file ${file}`, error as Error)
         }
       }
     } catch (error) {
-      console.error('Error during cleanup:', error)
+      logger.error('Error during cleanup', error as Error)
     }
   },
   60 * 60 * 1000
@@ -71,10 +76,9 @@ async function getUploadMetadata(
     return JSON.parse(data)
   } catch (error) {
     if (error instanceof Error) {
-      console.error(
-        `Error reading metadata for upload ${localId}:`,
-        error.message
-      )
+      logger.debug(`Error reading metadata for upload ${localId}`, {
+        error: error.message,
+      })
     }
     return null
   }
@@ -93,7 +97,9 @@ async function deleteUploadMetadata(localId: string) {
     const metadataPath = join(TEMP_DIR, `meta-${localId}`)
     await unlink(metadataPath)
   } catch (error) {
-    console.error(`Error deleting metadata for upload ${localId}:`, error)
+    logger.debug(`Error deleting metadata for upload ${localId}`, {
+      error,
+    })
   }
 }
 
@@ -158,7 +164,10 @@ export async function POST(req: Request) {
       }
       urlPath = `/${user.urlId}/${urlSafeName}`
     } catch (error) {
-      console.error('Path validation error:', error)
+      logger.error('Path validation error', error as Error, {
+        userId: user.id,
+        filename,
+      })
       return NextResponse.json({ error: 'Invalid file path' }, { status: 400 })
     }
 
@@ -192,7 +201,7 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
-    console.error('Error initializing upload:', error)
+    logger.error('Error initializing upload', error as Error)
     return NextResponse.json(
       {
         error:
@@ -236,7 +245,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: { presignedUrl } })
   } catch (error) {
-    console.error('Error getting presigned URL:', error)
+    logger.error('Error getting presigned URL', error as Error)
     return NextResponse.json(
       {
         error:
@@ -313,7 +322,10 @@ export async function PUT(req: Request) {
 
     if (metadata.mimeType.startsWith('image/')) {
       processImageOCR(metadata.fileKey, fileRecord.id).catch((error: Error) => {
-        console.error('Background OCR processing failed:', error)
+        logger.error('Background OCR processing failed', error, {
+          fileId: fileRecord.id,
+          fileKey: metadata.fileKey,
+        })
       })
     }
 
@@ -321,7 +333,7 @@ export async function PUT(req: Request) {
       data: { success: true },
     })
   } catch (error) {
-    console.error('Error completing upload:', error)
+    logger.error('Error completing upload', error as Error)
     return NextResponse.json(
       {
         error:
