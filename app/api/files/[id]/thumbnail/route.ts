@@ -19,18 +19,15 @@ export async function GET(
       params,
     ])
 
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
-
+    // Get file first to check visibility and ownership
     const file = await prisma.file.findUnique({
-      where: {
-        id,
-        ...(session.user.role !== 'ADMIN' && { userId: session.user.id }),
-      },
+      where: { id },
       select: {
         mimeType: true,
         path: true,
+        visibility: true,
+        userId: true,
+        password: true,
       },
     })
 
@@ -42,6 +39,16 @@ export async function GET(
       return new NextResponse('Not an image', { status: 400 })
     }
 
+    // Check access permissions (similar to main file endpoint)
+    const isOwner = session?.user?.id === file.userId
+    const isAdmin = session?.user?.role === 'ADMIN'
+    const isPrivate = file.visibility === 'PRIVATE' && !isOwner && !isAdmin
+
+    if (isPrivate) {
+      return new NextResponse('File not found', { status: 404 })
+    }
+
+    // Skip password check for thumbnails (thumbnails should be accessible if file is accessible)
     const storageProvider = await getStorageProvider()
     const fileStream = await storageProvider.getFileStream(file.path)
 
