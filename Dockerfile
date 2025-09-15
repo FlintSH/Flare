@@ -1,6 +1,6 @@
 # Stage 1: Dependencies
 FROM node:lts-alpine AS deps
-RUN apk add --no-cache libc6-compat python3 make g++ libexecinfo-dev
+RUN apk add --no-cache libc6-compat python3 make g++ execinfo-dev
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -37,7 +37,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Install curl for healthcheck, OpenSSL for Prisma, and execinfo for segfault handler
-RUN apk add --no-cache curl openssl libc6-compat libexecinfo
+RUN apk add --no-cache curl openssl libc6-compat execinfo
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
