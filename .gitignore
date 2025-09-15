@@ -68,4 +68,3 @@ prisma/*.db-journal
 
 # Tesseract files
 eng.traineddata
-segfault.log
