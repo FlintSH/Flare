@@ -14,7 +14,8 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "postinstall": "npx prisma generate",
+    "postinstall": "npx prisma generate && npm run compile-segfault-handler",
+    "compile-segfault-handler": "if [ -d node_modules/node-segfault-handler ]; then cd node_modules/node-segfault-handler && npm run install --if-present 2>/dev/null || npm rebuild 2>/dev/null || echo 'Segfault handler compilation failed but continuing...'; else echo 'Segfault handler not installed (optional dependency)'; fi",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -84,7 +85,6 @@
     "next": "15.5.2",
     "next-auth": "^4.24.11",
     "next-themes": "^0.4.6",
-    "node-segfault-handler": "^1.4.2",
     "papaparse": "^5.5.3",
     "pino": "^9.9.4",
     "pino-pretty": "^13.1.1",
@@ -98,6 +98,9 @@
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^6.0.1",
     "zod": "^3.25.76"
+  },
+  "optionalDependencies": {
+    "node-segfault-handler": "^1.4.2"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",

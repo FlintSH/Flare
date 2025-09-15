@@ -2,13 +2,17 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     // Register segfault handler early to catch crashes
     try {
-      const { default: segfaultHandler } = await import('node-segfault-handler')
-      // Write segfault info to a log file for easier debugging
+      // Use dynamic require to avoid webpack bundling issues
+      const segfaultHandler = eval('require')('node-segfault-handler')
       const logPath = process.env.SEGFAULT_LOG_PATH || './segfault.log'
       segfaultHandler.registerHandler(logPath)
       console.log(`Segfault handler registered, will write to: ${logPath}`)
     } catch (error) {
-      console.warn('Failed to register segfault handler:', error)
+      // Silently continue if segfault handler can't be loaded (optional dependency)
+      console.warn(
+        'Segfault handler not available:',
+        error instanceof Error ? error.message : String(error)
+      )
     }
 
     const { runStartupTasks } = await import('./lib/startup/index')
