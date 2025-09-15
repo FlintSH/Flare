@@ -1,6 +1,6 @@
-# Stage 1: Dependencies
-FROM node:lts-alpine AS deps
-RUN apk add --no-cache libc6-compat python3 make g++ execinfo-dev
+# Stage 1: Dependencies  
+FROM node:lts AS deps
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -12,8 +12,7 @@ RUN npm ci
 RUN npx prisma generate
 
 # Stage 2: Builder
-FROM node:lts-alpine AS builder
-RUN apk add --no-cache libc6-compat
+FROM node:lts AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -27,17 +26,17 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # Stage 3: Runner
-FROM node:lts-alpine AS runner
+FROM node:lts AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid nodejs nextjs
 
-# Install curl for healthcheck, OpenSSL for Prisma, and execinfo for segfault handler
-RUN apk add --no-cache curl openssl libc6-compat execinfo
+# Install curl for healthcheck and OpenSSL for Prisma
+RUN apt-get update && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
 
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
@@ -60,15 +59,12 @@ RUN chown -R nextjs:nodejs /app
 RUN chmod +x /app/start.sh
 
 # Create the entrypoint script that will run as root
-RUN echo '#!/bin/sh' > /entrypoint.sh && \
+RUN echo '#!/bin/bash' > /entrypoint.sh && \
     echo 'mkdir -p /app/uploads' >> /entrypoint.sh && \
     echo 'chown -R nextjs:nodejs /app/uploads' >> /entrypoint.sh && \
     echo 'chmod 775 /app/uploads' >> /entrypoint.sh && \
-    echo 'exec su-exec nextjs "$@"' >> /entrypoint.sh && \
+    echo 'exec su nextjs -s /bin/bash -c "$*"' >> /entrypoint.sh && \
     chmod +x /entrypoint.sh
-
-# Install su-exec for dropping privileges
-RUN apk add --no-cache su-exec
 
 EXPOSE 3000
 
