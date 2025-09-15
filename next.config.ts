@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     reactCompiler: true,
   },
-  serverExternalPackages: ['tesseract.js', 'node-segfault-handler'],
+  serverExternalPackages: ['tesseract.js', 'segfault-handler'],
   outputFileTracingIncludes: {
     '/api/**/*': ['./node_modules/**/*.wasm', './node_modules/**/*.proto'],
   },

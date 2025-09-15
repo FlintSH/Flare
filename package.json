@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "postinstall": "npx prisma generate && npm run compile-segfault-handler",
-    "compile-segfault-handler": "if [ -d node_modules/node-segfault-handler ]; then cd node_modules/node-segfault-handler && npm run install --if-present 2>/dev/null || npm rebuild 2>/dev/null || echo 'Segfault handler compilation failed but continuing...'; else echo 'Segfault handler not installed (optional dependency)'; fi",
+    "compile-segfault-handler": "if [ -d node_modules/segfault-handler ]; then cd node_modules/segfault-handler && npm run install --if-present 2>/dev/null || npm rebuild 2>/dev/null || echo 'Segfault handler compilation failed but continuing...'; else echo 'Segfault handler not installed'; fi",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -94,13 +94,11 @@
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.8",
     "react-hook-form": "^7.61.1",
+    "segfault-handler": "^1.3.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^6.0.1",
     "zod": "^3.25.76"
-  },
-  "optionalDependencies": {
-    "node-segfault-handler": "^1.4.2"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
