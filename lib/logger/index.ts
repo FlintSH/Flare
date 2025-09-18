@@ -42,19 +42,35 @@ const formatters = {
   },
 }
 
+// Fallback to console transport due to worker thread issues
 const transport = isDevelopment
-  ? pino.transport({
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        levelFirst: true,
-        translateTime: 'yyyy-mm-dd HH:MM:ss.l',
-        ignore: 'pid,hostname',
-        messageFormat: '{msg}',
-        errorLikeObjectKeys: ['error', 'err'],
-        errorProps: 'message,stack,code',
+  ? {
+      write: (msg: string) => {
+        try {
+          const obj = JSON.parse(msg)
+          const timestamp = new Date(obj.time)
+            .toISOString()
+            .replace('T', ' ')
+            .slice(0, -5)
+          const level = (
+            obj.level === 30
+              ? 'INFO'
+              : obj.level === 40
+                ? 'WARN'
+                : obj.level === 50
+                  ? 'ERROR'
+                  : obj.level === 20
+                    ? 'DEBUG'
+                    : 'TRACE'
+          ).padEnd(5)
+          const name = obj.name ? `[${obj.name}]`.padEnd(12) : ''
+          const message = obj.msg || ''
+          console.log(`${timestamp} ${level} ${name} ${message}`)
+        } catch {
+          console.log(msg)
+        }
       },
-    })
+    }
   : undefined
 
 const baseLogger = pino(
