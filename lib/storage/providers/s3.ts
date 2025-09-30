@@ -41,10 +41,11 @@ export class S3StorageProvider implements StorageProvider {
         secretAccessKey: config.secretAccessKey,
       },
       requestHandler: {
-        requestTimeout: 600000,
-        connectionTimeout: 60000,
+        requestTimeout: 300000, // 5 minutes
+        connectionTimeout: 30000, // 30 seconds
+        socketTimeout: 300000, // 5 minutes
       },
-      maxAttempts: 5,
+      maxAttempts: 3,
       retryMode: 'adaptive',
       ...(config.endpoint && {
         endpoint: config.endpoint,
@@ -90,56 +91,50 @@ export class S3StorageProvider implements StorageProvider {
       options.Range = `bytes=${range.start || 0}-${typeof range.end !== 'undefined' ? range.end : ''}`
     }
 
-    const maxRetries = 5
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await this.client.send(
-          new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: key,
-            ...options,
-          })
-        )
-
-        if (!response.Body) {
-          throw new Error('No file body returned from S3')
-        }
-
-        const stream = response.Body as Readable
-
-        stream.pause()
-
-        stream.on('error', (error) => {
-          logger.error(`S3 stream error for ${key}`, error as Error, { key })
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ...options,
         })
+      )
 
-        process.nextTick(() => {
-          stream.resume()
-        })
-
-        return stream
-      } catch (error) {
-        lastError = error as Error
-        logger.warn(`S3 getFileStream attempt ${attempt} failed`, {
-          error,
-          key,
-          attempt,
-          maxRetries,
-        })
-
-        if (attempt === maxRetries) {
-          throw lastError
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt) * 1000)
-        )
+      if (!response.Body) {
+        throw new Error('No file body returned from S3')
       }
-    }
 
-    throw lastError || new Error('Failed to get file stream after retries')
+      const stream = response.Body as Readable
+
+      // Set high water mark to prevent buffering issues
+      if (stream.setMaxListeners) {
+        stream.setMaxListeners(0)
+      }
+
+      // Don't pause/resume - let the stream flow naturally
+      stream.on('error', (error) => {
+        const err = error as Error & { code?: string }
+
+        // Only log if it's not a client disconnect during active streaming
+        if (
+          err.code !== 'ECONNRESET' &&
+          err.code !== 'ERR_STREAM_PREMATURE_CLOSE' &&
+          !err.message?.includes('aborted')
+        ) {
+          logger.error(`S3 stream error for ${key}`, err, {
+            key,
+            code: err.code,
+          })
+        }
+      })
+
+      return stream
+    } catch (error) {
+      logger.error(`Failed to get S3 stream for ${key}`, error as Error, {
+        key,
+      })
+      throw error
+    }
   }
 
   async getFileUrl(path: string, expiresIn: number = 3600): Promise<string> {

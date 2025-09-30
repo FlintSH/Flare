@@ -16,52 +16,85 @@ function encodeFilename(filename: string): string {
 function createRobustStream(nodeStream: Readable): ReadableStream {
   let streamClosed = false
   let controller: ReadableStreamDefaultController | null = null
+  let isPulling = false
 
-  return new ReadableStream({
-    start(ctrl) {
-      controller = ctrl
+  return new ReadableStream(
+    {
+      start(ctrl) {
+        controller = ctrl
 
-      nodeStream.on('data', (chunk) => {
-        if (!streamClosed) {
+        nodeStream.on('data', (chunk) => {
+          if (streamClosed) return
+
           try {
             controller?.enqueue(new Uint8Array(chunk))
           } catch (error) {
-            console.error('Error enqueueing chunk:', error)
+            const err = error as Error & { code?: string }
+            if (
+              err.code !== 'ECONNRESET' &&
+              !err.message?.includes('aborted')
+            ) {
+              console.error('Error enqueueing chunk:', error)
+            }
             if (!streamClosed) {
-              controller?.error(error)
               streamClosed = true
+              if (!nodeStream.destroyed) {
+                nodeStream.destroy()
+              }
             }
           }
-        }
-      })
+        })
 
-      nodeStream.on('end', () => {
-        if (!streamClosed) {
-          try {
-            controller?.close()
-          } catch (error) {
-            console.error('Error closing stream:', error)
+        nodeStream.on('end', () => {
+          if (!streamClosed) {
+            try {
+              controller?.close()
+            } catch {
+              // Client disconnected
+            }
+            streamClosed = true
           }
-          streamClosed = true
-        }
-      })
+        })
 
-      nodeStream.on('error', (error) => {
-        console.error('Node stream error:', error)
-        if (!streamClosed) {
-          controller?.error(error)
-          streamClosed = true
-        }
-      })
-    },
+        nodeStream.on('error', (error) => {
+          const err = error as Error & { code?: string }
+          if (
+            err.code !== 'ECONNRESET' &&
+            err.code !== 'ERR_STREAM_PREMATURE_CLOSE' &&
+            !err.message?.includes('aborted')
+          ) {
+            console.error('Node stream error:', error)
+          }
+          if (!streamClosed) {
+            streamClosed = true
+            if (!nodeStream.destroyed) {
+              nodeStream.destroy()
+            }
+          }
+        })
+      },
 
-    cancel() {
-      streamClosed = true
-      if (nodeStream.destroyed === false) {
-        nodeStream.destroy()
-      }
+      pull() {
+        if (!isPulling && !streamClosed) {
+          isPulling = true
+          nodeStream.resume()
+          process.nextTick(() => {
+            isPulling = false
+          })
+        }
+      },
+
+      cancel() {
+        streamClosed = true
+        if (!nodeStream.destroyed) {
+          nodeStream.destroy()
+        }
+      },
     },
-  })
+    {
+      highWaterMark: 65536, // 64KB buffer for smooth streaming
+    }
+  )
 }
 
 export async function GET(
@@ -131,8 +164,10 @@ export async function GET(
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
         'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+        'Cache-Control': 'public, max-age=31536000, immutable',
         Connection: 'keep-alive',
         'Keep-Alive': 'timeout=300, max=1000',
+        'Transfer-Encoding': 'identity',
       }
 
       return new NextResponse(createRobustStream(stream), {
@@ -147,8 +182,10 @@ export async function GET(
       'Content-Length': size.toString(),
       'Content-Type': file.mimeType,
       'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+      'Cache-Control': 'public, max-age=31536000, immutable',
       Connection: 'keep-alive',
       'Keep-Alive': 'timeout=300, max=1000',
+      'Transfer-Encoding': 'identity',
     }
 
     return new NextResponse(createRobustStream(stream), { headers })
