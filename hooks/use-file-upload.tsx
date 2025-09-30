@@ -118,6 +118,10 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   }
 
   const uploadFileInChunks = async (file: FileWithPreview, index: number) => {
+    const MAX_CONCURRENT_UPLOADS = 10
+    const MAX_RETRIES = 3
+    const INITIAL_RETRY_DELAY = 1000
+
     try {
       const initResponse = await fetch('/api/files/chunks', {
         method: 'POST',
@@ -144,14 +148,17 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       }
 
       const chunkSize = 5 * 1024 * 1024
-      const chunks: Blob[] = []
       const totalChunks = Math.ceil(file.size / chunkSize)
       const chunkProgress = new Map<number, number>()
 
+      const chunks: Array<{ blob: Blob; partNumber: number }> = []
       for (let i = 0; i < totalChunks; i++) {
         const start = i * chunkSize
         const end = Math.min(start + chunkSize, file.size)
-        chunks.push(file.slice(start, end))
+        chunks.push({
+          blob: file.slice(start, end),
+          partNumber: i + 1,
+        })
       }
 
       const updateTotalProgress = () => {
@@ -162,26 +169,16 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         updateFileProgress(index, totalUploaded, Date.now())
       }
 
-      const uploadedParts: { ETag: string; PartNumber: number }[] = []
-      const batchSize = 3
-      let completed = 0
-
-      for (let i = 0; i < Math.ceil(chunks.length / batchSize); i++) {
-        const batchStart = i * batchSize
-        const batchEnd = Math.min(batchStart + batchSize, chunks.length)
-        const batch = chunks.slice(batchStart, batchEnd)
-
-        const promises = batch.map(async (chunk, batchIndex) => {
-          const partNumber = batchStart + batchIndex + 1
-          const formData = new FormData()
-          formData.append('partNumber', partNumber.toString())
-          formData.append('uploadId', uploadId)
-          formData.append('key', fileKey)
-          formData.append('chunk', chunk)
-
-          const xhr = new XMLHttpRequest()
-          await new Promise<{ ETag: string; PartNumber: number }>(
+      const uploadChunkWithRetry = async (
+        chunk: Blob,
+        partNumber: number,
+        retryCount = 0
+      ): Promise<{ ETag: string; PartNumber: number }> => {
+        try {
+          return await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
+              const xhr = new XMLHttpRequest()
+
               xhr.upload.addEventListener('progress', (event) => {
                 if (event.lengthComputable) {
                   chunkProgress.set(partNumber, event.loaded)
@@ -191,7 +188,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
               xhr.addEventListener('load', () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                  completed++
                   chunkProgress.set(partNumber, chunk.size)
                   updateTotalProgress()
                   try {
@@ -212,19 +208,58 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 reject(new Error('Network error occurred'))
               })
 
+              xhr.addEventListener('abort', () => {
+                reject(new Error('Upload aborted'))
+              })
+
               xhr.open(
                 'PUT',
                 `/api/files/chunks/${uploadId}/part/${partNumber}`
               )
               xhr.send(chunk)
             }
-          ).then((response) => {
-            uploadedParts.push(response)
-          })
-        })
-
-        await Promise.all(promises)
+          )
+        } catch (error) {
+          if (retryCount < MAX_RETRIES) {
+            const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+            return uploadChunkWithRetry(chunk, partNumber, retryCount + 1)
+          }
+          throw error
+        }
       }
+
+      const uploadedParts: { ETag: string; PartNumber: number }[] = []
+      const uploadChunk = async (blob: Blob, partNumber: number) => {
+        const result = await uploadChunkWithRetry(blob, partNumber)
+        uploadedParts.push(result)
+      }
+
+      const parallelLimit = async <T,>(
+        items: T[],
+        limit: number,
+        fn: (item: T) => Promise<void>
+      ): Promise<void> => {
+        const executing: Promise<void>[] = []
+        for (const item of items) {
+          const promise = fn(item).then(() => {
+            executing.splice(executing.indexOf(promise), 1)
+          })
+          executing.push(promise)
+          if (executing.length >= limit) {
+            await Promise.race(executing)
+          }
+        }
+        await Promise.all(executing)
+      }
+
+      await parallelLimit(
+        chunks,
+        MAX_CONCURRENT_UPLOADS,
+        async ({ blob, partNumber }) => {
+          await uploadChunk(blob, partNumber)
+        }
+      )
 
       const completeResponse = await fetch(
         `/api/files/chunks/${uploadId}/complete`,
