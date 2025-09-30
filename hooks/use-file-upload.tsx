@@ -48,6 +48,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const pauseControllerRef = React.useRef<{
     paused: boolean
     resume: () => void
+    abort: () => void
   } | null>(null)
 
   const formatSpeed = useCallback((bytesPerSecond: number): string => {
@@ -61,7 +62,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     if (pauseControllerRef.current) {
       pauseControllerRef.current.paused = !pauseControllerRef.current.paused
       setIsPaused(pauseControllerRef.current.paused)
-      if (!pauseControllerRef.current.paused) {
+      if (pauseControllerRef.current.paused) {
+        // Abort all active uploads
+        pauseControllerRef.current.abort()
+      } else {
+        // Resume waiting uploads
         pauseControllerRef.current.resume()
       }
     }
@@ -212,9 +217,18 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         })
       }
 
+      const activeXHRs = new Map<number, XMLHttpRequest>()
       const pauseController = {
         paused: false,
         resume: () => {},
+        abort: () => {
+          activeXHRs.forEach((xhr) => {
+            if (xhr.readyState !== XMLHttpRequest.DONE) {
+              xhr.abort()
+            }
+          })
+          activeXHRs.clear()
+        },
       }
       pauseControllerRef.current = pauseController
 
@@ -252,6 +266,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           return await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
               const xhr = new XMLHttpRequest()
+              activeXHRs.set(partNumber, xhr)
+
+              const cleanup = () => {
+                activeXHRs.delete(partNumber)
+              }
 
               xhr.upload.addEventListener('progress', (event) => {
                 if (event.lengthComputable) {
@@ -261,6 +280,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
               })
 
               xhr.addEventListener('load', () => {
+                cleanup()
                 if (xhr.status >= 200 && xhr.status < 300) {
                   chunkProgress.set(partNumber, chunk.size)
                   updateTotalProgress()
@@ -279,11 +299,13 @@ export function useFileUpload(options: FileUploadOptions = {}) {
               })
 
               xhr.addEventListener('error', () => {
+                cleanup()
                 reject(new Error('Network error occurred'))
               })
 
               xhr.addEventListener('abort', () => {
-                reject(new Error('Upload aborted'))
+                cleanup()
+                reject(new Error('Upload paused'))
               })
 
               xhr.open(
@@ -294,6 +316,15 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             }
           )
         } catch (error) {
+          // Don't retry if upload was paused
+          if (
+            error instanceof Error &&
+            error.message === 'Upload paused' &&
+            pauseController.paused
+          ) {
+            throw error
+          }
+
           if (retryCount < MAX_RETRIES) {
             const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount)
             await new Promise((resolve) => setTimeout(resolve, delay))
@@ -305,8 +336,20 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
       const uploadedParts: { ETag: string; PartNumber: number }[] = []
       const uploadChunk = async (blob: Blob, partNumber: number) => {
-        const result = await uploadChunkWithRetry(blob, partNumber)
-        uploadedParts.push(result)
+        try {
+          const result = await uploadChunkWithRetry(blob, partNumber)
+          uploadedParts.push(result)
+        } catch (error) {
+          // If upload was paused, don't treat it as an error
+          if (
+            error instanceof Error &&
+            error.message === 'Upload paused' &&
+            pauseController.paused
+          ) {
+            return
+          }
+          throw error
+        }
       }
 
       const parallelLimit = async <T,>(
@@ -316,9 +359,27 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       ): Promise<void> => {
         const executing: Promise<void>[] = []
         for (const item of items) {
-          const promise = fn(item).then(() => {
-            executing.splice(executing.indexOf(promise), 1)
-          })
+          // Check if paused before starting new chunk
+          if (pauseController.paused) {
+            break
+          }
+
+          const promise = fn(item)
+            .then(() => {
+              executing.splice(executing.indexOf(promise), 1)
+            })
+            .catch((error) => {
+              executing.splice(executing.indexOf(promise), 1)
+              // If paused, silently stop processing
+              if (
+                error instanceof Error &&
+                error.message === 'Upload paused' &&
+                pauseController.paused
+              ) {
+                return
+              }
+              throw error
+            })
           executing.push(promise)
           if (executing.length >= limit) {
             await Promise.race(executing)
