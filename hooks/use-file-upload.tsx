@@ -263,81 +263,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         }
 
         try {
-          // Get presigned URL from server
-          const urlResponse = await fetch(
-            `/api/files/chunks/${uploadId}/part/${partNumber}`,
-            {
-              method: 'GET',
-            }
-          )
-
-          if (!urlResponse.ok) {
-            throw new Error('Failed to get presigned URL')
-          }
-
-          const { data } = await urlResponse.json()
-          const presignedUrl = data.url
-
-          // Check if using local storage (fake URL) or S3 (real presigned URL)
-          const isLocalStorage = presignedUrl.startsWith('local://')
-
-          if (isLocalStorage) {
-            // Fallback to server-proxied upload for local storage
-            return await new Promise<{ ETag: string; PartNumber: number }>(
-              (resolve, reject) => {
-                const xhr = new XMLHttpRequest()
-                activeXHRs.set(partNumber, xhr)
-
-                const cleanup = () => {
-                  activeXHRs.delete(partNumber)
-                }
-
-                xhr.upload.addEventListener('progress', (event) => {
-                  if (event.lengthComputable) {
-                    chunkProgress.set(partNumber, event.loaded)
-                    updateTotalProgress()
-                  }
-                })
-
-                xhr.addEventListener('load', () => {
-                  cleanup()
-                  if (xhr.status >= 200 && xhr.status < 300) {
-                    chunkProgress.set(partNumber, chunk.size)
-                    updateTotalProgress()
-                    try {
-                      const response = JSON.parse(xhr.responseText)
-                      resolve({
-                        ETag: response.data.etag,
-                        PartNumber: partNumber,
-                      })
-                    } catch (error) {
-                      reject(new Error('Failed to parse response'))
-                    }
-                  } else {
-                    reject(new Error(`Upload failed: ${xhr.statusText}`))
-                  }
-                })
-
-                xhr.addEventListener('error', () => {
-                  cleanup()
-                  reject(new Error('Network error occurred'))
-                })
-
-                xhr.addEventListener('abort', () => {
-                  cleanup()
-                  reject(new Error('Upload paused'))
-                })
-
-                xhr.open(
-                  'PUT',
-                  `/api/files/chunks/${uploadId}/part/${partNumber}`
-                )
-                xhr.send(chunk)
-              }
-            )
-          }
-
-          // Upload directly to S3 using presigned URL
+          // Upload through server (no CORS issues, works with any storage)
           return await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
               const xhr = new XMLHttpRequest()
@@ -359,18 +285,15 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 if (xhr.status >= 200 && xhr.status < 300) {
                   chunkProgress.set(partNumber, chunk.size)
                   updateTotalProgress()
-
-                  // Get ETag from response headers (S3 returns it)
-                  const etag = xhr.getResponseHeader('ETag')
-                  if (!etag) {
-                    reject(new Error('No ETag in S3 response'))
-                    return
+                  try {
+                    const response = JSON.parse(xhr.responseText)
+                    resolve({
+                      ETag: response.data.etag,
+                      PartNumber: partNumber,
+                    })
+                  } catch (error) {
+                    reject(new Error('Failed to parse response'))
                   }
-
-                  resolve({
-                    ETag: etag.replace(/"/g, ''), // Remove quotes from ETag
-                    PartNumber: partNumber,
-                  })
                 } else {
                   reject(new Error(`Upload failed: ${xhr.statusText}`))
                 }
@@ -386,8 +309,10 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 reject(new Error('Upload paused'))
               })
 
-              // Upload directly to S3 with presigned URL
-              xhr.open('PUT', presignedUrl)
+              xhr.open(
+                'PUT',
+                `/api/files/chunks/${uploadId}/part/${partNumber}`
+              )
               xhr.send(chunk)
             }
           )
