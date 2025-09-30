@@ -6,6 +6,7 @@ export interface User {
   storageUsed: number
   role: 'ADMIN' | 'USER'
   randomizeFileUrls: boolean
+  enableRichEmbeds: boolean
   urlId: string
   fileCount: number
   shortUrlCount: number
