@@ -397,6 +397,18 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         }
       )
 
+      // If paused during upload, don't complete
+      if (pauseController.paused) {
+        throw new Error('Upload was paused')
+      }
+
+      // Verify all chunks were uploaded
+      if (uploadedParts.length !== chunks.length) {
+        throw new Error(
+          `Upload incomplete: ${uploadedParts.length}/${chunks.length} chunks uploaded`
+        )
+      }
+
       const completeResponse = await fetch(
         `/api/files/chunks/${uploadId}/complete`,
         {
@@ -580,17 +592,29 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Upload failed'
-      toast({
-        title: 'Upload Failed',
-        description: errorMessage,
-        variant: 'destructive',
-      })
 
-      if (options.onUploadError) {
-        options.onUploadError(errorMessage)
+      // Don't show error toast if upload was paused by user
+      if (errorMessage === 'Upload was paused') {
+        toast({
+          title: 'Upload Paused',
+          description: 'You can resume the upload or remove the file',
+        })
+      } else {
+        toast({
+          title: 'Upload Failed',
+          description: errorMessage,
+          variant: 'destructive',
+        })
+
+        if (options.onUploadError) {
+          options.onUploadError(errorMessage)
+        }
       }
     } finally {
       setIsUploading(false)
+      setIsPaused(false)
+      progressToastRef.current?.dismiss()
+      progressToastRef.current = null
     }
   }
 
