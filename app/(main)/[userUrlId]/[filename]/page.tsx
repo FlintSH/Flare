@@ -153,16 +153,29 @@ export async function generateMetadata({
     name: file.user.name || 'Anonymous',
   }
 
+  // Check if user has rich embeds enabled
+  const enableRichEmbeds = file.user.enableRichEmbeds ?? true
+
+  // If rich embeds are disabled, return minimal metadata
+  if (!enableRichEmbeds) {
+    return {
+      title: cleanFile.name,
+      description: '',
+    }
+  }
+
   const isImage = cleanFile.mimeType.startsWith('image/')
   const isVideo = cleanFile.mimeType.startsWith('video/')
-  const isAudio = cleanFile.mimeType.startsWith('audio/')
-  const isMediaFile = isImage || isVideo || isAudio
   const formattedSize = formatFileSize(cleanFile.size)
 
-  const ogTitle = `${cleanFile.name} (${formattedSize})`
-  const ogDescription = isMediaFile
-    ? `Uploaded by ${cleanUser.name}`
-    : `${cleanFile.name} - ${formattedSize}, uploaded by ${cleanUser.name}`
+  const uploadDate = new Date(file.uploadedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+
+  const ogTitle = `${cleanFile.name}`
+  const ogDescription = `${formattedSize} • Uploaded by ${cleanUser.name} • ${uploadDate}`
 
   const host = headersList.get('host') || 'localhost:3000'
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
@@ -186,7 +199,9 @@ export async function generateMetadata({
     openGraph: {
       title: ogTitle,
       description: ogDescription,
-      url: rawUrl,
+      url: `${baseUrl}${urlPath}`,
+      siteName: 'Flare',
+      locale: 'en_US',
       type: (isVideo ? 'video.other' : isImage ? 'article' : 'website') as
         | 'video.other'
         | 'article'
@@ -222,6 +237,13 @@ export async function generateMetadata({
           images: [rawUrl],
         }
       : undefined,
+    other: {
+      // Discord-specific tags
+      'theme-color': '#3b82f6',
+      // Additional metadata for embeds
+      'article:published_time': file.uploadedAt.toISOString(),
+      'article:author': cleanUser.name,
+    },
   }
 
   return metadata

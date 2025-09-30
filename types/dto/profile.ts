@@ -7,6 +7,7 @@ export const UpdateProfileSchema = z.object({
   newPassword: z.string().min(8).optional(),
   image: z.string().optional(),
   randomizeFileUrls: z.boolean().optional(),
+  enableRichEmbeds: z.boolean().optional(),
 })
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
@@ -17,4 +18,5 @@ export interface ProfileResponse {
   email: string | null
   image: string | null
   randomizeFileUrls: boolean
+  enableRichEmbeds: boolean
 }

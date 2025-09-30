@@ -167,6 +167,44 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
     }
   }
 
+  const handleRichEmbedsToggle = async (checked: boolean) => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          enableRichEmbeds: checked,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update settings')
+      }
+
+      router.refresh()
+
+      onUpdate()
+
+      toast({
+        title: 'Success',
+        description: 'Rich embed settings updated successfully',
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description:
+          error instanceof Error ? error.message : 'Failed to update settings',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col sm:flex-row gap-6">
@@ -249,6 +287,22 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           id="randomize-urls"
           checked={user.randomizeFileUrls}
           onCheckedChange={handleRandomizeUrlsToggle}
+          disabled={isLoading}
+        />
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
+        <div className="space-y-0.5">
+          <Label htmlFor="rich-embeds">Enable Rich Embeds</Label>
+          <p className="text-sm text-muted-foreground">
+            When enabled, your shared files will include rich metadata for
+            previews on Discord, Twitter, and other platforms.
+          </p>
+        </div>
+        <Switch
+          id="rich-embeds"
+          checked={user.enableRichEmbeds}
+          onCheckedChange={handleRichEmbedsToggle}
           disabled={isLoading}
         />
       </div>

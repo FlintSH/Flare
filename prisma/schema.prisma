@@ -23,6 +23,7 @@ model User {
   urlId             String         @unique
   uploadToken       String         @unique
   randomizeFileUrls Boolean        @default(false)
+  enableRichEmbeds  Boolean        @default(true)
   files             File[]
   shortenedUrls     ShortenedUrl[]
 }

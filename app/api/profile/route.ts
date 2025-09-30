@@ -71,6 +71,8 @@ export async function PUT(req: Request) {
     if (body.image) updateData.image = body.image
     if (typeof body.randomizeFileUrls === 'boolean')
       updateData.randomizeFileUrls = body.randomizeFileUrls
+    if (typeof body.enableRichEmbeds === 'boolean')
+      updateData.enableRichEmbeds = body.enableRichEmbeds
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
@@ -81,6 +83,7 @@ export async function PUT(req: Request) {
         email: true,
         image: true,
         randomizeFileUrls: true,
+        enableRichEmbeds: true,
       },
     })
 
