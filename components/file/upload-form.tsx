@@ -6,7 +6,14 @@ import Image from 'next/image'
 
 import { ExpiryAction } from '@/types/events'
 import { format } from 'date-fns'
-import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
+import {
+  CalendarIcon,
+  FileIcon,
+  PauseIcon,
+  PlayIcon,
+  UploadIcon,
+  XIcon,
+} from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
 import { ExpiryModal } from '@/components/shared/expiry-modal'
@@ -38,9 +45,12 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
   const {
     files,
     isUploading,
+    isPaused,
     onDrop,
     removeFile,
     uploadFiles,
+    togglePause,
+    formatSpeed,
     visibility,
     setVisibility,
     password,
@@ -101,20 +111,54 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{file.name}</p>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      {file.uploaded !== undefined
-                        ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
-                        : formatBytes(file.size)}
-                    </p>
+                    <div className="flex justify-between items-center text-sm text-muted-foreground">
+                      <span>
+                        {file.uploaded !== undefined
+                          ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
+                          : formatBytes(file.size)}
+                      </span>
+                      {file.uploadSpeed !== undefined &&
+                        file.uploadSpeed > 0 &&
+                        isUploading && (
+                          <span className="text-xs">
+                            {formatSpeed(file.uploadSpeed)}
+                          </span>
+                        )}
+                    </div>
                     {file.progress !== undefined && file.progress > 0 && (
-                      <Progress
-                        value={Math.min(file.progress, 100)}
-                        className="h-1"
-                      />
+                      <div className="space-y-1">
+                        <Progress
+                          value={Math.min(file.progress, 100)}
+                          className="h-1"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {file.progress}%
+                          {isPaused &&
+                            file.progress > 0 &&
+                            file.progress < 100 && (
+                              <span className="ml-2 text-orange-500">
+                                (Paused)
+                              </span>
+                            )}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
-                {!isUploading && (
+                {isUploading && file.progress > 0 && file.progress < 100 ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={togglePause}
+                    title={isPaused ? 'Resume upload' : 'Pause upload'}
+                  >
+                    {isPaused ? (
+                      <PlayIcon className="w-4 h-4" />
+                    ) : (
+                      <PauseIcon className="w-4 h-4" />
+                    )}
+                  </Button>
+                ) : !isUploading ? (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -122,7 +166,7 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
                   >
                     <XIcon className="w-4 h-4" />
                   </Button>
-                )}
+                ) : null}
               </div>
             ))}
           </div>

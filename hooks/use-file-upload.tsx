@@ -11,6 +11,8 @@ export type FileWithPreview = File & {
   preview?: string
   progress: number
   uploaded: number
+  uploadSpeed?: number
+  isPaused?: boolean
 }
 
 export type UploadResponse = {
@@ -32,6 +34,7 @@ export type FileUploadOptions = {
 export function useFileUpload(options: FileUploadOptions = {}) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
@@ -42,6 +45,27 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     options.expiresAt || null
   )
   const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
+  const pauseControllerRef = React.useRef<{
+    paused: boolean
+    resume: () => void
+  } | null>(null)
+
+  const formatSpeed = useCallback((bytesPerSecond: number): string => {
+    if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`
+    if (bytesPerSecond < 1024 * 1024)
+      return `${(bytesPerSecond / 1024).toFixed(2)} KB/s`
+    return `${(bytesPerSecond / (1024 * 1024)).toFixed(2)} MB/s`
+  }, [])
+
+  const togglePause = useCallback(() => {
+    if (pauseControllerRef.current) {
+      pauseControllerRef.current.paused = !pauseControllerRef.current.paused
+      setIsPaused(pauseControllerRef.current.paused)
+      if (!pauseControllerRef.current.paused) {
+        pauseControllerRef.current.resume()
+      }
+    }
+  }, [])
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles((prev) => [
@@ -53,6 +77,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             : undefined,
           progress: 0,
           uploaded: 0,
+          uploadSpeed: 0,
+          isPaused: false,
         })
       ),
     ])
@@ -67,6 +93,42 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       }
     }
   }, [files])
+
+  useEffect(() => {
+    if (!isUploading || !progressToastRef.current) return
+
+    const interval = setInterval(() => {
+      const uploadingFile = files.find(
+        (f) => f.progress > 0 && f.progress < 100
+      )
+      if (!uploadingFile || !progressToastRef.current) return
+
+      const progress = Math.min(100, uploadingFile.progress)
+      const speed = uploadingFile.uploadSpeed || 0
+
+      progressToastRef.current.update({
+        id: progressToastRef.current.id,
+        title: isPaused ? 'Upload Paused' : 'Uploading...',
+        description: (
+          <div className="space-y-2">
+            <p className="text-sm font-medium truncate">{uploadingFile.name}</p>
+            <Progress value={progress} className="h-2" />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{progress}%</span>
+              <span>{formatSpeed(speed)}</span>
+            </div>
+          </div>
+        ),
+        action: (
+          <ToastAction altText="Pause/Resume" onClick={togglePause}>
+            {isPaused ? 'Resume' : 'Pause'}
+          </ToastAction>
+        ),
+      })
+    }, 200)
+
+    return () => clearInterval(interval)
+  }, [isUploading, files, isPaused, formatSpeed, togglePause])
 
   const removeFile = (index: number) => {
     setFiles((prev) => {
@@ -89,32 +151,19 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setFiles([])
   }
 
-  const updateFileProgress = (index: number, uploaded: number, now: number) => {
+  const updateFileProgress = (
+    index: number,
+    uploaded: number,
+    uploadSpeed: number
+  ) => {
     setFiles((prev) => {
       const newFiles = [...prev]
       const file = newFiles[index]
       file.progress = Math.min(100, Math.round((uploaded / file.size) * 100))
       file.uploaded = uploaded
+      file.uploadSpeed = uploadSpeed
       return [...newFiles]
     })
-
-    if (progressToastRef.current && files[index]) {
-      const progress = Math.min(
-        100,
-        Math.round((uploaded / files[index].size) * 100)
-      )
-      progressToastRef.current.update({
-        id: progressToastRef.current.id,
-        title: 'Uploading...',
-        description: (
-          <div className="space-y-2">
-            <p className="text-sm">{files[index].name}</p>
-            <Progress value={progress} className="h-2" />
-            <p className="text-xs text-muted-foreground">{progress}%</p>
-          </div>
-        ),
-      })
-    }
   }
 
   const uploadFileInChunks = async (file: FileWithPreview, index: number) => {
@@ -150,6 +199,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       const chunkSize = 5 * 1024 * 1024
       const totalChunks = Math.ceil(file.size / chunkSize)
       const chunkProgress = new Map<number, number>()
+      let lastUploadedBytes = 0
+      let lastUpdateTime = Date.now()
 
       const chunks: Array<{ blob: Blob; partNumber: number }> = []
       for (let i = 0; i < totalChunks; i++) {
@@ -161,12 +212,29 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         })
       }
 
+      const pauseController = {
+        paused: false,
+        resume: () => {},
+      }
+      pauseControllerRef.current = pauseController
+
       const updateTotalProgress = () => {
         const totalUploaded = Array.from(chunkProgress.values()).reduce(
           (sum, progress) => sum + progress,
           0
         )
-        updateFileProgress(index, totalUploaded, Date.now())
+        const now = Date.now()
+        const timeDiff = (now - lastUpdateTime) / 1000
+        let speed = 0
+
+        if (timeDiff > 0) {
+          const bytesDiff = totalUploaded - lastUploadedBytes
+          speed = bytesDiff / timeDiff
+          lastUploadedBytes = totalUploaded
+          lastUpdateTime = now
+        }
+
+        updateFileProgress(index, totalUploaded, speed)
       }
 
       const uploadChunkWithRetry = async (
@@ -174,6 +242,12 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         partNumber: number,
         retryCount = 0
       ): Promise<{ ETag: string; PartNumber: number }> => {
+        while (pauseController.paused) {
+          await new Promise<void>((resolve) => {
+            pauseController.resume = resolve
+          })
+        }
+
         try {
           return await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
@@ -286,6 +360,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     } catch (error) {
       console.error('Error in chunk upload:', error)
       throw error
+    } finally {
+      pauseControllerRef.current = null
     }
   }
 
@@ -296,17 +372,31 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     if (password) formData.append('password', password)
     if (expiresAt) formData.append('expiresAt', expiresAt.toISOString())
 
+    let lastUploadedBytes = 0
+    let lastUpdateTime = Date.now()
+
     const xhr = new XMLHttpRequest()
     return await new Promise<UploadResponse>((resolve, reject) => {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
-          updateFileProgress(index, event.loaded, Date.now())
+          const now = Date.now()
+          const timeDiff = (now - lastUpdateTime) / 1000
+          let speed = 0
+
+          if (timeDiff > 0) {
+            const bytesDiff = event.loaded - lastUploadedBytes
+            speed = bytesDiff / timeDiff
+            lastUploadedBytes = event.loaded
+            lastUpdateTime = now
+          }
+
+          updateFileProgress(index, event.loaded, speed)
         }
       })
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          updateFileProgress(index, file.size, Date.now())
+          updateFileProgress(index, file.size, 0)
           const response = JSON.parse(xhr.responseText)
           resolve(response.data || response)
         } else {
@@ -346,9 +436,12 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           title: 'Uploading...',
           description: (
             <div className="space-y-2">
-              <p className="text-sm">{file.name}</p>
+              <p className="text-sm font-medium truncate">{file.name}</p>
               <Progress value={0} className="h-2" />
-              <p className="text-xs text-muted-foreground">0%</p>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0%</span>
+                <span>0 B/s</span>
+              </div>
             </div>
           ),
           duration: Infinity,
@@ -442,10 +535,13 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   return {
     files,
     isUploading,
+    isPaused,
     onDrop,
     removeFile,
     clearFiles,
     uploadFiles,
+    togglePause,
+    formatSpeed,
     visibility,
     setVisibility,
     password,
