@@ -8,6 +8,8 @@ export const UpdateProfileSchema = z.object({
   image: z.string().optional(),
   randomizeFileUrls: z.boolean().optional(),
   enableRichEmbeds: z.boolean().optional(),
+  defaultFileExpiration: z.enum(['HOUR', 'DAY', 'WEEK', 'MONTH']).optional(),
+  defaultFileExpirationAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
 })
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
