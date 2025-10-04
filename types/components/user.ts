@@ -1,3 +1,5 @@
+import { ExpiryAction } from '@/types/events'
+
 export interface User {
   id: string
   name: string | null
@@ -10,6 +12,8 @@ export interface User {
   urlId: string
   fileCount: number
   shortUrlCount: number
+  defaultFileExpiration: 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | null
+  defaultFileExpirationAction: 'DELETE' | 'SET_PRIVATE' | null
 }
 
 export interface ProfileClientProps {
