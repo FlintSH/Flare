@@ -8,24 +8,26 @@ datasource db {
 }
 
 model User {
-  id                String         @id @default(cuid())
-  name              String?
-  email             String?        @unique
-  emailVerified     DateTime?
-  image             String?
-  password          String?
-  role              UserRole       @default(USER)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  storageUsed       Float          @default(0)
-  sessionVersion    Int            @default(1)
-  vanityId          String?        @unique
-  urlId             String         @unique
-  uploadToken       String         @unique
-  randomizeFileUrls Boolean        @default(false)
-  enableRichEmbeds  Boolean        @default(true)
-  files             File[]
-  shortenedUrls     ShortenedUrl[]
+  id                          String         @id @default(cuid())
+  name                        String?
+  email                       String?        @unique
+  emailVerified               DateTime?
+  image                       String?
+  password                    String?
+  role                        UserRole       @default(USER)
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
+  storageUsed                 Float          @default(0)
+  sessionVersion              Int            @default(1)
+  vanityId                    String?        @unique
+  urlId                       String         @unique
+  uploadToken                 String         @unique
+  randomizeFileUrls           Boolean        @default(false)
+  enableRichEmbeds            Boolean        @default(true)
+  files                       File[]
+  shortenedUrls               ShortenedUrl[]
+  defaultFileExpiration       FileExpiration @default(DISABLED)
+  defaultFileExpirationAction ExpiryAction   @default(DELETE)
 }
 
 model File {
@@ -119,4 +121,17 @@ enum EventStatus {
   COMPLETED
   FAILED
   SCHEDULED
+}
+
+enum FileExpiration {
+  DISABLED
+  HOUR
+  DAY
+  WEEK
+  MONTH
+}
+
+enum ExpiryAction {
+  DELETE
+  SET_PRIVATE
 }

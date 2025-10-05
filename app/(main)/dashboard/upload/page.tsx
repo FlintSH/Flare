@@ -6,12 +6,26 @@ import { UploadForm } from '@/components/file/upload-form'
 
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
+import { prisma } from '@/lib/database/prisma'
 import { formatBytes } from '@/lib/utils'
 
 export default async function UploadPage() {
   const session = await getServerSession(authOptions)
 
   if (!session?.user) {
+    redirect('/auth/login')
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      defaultFileExpirationAction: true,
+      defaultFileExpiration: true,
+    },
+  })
+
+  if (!user) {
     redirect('/auth/login')
   }
 
@@ -37,6 +51,7 @@ export default async function UploadPage() {
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
         <div className="relative p-8">
           <UploadForm
+            user={user}
             maxSize={maxSizeBytes}
             formattedMaxSize={formattedMaxSize}
           />

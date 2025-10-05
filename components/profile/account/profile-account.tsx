@@ -11,6 +11,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
 import { useToast } from '@/hooks/use-toast'
@@ -129,7 +136,11 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
     }
   }
 
-  const handleRandomizeUrlsToggle = async (checked: boolean) => {
+  const handleValueChange = async (
+    value: boolean | string,
+    key: string,
+    description: string
+  ) => {
     setIsLoading(true)
     try {
       const response = await fetch('/api/profile', {
@@ -138,7 +149,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          randomizeFileUrls: checked,
+          [key]: value,
         }),
       })
 
@@ -153,45 +164,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       toast({
         title: 'Success',
-        description: 'File URL settings updated successfully',
-      })
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to update settings',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleRichEmbedsToggle = async (checked: boolean) => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          enableRichEmbeds: checked,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update settings')
-      }
-
-      router.refresh()
-
-      onUpdate()
-
-      toast({
-        title: 'Success',
-        description: 'Rich embed settings updated successfully',
+        description: description,
       })
     } catch (error) {
       toast({
@@ -286,7 +259,13 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         <Switch
           id="randomize-urls"
           checked={user.randomizeFileUrls}
-          onCheckedChange={handleRandomizeUrlsToggle}
+          onCheckedChange={(c) =>
+            handleValueChange(
+              c,
+              'randomizeFileUrls',
+              'File URL settings updated successfully'
+            )
+          }
           disabled={isLoading}
         />
       </div>
@@ -302,9 +281,76 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         <Switch
           id="rich-embeds"
           checked={user.enableRichEmbeds}
-          onCheckedChange={handleRichEmbedsToggle}
+          onCheckedChange={(v) =>
+            handleValueChange(
+              v,
+              'enableRichEmbeds',
+              'Rich embed settings updated successfully'
+            )
+          }
           disabled={isLoading}
         />
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
+        <div className="space-y-0.5">
+          <Label>Default file expiry action</Label>
+          <p className="text-sm text-muted-foreground">
+            Set the default file expiry action when creating a new upload
+          </p>
+        </div>
+        <div className="w-1/4 ml-auto">
+          <Select
+            value={user.defaultFileExpirationAction ?? undefined}
+            onValueChange={(v) =>
+              handleValueChange(
+                v,
+                'defaultFileExpirationAction',
+                'Default file expiration action updated successfully'
+              )
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="DELETE">Delete file</SelectItem>
+              <SelectItem value="SET_PRIVATE">Set to private</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
+        <div className="space-y-0.5">
+          <Label>Default file expiry time</Label>
+          <p className="text-sm text-muted-foreground">
+            Set the default relative time before an upload expires
+          </p>
+        </div>
+        <div className="w-1/4 ml-auto">
+          <Select
+            value={user.defaultFileExpiration ?? undefined}
+            onValueChange={(v) =>
+              handleValueChange(
+                v,
+                'defaultFileExpiration',
+                'Default file expiration time updated successfully'
+              )
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="DISABLED">Disabled</SelectItem>
+              <SelectItem value="DAY">One hour</SelectItem>
+              <SelectItem value="HOUR">One day</SelectItem>
+              <SelectItem value="WEEK">One week</SelectItem>
+              <SelectItem value="MONTH">One month</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </>
   )

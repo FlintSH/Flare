@@ -73,6 +73,10 @@ export async function PUT(req: Request) {
       updateData.randomizeFileUrls = body.randomizeFileUrls
     if (typeof body.enableRichEmbeds === 'boolean')
       updateData.enableRichEmbeds = body.enableRichEmbeds
+    if (body.defaultFileExpiration)
+      updateData.defaultFileExpiration = body.defaultFileExpiration
+    if (body.defaultFileExpirationAction)
+      updateData.defaultFileExpirationAction = body.defaultFileExpirationAction
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },

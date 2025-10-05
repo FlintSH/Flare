@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 
 import { ExpiryAction } from '@/types/events'
+import { $Enums } from '@prisma/client'
 import { format } from 'date-fns'
 import {
   CalendarIcon,
@@ -37,9 +38,43 @@ import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
 interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
+  user: {
+    defaultFileExpiration: $Enums.FileExpiration | null
+    defaultFileExpirationAction: $Enums.ExpiryAction | null
+  }
 }
 
-export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
+const getDefaultExpiryDate = (unit: $Enums.FileExpiration | null) => {
+  if (!unit || unit === 'DISABLED') return undefined
+
+  const date = new Date()
+
+  switch (unit) {
+    case 'HOUR':
+      date.setHours(date.getHours() + 1)
+      break
+    case 'DAY':
+      date.setDate(date.getDate() + 1)
+      date.setHours(23, 59, 59, 999)
+      break
+    case 'WEEK':
+      date.setDate(date.getDate() + 7)
+      date.setHours(23, 59, 59, 999)
+      break
+    case 'MONTH':
+      date.setMonth(date.getMonth() + 1)
+      date.setHours(23, 59, 59, 999)
+      break
+  }
+
+  return date
+}
+
+export function UploadForm({
+  maxSize,
+  formattedMaxSize,
+  user,
+}: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
 
   const {
@@ -59,6 +94,7 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
     setExpiresAt,
   } = useFileUpload({
     maxSize,
+    expiresAt: getDefaultExpiryDate(user.defaultFileExpiration),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -251,7 +287,10 @@ export function UploadForm({ maxSize, formattedMaxSize }: UploadFormProps) {
           setExpiresAt(date)
         }}
         initialDate={expiresAt}
-        initialAction={ExpiryAction.DELETE}
+        initialAction={
+          (user.defaultFileExpirationAction as ExpiryAction) ??
+          ExpiryAction.DELETE
+        }
         title="Set File Expiration"
         description="Configure when uploaded files should be automatically deleted"
       />
