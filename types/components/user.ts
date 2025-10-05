@@ -12,7 +12,7 @@ export interface User {
   urlId: string
   fileCount: number
   shortUrlCount: number
-  defaultFileExpiration: 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | null
+  defaultFileExpiration: 'DISABLED' | 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | null
   defaultFileExpirationAction: 'DELETE' | 'SET_PRIVATE' | null
 }
 
