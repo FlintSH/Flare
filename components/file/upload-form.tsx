@@ -45,7 +45,7 @@ interface UploadFormProps {
 }
 
 const getDefaultExpiryDate = (unit: $Enums.FileExpiration | null) => {
-  if (!unit) return undefined
+  if (!unit || unit === 'DISABLED') return undefined
 
   const date = new Date()
 
@@ -101,9 +101,6 @@ export function UploadForm({
     onDrop,
     maxSize,
   })
-
-  if (user.defaultFileExpiration) {
-  }
 
   return (
     <div className="space-y-8">

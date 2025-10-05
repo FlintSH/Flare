@@ -343,6 +343,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="DISABLED">Disabled</SelectItem>
               <SelectItem value="DAY">One hour</SelectItem>
               <SelectItem value="HOUR">One day</SelectItem>
               <SelectItem value="WEEK">One week</SelectItem>
