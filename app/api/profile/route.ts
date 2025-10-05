@@ -71,6 +71,10 @@ export async function PUT(req: Request) {
     if (body.image) updateData.image = body.image
     if (typeof body.randomizeFileUrls === 'boolean')
       updateData.randomizeFileUrls = body.randomizeFileUrls
+    if (body.defaultFileExpiration)
+      updateData.defaultFileExpiration = body.defaultFileExpiration
+    if (body.defaultFileExpirationAction)
+      updateData.defaultFileExpirationAction = body.defaultFileExpirationAction
 
     const updatedUser = await prisma.user.update({
       where: { id: user.id },

@@ -28,6 +28,8 @@ export default async function ProfilePage() {
       storageUsed: true,
       role: true,
       randomizeFileUrls: true,
+      defaultFileExpirationAction: true,
+      defaultFileExpiration: true,
       urlId: true,
       _count: {
         select: { files: true, shortenedUrls: true },
@@ -80,6 +82,8 @@ export default async function ProfilePage() {
               urlId: user.urlId,
               fileCount: user._count.files,
               shortUrlCount: user._count.shortenedUrls,
+              defaultFileExpiration: user.defaultFileExpiration,
+              defaultFileExpirationAction: user.defaultFileExpirationAction,
             }}
             quotasEnabled={quotasEnabled}
             formattedQuota={formattedQuota}
