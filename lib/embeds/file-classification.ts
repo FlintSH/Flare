@@ -28,6 +28,7 @@ export interface FileClassification {
   isDocument: boolean
   isCode: boolean
   isText: boolean
+  isMusic: boolean
 }
 
 export function isImage(mimeType: string): boolean {
@@ -70,6 +71,25 @@ export function isText(mimeType: string): boolean {
   )
 }
 
+export function isMusic(mimeType: string): boolean {
+  // Music-specific MIME types
+  const musicMimeTypes = new Set([
+    'audio/mpeg',
+    'audio/mp3',
+    'audio/mp4',
+    'audio/aac',
+    'audio/flac',
+    'audio/x-flac',
+    'audio/ogg',
+    'audio/opus',
+    'audio/wav',
+    'audio/x-wav',
+    'audio/webm',
+  ])
+
+  return musicMimeTypes.has(mimeType)
+}
+
 export function classifyMimeType(mimeType: string): FileClassification {
   return {
     isImage: isImage(mimeType),
@@ -78,5 +98,6 @@ export function classifyMimeType(mimeType: string): FileClassification {
     isDocument: isDocument(mimeType),
     isCode: isCode(mimeType),
     isText: isText(mimeType),
+    isMusic: isMusic(mimeType),
   }
 }

@@ -81,7 +81,7 @@ export async function buildRichMetadata({
 
 function getOpenGraphType(classification: ReturnType<typeof classifyMimeType>) {
   if (classification.isVideo) return 'video.other'
-  if (classification.isAudio) return 'music.song'
+  if (classification.isMusic) return 'music.song'
   if (
     classification.isImage ||
     classification.isDocument ||
@@ -230,7 +230,6 @@ function buildOtherMetadata({
     'og:description': description,
     'al:ios:url': rawUrl,
     'al:android:url': rawUrl,
-    'og:see_also': uploaderName,
   }
 
   if (isImage) {
