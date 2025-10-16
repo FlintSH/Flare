@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { buildMinimalMetadata, buildRichMetadata } from '@/lib/embeds/metadata'
 import { formatFileSize } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -142,111 +142,26 @@ export async function generateMetadata({
     }
   }
 
-  const cleanFile = {
-    id: file.id,
-    name: file.name,
-    mimeType: file.mimeType,
-    size: file.size,
-  }
-
-  const cleanUser = {
-    name: file.user.name || 'Anonymous',
-  }
-
-  // Check if user has rich embeds enabled
-  const enableRichEmbeds = file.user.enableRichEmbeds ?? true
-
-  // If rich embeds are disabled, return minimal metadata
-  if (!enableRichEmbeds) {
-    return {
-      title: cleanFile.name,
-      description: '',
-    }
-  }
-
-  const isImage = cleanFile.mimeType.startsWith('image/')
-  const isVideo = cleanFile.mimeType.startsWith('video/')
-  const formattedSize = formatFileSize(cleanFile.size)
-
-  const uploadDate = new Date(file.uploadedAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-
-  const ogTitle = `${cleanFile.name}`
-  const ogDescription = `${formattedSize} • Uploaded by ${cleanUser.name} • ${uploadDate}`
-
   const host = headersList.get('host') || 'localhost:3000'
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
   const baseUrl = `${protocol}://${host}`
   const rawUrl = `${baseUrl}${urlPath}/raw`
-
-  let videoUrl = rawUrl
-  if (isVideo) {
-    const storageProvider = await getStorageProvider()
-    if (storageProvider instanceof S3StorageProvider) {
-      videoUrl = await storageProvider.getFileUrl(file.path)
-    } else {
-      videoUrl = `${baseUrl}${urlPath}/raw`
-    }
+  const enableRichEmbeds = file.user.enableRichEmbeds ?? true
+  if (!enableRichEmbeds) {
+    return buildMinimalMetadata(file.name)
   }
 
-  const metadata: Metadata = {
-    title: ogTitle,
-    description: ogDescription,
-    metadataBase: new URL(baseUrl),
-    openGraph: {
-      title: ogTitle,
-      description: ogDescription,
-      url: `${baseUrl}${urlPath}`,
-      siteName: 'Flare',
-      locale: 'en_US',
-      type: (isVideo ? 'video.other' : isImage ? 'article' : 'website') as
-        | 'video.other'
-        | 'article'
-        | 'website',
-      images: isImage
-        ? [
-            {
-              url: rawUrl,
-              width: 1200,
-              height: 630,
-              alt: cleanFile.name,
-              type: cleanFile.mimeType,
-            },
-          ]
-        : undefined,
-      videos: isVideo
-        ? [
-            {
-              url: videoUrl,
-              width: 1920,
-              height: 1080,
-              type: cleanFile.mimeType,
-              secureUrl: videoUrl,
-            },
-          ]
-        : undefined,
-    },
-    twitter: isImage
-      ? {
-          card: 'summary_large_image',
-          title: ogTitle,
-          description: ogDescription,
-          images: [rawUrl],
-        }
-      : undefined,
-    other: {
-      // Discord-specific tags
-      'theme-color': '#3b82f6',
-      // Additional metadata for embeds
-      'article:published_time': file.uploadedAt.toISOString(),
-      'article:author': cleanUser.name,
-    },
-  }
-
-  return metadata
+  return buildRichMetadata({
+    baseUrl,
+    fileUrlPath: urlPath,
+    rawUrl,
+    fileName: file.name,
+    mimeType: file.mimeType,
+    size: file.size,
+    uploadedAt: file.uploadedAt,
+    uploaderName: file.user.name || 'Anonymous',
+    filePath: file.path,
+  })
 }
 
 export default async function FilePage({

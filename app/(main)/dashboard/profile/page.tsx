@@ -29,8 +29,6 @@ export default async function ProfilePage() {
       role: true,
       randomizeFileUrls: true,
       enableRichEmbeds: true,
-      defaultFileExpirationAction: true,
-      defaultFileExpiration: true,
       urlId: true,
       _count: {
         select: { files: true, shortenedUrls: true },
@@ -84,8 +82,8 @@ export default async function ProfilePage() {
               urlId: user.urlId,
               fileCount: user._count.files,
               shortUrlCount: user._count.shortenedUrls,
-              defaultFileExpiration: user.defaultFileExpiration,
-              defaultFileExpirationAction: user.defaultFileExpirationAction,
+              defaultFileExpiration: null,
+              defaultFileExpirationAction: null,
             }}
             quotasEnabled={quotasEnabled}
             formattedQuota={formattedQuota}

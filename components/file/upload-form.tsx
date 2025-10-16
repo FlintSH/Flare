@@ -39,6 +39,7 @@ interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
   user: {
+    id: string
     defaultFileExpiration: $Enums.FileExpiration | null
     defaultFileExpirationAction: $Enums.ExpiryAction | null
   }
