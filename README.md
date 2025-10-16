@@ -31,7 +31,11 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 🔗 **URL Shortener** - Custom short URLs under your domain with click tracking
 - 📝 **Pastebin** - Code and text sharing with syntax highlighting
 - 🤖 **OCR Processing** - Automatic text extraction from images uploaded
-- 🔌 **Rich Embeds** - Content embeds naturally on all your social media platforms.
+- 🔌 **Rich Embeds**
+  - Rich previews across Discord, Twitter/X, Slack, and LinkedIn
+  - Image, video, audio, document, and code smart metadata
+  - Per-user toggle with automatic fallbacks
+  - Manual verification checklist: Discord, Twitter/X, Slack, LinkedIn
 
 ## 🚀 Quick Start
 

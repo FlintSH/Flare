@@ -51,7 +51,11 @@ export default async function UploadPage() {
         <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
         <div className="relative p-8">
           <UploadForm
-            user={user}
+            user={{
+              id: user.id,
+              defaultFileExpiration: user.defaultFileExpiration,
+              defaultFileExpirationAction: user.defaultFileExpirationAction,
+            }}
             maxSize={maxSizeBytes}
             formattedMaxSize={formattedMaxSize}
           />

@@ -29,8 +29,8 @@ export default async function ProfilePage() {
       role: true,
       randomizeFileUrls: true,
       enableRichEmbeds: true,
-      defaultFileExpirationAction: true,
       defaultFileExpiration: true,
+      defaultFileExpirationAction: true,
       urlId: true,
       _count: {
         select: { files: true, shortenedUrls: true },
