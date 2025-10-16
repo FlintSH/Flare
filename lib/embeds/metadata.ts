@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
 import { getFileDescription } from '@/lib/utils/metadata'
 
@@ -101,8 +101,6 @@ function buildOpenGraphImages(
   return [
     {
       url: rawUrl,
-      width: 1200,
-      height: 630,
       alt: 'Preview image',
       type: mimeType,
     },
@@ -118,16 +116,19 @@ async function buildOpenGraphVideos(
   if (!isVideoFile) return undefined
 
   let videoUrl = rawUrl
-  const storageProvider = await getStorageProvider()
-  if (storageProvider instanceof S3StorageProvider) {
-    videoUrl = await storageProvider.getFileUrl(filePath)
+  try {
+    const storageProvider = await getStorageProvider()
+    if (storageProvider && typeof storageProvider.getFileUrl === 'function') {
+      videoUrl = await storageProvider.getFileUrl(filePath)
+    }
+  } catch (error) {
+    // Fall back to rawUrl if storage provider is unavailable
+    console.error('Failed to get video URL from storage provider:', error)
   }
 
   return [
     {
       url: videoUrl,
-      width: 1920,
-      height: 1080,
       type: mimeType,
       secureUrl: videoUrl,
     },
@@ -178,8 +179,6 @@ function buildTwitterMetadata(
         {
           url: fileUrl,
           stream: rawUrl,
-          width: 1920,
-          height: 1080,
         },
       ],
     }
