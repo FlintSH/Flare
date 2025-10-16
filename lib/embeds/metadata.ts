@@ -228,7 +228,6 @@ function buildOtherMetadata({
     'article:published_time': uploadDate,
     'article:author': uploaderName,
     'og:description': description,
-    'slack-app-id': 'A0XXXXXXX',
     'al:ios:url': rawUrl,
     'al:android:url': rawUrl,
     'og:see_also': uploaderName,
