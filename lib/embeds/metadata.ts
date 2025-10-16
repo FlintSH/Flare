@@ -69,7 +69,6 @@ export async function buildRichMetadata({
     }),
     other: buildOtherMetadata({
       uploadDate,
-      uploaderName,
       description: baseDescription,
       rawUrl,
       isImage: classification.isImage,
@@ -209,7 +208,6 @@ function buildTwitterMetadata(
 
 interface OtherMetadataInput {
   uploadDate: string
-  uploaderName: string
   description: string
   rawUrl: string
   isImage: boolean
@@ -217,7 +215,6 @@ interface OtherMetadataInput {
 
 function buildOtherMetadata({
   uploadDate,
-  uploaderName,
   description,
   rawUrl,
   isImage,
@@ -225,7 +222,6 @@ function buildOtherMetadata({
   const metadata: Record<string, string> = {
     'theme-color': '#3b82f6',
     'article:published_time': uploadDate,
-    'article:author': uploaderName,
     'og:description': description,
     'al:ios:url': rawUrl,
     'al:android:url': rawUrl,
