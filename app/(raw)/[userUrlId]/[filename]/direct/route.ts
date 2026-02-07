@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 
 export async function GET(
@@ -14,9 +15,14 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     const { userUrlId, filename } = await params
-    const urlPath = `/${userUrlId}/${filename}`
     const url = new URL(req.url)
     const providedPassword = url.searchParams.get('password')
+
+    const urlPath = await resolveFileUrlPath(userUrlId, filename)
+
+    if (!urlPath) {
+      return new Response(null, { status: 404 })
+    }
 
     const file = await prisma.file.findUnique({
       where: { urlPath },
@@ -52,7 +58,7 @@ export async function GET(
     const storageProvider = await getStorageProvider()
 
     if (!(storageProvider instanceof S3StorageProvider)) {
-      const rawUrl = `${urlPath}/raw${providedPassword ? `?password=${providedPassword}` : ''}`
+      const rawUrl = `${file.urlPath}/raw${providedPassword ? `?password=${providedPassword}` : ''}`
       return NextResponse.json({ url: rawUrl })
     }
 

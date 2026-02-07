@@ -6,6 +6,7 @@ import { Readable } from 'stream'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { getStorageProvider } from '@/lib/storage'
 
 function encodeFilename(filename: string): string {
@@ -71,21 +72,18 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     const { userUrlId, filename } = await params
-    const urlPath = `/${userUrlId}/${filename}`
     const url = new URL(req.url)
     const providedPassword = url.searchParams.get('password')
 
-    let file = await prisma.file.findUnique({
+    const urlPath = await resolveFileUrlPath(userUrlId, filename)
+
+    if (!urlPath) {
+      return new Response(null, { status: 404 })
+    }
+
+    const file = await prisma.file.findUnique({
       where: { urlPath },
     })
-
-    if (!file && filename.includes(' ')) {
-      const urlSafeFilename = filename.replace(/ /g, '-')
-      const urlSafePath = `/${userUrlId}/${urlSafeFilename}`
-      file = await prisma.file.findUnique({
-        where: { urlPath: urlSafePath },
-      })
-    }
 
     if (!file) {
       return new Response(null, { status: 404 })

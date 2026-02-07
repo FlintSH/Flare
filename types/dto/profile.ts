@@ -1,3 +1,4 @@
+import { VanityIdSchema } from '@/types/dto/user'
 import { z } from 'zod'
 
 export const UpdateProfileSchema = z.object({
@@ -9,6 +10,7 @@ export const UpdateProfileSchema = z.object({
   randomizeFileUrls: z.boolean().optional(),
   defaultFileExpiration: z.enum(['HOUR', 'DAY', 'WEEK', 'MONTH']).optional(),
   defaultFileExpirationAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
+  vanityId: VanityIdSchema.nullable().optional(),
 })
 
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
@@ -19,4 +21,5 @@ export interface ProfileResponse {
   email: string | null
   image: string | null
   randomizeFileUrls: boolean
+  vanityId: string | null
 }

@@ -98,6 +98,7 @@ interface User {
   image: string | null
   role: 'ADMIN' | 'USER'
   urlId: string
+  vanityId: string | null
   storageUsed: number
   _count: {
     files: number
@@ -488,6 +489,7 @@ export function UserList() {
       email: user.email,
       role: user.role,
       urlId: user.urlId,
+      vanityId: user.vanityId || '',
     })
     setIsDialogOpen(true)
   }
@@ -755,9 +757,16 @@ export function UserList() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
-                    {user.urlId}
-                  </code>
+                  <div className="flex flex-col gap-1">
+                    <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
+                      {user.urlId}
+                    </code>
+                    {user.vanityId && (
+                      <code className="relative rounded bg-primary/10 text-primary px-[0.3rem] py-[0.2rem] font-mono text-xs">
+                        {user.vanityId}
+                      </code>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>{user._count.files}</TableCell>
                 <TableCell>{formatFileSize(user.storageUsed)}</TableCell>
@@ -946,6 +955,30 @@ export function UserList() {
                     }}
                     placeholder="e.g. ABC12"
                     maxLength={5}
+                  />
+                </div>
+              )}
+              {editingUser && (
+                <div className="space-y-2">
+                  <Label htmlFor="vanityId">
+                    Vanity URL
+                    <span className="text-sm text-muted-foreground ml-2">
+                      (3-32 characters, optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="vanityId"
+                    value={formData.vanityId || ''}
+                    onChange={(e) => {
+                      const value = e.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]/g, '')
+                      if (value.length <= 32) {
+                        setFormData({ ...formData, vanityId: value })
+                      }
+                    }}
+                    placeholder="e.g. my-custom-url"
+                    maxLength={32}
                   />
                 </div>
               )}

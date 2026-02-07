@@ -76,6 +76,37 @@ export async function PUT(req: Request) {
     if (body.defaultFileExpirationAction)
       updateData.defaultFileExpirationAction = body.defaultFileExpirationAction
 
+    if (body.vanityId !== undefined) {
+      if (body.vanityId === null) {
+        // Clear vanity ID
+        updateData.vanityId = null
+      } else {
+        // Check vanityId doesn't collide with another user's vanityId
+        const existingVanity = await prisma.user.findUnique({
+          where: { vanityId: body.vanityId },
+        })
+        if (existingVanity && existingVanity.id !== user.id) {
+          return apiError(
+            'This vanity URL is already taken',
+            HTTP_STATUS.BAD_REQUEST
+          )
+        }
+
+        // Check vanityId doesn't collide with any user's urlId
+        const existingUrlId = await prisma.user.findUnique({
+          where: { urlId: body.vanityId },
+        })
+        if (existingUrlId) {
+          return apiError(
+            'This vanity URL conflicts with an existing URL ID',
+            HTTP_STATUS.BAD_REQUEST
+          )
+        }
+
+        updateData.vanityId = body.vanityId
+      }
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: updateData,
@@ -85,6 +116,7 @@ export async function PUT(req: Request) {
         email: true,
         image: true,
         randomizeFileUrls: true,
+        vanityId: true,
       },
     })
 

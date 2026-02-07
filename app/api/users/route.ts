@@ -35,6 +35,7 @@ export async function GET(req: Request) {
         image: true,
         role: true,
         urlId: true,
+        vanityId: true,
         storageUsed: true,
         _count: {
           select: {
@@ -122,6 +123,7 @@ export async function POST(req: Request) {
         image: true,
         role: true,
         urlId: true,
+        vanityId: true,
         storageUsed: true,
         _count: {
           select: {
@@ -174,6 +176,30 @@ export async function PUT(req: Request) {
       }
     }
 
+    if (body.vanityId !== undefined && body.vanityId !== null) {
+      // Check vanityId doesn't collide with another user's vanityId
+      const existingVanity = await prisma.user.findUnique({
+        where: { vanityId: body.vanityId },
+      })
+      if (existingVanity && existingVanity.id !== body.id) {
+        return apiError(
+          'This vanity URL is already taken',
+          HTTP_STATUS.BAD_REQUEST
+        )
+      }
+
+      // Check vanityId doesn't collide with any user's urlId
+      const existingVanityAsUrlId = await prisma.user.findUnique({
+        where: { urlId: body.vanityId },
+      })
+      if (existingVanityAsUrlId) {
+        return apiError(
+          'This vanity URL conflicts with an existing URL ID',
+          HTTP_STATUS.BAD_REQUEST
+        )
+      }
+    }
+
     const updateData = {
       updatedAt: new Date(),
       ...(body.name !== undefined && { name: body.name }),
@@ -181,6 +207,9 @@ export async function PUT(req: Request) {
       ...(body.role !== undefined && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
       ...(body.urlId && { urlId: body.urlId }),
+      ...(body.vanityId !== undefined && {
+        vanityId: body.vanityId || null,
+      }),
     }
 
     if (body.urlId && body.urlId !== existingUser.urlId) {
@@ -226,6 +255,7 @@ export async function PUT(req: Request) {
         image: true,
         role: true,
         urlId: true,
+        vanityId: true,
         storageUsed: true,
         _count: {
           select: {

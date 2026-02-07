@@ -11,6 +11,7 @@ export interface User {
   image: string | null
   role: 'ADMIN' | 'USER'
   urlId: string
+  vanityId: string | null
   storageUsed: number
   _count: {
     files: number
@@ -36,6 +37,7 @@ export interface UserFormData {
   password?: string
   role: 'ADMIN' | 'USER'
   urlId?: string
+  vanityId?: string
 }
 
 export interface UseUserManagementOptions {

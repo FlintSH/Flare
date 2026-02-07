@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
 
@@ -87,7 +88,6 @@ export async function generateMetadata({
   searchParams,
 }: FilePageProps): Promise<Metadata> {
   const { userUrlId, filename } = await params
-  const urlPath = `/${userUrlId}/${filename}`
   const headersList = await headers()
   const session = await getServerSession(authOptions)
   const providedPassword = (await searchParams).password as string | undefined
@@ -97,19 +97,16 @@ export async function generateMetadata({
     return {}
   }
 
-  let file = await prisma.file.findUnique({
+  const urlPath = await resolveFileUrlPath(userUrlId, filename)
+
+  if (!urlPath) {
+    return {}
+  }
+
+  const file = await prisma.file.findUnique({
     where: { urlPath },
     include: { user: true },
   })
-
-  if (!file && filename.includes(' ')) {
-    const urlSafeFilename = filename.replace(/ /g, '-')
-    const urlSafePath = `/${userUrlId}/${urlSafeFilename}`
-    file = await prisma.file.findUnique({
-      where: { urlPath: urlSafePath },
-      include: { user: true },
-    })
-  }
 
   if (!file || !file.user) {
     return {}
@@ -234,22 +231,18 @@ export default async function FilePage({
   const session = await getServerSession(authOptions)
   const config = await getConfig()
   const { userUrlId, filename } = await params
-  const urlPath = `/${userUrlId}/${filename}`
   const providedPassword = (await searchParams).password as string | undefined
 
-  let file = await prisma.file.findUnique({
+  const urlPath = await resolveFileUrlPath(userUrlId, filename)
+
+  if (!urlPath) {
+    notFound()
+  }
+
+  const file = await prisma.file.findUnique({
     where: { urlPath },
     include: { user: true },
   })
-
-  if (!file && filename.includes(' ')) {
-    const urlSafeFilename = filename.replace(/ /g, '-')
-    const urlSafePath = `/${userUrlId}/${urlSafeFilename}`
-    file = await prisma.file.findUnique({
-      where: { urlPath: urlSafePath },
-      include: { user: true },
-    })
-  }
 
   if (!file) {
     notFound()

@@ -9,6 +9,7 @@ export interface User {
   role: 'ADMIN' | 'USER'
   randomizeFileUrls: boolean
   urlId: string
+  vanityId: string | null
   fileCount: number
   shortUrlCount: number
   defaultFileExpiration: 'DISABLED' | 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | null

@@ -31,6 +31,7 @@ export default async function ProfilePage() {
       defaultFileExpirationAction: true,
       defaultFileExpiration: true,
       urlId: true,
+      vanityId: true,
       _count: {
         select: { files: true, shortenedUrls: true },
       },
@@ -80,6 +81,7 @@ export default async function ProfilePage() {
               role: user.role,
               randomizeFileUrls: user.randomizeFileUrls,
               urlId: user.urlId,
+              vanityId: user.vanityId,
               fileCount: user._count.files,
               shortUrlCount: user._count.shortenedUrls,
               defaultFileExpiration: user.defaultFileExpiration,
