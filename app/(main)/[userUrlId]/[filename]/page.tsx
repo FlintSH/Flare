@@ -432,7 +432,7 @@ export default async function FilePage({
       </div>
 
       <main
-        className="flex items-center justify-center p-6 relative z-10"
+        className={`flex items-center justify-center px-6 relative z-10 ${config.settings.general.credits.showFooter ? 'pb-24' : 'pb-6'}`}
         style={{ minHeight: 'calc(100vh - 7rem)', paddingTop: '7rem' }}
       >
         <div className="relative">
