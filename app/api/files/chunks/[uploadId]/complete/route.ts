@@ -25,7 +25,13 @@ async function getAuthenticatedUser(req: Request) {
   if (session?.user) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        vanityId: true,
+        role: true,
+      },
     })
     return user
   }
@@ -35,7 +41,13 @@ async function getAuthenticatedUser(req: Request) {
     const token = authHeader.substring(7)
     const user = await prisma.user.findUnique({
       where: { uploadToken: token },
-      select: { id: true, storageUsed: true, urlId: true, role: true },
+      select: {
+        id: true,
+        storageUsed: true,
+        urlId: true,
+        vanityId: true,
+        role: true,
+      },
     })
     return user
   }
@@ -178,8 +190,12 @@ export async function POST(
         : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
     const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
 
+    const displayUrlPath = user.vanityId
+      ? metadata.urlPath.replace(`/${user.urlId}/`, `/${user.vanityId}/`)
+      : metadata.urlPath
+
     const responseData: FileUploadResponse = {
-      url: `${fullUrl}${metadata.urlPath}`,
+      url: `${fullUrl}${displayUrlPath}`,
       name: metadata.filename,
       size: metadata.totalSize,
       type: metadata.mimeType,

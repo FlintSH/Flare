@@ -171,8 +171,12 @@ export async function POST(req: Request) {
         : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
     const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
 
+    const displayUrlPath = user.vanityId
+      ? `/${user.vanityId}/${urlSafeName}`
+      : urlPath
+
     const responseData: FileUploadResponse = {
-      url: `${fullUrl}${urlPath}`,
+      url: `${fullUrl}${displayUrlPath}`,
       name: displayName,
       size: uploadedFile.size,
       type: uploadedFile.type,

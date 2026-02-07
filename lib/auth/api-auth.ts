@@ -9,6 +9,7 @@ export type AuthenticatedUser = {
   id: string
   storageUsed: number
   urlId: string
+  vanityId: string | null
   role: string
   randomizeFileUrls: boolean
 }
@@ -24,6 +25,7 @@ export async function getAuthenticatedUser(
         id: true,
         storageUsed: true,
         urlId: true,
+        vanityId: true,
         role: true,
         randomizeFileUrls: true,
       },
@@ -40,6 +42,7 @@ export async function getAuthenticatedUser(
         id: true,
         storageUsed: true,
         urlId: true,
+        vanityId: true,
         role: true,
         randomizeFileUrls: true,
       },
