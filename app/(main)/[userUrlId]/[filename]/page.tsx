@@ -390,7 +390,8 @@ export default async function FilePage({
 
   const isImage = serializedFile.mimeType.startsWith('image/')
   const isVideo = serializedFile.mimeType.startsWith('video/')
-  const isMediaFile = isImage || isVideo
+  const isPdf = serializedFile.mimeType === 'application/pdf'
+  const isMediaFile = isImage || isVideo || isPdf
 
   return (
     <div className="flex-1 relative min-h-screen overflow-hidden">
