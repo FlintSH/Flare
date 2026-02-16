@@ -129,6 +129,8 @@ export async function GET(
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
         'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+        'Content-Security-Policy': 'sandbox',
+        'X-Content-Type-Options': 'nosniff',
         Connection: 'keep-alive',
         'Keep-Alive': 'timeout=300, max=1000',
       }
@@ -145,6 +147,8 @@ export async function GET(
       'Content-Length': size.toString(),
       'Content-Type': file.mimeType,
       'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
       Connection: 'keep-alive',
       'Keep-Alive': 'timeout=300, max=1000',
     }

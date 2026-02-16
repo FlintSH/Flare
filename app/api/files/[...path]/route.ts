@@ -89,6 +89,8 @@ export async function GET(
         'Content-Length': chunkSize.toString(),
         'Content-Type': file.mimeType,
         'Content-Disposition': `${isDownloadRequest ? 'attachment' : 'inline'}; filename=${encodeFilename(file.name)}`,
+        'Content-Security-Policy': 'sandbox',
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
       }
 
@@ -102,6 +104,8 @@ export async function GET(
     const headers = {
       'Content-Type': file.mimeType,
       'Content-Disposition': `${isDownloadRequest ? 'attachment' : 'inline'}; filename=${encodeFilename(file.name)}`,
+      'Content-Security-Policy': 'sandbox',
+      'X-Content-Type-Options': 'nosniff',
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
