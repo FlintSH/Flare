@@ -3,7 +3,6 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
 import { ProtectedFile } from '@/components/file/protected-file'
@@ -18,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -112,30 +112,11 @@ export async function generateMetadata({
     return {}
   }
 
-  const isOwner = session?.user?.id === file.userId
-  const isPrivate = file.visibility === 'PRIVATE' && !isOwner
-
-  if (isPrivate || (file.password && !isOwner)) {
+  const access = await checkFileAccess(file, session, providedPassword)
+  if (!access.allowed) {
     return {
       title: 'Protected File - Flare',
       description: 'This file is protected',
-    }
-  }
-
-  if (file.password && !isOwner) {
-    if (!providedPassword) {
-      return {
-        title: 'Protected File - Flare',
-        description: 'This file is protected',
-      }
-    }
-
-    const isPasswordValid = await compare(providedPassword, file.password)
-    if (!isPasswordValid) {
-      return {
-        title: 'Protected File - Flare',
-        description: 'This file is protected',
-      }
     }
   }
 
@@ -255,130 +236,77 @@ export default async function FilePage({
 
   const serializedFile = prepareFileProps(file)
 
-  const isOwner = session?.user?.id === serializedFile.userId
-  const isPrivate = serializedFile.visibility === 'PRIVATE' && !isOwner
+  const access = await checkFileAccess(serializedFile, session, providedPassword)
 
-  if (isPrivate) {
-    notFound()
-  }
-
-  if (serializedFile.password && !isOwner) {
-    const needsPassword = !providedPassword
-    if (needsPassword) {
-      return (
-        <div className="flex-1 relative min-h-screen overflow-hidden">
-          <DynamicBackground />
-          <div className="absolute top-6 left-6 z-20">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-              <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-                <Link
-                  href="/dashboard"
-                  className="flex items-center space-x-2.5"
-                >
-                  <Icons.logo className="h-6 w-6" />
-                  <span className="flare-text text-lg">Flare</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-          <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-              <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
-                <div className="p-6">
-                  <h1 className="text-xl font-medium text-center mb-4">
-                    Password Protected File
-                  </h1>
-                  <p className="text-sm text-muted-foreground text-center mb-6">
-                    This file requires a password to access
-                  </p>
-                  <form className="space-y-4" action={urlPath}>
-                    <div className="space-y-2">
-                      <Input
-                        type="password"
-                        name="password"
-                        placeholder="Enter password"
-                        className="bg-background/60 backdrop-blur-sm border-border/50"
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      Access File
-                    </Button>
-                  </form>
-                </div>
-              </Card>
-            </div>
-            {config.settings.general.credits.showFooter && (
-              <div className="fixed bottom-0 left-0 right-0 z-10">
-                <Footer />
-              </div>
-            )}
-          </main>
-        </div>
-      )
+  if (!access.allowed) {
+    if (access.reason === 'private') {
+      notFound()
     }
 
-    const isPasswordValid = await compare(
-      providedPassword,
-      serializedFile.password
+    const title =
+      access.reason === 'password_invalid'
+        ? 'Incorrect Password'
+        : 'Password Protected File'
+    const description =
+      access.reason === 'password_invalid'
+        ? 'The password you entered is incorrect'
+        : 'This file requires a password to access'
+    const buttonText =
+      access.reason === 'password_invalid' ? 'Try Again' : 'Access File'
+
+    return (
+      <div className="flex-1 relative min-h-screen overflow-hidden">
+        <DynamicBackground />
+        <div className="absolute top-6 left-6 z-20">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
+            <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
+              <Link
+                href="/dashboard"
+                className="flex items-center space-x-2.5"
+              >
+                <Icons.logo className="h-6 w-6" />
+                <span className="flare-text text-lg">Flare</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+        <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
+            <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
+              <div className="p-6">
+                <h1 className="text-xl font-medium text-center mb-4">
+                  {title}
+                </h1>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  {description}
+                </p>
+                <form className="space-y-4" action={urlPath}>
+                  <div className="space-y-2">
+                    <Input
+                      type="password"
+                      name="password"
+                      placeholder="Enter password"
+                      className="bg-background/60 backdrop-blur-sm border-border/50"
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full">
+                    {buttonText}
+                  </Button>
+                </form>
+              </div>
+            </Card>
+          </div>
+          {config.settings.general.credits.showFooter && (
+            <div className="fixed bottom-0 left-0 right-0 z-10">
+              <Footer />
+            </div>
+          )}
+        </main>
+      </div>
     )
-    if (!isPasswordValid) {
-      return (
-        <div className="flex-1 relative min-h-screen overflow-hidden">
-          <DynamicBackground />
-          <div className="absolute top-6 left-6 z-20">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-              <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-                <Link
-                  href="/dashboard"
-                  className="flex items-center space-x-2.5"
-                >
-                  <Icons.logo className="h-6 w-6" />
-                  <span className="flare-text text-lg">Flare</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-          <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-              <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
-                <div className="p-6">
-                  <h1 className="text-xl font-medium text-center mb-4">
-                    Incorrect Password
-                  </h1>
-                  <p className="text-sm text-muted-foreground text-center mb-6">
-                    The password you entered is incorrect
-                  </p>
-                  <form className="space-y-4" action={urlPath}>
-                    <div className="space-y-2">
-                      <Input
-                        type="password"
-                        name="password"
-                        placeholder="Enter password"
-                        className="bg-background/60 backdrop-blur-sm border-border/50"
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      Try Again
-                    </Button>
-                  </form>
-                </div>
-              </Card>
-            </div>
-            {config.settings.general.credits.showFooter && (
-              <div className="fixed bottom-0 left-0 right-0 z-10">
-                <Footer />
-              </div>
-            )}
-          </main>
-        </div>
-      )
-    }
   }
 
   const isImage = serializedFile.mimeType.startsWith('image/')

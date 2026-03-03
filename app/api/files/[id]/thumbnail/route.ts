@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { checkFileAccess } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -19,7 +20,9 @@ export async function GET(
       params,
     ])
 
-    // Get file first to check visibility and ownership
+    const url = new URL(request.url)
+    const providedPassword = url.searchParams.get('password')
+
     const file = await prisma.file.findUnique({
       where: { id },
       select: {
@@ -39,16 +42,11 @@ export async function GET(
       return new NextResponse('Not an image', { status: 400 })
     }
 
-    // Check access permissions (similar to main file endpoint)
-    const isOwner = session?.user?.id === file.userId
-    const isAdmin = session?.user?.role === 'ADMIN'
-    const isPrivate = file.visibility === 'PRIVATE' && !isOwner && !isAdmin
-
-    if (isPrivate) {
-      return new NextResponse('File not found', { status: 404 })
+    const access = await checkFileAccess(file, session, providedPassword)
+    if (!access.allowed) {
+      return new NextResponse(null, { status: access.status })
     }
 
-    // Skip password check for thumbnails (thumbnails should be accessible if file is accessible)
     const storageProvider = await getStorageProvider()
     const fileStream = await storageProvider.getFileStream(file.path)
 

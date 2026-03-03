@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 
-import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { checkFileAccess } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
 
@@ -54,39 +54,13 @@ export async function GET(
     }
 
     const session = await getServerSession(authOptions)
-    const isOwner = session?.user?.id === file.userId
 
-    if (file.visibility === 'PRIVATE' && !isOwner) {
+    const access = await checkFileAccess(file, session, providedPassword)
+    if (!access.allowed) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized',
-        },
-        { status: 401 }
+        { success: false, error: access.reason === 'private' ? 'Unauthorized' : 'Password required' },
+        { status: access.status }
       )
-    }
-
-    if (file.password && !isOwner) {
-      if (!providedPassword) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Password required',
-          },
-          { status: 401 }
-        )
-      }
-
-      const isPasswordValid = await compare(providedPassword, file.password)
-      if (!isPasswordValid) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Invalid password',
-          },
-          { status: 401 }
-        )
-      }
     }
 
     if (!file.isOcrProcessed || (file.isOcrProcessed && !file.ocrText)) {

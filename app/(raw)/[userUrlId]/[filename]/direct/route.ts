@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 
-import { compare } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 
@@ -32,22 +32,9 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
-    const isOwner = session?.user?.id === file.userId
-    const isPrivate = file.visibility === 'PRIVATE' && !session?.user
-
-    if (isPrivate) {
-      return new Response(null, { status: 404 })
-    }
-
-    if (file.password && !isOwner) {
-      if (!providedPassword) {
-        return new Response(null, { status: 401 })
-      }
-
-      const isPasswordValid = await compare(providedPassword, file.password)
-      if (!isPasswordValid) {
-        return new Response(null, { status: 401 })
-      }
+    const access = await checkFileAccess(file, session, providedPassword)
+    if (!access.allowed) {
+      return new Response(null, { status: access.status })
     }
 
     const isVideo = file.mimeType.startsWith('video/')
