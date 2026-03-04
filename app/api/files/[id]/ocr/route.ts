@@ -58,7 +58,11 @@ export async function GET(
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
       return NextResponse.json(
-        { success: false, error: access.reason === 'private' ? 'Unauthorized' : 'Password required' },
+        {
+          success: false,
+          error:
+            access.reason === 'private' ? 'Unauthorized' : 'Password required',
+        },
         { status: access.status }
       )
     }
