@@ -201,7 +201,7 @@ export async function POST(req: Request) {
     }
 
     return apiError(
-      error instanceof Error ? error.message : 'An unexpected error occurred',
+      'An unexpected error occurred',
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     )
   }

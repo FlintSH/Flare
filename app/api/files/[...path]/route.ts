@@ -6,13 +6,15 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
+import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
 function encodeFilename(filename: string): string {
-  const encoded = encodeURIComponent(filename)
-  return `"${encoded.replace(/["\\]/g, '\\$&')}"`
+  const safe = sanitizeDisplayName(filename)
+  const encoded = encodeURIComponent(safe)
+  return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
 }
 
 export async function GET(

@@ -66,12 +66,7 @@ export async function GET(
   } catch (error) {
     logger.error('Error getting presigned URL:', error as Error)
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to get presigned URL',
-      },
+      { error: 'Failed to get presigned URL' },
       { status: 500 }
     )
   }
@@ -114,9 +109,7 @@ export async function PUT(
   } catch (error) {
     logger.error('Error uploading part:', error as Error)
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Failed to upload part',
-      },
+      { error: 'Failed to upload part' },
       { status: 500 }
     )
   }

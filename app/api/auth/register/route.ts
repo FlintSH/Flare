@@ -25,6 +25,12 @@ function generateUrlId() {
     .join('')
 }
 
+class RegistrationConflictError extends Error {
+  constructor() {
+    super('User already exists')
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const config = await getConfig()
@@ -35,44 +41,42 @@ export async function POST(req: Request) {
     const json = await req.json()
     const body = registerSchema.parse(json)
 
-    const exists = await prisma.user.findUnique({
-      where: {
-        email: body.email,
-      },
-    })
+    const hashedPassword = await hash(body.password, 10)
 
-    if (exists) {
-      return NextResponse.json(
-        { error: 'User already exists' },
-        { status: 400 }
-      )
-    }
-
-    let urlId = generateUrlId()
-    let isUnique = false
-    while (!isUnique) {
-      const existing = await prisma.user.findUnique({
-        where: { urlId },
+    const user = await prisma.$transaction(async (tx) => {
+      const exists = await tx.user.findUnique({
+        where: { email: body.email },
       })
-      if (!existing) {
-        isUnique = true
-      } else {
-        urlId = generateUrlId()
+      if (exists) {
+        throw new RegistrationConflictError()
       }
-    }
 
-    const userCount = await prisma.user.count()
-    const isFirstUser = userCount === 0
+      let urlId = generateUrlId()
+      let isUnique = false
+      while (!isUnique) {
+        const existing = await tx.user.findUnique({
+          where: { urlId },
+        })
+        if (!existing) {
+          isUnique = true
+        } else {
+          urlId = generateUrlId()
+        }
+      }
 
-    const user = await prisma.user.create({
-      data: {
-        email: body.email,
-        name: body.name,
-        password: await hash(body.password, 10),
-        urlId,
-        role: isFirstUser ? 'ADMIN' : 'USER',
-        uploadToken: uuidv4(),
-      },
+      const userCount = await tx.user.count()
+      const isFirstUser = userCount === 0
+
+      return tx.user.create({
+        data: {
+          email: body.email,
+          name: body.name,
+          password: hashedPassword,
+          urlId,
+          role: isFirstUser ? 'ADMIN' : 'USER',
+          uploadToken: uuidv4(),
+        },
+      })
     })
 
     return NextResponse.json({
@@ -83,6 +87,12 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof RegistrationConflictError) {
+      return NextResponse.json(
+        { error: 'User already exists' },
+        { status: 400 }
+      )
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: error.issues[0].message },

@@ -95,7 +95,7 @@ export async function GET(
       {
         success: false,
         error:
-          error instanceof Error ? error.message : 'Failed to fetch OCR text',
+          'Failed to fetch OCR text',
       },
       { status: 500 }
     )

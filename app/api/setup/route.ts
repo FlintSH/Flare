@@ -10,6 +10,12 @@ import { loggers } from '@/lib/logger'
 
 const logger = loggers.startup
 
+class SetupAlreadyCompleteError extends Error {
+  constructor() {
+    super('Setup already completed')
+  }
+}
+
 function generateUrlId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
   return Array.from({ length: 5 }, () => {
@@ -42,41 +48,41 @@ const setupSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const userCount = await prisma.user.count()
-    if (userCount > 0) {
-      return NextResponse.json(
-        { error: 'Setup already completed' },
-        { status: 400 }
-      )
-    }
-
     const data = await req.json()
     const validatedData = setupSchema.parse(data)
 
-    let urlId = generateUrlId()
-    let isUnique = false
-    while (!isUnique) {
-      const existing = await prisma.user.findUnique({
-        where: { urlId },
-      })
-      if (!existing) {
-        isUnique = true
-      } else {
-        urlId = generateUrlId()
-      }
-    }
-
     const hashedPassword = await hash(validatedData.admin.password, 10)
-    const user = await prisma.user.create({
-      data: {
-        name: validatedData.admin.name,
-        email: validatedData.admin.email,
-        password: hashedPassword,
-        role: 'ADMIN',
-        emailVerified: new Date(),
-        urlId,
-        uploadToken: uuidv4(),
-      },
+
+    const user = await prisma.$transaction(async (tx) => {
+      const userCount = await tx.user.count()
+      if (userCount > 0) {
+        throw new SetupAlreadyCompleteError()
+      }
+
+      let urlId = generateUrlId()
+      let isUnique = false
+      while (!isUnique) {
+        const existing = await tx.user.findUnique({
+          where: { urlId },
+        })
+        if (!existing) {
+          isUnique = true
+        } else {
+          urlId = generateUrlId()
+        }
+      }
+
+      return tx.user.create({
+        data: {
+          name: validatedData.admin.name,
+          email: validatedData.admin.email,
+          password: hashedPassword,
+          role: 'ADMIN',
+          emailVerified: new Date(),
+          urlId,
+          uploadToken: uuidv4(),
+        },
+      })
     })
 
     await updateConfig({
@@ -133,9 +139,18 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof SetupAlreadyCompleteError) {
+      return NextResponse.json(
+        { error: 'Setup already completed' },
+        { status: 400 }
+      )
+    }
     logger.error('Setup error', error as Error)
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.issues }, { status: 400 })
+      return NextResponse.json(
+        { error: error.issues[0]?.message || 'Validation failed' },
+        { status: 400 }
+      )
     }
     return NextResponse.json(
       { error: 'Failed to complete setup' },

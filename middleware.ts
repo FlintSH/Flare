@@ -3,12 +3,13 @@ import type { NextRequest } from 'next/server'
 
 import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
-import { PUBLIC_PATHS } from './lib/middleware/constants'
+import { FILE_URL_PATTERN, PUBLIC_PATHS } from './lib/middleware/constants'
 
 export async function middleware(request: NextRequest) {
   if (
-    request.nextUrl.pathname.endsWith('/raw') ||
-    request.nextUrl.pathname.endsWith('/direct')
+    (request.nextUrl.pathname.endsWith('/raw') ||
+      request.nextUrl.pathname.endsWith('/direct')) &&
+    FILE_URL_PATTERN.test(request.nextUrl.pathname)
   ) {
     return NextResponse.next()
   }

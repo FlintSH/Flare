@@ -7,11 +7,16 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { loggers } from '@/lib/logger'
+import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
+const logger = loggers.files
+
 function encodeFilename(filename: string): string {
-  const encoded = encodeURIComponent(filename)
-  return `"${encoded.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+  const safe = sanitizeDisplayName(filename)
+  const encoded = encodeURIComponent(safe)
+  return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
 }
 
 function createRobustStream(nodeStream: Readable): ReadableStream {
@@ -27,7 +32,7 @@ function createRobustStream(nodeStream: Readable): ReadableStream {
           try {
             controller?.enqueue(new Uint8Array(chunk))
           } catch (error) {
-            console.error('Error enqueueing chunk:', error)
+            logger.error('Error enqueueing chunk:', error as Error)
             if (!streamClosed) {
               controller?.error(error)
               streamClosed = true
@@ -41,14 +46,14 @@ function createRobustStream(nodeStream: Readable): ReadableStream {
           try {
             controller?.close()
           } catch (error) {
-            console.error('Error closing stream:', error)
+            logger.error('Error closing stream:', error as Error)
           }
           streamClosed = true
         }
       })
 
       nodeStream.on('error', (error) => {
-        console.error('Node stream error:', error)
+        logger.error('Node stream error:', error as Error)
         if (!streamClosed) {
           controller?.error(error)
           streamClosed = true
@@ -142,7 +147,7 @@ export async function GET(
 
     return new NextResponse(createRobustStream(stream), { headers })
   } catch (error) {
-    console.error('File serve error:', error)
+    logger.error('File serve error:', error as Error)
     if (error instanceof Error && error.message.includes('NoSuchKey')) {
       return new Response(null, { status: 404 })
     }

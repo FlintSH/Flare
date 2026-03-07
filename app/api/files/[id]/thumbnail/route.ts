@@ -54,6 +54,7 @@ export async function GET(
     return new NextResponse(fileStream as unknown as BodyInit, {
       headers: {
         'Content-Type': file.mimeType,
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     })

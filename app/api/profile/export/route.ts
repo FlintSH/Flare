@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { sanitizeDisplayName } from '@/lib/security/paths'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
@@ -220,7 +221,8 @@ export async function GET(req: Request) {
             }
 
             if (filePath) {
-              const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${file.name}`
+              const safeName = sanitizeDisplayName(file.name)
+              const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${safeName}`
               try {
                 archive.file(filePath, { name: zipPath })
                 successfulFiles++

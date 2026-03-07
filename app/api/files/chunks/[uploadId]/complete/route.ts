@@ -121,13 +121,28 @@ export async function POST(
       parts
     )
 
+    const actualSize = await storageProvider.getFileSize(metadata.fileKey)
+    const MAX_OVERSIZE_RATIO = 1.05
+    if (actualSize > metadata.totalSize * MAX_OVERSIZE_RATIO) {
+      try {
+        await storageProvider.deleteFile(metadata.fileKey)
+      } catch (cleanupErr) {
+        logger.error('Failed to clean up oversized upload', cleanupErr as Error)
+      }
+      await deleteUploadMetadata(localId)
+      return NextResponse.json(
+        { error: 'Uploaded data exceeds declared file size' },
+        { status: 413 }
+      )
+    }
+
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({
         data: {
           name: metadata.filename,
           urlPath: metadata.urlPath,
           mimeType: metadata.mimeType,
-          size: bytesToMB(metadata.totalSize),
+          size: bytesToMB(actualSize),
           path: metadata.fileKey,
           visibility: metadata.visibility,
           password: metadata.password
@@ -145,7 +160,7 @@ export async function POST(
         where: { id: metadata.userId },
         data: {
           storageUsed: {
-            increment: bytesToMB(metadata.totalSize),
+            increment: bytesToMB(actualSize),
           },
         },
       })
@@ -208,10 +223,7 @@ export async function POST(
   } catch (error) {
     logger.error('Error completing upload', error as Error)
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : 'Failed to complete upload',
-      },
+      { error: 'Failed to complete upload' },
       { status: 500 }
     )
   }

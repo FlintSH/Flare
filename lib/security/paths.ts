@@ -1,6 +1,17 @@
 import { basename, isAbsolute, join, normalize, resolve, sep } from 'path'
 
 /**
+ * Strips control characters (CRLF, null bytes, etc.) and path traversal
+ * sequences from a display name so it is safe for use in HTTP headers
+ * (Content-Disposition) and archive entry paths.
+ */
+export function sanitizeDisplayName(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\.\./g, '')
+  return basename(cleaned) || 'download'
+}
+
+/**
  * Validates that a relative storage path is safe — no traversal sequences,
  * not absolute, and rooted under an allowed directory (uploads/ or public/).
  * Returns the normalized path. Throws on any violation.
