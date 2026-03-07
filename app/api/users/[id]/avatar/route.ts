@@ -6,6 +6,7 @@ import { join } from 'path'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { sanitizeFilename } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.users
@@ -34,9 +35,10 @@ export async function DELETE(
     if (user.image?.startsWith('/api/avatars/')) {
       try {
         const storageProvider = await getStorageProvider()
-        const filename = user.image.split('/').pop()
-        if (filename) {
-          const avatarPath = join('uploads', 'avatars', filename)
+        const rawFilename = user.image.split('/').pop()
+        if (rawFilename) {
+          const safeFilename = sanitizeFilename(rawFilename)
+          const avatarPath = join('uploads', 'avatars', safeFilename)
           await storageProvider.deleteFile(avatarPath)
         }
       } catch (error) {

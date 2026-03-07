@@ -5,6 +5,7 @@ import { join } from 'path'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
 import { loggers } from '@/lib/logger'
+import { validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
@@ -16,8 +17,9 @@ interface RouteParams {
 
 async function getUploadMetadata(localId: string) {
   try {
+    const safeId = validatePathSegment(localId)
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
+    const metadataPath = join(TEMP_DIR, `meta-${safeId}`)
     const data = await readFile(metadataPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {

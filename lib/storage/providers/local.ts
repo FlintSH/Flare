@@ -9,28 +9,11 @@ import {
   writeFile,
 } from 'fs/promises'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
-import { isAbsolute, join, normalize } from 'path'
+import { join } from 'path'
+
+import { validateStoragePath } from '@/lib/security/paths'
 
 import type { RangeOptions, StorageProvider } from '../types'
-
-function validateStoragePath(path: string): string {
-  const normalizedPath = normalize(path).replace(/\\/g, '/')
-
-  if (isAbsolute(normalizedPath) || normalizedPath.includes('..')) {
-    throw new Error('Invalid storage path: Path traversal detected')
-  }
-
-  if (
-    !normalizedPath.startsWith('uploads/') &&
-    !normalizedPath.startsWith('public/')
-  ) {
-    throw new Error(
-      'Invalid storage path: Path must be within allowed directories'
-    )
-  }
-
-  return normalizedPath
-}
 
 export class LocalStorageProvider implements StorageProvider {
   private activeWriteStreams = new Map<
@@ -167,16 +150,14 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async deleteFile(path: string): Promise<void> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     await unlink(fullPath)
   }
 
   async getFileStream(path: string, range?: RangeOptions): Promise<Readable> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const options: { start?: number; end?: number } = {}
     if (range) {
       if (typeof range.start !== 'undefined') options.start = range.start
@@ -199,9 +180,8 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async getFileSize(path: string): Promise<number> {
-    const fullPath = path.startsWith('public/')
-      ? path
-      : join(process.cwd(), path)
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
     const stats = await stat(fullPath)
     return stats.size
   }
@@ -280,12 +260,10 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async renameFolder(oldPath: string, newPath: string): Promise<void> {
-    const fullOldPath = oldPath.startsWith('public/')
-      ? oldPath
-      : join(process.cwd(), oldPath)
-    const fullNewPath = newPath.startsWith('public/')
-      ? newPath
-      : join(process.cwd(), newPath)
+    const validOldPath = validateStoragePath(oldPath)
+    const validNewPath = validateStoragePath(newPath)
+    const fullOldPath = join(process.cwd(), validOldPath)
+    const fullNewPath = join(process.cwd(), validNewPath)
 
     await mkdir(fullNewPath, { recursive: true })
 

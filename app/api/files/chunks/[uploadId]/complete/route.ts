@@ -11,6 +11,7 @@ import { prisma } from '@/lib/database/prisma'
 import { scheduleFileExpiration } from '@/lib/events/handlers/file-expiry'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+import { validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
@@ -57,8 +58,9 @@ async function getAuthenticatedUser(req: Request) {
 
 async function getUploadMetadata(localId: string) {
   try {
+    const safeId = validatePathSegment(localId)
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
+    const metadataPath = join(TEMP_DIR, `meta-${safeId}`)
     const data = await readFile(metadataPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {
@@ -73,8 +75,9 @@ async function getUploadMetadata(localId: string) {
 
 async function deleteUploadMetadata(localId: string) {
   try {
+    const safeId = validatePathSegment(localId)
     const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, `meta-${localId}`)
+    const metadataPath = join(TEMP_DIR, `meta-${safeId}`)
     await unlink(metadataPath)
   } catch (err) {
     logger.debug(`Error deleting metadata for upload ${localId}`, {
