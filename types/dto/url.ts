@@ -1,7 +1,12 @@
 import { z } from 'zod'
 
 export const CreateUrlSchema = z.object({
-  url: z.string().url(),
+  url: z
+    .string()
+    .url()
+    .refine((u) => u.startsWith('https://') || u.startsWith('http://'), {
+      message: 'Only HTTP and HTTPS URLs are allowed',
+    }),
 })
 
 export type CreateUrlRequest = z.infer<typeof CreateUrlSchema>

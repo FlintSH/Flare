@@ -236,7 +236,11 @@ export default async function FilePage({
 
   const serializedFile = prepareFileProps(file)
 
-  const access = await checkFileAccess(serializedFile, session, providedPassword)
+  const access = await checkFileAccess(
+    serializedFile,
+    session,
+    providedPassword
+  )
 
   if (!access.allowed) {
     if (access.reason === 'private') {
@@ -261,10 +265,7 @@ export default async function FilePage({
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
             <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-              <Link
-                href="/dashboard"
-                className="flex items-center space-x-2.5"
-              >
+              <Link href="/dashboard" className="flex items-center space-x-2.5">
                 <Icons.logo className="h-6 w-6" />
                 <span className="flare-text text-lg">Flare</span>
               </Link>
