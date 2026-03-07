@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { validateFileType } from '@/lib/security/file-validation'
 import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
@@ -26,6 +27,25 @@ export async function POST(req: Request) {
     }
 
     if (!file.type.startsWith('image/')) {
+      return NextResponse.json(
+        { error: 'File must be an image' },
+        { status: 400 }
+      )
+    }
+
+    const avatarBytes = await file.arrayBuffer()
+    const avatarBuffer = Buffer.from(avatarBytes)
+    const typeCheck = await validateFileType(avatarBuffer, file.type)
+    if (!typeCheck.valid) {
+      return NextResponse.json(
+        { error: 'File content does not match claimed image type' },
+        { status: 400 }
+      )
+    }
+    if (
+      typeCheck.detectedType &&
+      !typeCheck.detectedType.startsWith('image/')
+    ) {
       return NextResponse.json(
         { error: 'File must be an image' },
         { status: 400 }
@@ -66,8 +86,7 @@ export async function POST(req: Request) {
       select: { image: true },
     })
 
-    const bytes = await file.arrayBuffer()
-    const processedImage = Buffer.from(bytes)
+    const processedImage = avatarBuffer
 
     const storageProvider = await getStorageProvider()
     const avatarFilename = `${session.user.id}.jpg`

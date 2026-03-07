@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 
 const logger = loggers.users
 
@@ -33,6 +34,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const limited = await rateLimit(req, generalLimiter)
+  if (limited) return limited
+
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response

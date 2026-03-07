@@ -1,21 +1,13 @@
 import { basename, isAbsolute, join, normalize, resolve, sep } from 'path'
 
-/**
- * Strips control characters (CRLF, null bytes, etc.) and path traversal
- * sequences from a display name so it is safe for use in HTTP headers
- * (Content-Disposition) and archive entry paths.
- */
+// safe for Content-Disposition headers and zip entry names
 export function sanitizeDisplayName(name: string): string {
   // eslint-disable-next-line no-control-regex
   const cleaned = name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\.\./g, '')
   return basename(cleaned) || 'download'
 }
 
-/**
- * Validates that a relative storage path is safe — no traversal sequences,
- * not absolute, and rooted under an allowed directory (uploads/ or public/).
- * Returns the normalized path. Throws on any violation.
- */
+// rejects traversal, absolute paths, and anything outside uploads/ or public/
 export function validateStoragePath(path: string): string {
   const normalizedPath = normalize(path).replace(/\\/g, '/')
 
@@ -35,11 +27,7 @@ export function validateStoragePath(path: string): string {
   return normalizedPath
 }
 
-/**
- * Sanitizes a user-supplied filename by stripping directory components
- * and rejecting characters outside a safe set (alphanumerics, hyphens,
- * underscores, dots).  Returns the safe filename. Throws on any violation.
- */
+// only allows [a-zA-Z0-9_\-\.] — no slashes, no path components
 export function sanitizeFilename(filename: string): string {
   const safe = basename(filename)
   if (!safe || safe !== filename) {
@@ -51,11 +39,7 @@ export function sanitizeFilename(filename: string): string {
   return safe
 }
 
-/**
- * Validates that a simple identifier (e.g. an upload ID) contains only
- * lowercase alphanumeric characters so it is safe to interpolate into
- * filesystem paths.  Returns the validated segment. Throws on any violation.
- */
+// for upload IDs and similar — lowercase alphanumeric only
 export function validatePathSegment(segment: string): string {
   if (!segment || !/^[a-z0-9]+$/.test(segment)) {
     throw new Error('Invalid path segment: contains disallowed characters')
@@ -63,11 +47,7 @@ export function validatePathSegment(segment: string): string {
   return segment
 }
 
-/**
- * Joins path segments under a root directory and verifies the resolved
- * result has not escaped that root.  Returns the resolved absolute path.
- * Throws if the final path is outside `rootDir`.
- */
+// resolves the path and blows up if it escapes rootDir
 export function safeJoin(rootDir: string, ...segments: string[]): string {
   const root = resolve(rootDir)
   const target = resolve(join(root, ...segments))

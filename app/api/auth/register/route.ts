@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -32,6 +33,9 @@ class RegistrationConflictError extends Error {
 }
 
 export async function POST(req: Request) {
+  const limited = await rateLimit(req, authLimiter)
+  if (limited) return limited
+
   try {
     const config = await getConfig()
     if (!config.settings.general.registrations.enabled) {

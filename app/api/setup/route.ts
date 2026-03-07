@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { updateConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
 
 const logger = loggers.startup
 
@@ -47,6 +48,9 @@ const setupSchema = z.object({
 })
 
 export async function POST(req: Request) {
+  const limited = await rateLimit(req, setupLimiter)
+  if (limited) return limited
+
   try {
     const data = await req.json()
     const validatedData = setupSchema.parse(data)

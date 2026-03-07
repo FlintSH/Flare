@@ -23,12 +23,17 @@ import {
 import { getUniqueFilename } from '@/lib/files/filename'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+import { validateFileType } from '@/lib/security/file-validation'
+import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
 const logger = loggers.files
 
 export async function POST(req: Request) {
+  const limited = await rateLimit(req, uploadLimiter)
+  if (limited) return limited
+
   let filePath = ''
   let userId: string | undefined
 
@@ -104,11 +109,22 @@ export async function POST(req: Request) {
 
     const storageProvider = await getStorageProvider()
     const bytes = await uploadedFile.arrayBuffer()
-    await storageProvider.uploadFile(
-      Buffer.from(bytes),
-      filePath,
-      uploadedFile.type
-    )
+    const fileBuffer = Buffer.from(bytes)
+
+    const typeCheck = await validateFileType(fileBuffer, uploadedFile.type)
+    if (!typeCheck.valid) {
+      logger.warn('File type mismatch on upload', {
+        claimed: uploadedFile.type,
+        detected: typeCheck.detectedType,
+        userId: user.id,
+      })
+      return apiError(
+        `File type mismatch: detected ${typeCheck.detectedType}, claimed ${uploadedFile.type}`,
+        HTTP_STATUS.BAD_REQUEST
+      )
+    }
+
+    await storageProvider.uploadFile(fileBuffer, filePath, uploadedFile.type)
 
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({

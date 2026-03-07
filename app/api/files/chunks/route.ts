@@ -11,7 +11,9 @@ import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+import { validateFileType } from '@/lib/security/file-validation'
 import { validatePathSegment } from '@/lib/security/paths'
+import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
@@ -108,6 +110,9 @@ async function deleteUploadMetadata(localId: string) {
 }
 
 export async function POST(req: Request) {
+  const limited = await rateLimit(req, uploadLimiter)
+  if (limited) return limited
+
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -292,6 +297,40 @@ export async function PUT(req: Request) {
       return NextResponse.json(
         { error: 'Uploaded data exceeds declared file size' },
         { status: 413 }
+      )
+    }
+
+    const MAGIC_BYTES_SIZE = 4100
+    const headStream = await storageProvider.getFileStream(metadata.fileKey, {
+      start: 0,
+      end: Math.min(MAGIC_BYTES_SIZE - 1, actualSize - 1),
+    })
+    const headChunks: Buffer[] = []
+    for await (const chunk of headStream) {
+      headChunks.push(Buffer.from(chunk))
+    }
+    const headBuffer = Buffer.concat(headChunks)
+    const typeCheck = await validateFileType(headBuffer, metadata.mimeType)
+    if (!typeCheck.valid) {
+      logger.warn('File type mismatch on chunked upload', {
+        claimed: metadata.mimeType,
+        detected: typeCheck.detectedType,
+        userId: user.id,
+      })
+      try {
+        await storageProvider.deleteFile(metadata.fileKey)
+      } catch (cleanupErr) {
+        logger.error(
+          'Failed to clean up type-mismatch upload',
+          cleanupErr as Error
+        )
+      }
+      await deleteUploadMetadata(localId)
+      return NextResponse.json(
+        {
+          error: `File type mismatch: detected ${typeCheck.detectedType}, claimed ${metadata.mimeType}`,
+        },
+        { status: 400 }
       )
     }
 

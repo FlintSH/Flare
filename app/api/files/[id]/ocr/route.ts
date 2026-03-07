@@ -94,8 +94,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        error:
-          'Failed to fetch OCR text',
+        error: 'Failed to fetch OCR text',
       },
       { status: 500 }
     )
