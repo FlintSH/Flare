@@ -2,7 +2,6 @@ import { basename, isAbsolute, join, normalize, resolve, sep } from 'path'
 
 // safe for Content-Disposition headers and zip entry names
 export function sanitizeDisplayName(name: string): string {
-  // eslint-disable-next-line no-control-regex
   const cleaned = name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\.\./g, '')
   return basename(cleaned) || 'download'
 }
