@@ -78,7 +78,7 @@
     "date-fns": "^2.30.0",
     "dompurify": "^3.2.6",
     "fast-equals": "^5.2.2",
-    "file-type": "^21.3.0",
+    "file-type": "^21.3.1",
     "lucide-react": "^0.525.0",
     "nanoid": "^5.1.5",
     "next": "^15.5.12",
