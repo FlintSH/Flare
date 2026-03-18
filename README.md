@@ -1,3 +1,4 @@
+
 <div align="center">
   <img src="./public/banner.png" alt="Flare Banner" width="600px" />
   <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
@@ -45,7 +46,7 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-1. Set up a PostgreSQL server and create a database for Flare.
+1. Install ```docker.io``` and ```docker-compose```
 
 2. Create a `.env` file with the following required variables:
 
@@ -55,18 +56,47 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
    NEXTAUTH_URL=http://localhost:3000 # (or wherever you deploy Flare)
    ```
 
-3. Run Flare using the pre-built Docker image:
+3. Create ```docker-compose.yml``` with the following template:
 
-   ```bash
-   docker run -d \
-     --name flare \
-     -p 3000:3000 \
-     --env-file .env \
-     -v ./uploads:/app/uploads \
-     flintsh/flare:latest
-   ```
+```bash
+version: '3.8'
 
-4. Open http://localhost:3000 to complete the setup and create your admin account.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: flare-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flareuser
+      POSTGRES_PASSWORD: your-secure-password-here
+      POSTGRES_DB: flaredb
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flareuser -d flaredb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flare:
+    image: flintsh/flare:latest
+    container_name: flare-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"                     # change left side if you want different host port
+    environment:
+      DATABASE_URL: postgresql://flareuser:your-secure-password-here@db:5432/flaredb?schema=public
+      NEXTAUTH_SECRET: securestuffhere   # generate with: openssl rand -base64 32
+      NEXTAUTH_URL: http://localhost:3000     # or https:// if using reverse proxy
+    volumes:
+      - ./uploads:/app/uploads          # where uploaded files are stored
+    depends_on:
+      db:
+        condition: service_healthy
+```
+4. Run ```docker-compose up -d```
+
+6. Open http://localhost:3000 to complete the setup and create your admin account.
 
 The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
 
