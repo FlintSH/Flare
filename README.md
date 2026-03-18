@@ -48,15 +48,7 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 1. Install ```docker.io``` and ```docker-compose```
 
-2. Create a `.env` file with the following required variables:
-
-   ```bash
-   DATABASE_URL=postgresql://user:pass@host:5432/dbname # (replace with your PostgreSQL connection string)
-   NEXTAUTH_SECRET=your-secure-secret-key # (generate with `openssl rand -base64 32`)
-   NEXTAUTH_URL=http://localhost:3000 # (or wherever you deploy Flare)
-   ```
-
-3. Create ```docker-compose.yml``` with the following template:
+2. Create ```docker-compose.yml``` with the following template:
 
    ```bash
    version: '3.8'
@@ -95,9 +87,9 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
            condition: service_healthy
 
    ```
-4. Run ```docker-compose up -d```
+3. Run ```docker-compose up -d```
 
-6. Open http://localhost:3000 to complete the setup and create your admin account.
+4. Open http://localhost:3000 to complete the setup and create your admin account.
 
 The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
 
