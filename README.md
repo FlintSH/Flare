@@ -1,4 +1,3 @@
-
 <div align="center">
   <img src="./public/banner.png" alt="Flare Banner" width="600px" />
   <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
@@ -46,13 +45,13 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-1. Install ```docker.io``` and ```docker-compose```
+1. Install `docker.io` and `docker-compose`
 
-2. Create ```docker-compose.yml``` with the following template:
+2. Create `docker-compose.yml` with the following template:
 
    ```bash
    version: '3.8'
-   
+
    services:
      db:
        image: postgres:17-alpine   # lightweight, recent version; 16 or 15 also fine
@@ -69,7 +68,7 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
          interval: 10s
          timeout: 5s
          retries: 5
-   
+
      flare:
        image: flintsh/flare:latest
        container_name: flare-app
@@ -87,7 +86,8 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
            condition: service_healthy
 
    ```
-3. Run ```docker-compose up -d```
+
+3. Run `docker-compose up -d`
 
 4. Open http://localhost:3000 to complete the setup and create your admin account.
 
