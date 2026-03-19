@@ -45,26 +45,49 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-1. Set up a PostgreSQL server and create a database for Flare.
+1. Install `docker.io` and `docker-compose`
 
-2. Create a `.env` file with the following required variables:
-
-   ```bash
-   DATABASE_URL=postgresql://user:pass@host:5432/dbname # (replace with your PostgreSQL connection string)
-   NEXTAUTH_SECRET=your-secure-secret-key # (generate with `openssl rand -base64 32`)
-   NEXTAUTH_URL=http://localhost:3000 # (or wherever you deploy Flare)
-   ```
-
-3. Run Flare using the pre-built Docker image:
+2. Create `docker-compose.yml` with the following template:
 
    ```bash
-   docker run -d \
-     --name flare \
-     -p 3000:3000 \
-     --env-file .env \
-     -v ./uploads:/app/uploads \
-     flintsh/flare:latest
+   version: '3.8'
+
+   services:
+     db:
+       image: postgres:17-alpine   # lightweight, recent version; 16 or 15 also fine
+       container_name: flare-db
+       restart: unless-stopped
+       environment:
+         POSTGRES_USER: flareuser          # change if you want
+         POSTGRES_PASSWORD: your-secure-password-here   #  ^f^p CHANGE THIS to something strong
+         POSTGRES_DB: flaredb              # database name Flare will use
+       volumes:
+         - ./postgres-data:/var/lib/postgresql/data   # persistent storage
+       healthcheck:
+         test: ["CMD-SHELL", "pg_isready -U flareuser -d flaredb"]
+         interval: 10s
+         timeout: 5s
+         retries: 5
+
+     flare:
+       image: flintsh/flare:latest
+       container_name: flare-app
+       restart: unless-stopped
+       ports:
+         - "3000:3000"                     # change left side if you want different host port
+       environment:
+         DATABASE_URL: postgresql://flareuser:your-secure-password-here@db:5432/flaredb?schema=public
+         NEXTAUTH_SECRET: securestuffhere   # generate with: openssl rand -base64 32
+         NEXTAUTH_URL: http://localhost:3000     # or https:// if using reverse proxy
+       volumes:
+         - ./uploads:/app/uploads          # where files/screenshots/videos are stored
+       depends_on:
+         db:
+           condition: service_healthy
+
    ```
+
+3. Run `docker-compose up -d`
 
 4. Open http://localhost:3000 to complete the setup and create your admin account.
 
