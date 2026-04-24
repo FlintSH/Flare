@@ -111,7 +111,7 @@
     "husky": "^8.0.3",
     "knip": "^5.62.0",
     "lint-staged": "^15.5.2",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.10",
     "postcss-load-config": "^6.0.1",
     "prettier": "^3.6.2",
     "tailwindcss": "^3.4.17",
