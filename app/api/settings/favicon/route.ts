@@ -58,12 +58,6 @@ export async function POST(req: Request) {
       data: { value: config },
     })
 
-    await storageProvider.uploadFile(
-      Buffer.from(JSON.stringify(config, null, 2)),
-      join(process.cwd(), 'flare.config.json'),
-      'application/json'
-    )
-
     return new NextResponse('Favicon updated successfully', { status: 200 })
   } catch (error) {
     logger.error('Error updating favicon:', error as Error)
