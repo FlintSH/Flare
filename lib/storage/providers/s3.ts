@@ -12,6 +12,7 @@ import {
   UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { Transform } from 'node:stream'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
 
 import { loggers } from '@/lib/logger'
@@ -69,6 +70,42 @@ export class S3StorageProvider implements StorageProvider {
         ACL: key.startsWith('avatars/') ? 'public-read' : undefined,
       })
     )
+  }
+
+  async uploadStream(
+    stream: Readable,
+    path: string,
+    mimeType: string
+  ): Promise<{ size: number }> {
+    const { Upload } = await import('@aws-sdk/lib-storage')
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+
+    let size = 0
+    const counter = new Transform({
+      transform(chunk, _encoding, callback) {
+        size += chunk.length
+        callback(null, chunk)
+      },
+    })
+
+    stream.on('error', (error) => counter.destroy(error as Error))
+
+    const upload = new Upload({
+      client: this.client,
+      params: {
+        Bucket: this.bucket,
+        Key: key,
+        Body: stream.pipe(counter),
+        ContentType: mimeType,
+        ACL: key.startsWith('avatars/') ? 'public-read' : undefined,
+      },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024,
+    })
+
+    await upload.done()
+
+    return { size }
   }
 
   async deleteFile(path: string): Promise<void> {

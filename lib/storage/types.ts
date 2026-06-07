@@ -7,6 +7,11 @@ export interface RangeOptions {
 
 export interface StorageProvider {
   uploadFile(file: Buffer, path: string, mimeType: string): Promise<void>
+  uploadStream(
+    stream: Readable,
+    path: string,
+    mimeType: string
+  ): Promise<{ size: number }>
   uploadChunkedFile(
     chunksDir: string,
     targetPath: string,

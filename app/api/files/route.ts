@@ -1,7 +1,7 @@
 import {
   FileMetadata,
-  FileUploadFormDataSchema,
   FileUploadResponse,
+  FileVisibility,
 } from '@/types/dto/file'
 import { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
@@ -21,6 +21,7 @@ import {
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
 import { validateFileType } from '@/lib/security/file-validation'
@@ -29,6 +30,8 @@ import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
 const logger = loggers.files
+
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
   const limited = await rateLimit(req, uploadLimiter)
@@ -42,33 +45,12 @@ export async function POST(req: Request) {
     userId = user?.id
     if (response) return response
 
-    const formData = await req.formData()
-
-    const uploadedFile = formData.get('file') as File
-    const visibility =
-      (formData.get('visibility') as 'PUBLIC' | 'PRIVATE') || 'PUBLIC'
-    const password = formData.get('password') as string | null
-    const expiresAt = formData.get('expiresAt') as string | null
-
-    const result = FileUploadFormDataSchema.safeParse({
-      file: uploadedFile,
-      visibility,
-      password,
-    })
-
-    let expirationDate: Date | null = null
-    if (expiresAt) {
-      expirationDate = new Date(expiresAt)
-      if (isNaN(expirationDate.getTime()) || expirationDate <= new Date()) {
-        return apiError(
-          'Invalid expiration date. Must be in the future.',
-          HTTP_STATUS.BAD_REQUEST
-        )
-      }
-    }
-
-    if (!result.success) {
-      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
+    const contentType = req.headers.get('content-type') || ''
+    if (!contentType.includes('multipart/form-data')) {
+      return apiError(
+        'Content-Type must be multipart/form-data',
+        HTTP_STATUS.BAD_REQUEST
+      )
     }
 
     const config = await getConfig()
@@ -78,63 +60,135 @@ export async function POST(req: Request) {
     const quotasEnabled = config.settings.general.storage.quotas.enabled
     const defaultQuota = config.settings.general.storage.quotas.default
 
-    if (uploadedFile.size > maxBytes) {
+    let quotaLimitBytes = Number.POSITIVE_INFINITY
+    if (quotasEnabled && user.role !== 'ADMIN') {
+      const quotaMB =
+        defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
+      const remainingMB = quotaMB - user.storageUsed
+      quotaLimitBytes = Math.max(0, remainingMB) * 1024 * 1024
+    }
+
+    if (quotaLimitBytes <= 0) {
+      return apiError(
+        `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
+        HTTP_STATUS.PAYLOAD_TOO_LARGE
+      )
+    }
+
+    const storageProvider = await getStorageProvider()
+
+    const { upload, fields, limitHit } = await parseSingleFileUpload({
+      req,
+      storageProvider,
+      maxBytes,
+      quotaLimitBytes,
+      resolveDestination: async ({ filename }) => {
+        const { urlSafeName, displayName } = await getUniqueFilename(
+          join('uploads', user.urlId),
+          filename,
+          user.randomizeFileUrls
+        )
+
+        filePath = join('uploads', user.urlId, urlSafeName)
+
+        return {
+          filePath,
+          urlPath: `/${user.urlId}/${urlSafeName}`,
+          displayName,
+          urlSafeName,
+        }
+      },
+    })
+
+    const cleanupPartialUpload = async () => {
+      if (!filePath) return
+      try {
+        await storageProvider.deleteFile(filePath)
+      } catch (unlinkError) {
+        logger.debug('No partial upload to clean up', {
+          filePath,
+          error: unlinkError,
+        })
+      }
+    }
+
+    if (limitHit === 'quota') {
+      await cleanupPartialUpload()
+      return apiError(
+        `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
+        HTTP_STATUS.PAYLOAD_TOO_LARGE
+      )
+    }
+
+    if (limitHit === 'size') {
+      await cleanupPartialUpload()
       return apiError(
         `Maximum file size is ${maxSize.value}${maxSize.unit}`,
         HTTP_STATUS.PAYLOAD_TOO_LARGE
       )
     }
 
-    if (quotasEnabled && user.role !== 'ADMIN') {
-      const quotaMB =
-        defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
-      const fileSizeMB = bytesToMB(uploadedFile.size)
+    if (!upload) {
+      return apiError('No file provided', HTTP_STATUS.BAD_REQUEST)
+    }
 
-      if (user.storageUsed + fileSizeMB > quotaMB) {
+    const visibility =
+      fields.visibility === FileVisibility.PRIVATE
+        ? FileVisibility.PRIVATE
+        : FileVisibility.PUBLIC
+    const password = fields.password || null
+    const expiresAt = fields.expiresAt || null
+
+    let expirationDate: Date | null = null
+    if (expiresAt) {
+      expirationDate = new Date(expiresAt)
+      if (isNaN(expirationDate.getTime()) || expirationDate <= new Date()) {
+        await cleanupPartialUpload()
         return apiError(
-          `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
-          HTTP_STATUS.PAYLOAD_TOO_LARGE
+          'Invalid expiration date. Must be in the future.',
+          HTTP_STATUS.BAD_REQUEST
         )
       }
     }
 
-    const { urlSafeName, displayName } = await getUniqueFilename(
-      join('uploads', user.urlId),
-      uploadedFile.name,
-      user.randomizeFileUrls
+    const { displayName, urlPath, mimeType, size, urlSafeName } = upload
+
+    // Validate the real file type against the claimed MIME using only the header
+    // bytes read back from storage, so we never buffer the whole file in memory.
+    const headStream = await storageProvider.getFileStream(filePath, {
+      start: 0,
+      end: 4099,
+    })
+    const headChunks: Buffer[] = []
+    for await (const chunk of headStream) {
+      headChunks.push(Buffer.from(chunk))
+    }
+    const typeCheck = await validateFileType(
+      Buffer.concat(headChunks),
+      mimeType
     )
-
-    filePath = join('uploads', user.urlId, urlSafeName)
-    const urlPath = `/${user.urlId}/${urlSafeName}`
-
-    const storageProvider = await getStorageProvider()
-    const bytes = await uploadedFile.arrayBuffer()
-    const fileBuffer = Buffer.from(bytes)
-
-    const typeCheck = await validateFileType(fileBuffer, uploadedFile.type)
     if (!typeCheck.valid) {
       logger.warn('File type mismatch on upload', {
-        claimed: uploadedFile.type,
+        claimed: mimeType,
         detected: typeCheck.detectedType,
         userId: user.id,
       })
+      await cleanupPartialUpload()
       return apiError(
-        `File type mismatch: detected ${typeCheck.detectedType}, claimed ${uploadedFile.type}`,
+        `File type mismatch: detected ${typeCheck.detectedType}, claimed ${mimeType}`,
         HTTP_STATUS.BAD_REQUEST
       )
     }
-
-    await storageProvider.uploadFile(fileBuffer, filePath, uploadedFile.type)
 
     const fileRecord = await prisma.$transaction(async (tx) => {
       const file = await tx.file.create({
         data: {
           name: displayName,
           urlPath,
-          mimeType: uploadedFile.type,
-          size: bytesToMB(uploadedFile.size),
+          mimeType,
+          size: bytesToMB(size),
           path: filePath,
-          visibility: visibility,
+          visibility,
           password: password ? await hash(password, 10) : null,
           userId: user.id,
         },
@@ -144,7 +198,7 @@ export async function POST(req: Request) {
         where: { id: user.id },
         data: {
           storageUsed: {
-            increment: bytesToMB(uploadedFile.size),
+            increment: bytesToMB(size),
           },
         },
       })
@@ -152,7 +206,7 @@ export async function POST(req: Request) {
       return file
     })
 
-    if (uploadedFile.type.startsWith('image/')) {
+    if (mimeType.startsWith('image/')) {
       processImageOCR(filePath, fileRecord.id).catch((error) => {
         logger.error('Background OCR processing failed', error as Error, {
           fileId: fileRecord.id,
@@ -194,8 +248,8 @@ export async function POST(req: Request) {
     const responseData: FileUploadResponse = {
       url: `${fullUrl}${displayUrlPath}`,
       name: displayName,
-      size: uploadedFile.size,
-      type: uploadedFile.type,
+      size,
+      type: mimeType,
     }
 
     return apiResponse<FileUploadResponse>(responseData)

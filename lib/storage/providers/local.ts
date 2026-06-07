@@ -4,11 +4,14 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   stat,
   unlink,
   writeFile,
 } from 'fs/promises'
+import { Transform } from 'node:stream'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { join } from 'path'
 
 import { validateStoragePath } from '@/lib/security/paths'
@@ -24,72 +27,39 @@ export class LocalStorageProvider implements StorageProvider {
     }
   >()
 
-  private multipartUploads = new Map<
-    string,
-    {
-      path: string
-      mimeType: string
-      parts: Map<number, Buffer>
-      stream: ReturnType<typeof createWriteStream>
+  private getMultipartPartsDir(uploadId: string): string {
+    if (!/^local-[A-Za-z0-9-]+$/.test(uploadId)) {
+      throw new Error('Invalid upload ID')
     }
-  >()
+    return join(process.cwd(), 'tmp', 'local-multipart', uploadId)
+  }
 
   async initializeMultipartUpload(
     path: string,
-    mimeType: string
+    _mimeType: string
   ): Promise<string> {
-    const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
-    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
-    await mkdir(dir, { recursive: true })
+    validateStoragePath(path)
 
     const uploadId = `local-${Date.now()}-${Math.random().toString(36).substring(2)}`
 
-    const stream = createWriteStream(fullPath)
-
-    this.multipartUploads.set(uploadId, {
-      path: fullPath,
-      mimeType,
-      parts: new Map(),
-      stream,
-    })
+    await mkdir(this.getMultipartPartsDir(uploadId), { recursive: true })
 
     return uploadId
   }
 
   async uploadPart(
-    path: string,
+    _path: string,
     uploadId: string,
     partNumber: number,
     data: Buffer
   ): Promise<{ ETag: string }> {
-    const upload = this.multipartUploads.get(uploadId)
-    if (!upload) {
-      throw new Error('Upload not found')
-    }
+    const partsDir = this.getMultipartPartsDir(uploadId)
+    await mkdir(partsDir, { recursive: true })
 
-    upload.parts.set(partNumber, data)
+    const partPath = join(partsDir, `part-${partNumber}`)
+    await writeFile(partPath, data)
 
-    const etag = `"${uploadId}-${partNumber}-${data.length}"`
-
-    const parts = Array.from(upload.parts.entries()).sort(([a], [b]) => a - b)
-
-    let nextExpectedPart = 1
-    for (const [partNum, partData] of parts) {
-      if (partNum !== nextExpectedPart) break
-
-      await new Promise<void>((resolve, reject) => {
-        upload.stream.write(partData, (error) => {
-          if (error) reject(error)
-          else resolve()
-        })
-      })
-
-      upload.parts.delete(partNum)
-      nextExpectedPart++
-    }
-
-    return { ETag: etag }
+    return { ETag: `"${uploadId}-${partNumber}-${data.length}"` }
   }
 
   async getPresignedPartUploadUrl(
@@ -103,38 +73,71 @@ export class LocalStorageProvider implements StorageProvider {
   async completeMultipartUpload(
     path: string,
     uploadId: string,
-    _parts: { ETag: string; PartNumber: number }[]
+    parts: { ETag: string; PartNumber: number }[]
   ): Promise<void> {
-    const upload = this.multipartUploads.get(uploadId)
-    if (!upload) {
-      throw new Error('Upload not found')
-    }
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
+    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
+    await mkdir(dir, { recursive: true })
+
+    const partsDir = this.getMultipartPartsDir(uploadId)
+    const orderedParts = [...parts].sort((a, b) => a.PartNumber - b.PartNumber)
+
+    const writeStream = createWriteStream(fullPath)
 
     try {
-      if (upload.parts.size > 0) {
-        const remainingParts = Array.from(upload.parts.entries()).sort(
-          ([a], [b]) => a - b
-        )
+      await new Promise<void>((resolveAll, rejectAll) => {
+        writeStream.on('error', rejectAll)
+        ;(async () => {
+          for (const part of orderedParts) {
+            const partPath = join(partsDir, `part-${part.PartNumber}`)
+            await new Promise<void>((resolve, reject) => {
+              const readStream = createReadStream(partPath)
+              readStream.on('error', reject)
+              readStream.on('end', resolve)
+              readStream.pipe(writeStream, { end: false })
+            })
+          }
 
-        for (const [, partData] of remainingParts) {
           await new Promise<void>((resolve, reject) => {
-            upload.stream.write(partData, (error: Error | null | undefined) => {
+            writeStream.end((error: Error | null | undefined) => {
               if (error) reject(error)
               else resolve()
             })
           })
-        }
-      }
 
-      await new Promise<void>((resolve, reject) => {
-        upload.stream.end((error: Error | null | undefined) => {
-          if (error) reject(error)
-          else resolve()
-        })
+          resolveAll()
+        })().catch(rejectAll)
       })
+    } catch (error) {
+      writeStream.destroy()
+      throw error
     } finally {
-      this.multipartUploads.delete(uploadId)
+      await rm(partsDir, { recursive: true, force: true })
     }
+  }
+
+  async uploadStream(
+    stream: Readable,
+    path: string,
+    _mimeType: string
+  ): Promise<{ size: number }> {
+    const validPath = validateStoragePath(path)
+    const fullPath = join(process.cwd(), validPath)
+    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
+    await mkdir(dir, { recursive: true })
+
+    let size = 0
+    const counter = new Transform({
+      transform(chunk, _encoding, callback) {
+        size += chunk.length
+        callback(null, chunk)
+      },
+    })
+
+    await pipeline(stream, counter, createWriteStream(fullPath))
+
+    return { size }
   }
 
   async uploadFile(
