@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { markSetupAsCompleted } from '@/lib/utils/setup-cache'
+
 import { useToast } from '@/hooks/use-toast'
 
 interface SetupData {
@@ -129,6 +131,10 @@ export default function SetupPage() {
         )
       }
 
+      // Setup succeeded server-side: update the cached setup status so the
+      // SetupChecker stops redirecting back to /setup, then route onward.
+      markSetupAsCompleted()
+
       const result = await signIn('credentials', {
         email: setupData.admin.email,
         password: setupData.admin.password,
@@ -136,7 +142,15 @@ export default function SetupPage() {
       })
 
       if (result?.error) {
-        throw new Error('Failed to sign in after setup')
+        // The account exists; auto sign-in just failed. Send the user to login
+        // instead of stranding them on the form.
+        toast({
+          title: 'Setup complete',
+          description:
+            'Your instance is configured. Please sign in to continue.',
+        })
+        router.push('/auth/login')
+        return
       }
 
       toast({
@@ -145,6 +159,7 @@ export default function SetupPage() {
       })
 
       router.push('/dashboard')
+      router.refresh()
     } catch (error) {
       console.error('Setup error:', error)
       toast({
