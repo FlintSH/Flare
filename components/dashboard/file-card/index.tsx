@@ -264,6 +264,9 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                 sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                 priority={false}
                 loading="lazy"
+                // The image optimizer flattens animated GIFs (and can fail to
+                // render them at all). Serve GIFs as-is so previews work.
+                unoptimized={file.mimeType === 'image/gif'}
               />
               {isLoadingOcr && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm">
