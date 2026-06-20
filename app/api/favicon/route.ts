@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { join } from 'path'
 
 import { loggers } from '@/lib/logger'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
@@ -12,9 +12,9 @@ export async function GET() {
     const filepath = join('uploads', 'favicon.png')
     const storageProvider = await getStorageProvider()
 
-    if (storageProvider instanceof S3StorageProvider) {
-      const fileUrl = await storageProvider.getFileUrl(filepath)
-      return NextResponse.redirect(fileUrl)
+    const publicUrl = await storageProvider.getPublicUrl(filepath)
+    if (publicUrl) {
+      return NextResponse.redirect(publicUrl)
     }
 
     const stream = await storageProvider.getFileStream(filepath)

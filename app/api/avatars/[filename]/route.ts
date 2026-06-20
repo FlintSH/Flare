@@ -4,7 +4,7 @@ import { join } from 'path'
 
 import { loggers } from '@/lib/logger'
 import { sanitizeFilename } from '@/lib/security/paths'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
@@ -23,16 +23,14 @@ export async function GET(
     }
 
     const storageProvider = await getStorageProvider()
+    const avatarPath = join('uploads', 'avatars', safeFilename)
 
-    if (storageProvider instanceof S3StorageProvider) {
-      const filepath = join('avatars', safeFilename)
-      const fileUrl = await storageProvider.getFileUrl(filepath)
-      return NextResponse.redirect(fileUrl)
+    const publicUrl = await storageProvider.getPublicUrl(avatarPath)
+    if (publicUrl) {
+      return NextResponse.redirect(publicUrl)
     }
 
-    const stream = await storageProvider.getFileStream(
-      join('uploads', 'avatars', safeFilename)
-    )
+    const stream = await storageProvider.getFileStream(avatarPath)
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {

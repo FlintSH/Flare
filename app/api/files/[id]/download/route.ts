@@ -57,11 +57,11 @@ export async function GET(
 
     const storageProvider = await getStorageProvider()
 
-    if ('getDownloadUrl' in storageProvider && storageProvider.getDownloadUrl) {
-      const downloadUrl = await storageProvider.getDownloadUrl(
-        file.path,
-        file.name
-      )
+    const downloadUrl = await storageProvider.getDownloadUrl(
+      file.path,
+      file.name
+    )
+    if (downloadUrl) {
       return Response.redirect(downloadUrl, 302)
     }
 
@@ -154,11 +154,11 @@ export async function POST(
 
     const storageProvider = await getStorageProvider()
 
-    if ('getDownloadUrl' in storageProvider && storageProvider.getDownloadUrl) {
-      const downloadUrl = await storageProvider.getDownloadUrl(
-        file.path,
-        file.name
-      )
+    const downloadUrl = await storageProvider.getDownloadUrl(
+      file.path,
+      file.name
+    )
+    if (downloadUrl) {
       return Response.redirect(downloadUrl, 302)
     }
 

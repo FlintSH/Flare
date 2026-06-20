@@ -280,13 +280,28 @@ export function runStorageProviderContract(
       }
     })
 
-    it('getDownloadUrl returns a non-empty string', async () => {
+    it('getPublicUrl returns a redirect URL or null (then a non-empty string)', async () => {
       const { provider, prefix } = await makeProvider()
       try {
-        if (typeof provider.getDownloadUrl !== 'function') {
-          // Optional in the legacy interface; skip if unimplemented.
-          return
-        }
+        const path = uniqueName(prefix, 'public.bin')
+        await provider.uploadFile(
+          Buffer.from('x'),
+          path,
+          'application/octet-stream'
+        )
+        const url = await provider.getPublicUrl(path)
+        // null is a valid contract result (backend has no direct URL).
+        expect(
+          url === null || (typeof url === 'string' && url.length > 0)
+        ).toBe(true)
+      } finally {
+        await ctx.cleanup()
+      }
+    })
+
+    it('getDownloadUrl returns a redirect URL or null', async () => {
+      const { provider, prefix } = await makeProvider()
+      try {
         const path = uniqueName(prefix, 'download.bin')
         await provider.uploadFile(
           Buffer.from('x'),
@@ -294,8 +309,9 @@ export function runStorageProviderContract(
           'application/octet-stream'
         )
         const url = await provider.getDownloadUrl(path, 'download.bin')
-        expect(typeof url).toBe('string')
-        expect(url.length).toBeGreaterThan(0)
+        expect(
+          url === null || (typeof url === 'string' && url.length > 0)
+        ).toBe(true)
       } finally {
         await ctx.cleanup()
       }

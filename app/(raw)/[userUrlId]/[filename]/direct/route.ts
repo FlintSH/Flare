@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 
 export async function GET(
   req: Request,
@@ -44,14 +44,13 @@ export async function GET(
 
     const storageProvider = await getStorageProvider()
 
-    if (!(storageProvider instanceof S3StorageProvider)) {
-      const rawUrl = `${file.urlPath}/raw${providedPassword ? `?password=${providedPassword}` : ''}`
-      return NextResponse.json({ url: rawUrl })
+    const directUrl = await storageProvider.getPublicUrl(file.path)
+    if (directUrl) {
+      return NextResponse.json({ url: directUrl })
     }
 
-    const directUrl = await storageProvider.getFileUrl(file.path)
-
-    return NextResponse.json({ url: directUrl })
+    const rawUrl = `${file.urlPath}/raw${providedPassword ? `?password=${providedPassword}` : ''}`
+    return NextResponse.json({ url: rawUrl })
   } catch (error) {
     console.error('Direct URL error:', error)
     return new Response(null, { status: 500 })
