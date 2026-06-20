@@ -7,7 +7,7 @@ import { join } from 'path'
 import { authOptions } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { loggers } from '@/lib/logger'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
@@ -47,8 +47,9 @@ export async function POST(req: Request) {
 
     await storageProvider.uploadFile(processedBuffer, faviconPath, 'image/png')
 
-    if (storageProvider instanceof S3StorageProvider) {
-      publicPath = await storageProvider.getFileUrl(faviconPath)
+    const publicUrl = await storageProvider.getPublicUrl(faviconPath)
+    if (publicUrl) {
+      publicPath = publicUrl
     }
 
     config.settings.appearance.favicon = publicPath

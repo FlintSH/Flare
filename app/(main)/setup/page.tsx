@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { markSetupAsCompleted } from '@/lib/utils/setup-cache'
+
 import { useToast } from '@/hooks/use-toast'
 
 interface SetupData {
@@ -70,6 +72,29 @@ const defaultSetupData: SetupData = {
   },
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Mirrors the server-side zod rules so the most common mistakes surface
+// instantly instead of failing silently after a round-trip.
+function getValidationError(data: SetupData): string | null {
+  if (!data.admin.name.trim()) {
+    return 'Username is required'
+  }
+  if (!EMAIL_REGEX.test(data.admin.email)) {
+    return 'Enter a valid email address'
+  }
+  if (data.admin.password.length < 8) {
+    return 'Password must be at least 8 characters'
+  }
+  if (data.storage.provider === 's3') {
+    const { bucket, region, accessKeyId, secretAccessKey } = data.storage.s3
+    if (!bucket || !region || !accessKeyId || !secretAccessKey) {
+      return 'All S3 fields (bucket, region, access key ID, secret access key) are required'
+    }
+  }
+  return null
+}
+
 export default function SetupPage() {
   const [step, setStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
@@ -78,6 +103,16 @@ export default function SetupPage() {
   const router = useRouter()
 
   const handleSubmit = async () => {
+    const validationError = getValidationError(setupData)
+    if (validationError) {
+      toast({
+        title: 'Check your details',
+        description: validationError,
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setIsLoading(true)
 
@@ -90,9 +125,15 @@ export default function SetupPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to complete setup')
+        const error = await response.json().catch(() => ({}))
+        throw new Error(
+          error.error || error.message || 'Failed to complete setup'
+        )
       }
+
+      // Setup succeeded server-side: update the cached setup status so the
+      // SetupChecker stops redirecting back to /setup, then route onward.
+      markSetupAsCompleted()
 
       const result = await signIn('credentials', {
         email: setupData.admin.email,
@@ -101,7 +142,15 @@ export default function SetupPage() {
       })
 
       if (result?.error) {
-        throw new Error('Failed to sign in after setup')
+        // The account exists; auto sign-in just failed. Send the user to login
+        // instead of stranding them on the form.
+        toast({
+          title: 'Setup complete',
+          description:
+            'Your instance is configured. Please sign in to continue.',
+        })
+        router.push('/auth/login')
+        return
       }
 
       toast({
@@ -110,6 +159,7 @@ export default function SetupPage() {
       })
 
       router.push('/dashboard')
+      router.refresh()
     } catch (error) {
       console.error('Setup error:', error)
       toast({
@@ -229,6 +279,12 @@ export default function SetupPage() {
                           }
                           className="h-11 bg-background/50 focus:bg-background transition-colors"
                         />
+                        {setupData.admin.password.length > 0 &&
+                          setupData.admin.password.length < 8 && (
+                            <p className="text-sm text-destructive">
+                              Password must be at least 8 characters
+                            </p>
+                          )}
                       </div>
                     </div>
                   )}
@@ -499,7 +555,7 @@ export default function SetupPage() {
                         (step === 1 &&
                           (!setupData.admin.name ||
                             !setupData.admin.email ||
-                            !setupData.admin.password)) ||
+                            setupData.admin.password.length < 8)) ||
                         (step === 2 &&
                           setupData.storage.provider === 's3' &&
                           (!setupData.storage.s3.bucket ||

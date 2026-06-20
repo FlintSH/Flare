@@ -17,6 +17,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "npx prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "npx prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install",
@@ -109,6 +111,7 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@types/uuid": "^10.0.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "babel-plugin-react-compiler": "^19.0.0-beta-ebf51a3-20250411",
     "eslint-config-next": "^15.4.4",
     "husky": "^8.0.3",
@@ -118,7 +121,8 @@
     "postcss-load-config": "^6.0.1",
     "prettier": "^3.6.2",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.9"
   },
   "lint-staged": {
     "**/*.{ts,tsx,js,jsx,json,md}": "prettier --write"

@@ -22,6 +22,8 @@ import type { RangeOptions, S3Config, StorageProvider } from '../types'
 const logger = loggers.storage.getChildLogger('s3')
 
 export class S3StorageProvider implements StorageProvider {
+  readonly kind = 's3' as const
+
   private client: S3Client
   private bucket: string
   private endpoint?: string
@@ -199,6 +201,12 @@ export class S3StorageProvider implements StorageProvider {
     return await getSignedUrl(this.client, command, {
       expiresIn: downloadExpiresIn,
     })
+  }
+
+  // S3 objects are reachable directly via a presigned/public URL, so callers
+  // can redirect to it instead of streaming bytes through the app.
+  async getPublicUrl(path: string): Promise<string | null> {
+    return this.getFileUrl(path)
   }
 
   async getDownloadUrl(path: string, filename?: string): Promise<string> {

@@ -9,7 +9,7 @@ import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
 
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
     await mkdir(exportDir, { recursive: true })
 
     const storageProvider = await getStorageProvider()
-    const isS3Storage = storageProvider instanceof S3StorageProvider
+    const isS3Storage = storageProvider.kind === 's3'
 
     if (isS3Storage) {
       logger.info('Using S3 storage provider for file exports')

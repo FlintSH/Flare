@@ -19,7 +19,7 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -150,11 +150,8 @@ export async function generateMetadata({
   let videoUrl = rawUrl
   if (isVideo) {
     const storageProvider = await getStorageProvider()
-    if (storageProvider instanceof S3StorageProvider) {
-      videoUrl = await storageProvider.getFileUrl(file.path)
-    } else {
-      videoUrl = `${baseUrl}${urlPath}/raw`
-    }
+    const publicUrl = await storageProvider.getPublicUrl(file.path)
+    videoUrl = publicUrl ?? `${baseUrl}${urlPath}/raw`
   }
 
   const metadata: Metadata = {

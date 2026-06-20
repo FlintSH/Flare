@@ -12,13 +12,15 @@ import {
 import { Transform } from 'node:stream'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { join } from 'path'
+import { dirname, join } from 'path'
 
 import { validateStoragePath } from '@/lib/security/paths'
 
 import type { RangeOptions, StorageProvider } from '../types'
 
 export class LocalStorageProvider implements StorageProvider {
+  readonly kind = 'local' as const
+
   private activeWriteStreams = new Map<
     string,
     {
@@ -182,6 +184,19 @@ export class LocalStorageProvider implements StorageProvider {
     return `${baseUrl}/${cleanPath}/raw`
   }
 
+  // The local backend has no direct, client-reachable object URL: callers must
+  // stream the bytes through the app. Returning null signals exactly that.
+  async getPublicUrl(_path: string): Promise<string | null> {
+    return null
+  }
+
+  async getDownloadUrl(
+    _path: string,
+    _filename?: string
+  ): Promise<string | null> {
+    return null
+  }
+
   async getFileSize(path: string): Promise<number> {
     const validPath = validateStoragePath(path)
     const fullPath = join(process.cwd(), validPath)
@@ -268,7 +283,10 @@ export class LocalStorageProvider implements StorageProvider {
     const fullOldPath = join(process.cwd(), validOldPath)
     const fullNewPath = join(process.cwd(), validNewPath)
 
-    await mkdir(fullNewPath, { recursive: true })
+    // Ensure the destination's parent exists, then move the directory into
+    // place. Pre-creating the destination itself and renaming onto it is
+    // fragile (it only works while the target is empty), so we avoid it.
+    await mkdir(dirname(fullNewPath), { recursive: true })
 
     await rename(fullOldPath, fullNewPath)
   }

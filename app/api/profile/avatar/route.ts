@@ -8,7 +8,7 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { validateFileType } from '@/lib/security/file-validation'
-import { S3StorageProvider, getStorageProvider } from '@/lib/storage'
+import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
 
 const logger = loggers.users
@@ -110,8 +110,10 @@ export async function POST(req: Request) {
 
     await storageProvider.uploadFile(processedImage, avatarPath, 'image/jpeg')
 
-    if (storageProvider instanceof S3StorageProvider) {
-      publicPath = await storageProvider.getFileUrl(avatarPath)
+    // S3 exposes a stable public URL; local is served via /api/avatars/*.
+    const publicUrl = await storageProvider.getPublicUrl(avatarPath)
+    if (publicUrl) {
+      publicPath = publicUrl
     }
 
     await prisma.user.update({
