@@ -26,9 +26,9 @@ function generateUrlId() {
 
 const setupSchema = z.object({
   admin: z.object({
-    name: z.string().min(1),
-    email: z.string().email(),
-    password: z.string().min(8),
+    name: z.string().min(1, 'Username is required'),
+    email: z.string().email('Enter a valid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
   }),
   storage: z.object({
     provider: z.enum(['local', 's3']),
@@ -151,8 +151,12 @@ export async function POST(req: Request) {
     }
     logger.error('Setup error', error as Error)
     if (error instanceof z.ZodError) {
+      const issue = error.issues[0]
       return NextResponse.json(
-        { error: error.issues[0]?.message || 'Validation failed' },
+        {
+          error: issue?.message || 'Validation failed',
+          field: issue?.path?.join('.') || undefined,
+        },
         { status: 400 }
       )
     }
