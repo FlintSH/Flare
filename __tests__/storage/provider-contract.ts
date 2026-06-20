@@ -1,7 +1,16 @@
+import { randomBytes } from 'node:crypto'
 import { type Readable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
 
+import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage/types'
+
+// 1x1 PNG (signature + IHDR) — a real, detectable binary fixture.
+const PNG_FIXTURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+])
 
 export interface ContractContext {
   provider: StorageProvider
@@ -136,6 +145,62 @@ export function runStorageProviderContract(
         const read = await streamToBuffer(await provider.getFileStream(path))
         expect(read.equals(Buffer.concat([part1, part2, part3]))).toBe(true)
         expect(await provider.getFileSize(path)).toBe(40)
+      } finally {
+        await ctx.cleanup()
+      }
+    })
+
+    it('preserves binary integrity so type validation still passes', async () => {
+      const { provider, prefix } = await makeProvider()
+      try {
+        const path = uniqueName(prefix, 'image.png')
+        await provider.uploadFile(PNG_FIXTURE, path, 'image/png')
+
+        const read = await streamToBuffer(await provider.getFileStream(path))
+        expect(read.equals(PNG_FIXTURE)).toBe(true)
+
+        // The header bytes read back from storage must still validate as PNG —
+        // this is exactly what the upload routes do post-write.
+        const head = await streamToBuffer(
+          await provider.getFileStream(path, { start: 0, end: 4099 })
+        )
+        const result = await validateFileType(head, 'image/png')
+        expect(result.valid).toBe(true)
+        expect(result.detectedType).toBe('image/png')
+      } finally {
+        await ctx.cleanup()
+      }
+    })
+
+    it('handles a larger multipart upload with realistic part sizes', async () => {
+      const { provider, prefix } = await makeProvider()
+      try {
+        const path = uniqueName(prefix, 'large-multipart.bin')
+        const parts = [
+          randomBytes(64 * 1024),
+          randomBytes(64 * 1024),
+          randomBytes(17 * 1024),
+        ]
+
+        const uploadId = await provider.initializeMultipartUpload(
+          path,
+          'application/octet-stream'
+        )
+        const tags = await Promise.all(
+          parts.map((data, i) =>
+            provider.uploadPart(path, uploadId, i + 1, data)
+          )
+        )
+        await provider.completeMultipartUpload(
+          path,
+          uploadId,
+          tags.map((t, i) => ({ ETag: t.ETag, PartNumber: i + 1 }))
+        )
+
+        const expected = Buffer.concat(parts)
+        const read = await streamToBuffer(await provider.getFileStream(path))
+        expect(read.equals(expected)).toBe(true)
+        expect(await provider.getFileSize(path)).toBe(expected.length)
       } finally {
         await ctx.cleanup()
       }
