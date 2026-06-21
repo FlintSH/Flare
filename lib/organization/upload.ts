@@ -47,9 +47,7 @@ export async function resolveUploadOrganization(
       select: { id: true, name: true },
     })
     const byId = new Map(existingTags.map((t) => [t.id, t]))
-    const byName = new Map(
-      existingTags.map((t) => [t.name.toLowerCase(), t])
-    )
+    const byName = new Map(existingTags.map((t) => [t.name.toLowerCase(), t]))
 
     for (const token of tokens) {
       if (byId.has(token)) {

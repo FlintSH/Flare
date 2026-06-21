@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 
+import type { Tag } from '@/types/components/tag'
 import { Check, Plus, Tag as TagIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -14,8 +15,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { Tag } from '@/types/components/tag'
 
 interface TagPickerProps {
   tags: Tag[]
@@ -101,7 +100,10 @@ export function TagPicker({
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <span
-                    className={cn('h-2.5 w-2.5 rounded-full shrink-0', classes.dot)}
+                    className={cn(
+                      'h-2.5 w-2.5 rounded-full shrink-0',
+                      classes.dot
+                    )}
                   />
                   <span className="truncate">{tag.name}</span>
                 </span>

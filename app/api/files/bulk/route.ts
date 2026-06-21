@@ -1,11 +1,11 @@
+import { BulkFileActionSchema } from '@/types/dto/file'
+
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { isOrganizationEnabled } from '@/lib/organization'
 import { getStorageProvider } from '@/lib/storage'
-
-import { BulkFileActionSchema } from '@/types/dto/file'
 
 const logger = loggers.files
 

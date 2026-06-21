@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 
+import type { Tag } from '@/types/components/tag'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 
+import { ColorPicker } from '@/components/dashboard/folder/color-picker'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,13 +16,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
-import { ColorPicker } from '@/components/dashboard/folder/color-picker'
-
 import { getColorClasses } from '@/lib/organization/colors'
 import type { OrganizationColor } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { Tag } from '@/types/components/tag'
 
 interface ManageTagsDialogProps {
   open: boolean
@@ -101,7 +99,11 @@ export function ManageTagsDialog({
             />
             <div className="flex items-center justify-between gap-2">
               <ColorPicker value={newColor} onChange={setNewColor} />
-              <Button size="sm" onClick={handleCreate} disabled={!newName.trim()}>
+              <Button
+                size="sm"
+                onClick={handleCreate}
+                disabled={!newName.trim()}
+              >
                 <Plus className="mr-1 h-4 w-4" />
                 Add
               </Button>

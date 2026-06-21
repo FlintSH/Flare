@@ -1,11 +1,7 @@
-import { describe, expect, it } from 'vitest'
-
-import {
-  BulkFileActionSchema,
-  UpdateFileSchema,
-} from '@/types/dto/file'
+import { BulkFileActionSchema, UpdateFileSchema } from '@/types/dto/file'
 import { CreateFolderSchema, UpdateFolderSchema } from '@/types/dto/folder'
 import { CreateTagSchema } from '@/types/dto/tag'
+import { describe, expect, it } from 'vitest'
 
 describe('CreateFolderSchema', () => {
   it('accepts a valid folder', () => {

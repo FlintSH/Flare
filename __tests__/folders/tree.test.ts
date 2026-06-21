@@ -1,3 +1,4 @@
+import type { FolderDTO } from '@/types/dto/folder'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -6,7 +7,6 @@ import {
   getDescendantIds,
   wouldCreateCycle,
 } from '@/lib/folders/tree'
-import type { FolderDTO } from '@/types/dto/folder'
 
 function folder(
   id: string,

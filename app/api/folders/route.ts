@@ -1,3 +1,5 @@
+import { CreateFolderSchema } from '@/types/dto/folder'
+import type { FolderDTO } from '@/types/dto/folder'
 import { Prisma } from '@prisma/client'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
@@ -6,9 +8,6 @@ import { prisma } from '@/lib/database/prisma'
 import { buildFolderTree } from '@/lib/folders/tree'
 import { loggers } from '@/lib/logger'
 import { isOrganizationEnabled } from '@/lib/organization'
-
-import { CreateFolderSchema } from '@/types/dto/folder'
-import type { FolderDTO } from '@/types/dto/folder'
 
 const logger = loggers.files
 
@@ -89,6 +88,23 @@ export async function POST(req: Request) {
       if (!parent) {
         return apiError('Parent folder not found', HTTP_STATUS.NOT_FOUND)
       }
+    }
+
+    // The DB unique constraint treats NULL parentIds as distinct, so enforce
+    // case-insensitive uniqueness within a parent (including root) ourselves.
+    const duplicate = await prisma.folder.findFirst({
+      where: {
+        userId: user.id,
+        parentId: parentId ?? null,
+        name: { equals: name, mode: 'insensitive' },
+      },
+      select: { id: true },
+    })
+    if (duplicate) {
+      return apiError(
+        'A folder with this name already exists here',
+        HTTP_STATUS.CONFLICT
+      )
     }
 
     try {

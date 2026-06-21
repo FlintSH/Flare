@@ -1,5 +1,6 @@
 'use client'
 
+import type { FolderTreeNode } from '@/types/components/folder'
 import { Check, Files, Folder as FolderIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -14,8 +15,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { FolderTreeNode } from '@/types/components/folder'
 
 interface FolderFilterProps {
   tree: FolderTreeNode[]
@@ -58,7 +57,10 @@ export function FolderFilter({ tree, value, onChange }: FolderFilterProps) {
         <DropdownMenuLabel>Filter by folder</DropdownMenuLabel>
         <DropdownMenuItem
           onClick={() => onChange(null)}
-          className={cn('flex items-center justify-between', value === null && 'bg-accent')}
+          className={cn(
+            'flex items-center justify-between',
+            value === null && 'bg-accent'
+          )}
         >
           <span className="flex items-center gap-2">
             <Files className="h-4 w-4 text-muted-foreground" />

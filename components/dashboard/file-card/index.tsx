@@ -288,9 +288,7 @@ export function FileCard({
             <div className="rounded-md bg-background/80 backdrop-blur-sm p-1 shadow-sm">
               <Checkbox
                 checked={selected}
-                onCheckedChange={(value) =>
-                  onSelectChange?.(file.id, value)
-                }
+                onCheckedChange={(value) => onSelectChange?.(file.id, value)}
                 aria-label={selected ? 'Deselect file' : 'Select file'}
               />
             </div>

@@ -1,3 +1,5 @@
+import { CreateTagSchema } from '@/types/dto/tag'
+import type { TagDTO } from '@/types/dto/tag'
 import { Prisma } from '@prisma/client'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
@@ -6,9 +8,6 @@ import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { isOrganizationEnabled } from '@/lib/organization'
 import { normalizeTagName } from '@/lib/tags/normalize'
-
-import { CreateTagSchema } from '@/types/dto/tag'
-import type { TagDTO } from '@/types/dto/tag'
 
 const logger = loggers.files
 
@@ -112,7 +111,10 @@ export async function POST(req: Request) {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        return apiError('A tag with this name already exists', HTTP_STATUS.CONFLICT)
+        return apiError(
+          'A tag with this name already exists',
+          HTTP_STATUS.CONFLICT
+        )
       }
       throw error
     }

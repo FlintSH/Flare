@@ -19,7 +19,8 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
         onClick={() => onChange(null)}
         className={cn(
           'h-6 w-6 rounded-full border border-border bg-muted-foreground/30 flex items-center justify-center',
-          value === null && 'ring-2 ring-ring ring-offset-2 ring-offset-background'
+          value === null &&
+            'ring-2 ring-ring ring-offset-2 ring-offset-background'
         )}
         aria-label="No color"
       >

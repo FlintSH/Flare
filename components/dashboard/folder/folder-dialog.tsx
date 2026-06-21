@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { ColorPicker } from '@/components/dashboard/folder/color-picker'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,8 +12,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-import { ColorPicker } from '@/components/dashboard/folder/color-picker'
 
 import type { OrganizationColor } from '@/lib/organization/colors'
 
@@ -92,7 +91,10 @@ export function FolderDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={!name.trim() || submitting}>
+            <Button
+              onClick={handleSubmit}
+              disabled={!name.trim() || submitting}
+            >
               {mode === 'create' ? 'Create' : 'Save'}
             </Button>
           </div>

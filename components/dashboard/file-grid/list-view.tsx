@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 
+import type { FileType } from '@/types/components/file'
 import { format } from 'date-fns'
 import {
   Download,
@@ -38,8 +39,6 @@ import { sanitizeUrl } from '@/lib/utils/url'
 
 import { useToast } from '@/hooks/use-toast'
 
-import type { FileType } from '@/types/components/file'
-
 interface FileListViewProps {
   files: FileType[]
   organizationEnabled?: boolean
@@ -64,7 +63,8 @@ export function FileListView({
   onDelete,
 }: FileListViewProps) {
   const { toast } = useToast()
-  const allSelected = files.length > 0 && files.every((f) => selectedIds.has(f.id))
+  const allSelected =
+    files.length > 0 && files.every((f) => selectedIds.has(f.id))
 
   const handleCopyLink = (file: FileType) => {
     navigator.clipboard.writeText(
@@ -203,7 +203,9 @@ export function FileListView({
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground whitespace-nowrap">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span>{getRelativeTime(new Date(file.uploadedAt))}</span>
+                        <span>
+                          {getRelativeTime(new Date(file.uploadedAt))}
+                        </span>
                       </TooltipTrigger>
                       <TooltipContent>
                         {format(new Date(file.uploadedAt), 'PPP p')}

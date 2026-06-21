@@ -1,12 +1,10 @@
 'use client'
 
+import type { Tag } from '@/types/components/tag'
 import { Download, FolderInput, Tag as TagIcon, Trash2, X } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-
 import { TagPicker } from '@/components/dashboard/tag/tag-picker'
-
-import type { Tag } from '@/types/components/tag'
+import { Button } from '@/components/ui/button'
 
 interface BulkActionsBarProps {
   count: number

@@ -1,3 +1,5 @@
+import { UpdateFolderSchema } from '@/types/dto/folder'
+import type { FolderDTO } from '@/types/dto/folder'
 import { Prisma } from '@prisma/client'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
@@ -6,9 +8,6 @@ import { prisma } from '@/lib/database/prisma'
 import { getBreadcrumb, wouldCreateCycle } from '@/lib/folders/tree'
 import { loggers } from '@/lib/logger'
 import { isOrganizationEnabled } from '@/lib/organization'
-
-import { UpdateFolderSchema } from '@/types/dto/folder'
-import type { FolderDTO } from '@/types/dto/folder'
 
 const logger = loggers.files
 
@@ -117,7 +116,7 @@ export async function PATCH(
 
     const existing = await prisma.folder.findFirst({
       where: { id, userId: user.id },
-      select: { id: true },
+      select: { id: true, name: true, parentId: true },
     })
     if (!existing) {
       return apiError('Folder not found', HTTP_STATUS.NOT_FOUND)
@@ -144,6 +143,29 @@ export async function PATCH(
         return apiError(
           'Cannot move a folder into itself or one of its subfolders',
           HTTP_STATUS.BAD_REQUEST
+        )
+      }
+    }
+
+    // Enforce case-insensitive name uniqueness within the (effective) parent,
+    // since NULL parentIds bypass the DB unique constraint.
+    if (name !== undefined || parentId !== undefined) {
+      const targetName = name ?? existing.name
+      const targetParentId =
+        parentId !== undefined ? (parentId ?? null) : existing.parentId
+      const duplicate = await prisma.folder.findFirst({
+        where: {
+          userId: user.id,
+          parentId: targetParentId,
+          name: { equals: targetName, mode: 'insensitive' },
+          id: { not: id },
+        },
+        select: { id: true },
+      })
+      if (duplicate) {
+        return apiError(
+          'A folder with this name already exists here',
+          HTTP_STATUS.CONFLICT
         )
       }
     }

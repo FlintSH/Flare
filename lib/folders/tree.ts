@@ -66,9 +66,6 @@ export function buildFolderTree<T extends FolderLike>(
   return roots
 }
 
-// Convenience alias for the common server-side case.
-export type ServerFolderTree = FolderTreeNodeOf<FolderDTO>
-
 /**
  * Returns the ids of every descendant of `folderId` (not including itself).
  */

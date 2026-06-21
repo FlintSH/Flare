@@ -1,7 +1,7 @@
+import { TAG_NAME_MAX_LENGTH } from '@/types/dto/tag'
 import { describe, expect, it } from 'vitest'
 
 import { normalizeTagName, tagNamesEqual } from '@/lib/tags/normalize'
-import { TAG_NAME_MAX_LENGTH } from '@/types/dto/tag'
 
 describe('normalizeTagName', () => {
   it('trims surrounding whitespace', () => {

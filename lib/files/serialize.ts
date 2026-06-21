@@ -1,6 +1,5 @@
-import type { Prisma } from '@prisma/client'
-
 import type { FileMetadata } from '@/types/dto/file'
+import type { Prisma } from '@prisma/client'
 
 // Shared Prisma select used when returning files to the dashboard, including the
 // folder summary and tag chips.
@@ -22,7 +21,9 @@ export const fileListSelect = {
   },
 } satisfies Prisma.FileSelect
 
-type FileWithRelations = Prisma.FileGetPayload<{ select: typeof fileListSelect }>
+type FileWithRelations = Prisma.FileGetPayload<{
+  select: typeof fileListSelect
+}>
 
 /**
  * Maps a Prisma file row (selected with {@link fileListSelect}) into the

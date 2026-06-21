@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react'
 
+import type { Tag } from '@/types/components/tag'
 import { Plus } from 'lucide-react'
 
+import { TagBadge } from '@/components/dashboard/tag/tag-badge'
+import { TagPicker } from '@/components/dashboard/tag/tag-picker'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,11 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-
-import { TagBadge } from '@/components/dashboard/tag/tag-badge'
-import { TagPicker } from '@/components/dashboard/tag/tag-picker'
-
-import type { Tag } from '@/types/components/tag'
 
 interface EditTagsDialogProps {
   open: boolean
@@ -45,9 +43,7 @@ export function EditTagsDialog({
 
   const toggle = (tagId: string) => {
     setSelected((prev) =>
-      prev.includes(tagId)
-        ? prev.filter((t) => t !== tagId)
-        : [...prev, tagId]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
     )
   }
 

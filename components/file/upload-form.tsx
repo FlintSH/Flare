@@ -4,13 +4,13 @@ import { useState } from 'react'
 
 import Image from 'next/image'
 
+import type { FolderTreeNode } from '@/types/components/folder'
 import { ExpiryAction } from '@/types/events'
 import { $Enums } from '@prisma/client'
 import { format } from 'date-fns'
 import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
-import { useDropzone } from 'react-dropzone'
-
 import { Plus } from 'lucide-react'
+import { useDropzone } from 'react-dropzone'
 
 import { TagBadge } from '@/components/dashboard/tag/tag-badge'
 import { TagPicker } from '@/components/dashboard/tag/tag-picker'
@@ -33,8 +33,6 @@ import { formatBytes } from '@/lib/utils'
 import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
 import { useFolders } from '@/hooks/use-folders'
 import { useTags } from '@/hooks/use-tags'
-
-import type { FolderTreeNode } from '@/types/components/folder'
 
 interface UploadFormProps {
   maxSize: number

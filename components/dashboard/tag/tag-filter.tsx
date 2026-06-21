@@ -1,5 +1,6 @@
 'use client'
 
+import type { Tag } from '@/types/components/tag'
 import { Check, Settings2, Tag as TagIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -14,8 +15,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { Tag } from '@/types/components/tag'
 
 interface TagFilterProps {
   tags: Tag[]
@@ -79,7 +78,12 @@ export function TagFilter({
               )}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <span className={cn('h-2.5 w-2.5 rounded-full shrink-0', classes.dot)} />
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full shrink-0',
+                    classes.dot
+                  )}
+                />
                 <span className="truncate">{tag.name}</span>
                 <span className="text-xs text-muted-foreground">
                   {tag.fileCount}

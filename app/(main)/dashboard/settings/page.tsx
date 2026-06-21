@@ -1176,9 +1176,9 @@ export default function SettingsPage() {
                     <div className="space-y-0.5">
                       <Label>Enable Folders &amp; Tags</Label>
                       <p className="text-sm text-muted-foreground">
-                        Adds folders, tags, and extra dashboard views. When
-                        off, Flare stays a pure screenshot host and all
-                        organization UI is hidden.
+                        Adds folders, tags, and extra dashboard views. When off,
+                        Flare stays a pure screenshot host and all organization
+                        UI is hidden.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

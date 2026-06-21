@@ -67,9 +67,7 @@ function buildFolderPath(
   while (current && !seen.has(current.id)) {
     seen.add(current.id)
     parts.unshift(current.name.replace(/[\\/]/g, '_'))
-    current = current.parentId
-      ? foldersById.get(current.parentId)
-      : undefined
+    current = current.parentId ? foldersById.get(current.parentId) : undefined
   }
   return parts.join('/')
 }
@@ -163,6 +161,26 @@ export async function GET(req: Request) {
     const foldersById = new Map<string, FolderData>(
       userData.folders.map((f) => [f.id, f])
     )
+
+    // Guards against two files sharing a name within the same export directory.
+    const usedZipPaths = new Set<string>()
+    const uniqueZipPath = (dir: string, name: string): string => {
+      let candidate = `${dir}/${name}`
+      if (!usedZipPaths.has(candidate)) {
+        usedZipPaths.add(candidate)
+        return candidate
+      }
+      const dot = name.lastIndexOf('.')
+      const base = dot > 0 ? name.slice(0, dot) : name
+      const ext = dot > 0 ? name.slice(dot) : ''
+      let counter = 1
+      do {
+        candidate = `${dir}/${base} (${counter})${ext}`
+        counter += 1
+      } while (usedZipPaths.has(candidate))
+      usedZipPaths.add(candidate)
+      return candidate
+    }
 
     const userDataPath = join(exportDir, 'user-data.json')
     await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
@@ -270,7 +288,7 @@ export async function GET(req: Request) {
               const baseDir = folderPath
                 ? `files/${folderPath}`
                 : `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
-              const zipPath = `${baseDir}/${safeName}`
+              const zipPath = uniqueZipPath(baseDir, safeName)
               try {
                 archive.file(filePath, { name: zipPath })
                 successfulFiles++

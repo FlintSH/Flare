@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
 
+import { UpdateFileSchema } from '@/types/dto/file'
 import { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
-import { isOrganizationEnabled } from '@/lib/organization'
 import { loggers } from '@/lib/logger'
+import { isOrganizationEnabled } from '@/lib/organization'
 import { getStorageProvider } from '@/lib/storage'
-
-import { UpdateFileSchema } from '@/types/dto/file'
 
 const logger = loggers.files
 
@@ -60,10 +59,7 @@ export async function PATCH(
         select: { id: true },
       })
       if (!folder) {
-        return NextResponse.json(
-          { error: 'Folder not found' },
-          { status: 404 }
-        )
+        return NextResponse.json({ error: 'Folder not found' }, { status: 404 })
       }
     }
 

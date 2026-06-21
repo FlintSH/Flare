@@ -1,5 +1,6 @@
 'use client'
 
+import type { ViewMode } from '@/types/components/file'
 import { FolderTree, LayoutGrid, List } from 'lucide-react'
 
 import {
@@ -10,8 +11,6 @@ import {
 } from '@/components/ui/tooltip'
 
 import { cn } from '@/lib/utils'
-
-import type { ViewMode } from '@/types/components/file'
 
 interface ViewSwitcherProps {
   value: ViewMode

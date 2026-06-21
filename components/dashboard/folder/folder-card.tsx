@@ -1,8 +1,9 @@
 'use client'
 
+import type { FolderTreeNode } from '@/types/components/folder'
 import {
-  FolderInput,
   Folder as FolderIcon,
+  FolderInput,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -19,8 +20,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { FolderTreeNode } from '@/types/components/folder'
 
 interface FolderCardProps {
   folder: FolderTreeNode

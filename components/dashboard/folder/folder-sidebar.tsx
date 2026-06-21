@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 
+import type { FolderTreeNode } from '@/types/components/folder'
 import {
   ChevronRight,
   Files,
-  FolderInput,
   Folder as FolderIcon,
+  FolderInput,
   FolderPlus,
   MoreHorizontal,
   Pencil,
@@ -24,8 +25,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { FolderTreeNode } from '@/types/components/folder'
 
 export interface FolderSidebarProps {
   tree: FolderTreeNode[]
@@ -54,7 +53,12 @@ function FolderNode({
   depth: number
 } & Pick<
   FolderSidebarProps,
-  'selectedFolderId' | 'onSelect' | 'onCreateChild' | 'onRename' | 'onMove' | 'onDelete'
+  | 'selectedFolderId'
+  | 'onSelect'
+  | 'onCreateChild'
+  | 'onRename'
+  | 'onMove'
+  | 'onDelete'
 >) {
   const [expanded, setExpanded] = useState(false)
   const classes = getColorClasses(node.color)
@@ -77,7 +81,10 @@ function FolderNode({
             aria-label={expanded ? 'Collapse' : 'Expand'}
           >
             <ChevronRight
-              className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')}
+              className={cn(
+                'h-3.5 w-3.5 transition-transform',
+                expanded && 'rotate-90'
+              )}
             />
           </button>
         ) : (

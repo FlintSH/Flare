@@ -21,13 +21,13 @@ import {
 } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ViewSwitcher } from '@/components/dashboard/file-grid/view-switcher'
+import { EditTagsDialog } from '@/components/dashboard/file/edit-tags-dialog'
 import { FolderBreadcrumb } from '@/components/dashboard/folder/folder-breadcrumb'
 import { FolderCard } from '@/components/dashboard/folder/folder-card'
 import { FolderDialog } from '@/components/dashboard/folder/folder-dialog'
 import { FolderFilter } from '@/components/dashboard/folder/folder-filter'
 import { FolderSidebar } from '@/components/dashboard/folder/folder-sidebar'
 import { MoveToFolderDialog } from '@/components/dashboard/folder/move-to-folder-dialog'
-import { EditTagsDialog } from '@/components/dashboard/file/edit-tags-dialog'
 import { ManageTagsDialog } from '@/components/dashboard/tag/manage-tags-dialog'
 import { TagFilter } from '@/components/dashboard/tag/tag-filter'
 import { EmptyPlaceholder } from '@/components/shared/empty-placeholder'
@@ -42,7 +42,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-import { getDescendantIds, getBreadcrumb } from '@/lib/folders/tree'
+import { getBreadcrumb, getDescendantIds } from '@/lib/folders/tree'
 
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileSelection } from '@/hooks/use-file-selection'
@@ -54,10 +54,7 @@ interface FileGridProps {
   organizationEnabled?: boolean
 }
 
-function findNode(
-  nodes: FolderTreeNode[],
-  id: string
-): FolderTreeNode | null {
+function findNode(nodes: FolderTreeNode[], id: string): FolderTreeNode | null {
   for (const node of nodes) {
     if (node.id === id) return node
     const found = findNode(node.children, id)
@@ -434,9 +431,7 @@ export function FileGrid({ organizationEnabled = false }: FileGridProps) {
       onRequestEditTags={(f) => setEditTagsFile(f)}
       onTagClick={(tagId) =>
         setTags(
-          filters.tags.includes(tagId)
-            ? filters.tags
-            : [...filters.tags, tagId]
+          filters.tags.includes(tagId) ? filters.tags : [...filters.tags, tagId]
         )
       }
       onDelete={handleDelete}

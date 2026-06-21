@@ -2,7 +2,13 @@
 
 import { useState } from 'react'
 
-import { ChevronRight, Folder as FolderIcon, FolderInput, Home } from 'lucide-react'
+import type { FolderTreeNode } from '@/types/components/folder'
+import {
+  ChevronRight,
+  Folder as FolderIcon,
+  FolderInput,
+  Home,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -14,8 +20,6 @@ import {
 
 import { getColorClasses } from '@/lib/organization/colors'
 import { cn } from '@/lib/utils'
-
-import type { FolderTreeNode } from '@/types/components/folder'
 
 interface MoveToFolderDialogProps {
   open: boolean

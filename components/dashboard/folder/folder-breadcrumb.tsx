@@ -1,10 +1,9 @@
 'use client'
 
+import type { FolderBreadcrumbItem } from '@/types/components/folder'
 import { ChevronRight, Home } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-
-import type { FolderBreadcrumbItem } from '@/types/components/folder'
 
 interface FolderBreadcrumbProps {
   items: FolderBreadcrumbItem[]

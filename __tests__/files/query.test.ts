@@ -26,7 +26,9 @@ describe('buildFileWhere', () => {
   })
 
   it('filters by mime types', () => {
-    const where = buildFileWhere('user-1', { types: ['image/png', 'image/gif'] })
+    const where = buildFileWhere('user-1', {
+      types: ['image/png', 'image/gif'],
+    })
     expect(where.AND).toContainEqual({
       mimeType: { in: ['image/png', 'image/gif'] },
     })

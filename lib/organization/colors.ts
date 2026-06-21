@@ -15,7 +15,8 @@ interface ColorClasses {
 const COLOR_MAP: Record<OrganizationColor, ColorClasses> = {
   slate: {
     dot: 'bg-slate-400',
-    badge: 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30',
+    badge:
+      'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30',
     icon: 'text-slate-400',
   },
   red: {
@@ -77,7 +78,9 @@ const DEFAULT_CLASSES: ColorClasses = {
 }
 
 function isOrganizationColor(value: string | null): value is OrganizationColor {
-  return value !== null && (ORGANIZATION_COLORS as readonly string[]).includes(value)
+  return (
+    value !== null && (ORGANIZATION_COLORS as readonly string[]).includes(value)
+  )
 }
 
 export function getColorClasses(color: string | null): ColorClasses {
