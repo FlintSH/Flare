@@ -27,6 +27,8 @@ model User {
   shortenedUrls               ShortenedUrl[]
   defaultFileExpiration       FileExpiration @default(DISABLED)
   defaultFileExpirationAction ExpiryAction   @default(DELETE)
+  folders                     Folder[]
+  tags                        Tag[]
 }
 
 model File {
@@ -46,7 +48,57 @@ model File {
   ocrConfidence  Float?
   views          Int            @default(0)
   downloads      Int            @default(0)
+  folderId       String?
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder         Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  tags           FileTag[]
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([userId, folderId])
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  color     String?
+  userId    String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  files     File[]
+
+  @@unique([userId, parentId, name])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String
+  color     String?
+  userId    String
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files     FileTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model FileTag {
+  fileId     String
+  tagId      String
+  assignedAt DateTime @default(now())
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+  @@index([fileId])
+  @@index([tagId])
 }
 
 model ShortenedUrl {

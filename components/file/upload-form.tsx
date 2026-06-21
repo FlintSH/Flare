@@ -10,6 +10,10 @@ import { format } from 'date-fns'
 import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import { Plus } from 'lucide-react'
+
+import { TagBadge } from '@/components/dashboard/tag/tag-badge'
+import { TagPicker } from '@/components/dashboard/tag/tag-picker'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -27,14 +31,29 @@ import {
 import { formatBytes } from '@/lib/utils'
 
 import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
+import { useFolders } from '@/hooks/use-folders'
+import { useTags } from '@/hooks/use-tags'
+
+import type { FolderTreeNode } from '@/types/components/folder'
 
 interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
+  organizationEnabled?: boolean
   user: {
     defaultFileExpiration: $Enums.FileExpiration | null
     defaultFileExpirationAction: $Enums.ExpiryAction | null
   }
+}
+
+function flattenFolders(
+  nodes: FolderTreeNode[],
+  depth: number
+): { id: string; name: string; depth: number }[] {
+  return nodes.flatMap((node) => [
+    { id: node.id, name: node.name, depth },
+    ...flattenFolders(node.children, depth + 1),
+  ])
 }
 
 const getDefaultExpiryDate = (unit: $Enums.FileExpiration | null) => {
@@ -66,6 +85,7 @@ const getDefaultExpiryDate = (unit: $Enums.FileExpiration | null) => {
 export function UploadForm({
   maxSize,
   formattedMaxSize,
+  organizationEnabled = false,
   user,
 }: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
@@ -82,10 +102,28 @@ export function UploadForm({
     setPassword,
     expiresAt,
     setExpiresAt,
+    folderId,
+    setFolderId,
+    tags: selectedTagIds,
+    setTags: setSelectedTagIds,
   } = useFileUpload({
     maxSize,
     expiresAt: getDefaultExpiryDate(user.defaultFileExpiration),
   })
+
+  const { tree } = useFolders({ enabled: organizationEnabled })
+  const { tags, createTag } = useTags({ enabled: organizationEnabled })
+
+  const flatFolders = flattenFolders(tree, 0)
+  const selectedTags = tags.filter((t) => selectedTagIds.includes(t.id))
+
+  const toggleTag = (tagId: string) => {
+    setSelectedTagIds(
+      selectedTagIds.includes(tagId)
+        ? selectedTagIds.filter((t) => t !== tagId)
+        : [...selectedTagIds, tagId]
+    )
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -183,6 +221,59 @@ export function UploadForm({
             </SelectContent>
           </Select>
         </div>
+
+        {organizationEnabled && (
+          <>
+            <div className="space-y-2">
+              <Label>Folder (Optional)</Label>
+              <Select
+                value={folderId ?? 'none'}
+                onValueChange={(value) =>
+                  setFolderId(value === 'none' ? null : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="No folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No folder</SelectItem>
+                  {flatFolders.map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {'\u00A0'.repeat(folder.depth * 2)}
+                      {folder.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags (Optional)</Label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {selectedTags.map((tag) => (
+                  <TagBadge
+                    key={tag.id}
+                    name={tag.name}
+                    color={tag.color}
+                    onRemove={() => toggleTag(tag.id)}
+                  />
+                ))}
+                <TagPicker
+                  tags={tags}
+                  selectedIds={selectedTagIds}
+                  onToggle={toggleTag}
+                  onCreate={(name) => createTag({ name })}
+                  trigger={
+                    <Button variant="outline" size="sm" className="gap-1.5 h-7">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add tag
+                    </Button>
+                  }
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="space-y-2">
           <Label>Password Protection (Optional)</Label>

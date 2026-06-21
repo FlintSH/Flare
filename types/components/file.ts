@@ -1,3 +1,14 @@
+export interface FileTagInfo {
+  id: string
+  name: string
+  color: string | null
+}
+
+export interface FileFolderInfo {
+  id: string
+  name: string
+}
+
 export interface FileType {
   id: string
   name: string
@@ -10,6 +21,9 @@ export interface FileType {
   views: number
   downloads: number
   expiresAt?: string | null
+  folderId: string | null
+  folder: FileFolderInfo | null
+  tags: FileTagInfo[]
 }
 
 export interface PaginationInfo {
@@ -28,6 +42,10 @@ export type SortOption =
   | 'least-viewed'
   | 'most-downloaded'
   | 'least-downloaded'
+  | 'name-asc'
+  | 'name-desc'
+
+export type ViewMode = 'grid' | 'list' | 'folder'
 
 export interface FileFilterOptions {
   page: number
@@ -38,6 +56,9 @@ export interface FileFilterOptions {
   visibility: string[]
   dateFrom: string | null
   dateTo: string | null
+  folderId: string | null
+  tags: string[]
+  viewMode: ViewMode
 }
 
 export interface FileFilter {
@@ -46,4 +67,6 @@ export interface FileFilter {
   visibility: string[]
   dateFrom: string | null
   dateTo: string | null
+  folderId: string | null
+  tags: string[]
 }

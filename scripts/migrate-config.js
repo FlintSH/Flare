@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 const DEFAULT_CONFIG = {
-  version: '1.1.0',
+  version: '1.2.0',
   settings: {
     general: {
       setup: {
@@ -39,6 +39,9 @@ const DEFAULT_CONFIG = {
         showFooter: true,
       },
       ocr: {
+        enabled: true,
+      },
+      organization: {
         enabled: true,
       },
     },
@@ -94,19 +97,33 @@ async function migrateConfig() {
     }
 
     const currentConfig = config.value
+    let configChanged = false
+
     if (!currentConfig.settings?.general?.ocr) {
       currentConfig.settings.general.ocr = {
         enabled: true,
       }
       currentConfig.version = '1.1.0'
+      configChanged = true
+      console.log('Added OCR settings to config')
+    }
 
+    if (!currentConfig.settings?.general?.organization) {
+      currentConfig.settings.general.organization = {
+        enabled: true,
+      }
+      currentConfig.version = '1.2.0'
+      configChanged = true
+      console.log('Added organization settings to config')
+    }
+
+    if (configChanged) {
       await prisma.config.update({
         where: { key: 'flare_config' },
         data: {
           value: currentConfig,
         },
       })
-      console.log('Added OCR settings to config')
     }
 
     console.log('Config migrations completed successfully')

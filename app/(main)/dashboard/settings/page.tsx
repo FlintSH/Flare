@@ -1166,6 +1166,47 @@ export default function SettingsPage() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle>File Organization</CardTitle>
+                  <CardDescription>
+                    Enable folders and tags so users can organize their uploads
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Folders &amp; Tags</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Adds folders, tags, and extra dashboard views. When
+                        off, Flare stays a pure screenshot host and all
+                        organization UI is hidden.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isFieldChanged('general', [
+                        'organization',
+                        'enabled',
+                      ]) && <ChangeIndicator />}
+                      <Switch
+                        checked={
+                          workingConfig.settings.general.organization.enabled
+                        }
+                        onCheckedChange={(checked) =>
+                          handleSettingChange('general', {
+                            organization: { enabled: checked },
+                          })
+                        }
+                        className={getFieldClasses('general', [
+                          'organization',
+                          'enabled',
+                        ])}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle>Credits</CardTitle>
                   <CardDescription>
                     Manage footer credits visibility
