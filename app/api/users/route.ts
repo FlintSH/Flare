@@ -72,7 +72,15 @@ export async function POST(req: Request) {
 
     const json = await req.json()
 
-    const result = UserSchema.safeParse(json)
+    const normalizedPost = {
+      ...json,
+      vanityId:
+        json.vanityId === undefined
+          ? undefined
+          : json.vanityId?.trim?.() || null,
+    }
+
+    const result = UserSchema.safeParse(normalizedPost)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
@@ -148,7 +156,15 @@ export async function PUT(req: Request) {
 
     const json = await req.json()
 
-    const result = UserSchema.safeParse(json)
+    const normalized = {
+      ...json,
+      vanityId:
+        json.vanityId === undefined
+          ? undefined
+          : json.vanityId?.trim?.() || null,
+    }
+
+    const result = UserSchema.safeParse(normalized)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
@@ -177,7 +193,6 @@ export async function PUT(req: Request) {
     }
 
     if (body.vanityId !== undefined && body.vanityId !== null) {
-      // Check vanityId doesn't collide with another user's vanityId
       const existingVanity = await prisma.user.findUnique({
         where: { vanityId: body.vanityId },
       })
@@ -188,7 +203,6 @@ export async function PUT(req: Request) {
         )
       }
 
-      // Check vanityId doesn't collide with any user's urlId
       const existingVanityAsUrlId = await prisma.user.findUnique({
         where: { urlId: body.vanityId },
       })
@@ -196,6 +210,115 @@ export async function PUT(req: Request) {
         return apiError(
           'This vanity URL conflicts with an existing URL ID',
           HTTP_STATUS.BAD_REQUEST
+        )
+      }
+    }
+
+    if (body.urlId && body.urlId !== existingUser.urlId) {
+      try {
+        const storageProvider = await getStorageProvider()
+        const oldPath = `uploads/${existingUser.urlId}`
+        const newPath = `uploads/${body.urlId}`
+        await storageProvider.renameFolder(oldPath, newPath)
+
+        try {
+          await prisma.$transaction(async (tx) => {
+            const files = await tx.file.findMany({
+              where: { userId: body.id },
+              select: { id: true, path: true, urlPath: true },
+            })
+
+            for (const file of files) {
+              await tx.file.update({
+                where: { id: file.id },
+                data: {
+                  path: file.path.replace(`${oldPath}/`, `${newPath}/`),
+                  urlPath: file.urlPath.replace(
+                    `/${existingUser.urlId}/`,
+                    `/${body.urlId}/`
+                  ),
+                },
+              })
+            }
+
+            await tx.user.update({
+              where: { id: body.id! },
+              data: {
+                updatedAt: new Date(),
+                ...(body.name !== undefined && { name: body.name }),
+                ...(body.email !== undefined && { email: body.email }),
+                ...(body.role !== undefined && { role: body.role }),
+                ...(body.password && {
+                  password: await hash(body.password, 10),
+                }),
+                urlId: body.urlId,
+                ...(body.vanityId !== undefined && {
+                  vanityId: body.vanityId || null,
+                }),
+              },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+                role: true,
+                urlId: true,
+                vanityId: true,
+                storageUsed: true,
+                _count: {
+                  select: {
+                    files: true,
+                    shortenedUrls: true,
+                  },
+                },
+              },
+            })
+          })
+        } catch (dbError) {
+          logger.error(
+            'DB update failed after storage rename, attempting rollback',
+            dbError as Error
+          )
+          try {
+            await storageProvider.renameFolder(newPath, oldPath)
+          } catch (rollbackError) {
+            logger.error(
+              'Storage rollback failed — manual intervention required',
+              rollbackError as Error
+            )
+          }
+          return apiError(
+            'Failed to update file references',
+            HTTP_STATUS.INTERNAL_SERVER_ERROR
+          )
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: body.id! },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            role: true,
+            urlId: true,
+            vanityId: true,
+            storageUsed: true,
+            _count: {
+              select: {
+                files: true,
+                shortenedUrls: true,
+              },
+            },
+          },
+        })
+
+        return apiResponse<UserResponse>(user!)
+      } catch (error) {
+        logger.error('Error renaming user folder', error as Error)
+        return apiError(
+          'Failed to rename user folder',
+          HTTP_STATUS.INTERNAL_SERVER_ERROR
         )
       }
     }
@@ -210,39 +333,6 @@ export async function PUT(req: Request) {
       ...(body.vanityId !== undefined && {
         vanityId: body.vanityId || null,
       }),
-    }
-
-    if (body.urlId && body.urlId !== existingUser.urlId) {
-      try {
-        const storageProvider = await getStorageProvider()
-        const oldPath = `uploads/${existingUser.urlId}`
-        const newPath = `uploads/${body.urlId}`
-        await storageProvider.renameFolder(oldPath, newPath)
-
-        const files = await prisma.file.findMany({
-          where: { userId: body.id },
-          select: { id: true, path: true, urlPath: true },
-        })
-
-        for (const file of files) {
-          await prisma.file.update({
-            where: { id: file.id },
-            data: {
-              path: file.path.replace(`${oldPath}/`, `${newPath}/`),
-              urlPath: file.urlPath.replace(
-                `/${existingUser.urlId}/`,
-                `/${body.urlId}/`
-              ),
-            },
-          })
-        }
-      } catch (error) {
-        logger.error('Error renaming user folder', error as Error)
-        return apiError(
-          'Failed to rename user folder',
-          HTTP_STATUS.INTERNAL_SERVER_ERROR
-        )
-      }
     }
 
     const user = await prisma.user.update({

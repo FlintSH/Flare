@@ -18,7 +18,15 @@ export async function PUT(req: Request) {
 
     const json = await req.json()
 
-    const result = UpdateProfileSchema.safeParse(json)
+    const normalized = {
+      ...json,
+      vanityId:
+        json.vanityId === undefined
+          ? undefined
+          : json.vanityId?.trim?.() || null,
+    }
+
+    const result = UpdateProfileSchema.safeParse(normalized)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }

@@ -37,7 +37,7 @@ export interface UserFormData {
   password?: string
   role: 'ADMIN' | 'USER'
   urlId?: string
-  vanityId?: string
+  vanityId?: string | null
 }
 
 export interface UseUserManagementOptions {

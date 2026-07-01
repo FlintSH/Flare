@@ -470,11 +470,15 @@ export function UserList() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
+      const submitData = {
+        ...formData,
+        vanityId: formData.vanityId?.trim() || null,
+      }
       if (editingUser) {
-        await updateUser(editingUser.id, formData)
+        await updateUser(editingUser.id, submitData)
         await notifyUserOfChanges(editingUser.id)
       } else {
-        await createUser(formData)
+        await createUser(submitData)
       }
       setIsDialogOpen(false)
     } catch (error) {
