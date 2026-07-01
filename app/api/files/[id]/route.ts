@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
 
+import { UpdateFileSchema } from '@/types/dto/file'
+import { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { getServerSession } from 'next-auth'
-import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { isOrganizationEnabled } from '@/lib/organization'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
@@ -18,14 +20,10 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const schema = z.object({
-      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-      password: z.string().nullable().optional(),
-    })
-    const result = schema.safeParse(body)
+    const result = UpdateFileSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: 'Invalid request body' },
+        { error: result.error.issues[0]?.message || 'Invalid request body' },
         { status: 400 }
       )
     }
@@ -47,18 +45,37 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const {
-      visibility,
-      password,
-    }: {
-      visibility?: 'PUBLIC' | 'PRIVATE'
-      password?: string | null
-    } = result.data
+    const { visibility, password, folderId, tagIds } = result.data
 
-    const updates: {
-      visibility?: 'PUBLIC' | 'PRIVATE'
-      password?: string | null
-    } = {}
+    const orgEnabled =
+      folderId !== undefined || tagIds !== undefined
+        ? await isOrganizationEnabled()
+        : false
+
+    // Validate folder ownership before touching anything.
+    if (orgEnabled && folderId) {
+      const folder = await prisma.folder.findFirst({
+        where: { id: folderId, userId: session.user.id },
+        select: { id: true },
+      })
+      if (!folder) {
+        return NextResponse.json({ error: 'Folder not found' }, { status: 404 })
+      }
+    }
+
+    // Validate that any provided tags belong to the user.
+    let validTagIds: string[] = []
+    if (orgEnabled && tagIds !== undefined) {
+      if (tagIds.length > 0) {
+        const owned = await prisma.tag.findMany({
+          where: { id: { in: tagIds }, userId: session.user.id },
+          select: { id: true },
+        })
+        validTagIds = owned.map((t) => t.id)
+      }
+    }
+
+    const updates: Prisma.FileUpdateInput = {}
 
     if (visibility) {
       updates.visibility = visibility
@@ -68,9 +85,26 @@ export async function PATCH(
       updates.password = password ? await hash(password, 10) : null
     }
 
-    const updatedFile = await prisma.file.update({
-      where: { id },
-      data: updates,
+    if (orgEnabled && folderId !== undefined) {
+      updates.folder = folderId
+        ? { connect: { id: folderId } }
+        : { disconnect: true }
+    }
+
+    const updatedFile = await prisma.$transaction(async (tx) => {
+      if (orgEnabled && tagIds !== undefined) {
+        // Full replacement of the file's tags.
+        await tx.fileTag.deleteMany({ where: { fileId: id } })
+        if (validTagIds.length > 0) {
+          await tx.fileTag.createMany({
+            data: validTagIds.map((tagId) => ({ fileId: id, tagId })),
+          })
+        }
+      }
+      return tx.file.update({
+        where: { id },
+        data: updates,
+      })
     })
 
     return NextResponse.json(updatedFile)

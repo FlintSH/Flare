@@ -13,21 +13,26 @@ import {
   Download,
   Eye,
   EyeOff,
+  Folder as FolderIcon,
+  FolderInput,
   Globe,
   KeyRound,
   Link as LinkIcon,
   Lock,
   ScanText,
+  Tags,
   Timer,
   Trash2,
 } from 'lucide-react'
 
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
+import { TagBadge } from '@/components/dashboard/tag/tag-badge'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Icons } from '@/components/shared/icons'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -52,9 +57,26 @@ import { useToast } from '@/hooks/use-toast'
 interface FileCardProps {
   file: FileType
   onDelete?: (id: string) => void
+  organizationEnabled?: boolean
+  selectable?: boolean
+  selected?: boolean
+  onSelectChange?: (id: string, selected: boolean) => void
+  onRequestMove?: (file: FileType) => void
+  onRequestEditTags?: (file: FileType) => void
+  onTagClick?: (tagId: string) => void
 }
 
-export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
+export function FileCard({
+  file: initialFile,
+  onDelete,
+  organizationEnabled = false,
+  selectable = false,
+  selected = false,
+  onSelectChange,
+  onRequestMove,
+  onRequestEditTags,
+  onTagClick,
+}: FileCardProps) {
   const { toast } = useToast()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
@@ -250,9 +272,28 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const isImage = file.mimeType.startsWith('image/')
 
   return (
-    <Card className="group relative overflow-hidden bg-background/40 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-black/10 transition-all duration-300 hover:bg-background/60">
+    <Card
+      className={`group relative overflow-hidden bg-background/40 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl hover:shadow-black/10 transition-all duration-300 hover:bg-background/60 ${
+        selected ? 'ring-2 ring-primary border-primary/60' : ''
+      }`}
+    >
       {}
       <div className="relative">
+        {selectable && (
+          <div
+            className={`absolute top-2 left-2 z-10 transition-opacity ${
+              selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <div className="rounded-md bg-background/80 backdrop-blur-sm p-1 shadow-sm">
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(value) => onSelectChange?.(file.id, value)}
+                aria-label={selected ? 'Deselect file' : 'Select file'}
+              />
+            </div>
+          </div>
+        )}
         <Link href={sanitizeUrl(file.urlPath)} className="block">
           {isImage ? (
             <div className="relative aspect-square">
@@ -355,6 +396,36 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                 </TooltipTrigger>
                 <TooltipContent>Password protect</TooltipContent>
               </Tooltip>
+              {organizationEnabled && onRequestMove && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-8 w-8 glass-hover"
+                      onClick={() => onRequestMove(initialFile)}
+                    >
+                      <FolderInput className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Move to folder</TooltipContent>
+                </Tooltip>
+              )}
+              {organizationEnabled && onRequestEditTags && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-8 w-8 glass-hover"
+                      onClick={() => onRequestEditTags(initialFile)}
+                    >
+                      <Tags className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit tags</TooltipContent>
+                </Tooltip>
+              )}
               {isImage && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -515,7 +586,30 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
             <Download className="mr-1 h-3 w-3" />
             {file.downloads}
           </div>
+          {organizationEnabled && initialFile.folder && (
+            <div className="flex items-center min-w-0">
+              <FolderIcon className="mr-1 h-3 w-3 shrink-0" />
+              <span className="truncate">{initialFile.folder.name}</span>
+            </div>
+          )}
         </div>
+        {organizationEnabled && initialFile.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {initialFile.tags.slice(0, 3).map((tag) => (
+              <TagBadge
+                key={tag.id}
+                name={tag.name}
+                color={tag.color}
+                onClick={onTagClick ? () => onTagClick(tag.id) : undefined}
+              />
+            ))}
+            {initialFile.tags.length > 3 && (
+              <span className="text-xs text-muted-foreground self-center">
+                +{initialFile.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {}

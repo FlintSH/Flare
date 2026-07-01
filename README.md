@@ -20,6 +20,7 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
+- 🗂️ **Folders & Tags** - Optional, opt-in organization for your uploads with grid, list, and folder dashboard views, filtering, and bulk actions (stays out of your way by default)
 - 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**

@@ -121,6 +121,9 @@ export async function POST(req: Request) {
           ocr: {
             enabled: true,
           },
+          organization: {
+            enabled: true,
+          },
         },
         appearance: {
           theme: 'dark',

@@ -3,7 +3,6 @@ import {
   FileUploadResponse,
   FileVisibility,
 } from '@/types/dto/file'
-import { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { join } from 'path'
 
@@ -21,9 +20,12 @@ import {
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { buildFileOrderBy, buildFileWhere } from '@/lib/files/query'
+import { fileListSelect, serializeFile } from '@/lib/files/serialize'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+import { resolveUploadOrganization } from '@/lib/organization/upload'
 import { validateFileType } from '@/lib/security/file-validation'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { getStorageProvider } from '@/lib/storage'
@@ -153,6 +155,12 @@ export async function POST(req: Request) {
 
     const { displayName, urlPath, mimeType, size, urlSafeName } = upload
 
+    const { folderId, tagIds } = await resolveUploadOrganization(
+      user.id,
+      fields.folderId || null,
+      fields.tags ? fields.tags.split(',') : undefined
+    )
+
     // Validate the real file type against the claimed MIME using only the header
     // bytes read back from storage, so we never buffer the whole file in memory.
     const headStream = await storageProvider.getFileStream(filePath, {
@@ -191,6 +199,10 @@ export async function POST(req: Request) {
           visibility,
           password: password ? await hash(password, 10) : null,
           userId: user.id,
+          folderId,
+          ...(tagIds.length > 0 && {
+            tags: { create: tagIds.map((tagId) => ({ tagId })) },
+          }),
         },
       })
 
@@ -285,96 +297,21 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '24')
-    const search = searchParams.get('search') || ''
     const sortBy = searchParams.get('sortBy') || 'newest'
-    const types = searchParams.get('types')?.split(',') || []
-    const dateFrom = searchParams.get('dateFrom')
-    const dateTo = searchParams.get('dateTo')
-    const visibilityFilters = searchParams.get('visibility')?.split(',') || []
     const offset = (page - 1) * limit
 
-    const where: Prisma.FileWhereInput = {
-      userId: user.id,
-    }
+    const where = buildFileWhere(user.id, {
+      search: searchParams.get('search') || '',
+      types: searchParams.get('types')?.split(',').filter(Boolean) || [],
+      dateFrom: searchParams.get('dateFrom'),
+      dateTo: searchParams.get('dateTo'),
+      visibility:
+        searchParams.get('visibility')?.split(',').filter(Boolean) || [],
+      folderId: searchParams.get('folderId') ?? undefined,
+      tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
+    })
 
-    const conditions: Prisma.FileWhereInput[] = []
-
-    if (search) {
-      conditions.push({
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { ocrText: { contains: search, mode: 'insensitive' } },
-        ],
-      })
-    }
-
-    if (types.length > 0) {
-      conditions.push({ mimeType: { in: types } })
-    }
-
-    if (dateFrom || dateTo) {
-      const dateFilter: Prisma.DateTimeFilter = {}
-      if (dateFrom) {
-        const startDate = new Date(dateFrom)
-        dateFilter.gte = startDate
-      }
-      if (dateTo) {
-        const endDate = new Date(dateTo)
-        endDate.setHours(23, 59, 59, 999)
-        dateFilter.lte = endDate
-      }
-      conditions.push({ uploadedAt: dateFilter })
-    }
-
-    if (visibilityFilters.length > 0) {
-      const visibilityConditions = []
-
-      for (const filter of visibilityFilters) {
-        if (filter === 'hasPassword') {
-          visibilityConditions.push({ password: { not: null } })
-        } else {
-          visibilityConditions.push({
-            visibility: filter.toUpperCase() as 'PUBLIC' | 'PRIVATE',
-          })
-        }
-      }
-
-      conditions.push({ OR: visibilityConditions })
-    }
-
-    if (conditions.length > 0) {
-      where.AND = conditions
-    }
-
-    const orderBy: Prisma.FileOrderByWithRelationInput = {}
-    switch (sortBy) {
-      case 'oldest':
-        orderBy.uploadedAt = 'asc'
-        break
-      case 'largest':
-        orderBy.size = 'desc'
-        break
-      case 'smallest':
-        orderBy.size = 'asc'
-        break
-      case 'most-viewed':
-        orderBy.views = 'desc'
-        break
-      case 'least-viewed':
-        orderBy.views = 'asc'
-        break
-      case 'most-downloaded':
-        orderBy.downloads = 'desc'
-        break
-      case 'least-downloaded':
-        orderBy.downloads = 'asc'
-        break
-      case 'name':
-        orderBy.name = 'asc'
-        break
-      default:
-        orderBy.uploadedAt = 'desc'
-    }
+    const orderBy = buildFileOrderBy(sortBy)
 
     const total = await prisma.file.count({ where })
 
@@ -383,35 +320,15 @@ export async function GET(request: Request) {
       orderBy,
       take: limit,
       skip: offset,
-      select: {
-        id: true,
-        name: true,
-        urlPath: true,
-        mimeType: true,
-        size: true,
-        uploadedAt: true,
-        visibility: true,
-        password: true,
-        views: true,
-        downloads: true,
-        user: {
-          select: {
-            urlId: true,
-          },
-        },
-      },
+      select: fileListSelect,
     })
 
-    const filesList = (await Promise.all(
+    const filesList: FileMetadata[] = await Promise.all(
       files.map(async (file) => {
         const expiresAt = await getFileExpirationInfo(file.id)
-        return {
-          ...file,
-          hasPassword: Boolean(file.password),
-          expiresAt,
-        }
+        return serializeFile(file, expiresAt)
       })
-    )) as (FileMetadata & { expiresAt: Date | null })[]
+    )
 
     const pagination = {
       total,

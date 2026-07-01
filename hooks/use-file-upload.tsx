@@ -25,6 +25,8 @@ export type FileUploadOptions = {
   visibility?: 'PUBLIC' | 'PRIVATE'
   password?: string
   expiresAt?: Date | null
+  folderId?: string | null
+  tags?: string[]
   onUploadComplete?: (responses: UploadResponse[]) => void
   onUploadError?: (error: string) => void
 }
@@ -41,6 +43,10 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const [expiresAt, setExpiresAt] = useState<Date | null>(
     options.expiresAt || null
   )
+  const [folderId, setFolderId] = useState<string | null>(
+    options.folderId ?? null
+  )
+  const [tags, setTags] = useState<string[]>(options.tags ?? [])
   const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -238,6 +244,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             visibility,
             password: password || null,
             expiresAt: expiresAt?.toISOString() || null,
+            folderId,
+            tags,
           }),
         }
       )
@@ -260,6 +268,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     formData.append('visibility', visibility)
     if (password) formData.append('password', password)
     if (expiresAt) formData.append('expiresAt', expiresAt.toISOString())
+    if (folderId) formData.append('folderId', folderId)
+    if (tags.length > 0) formData.append('tags', tags.join(','))
 
     const xhr = new XMLHttpRequest()
     return await new Promise<UploadResponse>((resolve, reject) => {
@@ -417,5 +427,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setPassword,
     expiresAt,
     setExpiresAt,
+    folderId,
+    setFolderId,
+    tags,
+    setTags,
   }
 }

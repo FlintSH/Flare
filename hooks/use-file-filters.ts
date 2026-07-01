@@ -6,7 +6,19 @@ import {
   FileFilter,
   FileFilterOptions,
   SortOption,
+  ViewMode,
 } from '@/types/components/file'
+
+const VIEW_STORAGE_KEY = 'flare:dashboard:view'
+const VALID_VIEWS: ViewMode[] = ['grid', 'list', 'folder']
+
+function readStoredView(): ViewMode | null {
+  if (typeof window === 'undefined') return null
+  const stored = window.localStorage.getItem(VIEW_STORAGE_KEY)
+  return stored && VALID_VIEWS.includes(stored as ViewMode)
+    ? (stored as ViewMode)
+    : null
+}
 
 export function useFileFilters(
   options: {
@@ -18,16 +30,27 @@ export function useFileFilters(
   const router = useRouter()
   const defaultLimit = options.defaultLimit || 24
 
-  const [filters, setFilters] = useState<FileFilterOptions>({
-    search: searchParams.get('search') || '',
-    types: searchParams.get('types')?.split(',').filter(Boolean) || [],
-    dateFrom: searchParams.get('dateFrom'),
-    dateTo: searchParams.get('dateTo'),
-    visibility:
-      searchParams.get('visibility')?.split(',').filter(Boolean) || [],
-    sortBy: (searchParams.get('sortBy') as SortOption) || 'newest',
-    page: parseInt(searchParams.get('page') || '1'),
-    limit: parseInt(searchParams.get('limit') || defaultLimit.toString()),
+  const [filters, setFilters] = useState<FileFilterOptions>(() => {
+    const viewParam = searchParams.get('view') as ViewMode | null
+    const initialView =
+      viewParam && VALID_VIEWS.includes(viewParam)
+        ? viewParam
+        : readStoredView() || 'grid'
+
+    return {
+      search: searchParams.get('search') || '',
+      types: searchParams.get('types')?.split(',').filter(Boolean) || [],
+      dateFrom: searchParams.get('dateFrom'),
+      dateTo: searchParams.get('dateTo'),
+      visibility:
+        searchParams.get('visibility')?.split(',').filter(Boolean) || [],
+      sortBy: (searchParams.get('sortBy') as SortOption) || 'newest',
+      page: parseInt(searchParams.get('page') || '1'),
+      limit: parseInt(searchParams.get('limit') || defaultLimit.toString()),
+      folderId: searchParams.get('folderId'),
+      tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
+      viewMode: initialView,
+    }
   })
 
   useEffect(() => {
@@ -43,6 +66,13 @@ export function useFileFilters(
     if (filters.page !== 1) params.set('page', filters.page.toString())
     if (filters.limit !== defaultLimit)
       params.set('limit', filters.limit.toString())
+    if (filters.folderId) params.set('folderId', filters.folderId)
+    if (filters.tags.length) params.set('tags', filters.tags.join(','))
+    if (filters.viewMode !== 'grid') params.set('view', filters.viewMode)
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, filters.viewMode)
+    }
 
     const newParamsString = params.toString()
     const currentParamsString = new URLSearchParams(
@@ -92,8 +122,20 @@ export function useFileFilters(
     setFilters((prev) => ({ ...prev, limit, page: 1 }))
   }, [])
 
+  const setFolderId = useCallback((folderId: string | null) => {
+    setFilters((prev) => ({ ...prev, folderId, page: 1 }))
+  }, [])
+
+  const setTags = useCallback((tags: string[]) => {
+    setFilters((prev) => ({ ...prev, tags, page: 1 }))
+  }, [])
+
+  const setViewMode = useCallback((viewMode: ViewMode) => {
+    setFilters((prev) => ({ ...prev, viewMode }))
+  }, [])
+
   const resetFilters = useCallback(() => {
-    setFilters({
+    setFilters((prev) => ({
       search: '',
       types: [],
       dateFrom: null,
@@ -102,7 +144,10 @@ export function useFileFilters(
       sortBy: 'newest' as SortOption,
       page: 1,
       limit: defaultLimit,
-    })
+      folderId: null,
+      tags: [],
+      viewMode: prev.viewMode,
+    }))
   }, [defaultLimit])
 
   return {
@@ -114,6 +159,9 @@ export function useFileFilters(
     setSortBy,
     setPage,
     setLimit,
+    setFolderId,
+    setTags,
+    setViewMode,
     resetFilters,
   }
 }

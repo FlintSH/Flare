@@ -25,6 +25,8 @@ type FileData = {
   ocrText: string | null
   isPaste: boolean
   path: string
+  folderId: string | null
+  tags: { tag: { name: string } }[]
 }
 
 type ShortenedUrlData = {
@@ -34,6 +36,12 @@ type ShortenedUrlData = {
   createdAt: Date
 }
 
+type FolderData = {
+  id: string
+  name: string
+  parentId: string | null
+}
+
 type UserData = {
   id: string
   name: string | null
@@ -41,7 +49,27 @@ type UserData = {
   createdAt: Date
   updatedAt: Date
   files: FileData[]
+  folders: FolderData[]
+  tags: { name: string; color: string | null }[]
   shortenedUrls: ShortenedUrlData[]
+}
+
+// Builds a filesystem-safe folder path (e.g. "Screenshots/2024") for a file's
+// folder by walking up the parent chain.
+function buildFolderPath(
+  folderId: string | null,
+  foldersById: Map<string, FolderData>
+): string {
+  if (!folderId) return ''
+  const parts: string[] = []
+  const seen = new Set<string>()
+  let current = foldersById.get(folderId)
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    parts.unshift(current.name.replace(/[\\/]/g, '_'))
+    current = current.parentId ? foldersById.get(current.parentId) : undefined
+  }
+  return parts.join('/')
 }
 
 export const dynamic = 'force-dynamic'
@@ -93,7 +121,15 @@ export async function GET(req: Request) {
             ocrText: true,
             isPaste: true,
             path: true,
+            folderId: true,
+            tags: { select: { tag: { select: { name: true } } } },
           },
+        },
+        folders: {
+          select: { id: true, name: true, parentId: true },
+        },
+        tags: {
+          select: { name: true, color: true },
         },
         shortenedUrls: {
           select: {
@@ -117,7 +153,33 @@ export async function GET(req: Request) {
       createdAt: userData.createdAt,
       updatedAt: userData.updatedAt,
       files: userData.files,
+      folders: userData.folders,
+      tags: userData.tags,
       shortenedUrls: userData.shortenedUrls,
+    }
+
+    const foldersById = new Map<string, FolderData>(
+      userData.folders.map((f) => [f.id, f])
+    )
+
+    // Guards against two files sharing a name within the same export directory.
+    const usedZipPaths = new Set<string>()
+    const uniqueZipPath = (dir: string, name: string): string => {
+      let candidate = `${dir}/${name}`
+      if (!usedZipPaths.has(candidate)) {
+        usedZipPaths.add(candidate)
+        return candidate
+      }
+      const dot = name.lastIndexOf('.')
+      const base = dot > 0 ? name.slice(0, dot) : name
+      const ext = dot > 0 ? name.slice(dot) : ''
+      let counter = 1
+      do {
+        candidate = `${dir}/${base} (${counter})${ext}`
+        counter += 1
+      } while (usedZipPaths.has(candidate))
+      usedZipPaths.add(candidate)
+      return candidate
     }
 
     const userDataPath = join(exportDir, 'user-data.json')
@@ -222,7 +284,11 @@ export async function GET(req: Request) {
 
             if (filePath) {
               const safeName = sanitizeDisplayName(file.name)
-              const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${safeName}`
+              const folderPath = buildFolderPath(file.folderId, foldersById)
+              const baseDir = folderPath
+                ? `files/${folderPath}`
+                : `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
+              const zipPath = uniqueZipPath(baseDir, safeName)
               try {
                 archive.file(filePath, { name: zipPath })
                 successfulFiles++

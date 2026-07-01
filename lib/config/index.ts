@@ -62,6 +62,11 @@ export const configSchema = z.object({
       ocr: z.object({
         enabled: z.boolean().default(true),
       }),
+      organization: z
+        .object({
+          enabled: z.boolean().default(true),
+        })
+        .default({ enabled: true }),
     }),
     appearance: z.object({
       theme: z.string(),
@@ -115,6 +120,9 @@ export const DEFAULT_CONFIG: FlareConfig = {
         showFooter: true,
       },
       ocr: {
+        enabled: true,
+      },
+      organization: {
         enabled: true,
       },
     },
@@ -240,6 +248,10 @@ export async function updateConfig(
           ocr: {
             ...currentConfig.settings.general.ocr,
             ...(newConfig.settings?.general?.ocr || {}),
+          },
+          organization: {
+            ...currentConfig.settings.general.organization,
+            ...(newConfig.settings?.general?.organization || {}),
           },
         },
         appearance: {

@@ -9,6 +9,8 @@ export const PUBLIC_PATHS = [
   '/api/setup/check',
   '/api/health',
   '/api/files',
+  '/api/folders',
+  '/api/tags',
   '/api/urls',
   '/api/storage/type',
   '/auth/login',
