@@ -9,6 +9,12 @@ I currently maintain security updates for:
 | 1.x.x   | :white_check_mark: |
 | < 1.0   | :x:                |
 
+# DO NOT OPEN AI GENERATED SECURITY ADVISORIES IN THIS REPOSITORY
+
+There has been an extreme uptick in AI generated security advisories being submitted for Flare that are either not real security issues or just flat out wrong. I am someone who is optimistic about AI and use it in my daily workflows, but please do not use it to larp as a security researcher and waste my free, unpaid time validating your advisory. It will not be met with kindly.
+
+Please ensure that all advisories are opened with a full **manual** validation of the issue and a demonstrated full understanding by you, the reporter. Please do not waste my time.
+
 ## Reporting a Vulnerability
 
 Found a security issue in Flare? Thanks for looking out! You can report it in two ways:
