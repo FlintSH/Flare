@@ -44,7 +44,7 @@ runStorageProviderContract(
 // presigned-URL streaming (createWriteStream / multipart). Example:
 //   TEST_S3_ENDPOINT=http://localhost:9000 TEST_S3_BUCKET=flare-test \
 //   TEST_S3_REGION=us-east-1 TEST_S3_ACCESS_KEY=... TEST_S3_SECRET_KEY=... \
-//   TEST_S3_FORCE_PATH_STYLE=true npm test
+//   TEST_S3_FORCE_PATH_STYLE=true pnpm test
 const realS3Configured = Boolean(
   process.env.TEST_S3_BUCKET &&
     process.env.TEST_S3_REGION &&

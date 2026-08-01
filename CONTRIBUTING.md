@@ -34,9 +34,11 @@ Given that AI written code is such a contentious topic in 2025, I want to make i
 
 Flare is (by design) pretty easy to develop for. Since the backend and frontend are bundled together as one Next.JS server, everything is pretty plug and play. To get going you just need a Postgres instance running, Docker and Node.js.
 
+Flare uses [pnpm](https://pnpm.io) and Node.js 22.13 or newer. The exact pnpm version is pinned in `package.json`, and pnpm switches to it automatically, so any recent pnpm will do. If you don't have it yet, `corepack enable pnpm` is the quickest way to get started.
+
 ```bash
 # intall deps
-npm install
+pnpm install
 
 # setup db (using docker, optional)
 docker run --name flare-db -e POSTGRES_PASSWORD=postgres -d -p 5432:5432 postgres:16
@@ -46,11 +48,13 @@ cp .env.example .env
 # edit .env with your connection string and a auth secret
 
 # run any db migrations
-npx prisma migrate dev
+pnpm prisma migrate dev
 
 # start flare dev server
-npm run dev
+pnpm dev
 ```
+
+Note that pnpm only exposes packages you actually declare in `package.json`. If an import fails to resolve that worked under npm, the dependency is genuinely missing and should be added rather than worked around.
 
 ## Making Commits
 

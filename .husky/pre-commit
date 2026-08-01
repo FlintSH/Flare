@@ -3,28 +3,28 @@
 
 # Format staged files
 echo "🔍 Formatting staged files..."
-bunx lint-staged
+pnpm lint-staged
 
 # Stage the formatted files
 git add .
 
 # Run a lint check
 echo "🧹 Running lint check..."
-bun lint || (
+pnpm lint || (
     echo "❌ Lint check failed. Please fix the issues and commit again."
     exit 1
 )
 
 # Run formatter and auto-fix any issues
 echo "✨ Running formatter and auto-fixing..."
-bunx prettier --write "**/*.{ts,tsx,js,jsx,json,md}"
+pnpm format
 
 # Stage any newly formatted files
 git add .
 
 # Run a final format check to ensure everything is properly formatted
 echo "🔍 Verifying format..."
-bunx prettier --check "**/*.{ts,tsx,js,jsx,json,md}" || (
+pnpm format:check || (
     echo "❌ Formatting verification failed. Please commit again."
     exit 1
 )

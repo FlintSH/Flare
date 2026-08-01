@@ -6,8 +6,11 @@ const nextConfig: NextConfig = {
     reactCompiler: true,
   },
   serverExternalPackages: ['tesseract.js'],
+  // Scoped to the OCR core package on purpose: a bare `node_modules/**` glob
+  // walks pnpm's symlinked store and exhausts the heap while collecting build
+  // traces. tesseract.js-core is a direct dependency so this path is stable.
   outputFileTracingIncludes: {
-    '/api/**/*': ['./node_modules/**/*.wasm', './node_modules/**/*.proto'],
+    '/api/**/*': ['./node_modules/tesseract.js-core/**/*.wasm'],
   },
   async headers() {
     return [

@@ -16,24 +16,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Must run before setup-node so the pnpm store can be located for caching.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: 'pnpm'
 
       - name: Install dependencies
         uses: nick-fields/retry@v2
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: npm ci
+          command: pnpm install --frozen-lockfile
 
       - name: Type Check
-        run: npx tsc --noEmit
+        run: pnpm tsc --noEmit
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Check formatting
-        run: npx prettier --check "**/*.{ts,tsx,js,jsx,json,md}"
+        run: pnpm format:check

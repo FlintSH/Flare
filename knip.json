@@ -9,7 +9,9 @@
   ],
   "project": ["**/*.{ts,tsx}"],
   "ignoreDependencies": [
+    "eslint",
     "eslint-config-next",
+    "tesseract.js-core",
     "postcss",
     "tailwindcss",
     "typescript"

@@ -11,23 +11,24 @@
   "bugs": {
     "url": "https://github.com/FlintSH/flare/issues"
   },
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "dev": "next dev --turbopack",
-    "postinstall": "npx prisma generate",
+    "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "format": "npx prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "format:check": "npx prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install",
-    "knip": "npx knip",
-    "knip:exports": "npx knip --exports",
-    "knip:deps": "npx knip --dependencies",
-    "knip:files": "npx knip --files",
-    "knip:prod": "npx knip --production",
-    "knip:fix": "npx knip --fix"
+    "knip": "knip",
+    "knip:exports": "knip --exports",
+    "knip:deps": "knip --dependencies",
+    "knip:files": "knip --files",
+    "knip:prod": "knip --production",
+    "knip:fix": "knip --fix"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
@@ -101,10 +102,12 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^6.0.1",
+    "tesseract.js-core": "^6.0.0",
     "uuid": "^14.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/busboy": "^1.5.4",
     "@types/node": "^20.19.9",
@@ -113,6 +116,7 @@
     "@types/uuid": "^10.0.0",
     "aws-sdk-client-mock": "^4.1.0",
     "babel-plugin-react-compiler": "^19.0.0-beta-ebf51a3-20250411",
+    "eslint": "^9.35.0",
     "eslint-config-next": "^15.4.4",
     "husky": "^8.0.3",
     "knip": "^5.62.0",

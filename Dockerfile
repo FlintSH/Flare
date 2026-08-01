@@ -3,17 +3,28 @@ FROM node:lts AS deps
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# Corepack provisions the exact pnpm version pinned in package.json's
+# "packageManager" field. HUSKY=0 stops the prepare script from trying to
+# install git hooks, since .git isn't part of the build context.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV HUSKY=0
+RUN corepack enable pnpm
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma ./prisma
 
-# Install dependencies
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
-RUN npx prisma generate
+RUN pnpm prisma generate
 
 # Stage 2: Builder
 FROM node:lts AS builder
 WORKDIR /app
+
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV HUSKY=0
+RUN corepack enable pnpm
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY . .
@@ -23,7 +34,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # Build the application
-RUN npm run build
+RUN pnpm build
 
 # Stage 3: Runner
 FROM node:lts AS runner
@@ -31,6 +42,17 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# start.sh shells out to pnpm as the unprivileged nextjs user, so Corepack's
+# cache is placed somewhere world-readable and warmed at build time. Otherwise
+# pnpm would land in root's cache and the container would need network access on
+# every boot. node_modules is baked into the image, so pnpm's staleness check is
+# disabled to keep `pnpm start` from attempting an install at runtime.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV COREPACK_HOME=/usr/local/corepack
+ENV npm_config_verify_deps_before_run=false
+ENV HUSKY=0
+RUN corepack enable pnpm
 
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 --gid nodejs nextjs
@@ -46,6 +68,8 @@ RUN mkdir -p /app/uploads && \
 # Copy necessary files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
@@ -53,6 +77,10 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/scripts/start.sh ./start.sh
+
+# Pre-download pnpm into the shared Corepack cache and make it readable by the
+# unprivileged runtime user.
+RUN corepack install && chmod -R a+rX /usr/local/corepack
 
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app

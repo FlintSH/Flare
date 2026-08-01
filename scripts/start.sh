@@ -8,7 +8,7 @@ wait_for_db() {
     
     while [ $counter -lt $max_retries ]
     do
-        if npx prisma migrate deploy 2>/dev/null; then
+        if pnpm prisma migrate deploy 2>/dev/null; then
             echo "Database is ready!"
             return 0
         fi
@@ -32,14 +32,14 @@ fi
 
 # Run migrations
 echo "Running database migrations..."
-if ! npx prisma migrate deploy; then
+if ! pnpm prisma migrate deploy; then
     echo "Failed to run migrations"
     exit 1
 fi
 
 # Generate Prisma Client if needed
 echo "Ensuring Prisma Client is generated..."
-if ! npx prisma generate; then
+if ! pnpm prisma generate; then
     echo "Failed to generate Prisma Client"
     exit 1
 fi
@@ -60,4 +60,4 @@ fi
 
 # Start the application
 echo "Starting the application..."
-exec npm run start
+exec pnpm start

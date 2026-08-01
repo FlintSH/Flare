@@ -1,0 +1,15 @@
+# pnpm settings live here rather than in package.json as of pnpm 11.
+#
+# pnpm blocks dependency lifecycle scripts by default as a supply-chain
+# safeguard, and fails the install if any are unreviewed. These packages
+# genuinely need theirs: the Prisma packages download query/schema engines,
+# sharp and the resolvers install native binaries, and tesseract.js sets up its
+# OCR worker assets. Anything not listed here stays blocked.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  oxc-resolver: true
+  prisma: true
+  sharp: true
+  tesseract.js: true
+  unrs-resolver: true
