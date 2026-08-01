@@ -19,7 +19,7 @@ Contributing to the app is pretty simple, I try to keep the rules pretty straigh
 
 ## AI Usage
 
-Given that AI written code is such a contentious topic in 2025, I want to make it explicitly clear for this repository: **AI written code is totally fine for Flare, just be responsible.**
+Given that AI written code is such a contentious topic, I want to make it explicitly clear for this repository: **AI written code is totally fine for Flare, just be responsible.**
 
 **Being responsible means**:
 
