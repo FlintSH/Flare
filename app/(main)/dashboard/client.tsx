@@ -2,14 +2,10 @@
 
 import { FileGrid } from '@/components/dashboard/file-grid'
 
-interface DashboardClientProps {
-  organizationEnabled: boolean
-}
-
-export function DashboardClient({ organizationEnabled }: DashboardClientProps) {
+export function DashboardClient() {
   return (
     <div className="container space-y-6">
-      <FileGrid organizationEnabled={organizationEnabled} />
+      <FileGrid />
     </div>
   )
 }

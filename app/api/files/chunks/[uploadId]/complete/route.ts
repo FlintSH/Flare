@@ -11,7 +11,6 @@ import { prisma } from '@/lib/database/prisma'
 import { scheduleFileExpiration } from '@/lib/events/handlers/file-expiry'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
-import { resolveUploadOrganization } from '@/lib/organization/upload'
 import { validateFileType } from '@/lib/security/file-validation'
 import { validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -110,18 +109,11 @@ export async function POST(
     }
 
     const body = await req.json()
-    const { parts, expiresAt, folderId, tags } = body
+    const { parts, expiresAt } = body
 
     if (!Array.isArray(parts)) {
       return NextResponse.json({ error: 'Invalid parts data' }, { status: 400 })
     }
-
-    const { folderId: resolvedFolderId, tagIds } =
-      await resolveUploadOrganization(
-        user.id,
-        typeof folderId === 'string' ? folderId : null,
-        Array.isArray(tags) ? tags : undefined
-      )
 
     const storageProvider = await getStorageProvider()
     await storageProvider.completeMultipartUpload(
@@ -196,12 +188,6 @@ export async function POST(
               id: metadata.userId,
             },
           },
-          ...(resolvedFolderId && {
-            folder: { connect: { id: resolvedFolderId } },
-          }),
-          ...(tagIds.length > 0 && {
-            tags: { create: tagIds.map((tagId) => ({ tagId })) },
-          }),
         },
       })
 

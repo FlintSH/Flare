@@ -34,7 +34,6 @@ export default async function UploadPage() {
   const maxSizeBytes =
     value * (unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
   const formattedMaxSize = formatBytes(maxSizeBytes)
-  const organizationEnabled = config.settings.general.organization.enabled
 
   return (
     <div className="container space-y-6">
@@ -55,7 +54,6 @@ export default async function UploadPage() {
             user={user}
             maxSize={maxSizeBytes}
             formattedMaxSize={formattedMaxSize}
-            organizationEnabled={organizationEnabled}
           />
         </div>
       </div>
