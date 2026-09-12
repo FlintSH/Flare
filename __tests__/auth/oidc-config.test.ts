@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { isOidcProviderConfigured } from '@/lib/auth'
 import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
+import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 
 const complete = {
   enabled: true,
@@ -28,6 +29,57 @@ describe('isOidcProviderConfigured', () => {
   })
 })
 
+describe('OIDC configuration migration', () => {
+  it('defaults to SSO disabled when an older configuration has no OIDC settings', () => {
+    const { oidc, ...generalWithoutOidc } = DEFAULT_CONFIG.settings.general
+    const parsed = configSchema.parse({
+      ...DEFAULT_CONFIG,
+      settings: {
+        ...DEFAULT_CONFIG.settings,
+        general: {
+          ...generalWithoutOidc,
+          registrations: { enabled: false, disabledMessage: 'Invite only' },
+        },
+      },
+    })
+
+    expect(parsed.settings.general.oidc).toEqual(oidc)
+    expect(parsed.settings.general.oidc).toMatchObject({
+      enabled: false,
+      autoProvision: true,
+      requireEmailVerified: true,
+      enforceSso: false,
+    })
+    expect(parsed.settings.general.oidc).not.toHaveProperty('allowLinking')
+    expect(parsed.settings.general.registrations).toEqual({
+      enabled: false,
+      disabledMessage: 'Invite only',
+    })
+  })
+
+  it('discards persisted allowLinking while preserving the other SSO policies', () => {
+    const currentOidc = {
+      ...complete,
+      autoProvision: false,
+      requireEmailVerified: false,
+      enforceSso: true,
+    }
+    const parsed = configSchema.parse({
+      ...DEFAULT_CONFIG,
+      settings: {
+        ...DEFAULT_CONFIG.settings,
+        general: {
+          ...DEFAULT_CONFIG.settings.general,
+          oidc: { ...currentOidc, allowLinking: true },
+        },
+      },
+    })
+
+    expect(parsed.settings.general.oidc).toEqual(currentOidc)
+    expect(parsed.settings.general.oidc).not.toHaveProperty('allowLinking')
+  })
+})
+
 describe('getOidcErrorMessage', () => {
   const knownCodes = [
     'OidcNoEmail',
@@ -46,6 +98,14 @@ describe('getOidcErrorMessage', () => {
   it('returns distinct messages for every known error code', () => {
     const messages = knownCodes.map(getOidcErrorMessage)
     expect(new Set(messages).size).toBe(knownCodes.length)
+  })
+
+  it('directs account collisions to local sign-in or the previously linked identity', () => {
+    const message = getOidcErrorMessage('OidcAccountExists')
+
+    expect(message).toContain('local sign-in')
+    expect(message).toContain('previously linked SSO identity')
+    expect(message).not.toContain('linking is disabled')
   })
 
   it('falls back to a generic message for an unrecognized code', () => {

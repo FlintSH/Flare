@@ -104,7 +104,6 @@ export async function POST(req: Request) {
             clientSecret: '',
             buttonText: 'Sign in with SSO',
             autoProvision: true,
-            allowLinking: true,
             requireEmailVerified: true,
             enforceSso: false,
           },

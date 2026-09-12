@@ -1348,39 +1348,11 @@ export default function SettingsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label>Link Existing Accounts</Label>
-                          <p className="text-sm text-muted-foreground">
-                            If the provider&apos;s email matches an existing
-                            local account, sign in as that account instead of
-                            rejecting the login
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isFieldChanged('general', [
-                            'oidc',
-                            'allowLinking',
-                          ]) && <ChangeIndicator />}
-                          <Switch
-                            checked={
-                              workingConfig.settings.general.oidc.allowLinking
-                            }
-                            onCheckedChange={(checked) =>
-                              handleSettingChange('general', {
-                                oidc: {
-                                  ...workingConfig.settings.general.oidc,
-                                  allowLinking: checked,
-                                },
-                              })
-                            }
-                            className={getFieldClasses('general', [
-                              'oidc',
-                              'allowLinking',
-                            ])}
-                          />
-                        </div>
-                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        SSO identities are not automatically linked to existing
+                        accounts by email. Existing users must use local sign-in
+                        or their previously linked SSO identity.
+                      </p>
 
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">

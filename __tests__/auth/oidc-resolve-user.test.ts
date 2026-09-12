@@ -25,7 +25,6 @@ type OidcProfile = Parameters<typeof resolveOidcUser>[0]
 function makeConfig(overrides: Partial<OidcConfig> = {}): OidcConfig {
   return {
     autoProvision: true,
-    allowLinking: true,
     requireEmailVerified: true,
     ...overrides,
   }
@@ -48,6 +47,9 @@ const dbUser = {
   role: 'USER' as const,
   image: null,
   sessionVersion: 1,
+  password: null,
+  emailVerified: new Date('2026-01-01T00:00:00Z'),
+  oidcSubject: 'idp-subject-1',
 }
 
 beforeEach(() => {
@@ -72,6 +74,8 @@ describe('resolveOidcUser', () => {
     expect(mocks.userFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { oidcSubject: 'idp-subject-1' } })
     )
+    expect(mocks.userUpdate).not.toHaveBeenCalled()
+    expect(mocks.createUser).not.toHaveBeenCalled()
   })
 
   it('rejects with no_email when the provider omits an email', async () => {
@@ -85,16 +89,15 @@ describe('resolveOidcUser', () => {
     expect(result).toEqual({ ok: false, reason: 'no_email' })
   })
 
-  it.each([true, false])(
-    'rejects unverified email before any email-based lookup (allowLinking=%s)',
-    async (allowLinking) => {
+  it.each([false, null, undefined])(
+    'rejects unverified email before any email-based lookup (email_verified=%s)',
+    async (emailVerified) => {
       mocks.userFindUnique.mockResolvedValueOnce(null) // oidcSubject lookup misses
 
       const result = await resolveOidcUser(
-        makeProfile({ email_verified: false }),
+        makeProfile({ email_verified: emailVerified }),
         makeConfig({
           requireEmailVerified: true,
-          allowLinking,
           autoProvision: true,
         })
       )
@@ -106,57 +109,64 @@ describe('resolveOidcUser', () => {
     }
   )
 
-  it('links to an existing account when linking is allowed and email is verified', async () => {
-    const linkedUser = { ...dbUser, id: 'linked-user-id' }
-    mocks.userFindUnique
-      .mockResolvedValueOnce(null) // oidcSubject lookup misses
-      .mockResolvedValueOnce(dbUser) // email lookup hits
-    mocks.userUpdate.mockResolvedValueOnce(linkedUser)
+  it.each([
+    {
+      account: 'an unverified local account with a preclaimed email',
+      user: {
+        ...dbUser,
+        password: 'attacker-controlled-password-hash',
+        emailVerified: null,
+        oidcSubject: null,
+      },
+    },
+    {
+      account: 'a verified local account',
+      user: {
+        ...dbUser,
+        password: 'existing-password-hash',
+        oidcSubject: null,
+      },
+    },
+    {
+      account: 'an account linked to a different SSO subject',
+      user: { ...dbUser, oidcSubject: 'previous-idp-subject' },
+    },
+  ])(
+    'rejects an email match for $account without modifying it',
+    async ({ user }) => {
+      const originalUser = { ...user }
+      mocks.userFindUnique
+        .mockResolvedValueOnce(null) // oidcSubject lookup misses
+        .mockResolvedValueOnce(user) // email lookup hits
 
-    const result = await resolveOidcUser(
-      makeProfile({ email_verified: true }),
-      makeConfig({ allowLinking: true, requireEmailVerified: true })
-    )
+      const result = await resolveOidcUser(makeProfile(), makeConfig())
 
-    expect(result).toEqual({
-      ok: true,
-      user: expect.objectContaining({ id: linkedUser.id }),
-    })
-    expect(mocks.userUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: dbUser.id },
-        data: { oidcSubject: 'idp-subject-1' },
-      })
-    )
-  })
+      expect(result).toEqual({ ok: false, reason: 'account_exists' })
+      expect(mocks.userFindUnique).toHaveBeenCalledTimes(2)
+      expect(mocks.userFindUnique).toHaveBeenLastCalledWith(
+        expect.objectContaining({ where: { email: 'user@example.com' } })
+      )
+      expect(mocks.userUpdate).not.toHaveBeenCalled()
+      expect(mocks.createUser).not.toHaveBeenCalled()
+      expect(mocks.transaction).not.toHaveBeenCalled()
+      expect(user).toEqual(originalUser)
+    }
+  )
 
-  it('links without a verified email when requireEmailVerified is disabled', async () => {
+  it('rejects an email match even when email verification is disabled', async () => {
     mocks.userFindUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(dbUser)
-    mocks.userUpdate.mockResolvedValueOnce(dbUser)
 
     const result = await resolveOidcUser(
       makeProfile({ email_verified: undefined }),
-      makeConfig({ allowLinking: true, requireEmailVerified: false })
-    )
-
-    expect(result.ok).toBe(true)
-    expect(mocks.userUpdate).toHaveBeenCalled()
-  })
-
-  it('rejects with account_exists when a match is found but linking is disabled', async () => {
-    mocks.userFindUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(dbUser)
-
-    const result = await resolveOidcUser(
-      makeProfile({ email_verified: true }),
-      makeConfig({ allowLinking: false })
+      makeConfig({ requireEmailVerified: false })
     )
 
     expect(result).toEqual({ ok: false, reason: 'account_exists' })
     expect(mocks.userUpdate).not.toHaveBeenCalled()
+    expect(mocks.createUser).not.toHaveBeenCalled()
+    expect(mocks.transaction).not.toHaveBeenCalled()
   })
 
   it('auto-provisions a new user when no match exists, falling back to the email prefix for name', async () => {

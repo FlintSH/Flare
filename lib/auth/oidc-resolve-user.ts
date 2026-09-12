@@ -13,7 +13,6 @@ export interface OidcProfile {
 
 export interface OidcConfig {
   autoProvision: boolean
-  allowLinking: boolean
   requireEmailVerified: boolean
 }
 
@@ -73,17 +72,10 @@ export async function resolveOidcUser(
   })
 
   if (existingByEmail) {
-    if (!config.allowLinking) {
-      return { ok: false, reason: 'account_exists' }
-    }
-
-    const linked = await prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: { oidcSubject: profile.sub },
-      select: userSelect,
-    })
-
-    return { ok: true, user: toResolvedUser(linked) }
+    // A verified IdP email proves neither ownership of the local account nor
+    // continuity with its existing SSO identity. Linking needs a separate flow
+    // that authenticates both accounts; never attach or replace a subject here.
+    return { ok: false, reason: 'account_exists' }
   }
 
   if (!config.autoProvision) {

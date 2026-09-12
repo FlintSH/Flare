@@ -117,7 +117,6 @@ export const authOptions: NextAuthOptions = {
 
       const result = await resolveOidcUser(scopedProfile, {
         autoProvision: oidcConfig.autoProvision,
-        allowLinking: oidcConfig.allowLinking,
         requireEmailVerified: oidcConfig.requireEmailVerified,
       })
 

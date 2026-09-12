@@ -107,6 +107,23 @@ Flare is built to be as configurable as possible. Head to `/dashboard/settings` 
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 
+### Single Sign-On (OIDC)
+
+Configure your identity provider in `/dashboard/settings`, with
+`https://your-flare-host/api/auth/callback/oidc` as its redirect URI. Keep a local
+administrator login available; `/auth/login?local=1` bypasses OIDC auto-login.
+
+SSO sign-in identifies accounts by the provider's issuer and subject, not email.
+New identities can create accounts when auto-provisioning is enabled and their
+email is unused. A matching email never links or replaces an existing account:
+local users must use password sign-in, and already linked users must use their
+original SSO identity. With auto-provisioning disabled, only already linked SSO
+identities can sign in; precreating a local account with the same email does not
+enable SSO. An explicit account-linking flow is not yet available.
+
+Older development configurations containing `allowLinking` are accepted, but
+that setting is ignored. Existing SSO links and local credentials are preserved.
+
 ## 📜 License
 
 Flare is licensed under the MIT License.
