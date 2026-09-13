@@ -1,0 +1,15 @@
+# Server routes, backend-only modules, tests and tooling are outside browser coverage.
+app/api/**
+**/route.ts
+scripts/**
+prisma/**
+lib/auth/**
+lib/database/**
+lib/middleware/**
+middleware.ts
+__tests__/**
+**/*.test.ts
+**/*.test.tsx
+**/*.config.ts
+**/*.config.js
+**/*.config.mjs
