@@ -1,10 +1,9 @@
-import React, { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 
-import { Search } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-
-import { useDebounce } from '@/hooks/use-debounce'
 
 interface SearchInputProps {
   onSearch: (value: string) => void
@@ -16,25 +15,51 @@ export const SearchInput = memo(function SearchInput({
   initialValue = '',
 }: SearchInputProps) {
   const [value, setValue] = useState(initialValue)
-  const debouncedSearch = useDebounce(value, 300)
+  const pendingSearch = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     setValue(initialValue)
+    clearTimeout(pendingSearch.current)
   }, [initialValue])
 
-  useEffect(() => {
-    onSearch(debouncedSearch)
-  }, [debouncedSearch, onSearch])
+  useEffect(() => () => clearTimeout(pendingSearch.current), [])
+
+  const updateSearch = (nextValue: string, immediate = false) => {
+    setValue(nextValue)
+    clearTimeout(pendingSearch.current)
+    if (immediate) {
+      onSearch(nextValue)
+    } else {
+      pendingSearch.current = setTimeout(() => onSearch(nextValue), 300)
+    }
+  }
 
   return (
-    <div className="relative flex-1">
-      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground z-10" />
-      <Input
-        placeholder="Search files..."
-        className="pl-9 bg-background/60 backdrop-blur-sm border-border/50 focus:bg-background/80 transition-all duration-200"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+    <div className="relative min-w-0 flex-1">
+      <Search
+        aria-hidden="true"
+        className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-muted-foreground"
       />
+      <Input
+        type="search"
+        aria-label="Search files by name"
+        placeholder="Search your files…"
+        className="h-10 rounded-xl bg-background pl-10 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
+        value={value}
+        onChange={(event) => updateSearch(event.target.value)}
+      />
+      {value && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1 h-8 w-8 rounded-lg"
+          aria-label="Clear file search"
+          onClick={() => updateSearch('', true)}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   )
 })

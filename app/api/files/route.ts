@@ -150,8 +150,13 @@ export async function GET(request: Request) {
         dateFilter.gte = startDate
       }
       if (dateTo) {
+        // The picker supplies the end of the selected day in the user's
+        // timezone. Preserve that instant instead of shifting it to server time.
         const endDate = new Date(dateTo)
-        endDate.setHours(23, 59, 59, 999)
+        // Keep date-only API requests inclusive of their final day.
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+          endDate.setHours(23, 59, 59, 999)
+        }
         dateFilter.lte = endDate
       }
       conditions.push({ uploadedAt: dateFilter })

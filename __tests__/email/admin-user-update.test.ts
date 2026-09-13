@@ -1,4 +1,4 @@
-import { POST, PUT } from '@/app/api/users/route'
+import { GET, POST, PUT } from '@/app/api/users/route'
 import type { User } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   createUser: vi.fn(),
   invalidateEmailTokens: vi.fn(),
   db: {
-    user: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     $transaction: vi.fn(),
   },
   tx: {
@@ -249,4 +249,94 @@ describe('administrator account update serialization', () => {
     expect(response.status).toBe(400)
     expect(mocks.tx.user.update).not.toHaveBeenCalled()
   })
+})
+
+describe('user directory', () => {
+  it('keeps directory search behind the administrator guard', async () => {
+    mocks.requireAdmin.mockResolvedValue({
+      response: new Response(null, { status: 403 }),
+    })
+    const response = await GET(
+      new Request('https://flare.example/api/users?search=person')
+    )
+    expect(response.status).toBe(403)
+    expect(mocks.db.user.findMany).not.toHaveBeenCalled()
+    expect(mocks.db.user.count).not.toHaveBeenCalled()
+  })
+
+  it('searches the complete directory with matching counts and safe public fields', async () => {
+    mocks.db.user.count.mockResolvedValue(26)
+    mocks.db.user.findMany.mockResolvedValue([])
+    const response = await GET(
+      new Request(
+        'https://flare.example/api/users?search=%20Jordan%20&role=USER&page=2&limit=25'
+      )
+    )
+    const body = await response.json()
+    expect(body.pagination).toEqual({
+      total: 26,
+      pageCount: 2,
+      page: 2,
+      limit: 25,
+    })
+    const query = mocks.db.user.findMany.mock.calls[0][0]
+    expect(query.where).toEqual({
+      role: 'USER',
+      OR: [
+        { name: { contains: 'Jordan', mode: 'insensitive' } },
+        { email: { contains: 'Jordan', mode: 'insensitive' } },
+      ],
+    })
+    expect(mocks.db.user.count).toHaveBeenCalledWith({ where: query.where })
+    expect(query.skip).toBe(25)
+    expect(query.take).toBe(25)
+    expect(query.select.password).toBeUndefined()
+    expect(query.select.uploadToken).toBeUndefined()
+  })
+
+  it.each([25, 0])(
+    'returns to the first page after the last row on page 2 is removed (total %s)',
+    async (total) => {
+      mocks.db.user.count.mockResolvedValue(total)
+      mocks.db.user.findMany.mockResolvedValue([])
+      const response = await GET(
+        new Request('https://flare.example/api/users?page=2&limit=25')
+      )
+      expect(response.status).toBe(200)
+      expect((await response.json()).pagination.page).toBe(1)
+      expect(mocks.db.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 25 })
+      )
+    }
+  )
+
+  it('bounds an oversized requested page before calculating its database offset', async () => {
+    mocks.db.user.count.mockResolvedValue(26)
+    mocks.db.user.findMany.mockResolvedValue([])
+    const response = await GET(
+      new Request(
+        'https://flare.example/api/users?page=9007199254740991&limit=25'
+      )
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).pagination.page).toBe(2)
+    expect(mocks.db.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 25, take: 25 })
+    )
+  })
+
+  it.each(['page=NaN&limit=-4', 'page=-2&limit=Infinity'])(
+    'recovers malformed pagination: %s',
+    async (query) => {
+      mocks.db.user.count.mockResolvedValue(0)
+      mocks.db.user.findMany.mockResolvedValue([])
+      const response = await GET(
+        new Request(`https://flare.example/api/users?${query}`)
+      )
+      expect(response.status).toBe(200)
+      expect(mocks.db.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 25 })
+      )
+    }
+  )
 })

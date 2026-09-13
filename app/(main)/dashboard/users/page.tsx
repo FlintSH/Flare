@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 
+import { WorkspacePage } from '@/components/dashboard/page-shell'
 import { UserList } from '@/components/dashboard/user-list'
 
 import { getPageSession } from '@/lib/auth/page-session'
@@ -12,23 +13,12 @@ export default async function UsersPage() {
   }
 
   return (
-    <div className="container space-y-6">
-      <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-        <div className="relative p-8">
-          <h1 className="text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage user accounts, roles, and permissions
-          </p>
-        </div>
-      </div>
-
-      <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-        <div className="relative p-8">
-          <UserList />
-        </div>
-      </div>
-    </div>
+    <WorkspacePage
+      eyebrow="Your instance"
+      title="Users"
+      description="A clear view of the people, access, and content on your instance."
+    >
+      <UserList />
+    </WorkspacePage>
   )
 }

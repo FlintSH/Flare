@@ -56,6 +56,7 @@ export function LoginForm({
     try {
       await signIn('oidc', { callbackUrl: '/dashboard' })
     } catch {
+      setError('Unable to start sign-in. Please try again.')
       setIsOidcLoading(false)
     }
   }
@@ -96,25 +97,7 @@ export function LoginForm({
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="space-y-2 text-center pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-        <p className="text-base text-muted-foreground">
-          {registrationsEnabled ? (
-            <>
-              Don&apos;t have an account?{' '}
-              <Link
-                href="/auth/register"
-                className="text-primary hover:text-primary/90 hover:underline transition-colors font-medium"
-              >
-                Sign up now
-              </Link>
-            </>
-          ) : (
-            disabledMessage || 'Registrations are currently disabled'
-          )}
-        </p>
-      </div>
+    <form onSubmit={onSubmit} aria-busy={isLoading || isOidcLoading}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium" htmlFor="email">
@@ -126,7 +109,7 @@ export function LoginForm({
             type="email"
             placeholder="name@example.com"
             required
-            disabled={isLoading}
+            disabled={isLoading || isOidcLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="email"
             autoFocus
@@ -142,7 +125,7 @@ export function LoginForm({
             type="password"
             placeholder="Enter your password"
             required
-            disabled={isLoading}
+            disabled={isLoading || isOidcLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="current-password"
           />
@@ -156,8 +139,14 @@ export function LoginForm({
           )}
         </div>
         {error && (
-          <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md flex items-center space-x-2">
-            <Icons.alertCircle className="h-4 w-4 flex-shrink-0" />
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-foreground"
+          >
+            <Icons.alertCircle
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            />
             <span>{error}</span>
           </div>
         )}
@@ -166,7 +155,7 @@ export function LoginForm({
         <Button
           type="submit"
           className="w-full h-11 font-medium bg-primary hover:bg-primary/90 transition-colors"
-          disabled={isLoading}
+          disabled={isLoading || isOidcLoading}
         >
           {isLoading ? (
             <>
@@ -182,19 +171,17 @@ export function LoginForm({
         <div className="pt-6 space-y-4">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-white/10" />
+              <span className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or
-              </span>
+              <span className="bg-card px-3 text-muted-foreground">Or</span>
             </div>
           </div>
           <Button
             type="button"
             variant="outline"
             className="w-full h-11 font-medium"
-            disabled={isOidcLoading}
+            disabled={isLoading || isOidcLoading}
             onClick={onOidcSignIn}
           >
             {isOidcLoading ? (
@@ -208,6 +195,22 @@ export function LoginForm({
           </Button>
         </div>
       )}
+      <div className="mt-6 border-t border-border/60 pt-5 text-center text-sm leading-relaxed text-muted-foreground">
+        {registrationsEnabled ? (
+          <>
+            New here?{' '}
+            <Link
+              href="/auth/register"
+              className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              Create an account
+            </Link>
+          </>
+        ) : (
+          disabledMessage ||
+          'Registration is closed. Contact your administrator for an account.'
+        )}
+      </div>
     </form>
   )
 }

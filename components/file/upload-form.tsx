@@ -7,12 +7,28 @@ import Image from 'next/image'
 import { ExpiryAction } from '@/types/events'
 import { $Enums } from '@prisma/client'
 import { format } from 'date-fns'
-import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowUpRight,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Copy,
+  File,
+  FolderOpen,
+  Loader2,
+  ShieldCheck,
+  Upload,
+  X,
+} from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import {
+  WorkspaceNote,
+  WorkspacePanel,
+} from '@/components/dashboard/page-shell'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -25,9 +41,10 @@ import {
 } from '@/components/ui/select'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
-import { formatBytes } from '@/lib/utils'
+import { cn, formatBytes } from '@/lib/utils'
 
-import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
+import { UploadResponse, useFileUpload } from '@/hooks/use-file-upload'
+import { useToast } from '@/hooks/use-toast'
 
 interface UploadFormProps {
   maxSize: number
@@ -44,12 +61,16 @@ export function UploadForm({
   user,
 }: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
-
+  const [completed, setCompleted] = useState<UploadResponse[]>([])
+  const [uploadError, setUploadError] = useState('')
+  const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const { toast } = useToast()
   const {
     files,
     isUploading,
     onDrop,
     removeFile,
+    clearFiles,
     uploadFiles,
     visibility,
     setVisibility,
@@ -63,188 +84,387 @@ export function UploadForm({
     setProfileId,
   } = useFileUpload({
     maxSize,
+    onUploadComplete: (responses) => {
+      setCompleted((previous) => [...responses, ...previous])
+      setUploadError('')
+    },
+    onUploadError: setUploadError,
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+    onDrop: (acceptedFiles, rejections) => {
+      onDrop(acceptedFiles)
+      setUploadError(
+        rejections.length
+          ? `${rejections.length} ${rejections.length === 1 ? 'file could' : 'files could'} not be added. Each file must be ${formattedMaxSize} or smaller.`
+          : ''
+      )
+    },
     maxSize,
+    disabled: isUploading,
   })
+  const totalSize = files.reduce((total, file) => total + file.size, 0)
+
+  const copyLinks = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedLink(value)
+      toast({ title: 'Copied to clipboard' })
+    } catch {
+      toast({
+        title: 'Could not copy link',
+        description: 'Open the file to copy its address.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   return (
-    <div className="space-y-8">
-      <Card
-        {...getRootProps()}
-        className={`p-8 border-2 border-dashed transition-colors ${
-          isDragActive ? 'border-primary bg-primary/5' : 'border-muted'
-        }`}
-      >
-        <input {...getInputProps()} />
-        <div className="flex flex-col items-center justify-center text-center">
-          <UploadIcon className="w-12 h-12 mb-4 text-muted-foreground" />
-          <p className="text-lg font-medium">
-            {isDragActive
-              ? 'Drop the files here'
-              : 'Drag and drop files here, or click to select files'}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Maximum file size: {formattedMaxSize}
-          </p>
-        </div>
-      </Card>
-
-      {files.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Selected Files</h2>
-          <div className="space-y-2">
-            {files.map((file: FileWithPreview, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-4 p-4 rounded-lg bg-muted"
-              >
-                {file.preview ? (
-                  <Image
-                    src={file.preview}
-                    alt={file.name}
-                    width={48}
-                    height={48}
-                    className="object-cover rounded"
-                  />
-                ) : (
-                  <FileIcon className="w-12 h-12 text-muted-foreground" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{file.name}</p>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      {file.uploaded !== undefined
-                        ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
-                        : formatBytes(file.size)}
-                    </p>
-                    {file.progress !== undefined && file.progress > 0 && (
-                      <Progress
-                        value={Math.min(file.progress, 100)}
-                        className="h-1"
-                      />
-                    )}
-                  </div>
-                </div>
-                {!isUploading && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeFile(index)}
-                  >
-                    <XIcon className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            ))}
+    <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-6">
+        <WorkspacePanel
+          title="Choose your files"
+          description="Add one file or a whole collection. Your sharing choices apply to every file in this upload."
+        >
+          <div
+            {...getRootProps({
+              role: 'button',
+              'aria-label': 'Choose files to upload',
+              'aria-disabled': isUploading,
+            })}
+            className={cn(
+              'flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/20 px-6 py-10 text-center outline-none transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              isDragActive && 'border-primary bg-primary/5',
+              isUploading && 'pointer-events-none opacity-60'
+            )}
+          >
+            <input {...getInputProps()} />
+            <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary">
+              <Upload className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <p className="text-lg font-semibold tracking-tight">
+              {isDragActive
+                ? 'Drop your files here'
+                : 'Drag files here to get started'}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Or select files from your device. Up to {formattedMaxSize} per
+              file.
+            </p>
+            <span className="mt-5 inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm font-medium shadow-sm">
+              <FolderOpen className="h-4 w-4" aria-hidden="true" /> Browse files
+            </span>
           </div>
-        </div>
-      )}
 
-      <div className="space-y-4">
-        <ProfilePicker
-          value={profileId}
-          onChange={setProfileId}
-          disabled={isUploading}
-        />
-        <div className="space-y-2">
-          <Label>Visibility</Label>
-          <Select
-            value={visibility || 'inherit'}
-            onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
-              setVisibility(value === 'inherit' ? undefined : value)
+          {uploadError && (
+            <div
+              role="alert"
+              className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{uploadError}</p>
+            </div>
+          )}
+
+          {files.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    {isUploading ? 'Uploading your files' : 'Ready to upload'}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {files.length} {files.length === 1 ? 'file' : 'files'} ·{' '}
+                    {formatBytes(totalSize)} total
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFiles}
+                  disabled={isUploading}
+                >
+                  Clear all
+                </Button>
+              </div>
+              <ul className="divide-y rounded-xl border">
+                {files.map((file, index) => (
+                  <li
+                    key={`${file.name}-${file.lastModified}-${index}`}
+                    className="flex items-center gap-3 p-3 sm:p-4"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                      {file.preview ? (
+                        <Image
+                          src={file.preview}
+                          alt=""
+                          width={44}
+                          height={44}
+                          className="h-11 w-11 object-cover"
+                        />
+                      ) : (
+                        <File
+                          className="h-5 w-5 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-sm font-medium"
+                        title={file.name}
+                      >
+                        {file.name}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {isUploading
+                          ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
+                          : formatBytes(file.size)}
+                      </p>
+                      {isUploading && (
+                        <Progress
+                          value={Math.min(file.progress, 100)}
+                          aria-label={`Upload progress for ${file.name}`}
+                          className="mt-2 h-1.5"
+                        />
+                      )}
+                    </div>
+                    {isUploading ? (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {Math.min(file.progress, 100)}%
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() => removeFile(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </WorkspacePanel>
+
+        {completed.length > 0 ? (
+          <WorkspacePanel
+            title="Your files are ready"
+            description="Upload complete. Open a file or copy its link to share."
+            action={
+              completed.length > 1 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    copyLinks(
+                      completed
+                        .map((file) => file.copyText || file.url)
+                        .join('\n')
+                    )
+                  }
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy all links
+                </Button>
+              ) : undefined
             }
           >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inherit">From upload profile</SelectItem>
-              <SelectItem value="PUBLIC">Public</SelectItem>
-              <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            <ul className="divide-y rounded-xl border">
+              {completed.map((file, index) => (
+                <li
+                  key={`${file.url}-${index}`}
+                  className="flex flex-wrap items-center gap-3 p-4"
+                >
+                  <CheckCircle2
+                    className="h-5 w-5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1 basis-40">
+                    <p
+                      className="truncate text-sm font-medium"
+                      title={file.name}
+                    >
+                      {file.name}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {file.url}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Copy link for ${file.name}`}
+                      onClick={() => copyLinks(file.copyText || file.url)}
+                    >
+                      {copiedLink === (file.copyText || file.url) ? (
+                        <Check className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Copy className="mr-2 h-4 w-4" />
+                      )}
+                      {copiedLink === (file.copyText || file.url)
+                        ? 'Copied'
+                        : 'Copy link'}
+                    </Button>
+                    <Button asChild variant="ghost" size="icon">
+                      <a
+                        href={file.pageUrl || file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${file.name}`}
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </WorkspacePanel>
+        ) : (
+          <WorkspaceNote icon={ShieldCheck} title="Share on your terms">
+            Use a saved upload profile for consistent defaults, or adjust access
+            and expiration for this batch. You can manage your files in the
+            library after uploading.
+          </WorkspaceNote>
+        )}
+      </div>
 
-        <div className="space-y-2">
-          <Label>Password Protection (Optional)</Label>
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Leave empty for no password"
+      <WorkspacePanel
+        title="Sharing & access"
+        description="Start with your saved defaults, then adjust this upload."
+        className="xl:sticky xl:top-24"
+      >
+        <div className="space-y-5">
+          <ProfilePicker
+            value={profileId}
+            onChange={setProfileId}
+            disabled={isUploading}
           />
-        </div>
-
-        <div className="space-y-2">
-          <Label>File Expiration (Optional)</Label>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full justify-start text-left font-normal"
-            onClick={() => setIsExpiryModalOpen(true)}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {expiresAt ? (
-              <span>Expires: {format(expiresAt, 'PPP p')}</span>
-            ) : expiresAt === null ? (
-              'No expiration for this upload'
-            ) : (
-              'From upload profile'
-            )}
-          </Button>
-
-          <div className="flex gap-3 text-xs">
-            <button
-              type="button"
-              className="underline underline-offset-4"
-              onClick={() => {
-                setExpiresAt(undefined)
-                setExpiryAction(undefined)
-              }}
+          <div className="space-y-2 border-t pt-5">
+            <Label htmlFor="upload-visibility">Who can open these files?</Label>
+            <Select
+              value={visibility || 'inherit'}
+              disabled={isUploading}
+              onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
+                setVisibility(value === 'inherit' ? undefined : value)
+              }
             >
-              Use profile expiration
-            </button>
-            <button
-              type="button"
-              className="underline underline-offset-4"
-              onClick={() => setExpiresAt(null)}
-            >
-              No expiration
-            </button>
+              <SelectTrigger id="upload-visibility">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">From upload profile</SelectItem>
+                <SelectItem value="PUBLIC">Anyone with the link</SelectItem>
+                <SelectItem value="PRIVATE">Only me</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Private files are only accessible while signed in to your account.
+            </p>
           </div>
-          {expiresAt && (
-            <div className="rounded-md bg-orange-50 dark:bg-orange-950/20 p-3 border border-orange-200 dark:border-orange-800/50">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                  {expiryAction === 'SET_PRIVATE'
-                    ? 'Privacy change scheduled'
-                    : 'Expiration scheduled'}
-                </p>
-              </div>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                File will{' '}
+          <div className="space-y-2">
+            <Label htmlFor="upload-password">
+              Password{' '}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="upload-password"
+              type="password"
+              autoComplete="new-password"
+              disabled={isUploading}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Add a password"
+            />
+            <p className="text-xs text-muted-foreground">
+              Anyone opening a protected file will need this password.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Expiration</Label>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isUploading}
+              className="h-auto min-h-10 w-full justify-start whitespace-normal py-2 text-left font-normal"
+              onClick={() => setIsExpiryModalOpen(true)}
+            >
+              <CalendarClock className="mr-2 h-4 w-4 shrink-0" />
+              {expiresAt
+                ? format(expiresAt, 'PPP p')
+                : expiresAt === null
+                  ? 'No expiration for this upload'
+                  : 'From upload profile'}
+            </Button>
+            <div className="flex flex-wrap gap-x-3 gap-y-2 text-xs">
+              <button
+                type="button"
+                disabled={isUploading}
+                className="text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+                onClick={() => {
+                  setExpiresAt(undefined)
+                  setExpiryAction(undefined)
+                }}
+              >
+                Use profile expiration
+              </button>
+              <button
+                type="button"
+                disabled={isUploading}
+                className="text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+                onClick={() => setExpiresAt(null)}
+              >
+                No expiration
+              </button>
+            </div>
+            {expiresAt && (
+              <p className="rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+                These files will{' '}
                 {expiryAction === 'SET_PRIVATE'
                   ? 'become private'
                   : 'be permanently deleted'}{' '}
-                on {format(expiresAt, 'PPPP p')}
+                on {format(expiresAt, 'PPPP p')}.
               </p>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="border-t pt-5">
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => {
+                setUploadError('')
+                void uploadFiles()
+              }}
+              disabled={files.length === 0 || isUploading}
+            >
+              {isUploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              {isUploading
+                ? 'Uploading…'
+                : files.length
+                  ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
+                  : 'Upload files'}
+            </Button>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {files.length
+                ? `${formatBytes(totalSize)} ready to upload`
+                : 'Choose files to enable upload.'}
+            </p>
+          </div>
         </div>
-
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={uploadFiles}
-          disabled={files.length === 0 || isUploading}
-        >
-          {isUploading ? 'Uploading...' : 'Upload Files'}
-        </Button>
-      </div>
+      </WorkspacePanel>
 
       <ExpiryModal
         isOpen={isExpiryModalOpen}
@@ -259,7 +479,7 @@ export function UploadForm({
           (user.defaultFileExpirationAction as ExpiryAction) ??
           ExpiryAction.DELETE
         }
-        title="Set File Expiration"
+        title="Set file expiration"
         description="Choose when files expire and whether to delete them or make them private."
       />
     </div>

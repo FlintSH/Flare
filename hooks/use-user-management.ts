@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -37,10 +37,12 @@ export interface UserFormData {
   password?: string
   role: 'ADMIN' | 'USER'
   urlId?: string
-  vanityId?: string
+  vanityId?: string | null
 }
 
 export interface UseUserManagementOptions {
+  search?: string
+  role?: string
   onUserDeleted?: (userId: string) => void
   onUserUpdated?: (user: User) => void
   onUserCreated?: (user: User) => void
@@ -51,20 +53,44 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const [isLoading, setIsLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<PaginationData | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const pendingRequest = useRef<AbortController | null>(null)
+  const search = options.search || ''
+  const role = options.role || 'ALL'
+  useEffect(() => () => pendingRequest.current?.abort(), [])
   const { toast } = useToast()
   const router = useRouter()
 
   const fetchUsers = useCallback(
     async (page: number = 1) => {
+      pendingRequest.current?.abort()
+      const controller = new AbortController()
+      pendingRequest.current = controller
       try {
         setIsLoading(true)
-        const response = await fetch(`/api/users?page=${page}&limit=25`)
+        setLoadError(false)
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: '25',
+          search,
+          role,
+        })
+        const response = await fetch(`/api/users?${params}`, {
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error('Failed to fetch users')
         const data = await response.json()
+        if (controller.signal.aborted) return
         setUsers(data.data || [])
-        setPagination(data.pagination || null)
-        setCurrentPage(page)
+        setPagination(
+          data.pagination
+            ? { ...data.pagination, pages: data.pagination.pageCount }
+            : null
+        )
+        setCurrentPage(data.pagination?.page ?? page)
       } catch (error) {
+        if (controller.signal.aborted) return
+        setLoadError(true)
         console.error('Error fetching users:', error)
         toast({
           title: 'Error',
@@ -72,10 +98,10 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           variant: 'destructive',
         })
       } finally {
-        setIsLoading(false)
+        if (!controller.signal.aborted) setIsLoading(false)
       }
     },
-    [toast]
+    [toast, search, role]
   )
 
   const createUser = useCallback(
@@ -98,15 +124,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         const responseData = await response.json()
         const newUser = responseData.data
 
-        setUsers((prevUsers) => [newUser, ...prevUsers])
-
-        if (pagination) {
-          setPagination({
-            ...pagination,
-            total: pagination.total + 1,
-            pages: Math.ceil((pagination.total + 1) / pagination.limit),
-          })
-        }
+        await fetchUsers(1)
 
         if (options.onUserCreated) {
           options.onUserCreated(newUser)
@@ -131,7 +149,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         setIsLoading(false)
       }
     },
-    [pagination, toast, options]
+    [fetchUsers, toast, options]
   )
 
   const updateUser = useCallback(
@@ -143,7 +161,12 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...formData, id: userId }),
+          body: JSON.stringify({
+            ...formData,
+            password: formData.password || undefined,
+            vanityId: formData.vanityId?.trim() || null,
+            id: userId,
+          }),
         })
 
         if (!response.ok) {
@@ -154,9 +177,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         const responseData = await response.json()
         const updatedUser = responseData.data
 
-        setUsers((prevUsers) =>
-          prevUsers.map((user) => (user.id === userId ? updatedUser : user))
-        )
+        await fetchUsers(currentPage)
 
         if (options.onUserUpdated) {
           options.onUserUpdated(updatedUser)
@@ -181,7 +202,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         setIsLoading(false)
       }
     },
-    [toast, options]
+    [currentPage, fetchUsers, toast, options]
   )
 
   const deleteUser = useCallback(
@@ -196,15 +217,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           throw new Error('Failed to delete user')
         }
 
-        setUsers((prevUsers) => prevUsers.filter((user) => user.id !== userId))
-
-        if (pagination) {
-          setPagination({
-            ...pagination,
-            total: pagination.total - 1,
-            pages: Math.ceil((pagination.total - 1) / pagination.limit),
-          })
-        }
+        await fetchUsers(currentPage)
 
         if (options.onUserDeleted) {
           options.onUserDeleted(userId)
@@ -227,7 +240,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         setIsLoading(false)
       }
     },
-    [pagination, toast, router, options]
+    [currentPage, fetchUsers, toast, router, options]
   )
 
   const removeUserAvatar = useCallback(
@@ -269,6 +282,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   return {
     users,
     isLoading,
+    loadError,
     currentPage,
     pagination,
     fetchUsers,

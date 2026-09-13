@@ -1,11 +1,13 @@
 import Link from 'next/link'
 
+import { FileCheck2 } from 'lucide-react'
+
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Card } from '@/components/ui/card'
 
 import type { AppearanceDocument, ShareStyle } from '@/lib/customization/schema'
+import { cn } from '@/lib/utils'
 
 import { InstanceBrand } from './instance-brand'
 
@@ -29,137 +31,104 @@ export function ShareLayout({
   children: React.ReactNode
 }) {
   const { sharing } = appearance
+  const author = sharing.showUploader && (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar className="h-9 w-9 shrink-0 border border-border/70">
+        <AvatarImage src={uploader.image} alt="" />
+        <AvatarFallback className="text-xs">
+          {uploader.name.charAt(0) || '?'}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <p className="text-[11px] text-muted-foreground">Shared by</p>
+        <p className="max-w-44 truncate text-sm font-medium">{uploader.name}</p>
+      </div>
+    </div>
+  )
   const details = (
-    <>
-      {sharing.showFilename && (
-        <h1 className="text-base font-medium text-foreground/90 truncate max-w-[600px] mx-auto">
+    <div className="min-w-0 space-y-2">
+      {sharing.showFilename ? (
+        <h1 className="break-words text-xl font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-2xl">
           {filename}
         </h1>
+      ) : (
+        <h1 className="sr-only">Shared file</h1>
       )}
       {sharing.showSize && (
-        <p className="text-xs text-muted-foreground/60 font-medium">{size}</p>
+        <p className="text-sm text-muted-foreground">{size}</p>
       )}
-    </>
-  )
-  const author = sharing.showUploader && (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-muted-foreground">Uploaded by</span>
-      <Avatar className="h-8 w-8">
-        <AvatarImage src={uploader.image} alt="" />
-        <AvatarFallback>{uploader.name.charAt(0) || '?'}</AvatarFallback>
-      </Avatar>
-      <span className="text-sm font-medium truncate max-w-40">
-        {uploader.name}
-      </span>
     </div>
   )
 
-  if (style === 'minimal')
-    return (
-      <div
-        className="relative min-h-screen flex flex-col"
-        data-share-style="minimal"
-      >
-        <DynamicBackground />
-        <header className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <Link href="/dashboard">
-            <InstanceBrand />
-          </Link>
-          {author}
-        </header>
-        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-5">
-          {(sharing.showFilename || sharing.showSize) && (
-            <div className="text-center space-y-1">{details}</div>
-          )}
-          {children}
-        </main>
-        {showFooter && <Footer />}
-      </div>
-    )
-
-  if (style === 'delivery')
-    return (
-      <div
-        className="relative min-h-screen flex flex-col"
-        data-share-style="delivery"
-      >
-        <DynamicBackground />
-        <header className="max-w-6xl w-full mx-auto px-6 py-8">
-          <Link href="/dashboard">
-            <InstanceBrand />
-          </Link>
-        </header>
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pb-10">
-          <Card
-            className="overflow-hidden bg-background/70 backdrop-blur-xl"
-            data-flare-surface
-          >
-            <div className="border-b p-6 sm:p-8 flex flex-wrap justify-between gap-5 items-center">
-              <div className="min-w-0 space-y-2">
-                <p className="text-xs uppercase tracking-[.2em] text-muted-foreground">
-                  A file for you
-                </p>
-                {details}
-              </div>
-              {author}
-            </div>
-            <div className="py-8">{children}</div>
-          </Card>
-        </main>
-        {showFooter && <Footer />}
-      </div>
-    )
-
   return (
     <div
-      className="flex-1 relative min-h-screen overflow-hidden"
-      data-share-style="framed"
+      className="relative isolate flex min-h-dvh min-w-0 flex-col"
+      data-share-style={style}
     >
       <DynamicBackground />
-      <div className="absolute top-6 left-6 z-20">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-            <Link href="/dashboard" className="flex items-center space-x-2.5">
-              <InstanceBrand />
-            </Link>
-          </div>
-        </div>
-      </div>
-      {sharing.showUploader && (
-        <div className="absolute top-24 sm:top-6 right-6 z-20">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-            <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-              {author}
-            </div>
-          </div>
-        </div>
-      )}
-      <main
-        className={`flex items-center justify-center px-6 relative z-10 ${showFooter ? 'pb-24' : 'pb-6'} ${sharing.showUploader ? 'pt-40 sm:pt-28' : 'pt-28'}`}
-        style={{ minHeight: 'calc(100vh - 7rem)' }}
+      <header
+        className={cn(
+          'relative z-10 mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6 sm:px-8',
+          style === 'minimal' && 'border-b border-border/50'
+        )}
       >
-        <div className="relative max-w-full">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-          <Card
-            className={`relative overflow-hidden bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 ${isMedia ? 'max-w-[95vw]' : 'w-full sm:max-w-[50vw]'}`}
-            data-flare-surface
-          >
+        <Link
+          href="/dashboard"
+          className="inline-flex min-w-0 max-w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Open your dashboard"
+        >
+          <InstanceBrand />
+        </Link>
+        {style !== 'delivery' && author}
+      </header>
+      <main
+        className={cn(
+          'relative z-10 mx-auto flex w-full min-w-0 flex-1 flex-col justify-center px-4 py-6 sm:px-8 sm:py-10',
+          isMedia ? 'max-w-6xl' : 'max-w-5xl',
+          style === 'delivery' && 'justify-start'
+        )}
+      >
+        {style === 'minimal' ? (
+          <div className="min-w-0 space-y-6">
             {(sharing.showFilename || sharing.showSize) && (
-              <div className="px-6 pt-4 pb-2">
-                <div className="text-center space-y-1">{details}</div>
-              </div>
+              <div className="px-1">{details}</div>
+            )}
+            {!sharing.showFilename && !sharing.showSize && (
+              <h1 className="sr-only">Shared file</h1>
             )}
             {children}
-          </Card>
-        </div>
-        {showFooter && (
-          <div className="fixed bottom-0 left-0 right-0 z-10">
-            <Footer />
           </div>
+        ) : (
+          <section
+            className="min-w-0 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+            data-flare-surface
+          >
+            <div
+              className={cn(
+                'flex flex-col items-start justify-between gap-5 border-b border-border/60 p-5 sm:flex-row sm:items-center sm:p-7',
+                style === 'delivery' && 'bg-muted/20',
+                !sharing.showFilename &&
+                  !sharing.showSize &&
+                  style !== 'delivery' &&
+                  'sr-only'
+              )}
+            >
+              <div className="min-w-0 w-full sm:w-auto sm:flex-1">
+                {style === 'delivery' && (
+                  <p className="mb-4 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
+                    <FileCheck2 className="h-4 w-4" aria-hidden="true" />A file
+                    for you
+                  </p>
+                )}
+                {details}
+              </div>
+              {style === 'delivery' && author}
+            </div>
+            {children}
+          </section>
         )}
       </main>
+      {showFooter && <Footer />}
     </div>
   )
 }

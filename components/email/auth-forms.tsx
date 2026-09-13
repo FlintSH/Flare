@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
+import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,13 +18,21 @@ function Feedback({ error, message }: { error: string; message: string }) {
     <div aria-live="polite">
       {error && (
         <p
-          className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+          className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground"
           role="alert"
         >
           {error}
         </p>
       )}
-      {message && <p className="rounded-md border p-3 text-sm">{message}</p>}
+      {message && (
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed">
+          <CheckCircle2
+            className="mt-0.5 h-4 w-4 shrink-0 text-primary"
+            aria-hidden="true"
+          />
+          <p>{message}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -68,7 +78,7 @@ export function ForgotPasswordForm() {
   return (
     <div className="space-y-5">
       {capabilities?.enabled && capabilities.recoveryEnabled ? (
-        <form className="space-y-4" onSubmit={submit}>
+        <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
           <div className="space-y-2">
             <Label htmlFor="recovery-email">Email address</Label>
             <Input
@@ -81,7 +91,7 @@ export function ForgotPasswordForm() {
               disabled={busy}
             />
           </div>
-          <Button className="w-full" type="submit" disabled={busy}>
+          <Button className="h-11 w-full" type="submit" disabled={busy}>
             {busy ? 'Requesting…' : 'Send reset link'}
           </Button>
         </form>
@@ -92,7 +102,11 @@ export function ForgotPasswordForm() {
         </p>
       ) : (
         !error && (
-          <p className="text-sm text-muted-foreground">
+          <p
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+            role="status"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             Checking recovery options…
           </p>
         )
@@ -100,7 +114,7 @@ export function ForgotPasswordForm() {
       <Feedback error={error} message={message} />
       <Link
         href="/auth/login?local=1"
-        className="block text-sm text-primary hover:underline"
+        className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
       >
         Back to sign in
       </Link>
@@ -144,12 +158,15 @@ export function ResetPasswordForm({ token }: { token: string }) {
   return (
     <div className="space-y-5">
       {!token ? (
-        <p className="text-sm">
+        <p
+          className="rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed"
+          role="alert"
+        >
           This reset link is incomplete. Request a new link below.
         </p>
       ) : (
         !complete && (
-          <form className="space-y-4" onSubmit={submit}>
+          <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
             <div className="space-y-2">
               <Label htmlFor="reset-password">New password</Label>
               <Input
@@ -179,7 +196,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 disabled={busy}
               />
             </div>
-            <Button className="w-full" type="submit" disabled={busy}>
+            <Button className="h-11 w-full" type="submit" disabled={busy}>
               {busy ? 'Updating…' : 'Reset password'}
             </Button>
           </form>
@@ -189,17 +206,23 @@ export function ResetPasswordForm({ token }: { token: string }) {
       {!complete && (
         <Link
           href="/auth/forgot-password"
-          className="block text-sm text-primary hover:underline"
+          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
         >
           Request a new reset link
         </Link>
       )}
-      <Link
-        href="/auth/login?local=1"
-        className="block text-sm text-primary hover:underline"
-      >
-        Back to sign in
-      </Link>
+      {complete ? (
+        <Button asChild className="h-11 w-full">
+          <Link href="/auth/login?local=1">Sign in with your new password</Link>
+        </Button>
+      ) : (
+        <Link
+          href="/auth/login?local=1"
+          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
+        >
+          Back to sign in
+        </Link>
+      )}
     </div>
   )
 }
@@ -237,7 +260,7 @@ export function VerifyEmailForm({ token }: { token: string }) {
             If you did not request this, you can close this page.
           </p>
           <Button
-            className="w-full"
+            className="h-11 w-full"
             onClick={() => void submit()}
             disabled={busy}
           >
@@ -247,23 +270,23 @@ export function VerifyEmailForm({ token }: { token: string }) {
       )}
       <Feedback error={error} message={message} />
       {complete ? (
-        <Link
-          href="/dashboard"
-          className="block text-sm text-primary hover:underline"
-        >
-          Continue to Flare
-        </Link>
+        <Button asChild className="h-11 w-full">
+          <Link href="/dashboard">
+            Go to your files
+            <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Button>
       ) : (
         <Link
           href="/auth/verify-email"
-          className="block text-sm text-primary hover:underline"
+          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
         >
           Check status or request another email
         </Link>
       )}
       <Link
         href="/auth/login?local=1"
-        className="block text-sm text-primary hover:underline"
+        className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
       >
         Back to sign in
       </Link>
@@ -283,7 +306,7 @@ function VerificationStatus() {
           Try again
         </Button>
         <Link
-          className="block text-sm text-primary hover:underline"
+          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
           href="/auth/login?local=1"
         >
           Sign in
@@ -292,7 +315,11 @@ function VerificationStatus() {
     )
   if (!status)
     return (
-      <p className="text-sm text-muted-foreground">
+      <p
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+        role="status"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         Checking your email status…
       </p>
     )
@@ -302,24 +329,24 @@ function VerificationStatus() {
         <p className="text-sm">
           Email verification is not enabled on this instance.
         </p>
-        <Link
-          href="/dashboard"
-          className="text-sm text-primary hover:underline"
-        >
-          Continue to Flare
-        </Link>
+        <Button asChild className="h-11 w-full">
+          <Link href="/dashboard">
+            Go to your files
+            <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Button>
       </div>
     )
   if (status.verified)
     return (
       <div className="space-y-3">
-        <p className="text-sm">Your email address is verified.</p>
-        <Link
-          href="/dashboard"
-          className="text-sm text-primary hover:underline"
-        >
-          Continue to Flare
-        </Link>
+        <Feedback error="" message="Your email address is verified." />
+        <Button asChild className="h-11 w-full">
+          <Link href="/dashboard">
+            Go to your files
+            <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Button>
       </div>
     )
   return <AccountEmail status={status} refresh={refresh} restricted />

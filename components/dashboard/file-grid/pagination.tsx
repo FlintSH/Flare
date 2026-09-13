@@ -1,204 +1,124 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { PaginationInfo } from '@/types/components/file'
-
-import { Input } from '@/components/ui/input'
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
+  ChevronFirst,
+  ChevronLast,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface FileGridPaginationProps {
   paginationInfo: PaginationInfo
   setPage: (page: number) => void
 }
 
-interface InteractiveEllipsisProps {
-  onPageSelect: (page: number) => void
-  maxPage: number
-}
-
-function InteractiveEllipsis({
-  onPageSelect,
-  maxPage,
-}: InteractiveEllipsisProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [inputValue, setInputValue] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus()
-    }
-  }, [isEditing])
-
-  const handleSubmit = () => {
-    const pageNum = parseInt(inputValue, 10)
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= maxPage) {
-      onPageSelect(pageNum)
-      setIsEditing(false)
-      setInputValue('')
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSubmit()
-    } else if (e.key === 'Escape') {
-      setIsEditing(false)
-      setInputValue('')
-    }
-  }
-
-  const handleBlur = () => {
-    setIsEditing(false)
-    setInputValue('')
-  }
-
-  if (isEditing) {
-    return (
-      <div className="flex h-9 w-12 items-center justify-center">
-        <Input
-          ref={inputRef}
-          type="number"
-          min="1"
-          max={maxPage}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          placeholder="#"
-          className="h-8 w-12 px-1 text-center text-sm"
-        />
-      </div>
-    )
-  }
-
-  return (
-    <button
-      onClick={() => setIsEditing(true)}
-      className="flex h-9 w-9 items-center justify-center hover:bg-accent hover:text-accent-foreground rounded-md transition-colors cursor-pointer"
-      title={`Go to page (1-${maxPage})`}
-      aria-label={`Enter page number between 1 and ${maxPage}`}
-    >
-      <PaginationEllipsis />
-    </button>
-  )
-}
-
 export function FileGridPagination({
-  paginationInfo,
+  paginationInfo: { page, pageCount },
   setPage,
 }: FileGridPaginationProps) {
-  if (paginationInfo.pageCount <= 1) {
-    return null
-  }
+  const [pageInput, setPageInput] = useState(String(page))
+  useEffect(() => setPageInput(String(page)), [page])
+  if (pageCount <= 1) return null
 
   return (
-    <div className="flex justify-center mt-8">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/3 via-transparent to-accent/3 rounded-xl" />
-        <div className="relative bg-background/40 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (paginationInfo.page > 1) {
-                      setPage(paginationInfo.page - 1)
-                    }
-                  }}
-                  className={
-                    paginationInfo.page <= 1
-                      ? 'pointer-events-none opacity-50'
-                      : ''
-                  }
-                />
-              </PaginationItem>
-              {Array.from({ length: paginationInfo.pageCount }).map((_, i) => {
-                const pageNumber = i + 1
-                if (
-                  pageNumber === 1 ||
-                  pageNumber === paginationInfo.pageCount ||
-                  (pageNumber >= paginationInfo.page - 2 &&
-                    pageNumber <= paginationInfo.page + 2)
-                ) {
-                  return (
-                    <PaginationItem key={pageNumber}>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          setPage(pageNumber)
-                        }}
-                        isActive={pageNumber === paginationInfo.page}
-                      >
-                        {pageNumber}
-                      </PaginationLink>
-                    </PaginationItem>
-                  )
-                } else if (
-                  (pageNumber === 2 && paginationInfo.page - 2 > 2) ||
-                  (pageNumber === paginationInfo.pageCount - 1 &&
-                    paginationInfo.page + 2 < paginationInfo.pageCount - 1)
-                ) {
-                  return (
-                    <PaginationItem key={pageNumber}>
-                      <InteractiveEllipsis
-                        onPageSelect={setPage}
-                        maxPage={paginationInfo.pageCount}
-                      />
-                    </PaginationItem>
-                  )
-                }
-                return null
-              })}
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (paginationInfo.page < paginationInfo.pageCount) {
-                      setPage(paginationInfo.page + 1)
-                    }
-                  }}
-                  className={
-                    paginationInfo.page >= paginationInfo.pageCount
-                      ? 'pointer-events-none opacity-50'
-                      : ''
-                  }
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+    <nav
+      aria-label="File library pages"
+      className="flex flex-wrap items-center justify-center gap-3 rounded-2xl border bg-card p-3 sm:justify-between sm:px-5"
+    >
+      <form
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const requestedPage = Number(pageInput)
+          if (
+            Number.isInteger(requestedPage) &&
+            requestedPage >= 1 &&
+            requestedPage <= pageCount
+          )
+            setPage(requestedPage)
+        }}
+      >
+        <label htmlFor="file-library-page">Page</label>
+        <Input
+          id="file-library-page"
+          type="number"
+          min={1}
+          max={pageCount}
+          step={1}
+          required
+          value={pageInput}
+          onChange={(event) => setPageInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setPageInput(String(page))
+          }}
+          className="h-9 w-16 rounded-lg text-center"
+        />
+        <span>of {pageCount.toLocaleString()}</span>
+        <Button
+          type="submit"
+          variant="ghost"
+          size="sm"
+          className="rounded-lg"
+          aria-label="Go to page"
+        >
+          Go
+        </Button>
+      </form>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="First page"
+          disabled={page <= 1}
+          onClick={() => setPage(1)}
+          className="h-9 w-9 rounded-lg"
+        >
+          <ChevronFirst className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => setPage(page - 1)}
+          className="rounded-lg"
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page >= pageCount}
+          onClick={() => setPage(page + 1)}
+          className="rounded-lg"
+        >
+          Next
+          <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Last page"
+          disabled={page >= pageCount}
+          onClick={() => setPage(pageCount)}
+          className="h-9 w-9 rounded-lg"
+        >
+          <ChevronLast className="h-4 w-4" />
+        </Button>
       </div>
-    </div>
+    </nav>
   )
 }
 
 export function PaginationSkeleton() {
   return (
-    <div className="flex justify-center mt-8">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/3 via-transparent to-accent/3 rounded-xl" />
-        <div className="relative bg-background/40 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-md bg-muted/60 animate-pulse" />
-            <div className="h-9 w-9 rounded-md bg-muted/60 animate-pulse" />
-            <div className="h-9 w-9 rounded-md bg-muted/60 animate-pulse" />
-            <div className="h-9 w-9 rounded-md bg-muted/60 animate-pulse" />
-            <div className="h-9 w-9 rounded-md bg-muted/60 animate-pulse" />
-          </div>
-        </div>
-      </div>
-    </div>
+    <div
+      aria-hidden="true"
+      className="h-[62px] animate-pulse rounded-2xl border bg-card"
+    />
   )
 }

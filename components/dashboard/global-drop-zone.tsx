@@ -25,6 +25,7 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
     maxSize,
     onUploadComplete: () => {
       router.refresh()
+      window.dispatchEvent(new Event('flare:files-changed'))
       setShouldUpload(false)
     },
     onUploadError: () => setShouldUpload(false),
@@ -132,62 +133,28 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
 
   return (
     <div
+      aria-hidden={!isDragging}
       className={cn(
-        'fixed inset-0 z-[100]',
-        'bg-black/60 backdrop-blur-md',
-        'transition-all duration-500 ease-in-out',
+        'fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-6 backdrop-blur-sm transition-opacity motion-reduce:transition-none',
         isDragging
-          ? 'opacity-100 pointer-events-auto'
-          : 'opacity-0 pointer-events-none'
+          ? 'pointer-events-auto opacity-100'
+          : 'pointer-events-none invisible opacity-0'
       )}
     >
-      <div className="h-full w-full flex items-center justify-center p-8">
-        <div
-          className={cn(
-            'relative',
-            'bg-gradient-to-br from-primary/20 via-primary/10 to-transparent',
-            'backdrop-blur-xl',
-            'border-4 border-dashed border-primary/50',
-            'rounded-3xl p-16 md:p-32',
-            'flex flex-col items-center justify-center',
-            'transition-all duration-500 ease-out',
-            'transform',
-            isDragging ? 'scale-100 opacity-100' : 'scale-90 opacity-0',
-            'shadow-2xl shadow-primary/20'
-          )}
-        >
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-primary/5 animate-pulse" />
-
-          <div className="relative flex flex-col items-center">
-            <div className="relative">
-              <UploadIcon className="w-20 h-20 md:w-32 md:h-32 text-primary mb-6" />
-              <div className="absolute inset-0 blur-xl bg-primary/30 animate-pulse" />
-            </div>
-
-            <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-br from-primary to-primary/60 bg-clip-text text-transparent mb-3">
-              Drop files to upload
-            </h2>
-
-            <p className="text-muted-foreground/80 text-center max-w-md text-lg">
-              Release to upload using your account’s default upload profile.
-            </p>
-
-            <div className="mt-8 flex gap-2">
-              <div
-                className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                style={{ animationDelay: '0ms' }}
-              />
-              <div
-                className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                style={{ animationDelay: '150ms' }}
-              />
-              <div
-                className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                style={{ animationDelay: '300ms' }}
-              />
-            </div>
-          </div>
-        </div>
+      <div className="w-full max-w-xl rounded-3xl border-2 border-dashed border-primary/50 bg-card p-8 text-center shadow-xl sm:p-14">
+        <span className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/50">
+          <UploadIcon className="h-7 w-7" aria-hidden="true" />
+        </span>
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
+          Ready when you are
+        </p>
+        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Drop files to upload
+        </h2>
+        <p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
+          Release to upload using your account’s default upload profile. Your
+          files will appear in your library.
+        </p>
       </div>
     </div>
   )

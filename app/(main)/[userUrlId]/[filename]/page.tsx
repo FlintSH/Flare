@@ -1,16 +1,16 @@
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { InstanceBrand } from '@/components/customization/instance-brand'
+import { LockKeyhole } from 'lucide-react'
+
+import { PublicState } from '@/components/auth/public-state'
 import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
-import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
@@ -266,53 +266,54 @@ export default async function FilePage({
       access.reason === 'password_invalid' ? 'Try Again' : 'Access File'
 
     return (
-      <div className="flex-1 relative min-h-screen overflow-hidden">
-        <DynamicBackground />
-        <div className="absolute top-6 left-6 z-20">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-            <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-              <Link href="/dashboard" className="flex items-center space-x-2.5">
-                <InstanceBrand />
-              </Link>
-            </div>
-          </div>
-        </div>
-        <main className="flex items-center justify-center p-6 relative z-10 min-h-screen">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-            <Card className="relative w-full max-w-md bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5">
-              <div className="p-6">
-                <h1 className="text-xl font-medium text-center mb-4">
-                  {title}
-                </h1>
-                <p className="text-sm text-muted-foreground text-center mb-6">
-                  {description}
+      <>
+        <PublicState
+          icon={LockKeyhole}
+          eyebrow="Protected share"
+          title={title}
+          description={description}
+        >
+          <form className="space-y-5" action={urlPath}>
+            <div className="space-y-2">
+              <Label htmlFor="share-password">File password</Label>
+              <Input
+                id="share-password"
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                placeholder="Enter the password from the sender"
+                className="h-11"
+                aria-invalid={access.reason === 'password_invalid'}
+                aria-describedby={
+                  access.reason === 'password_invalid'
+                    ? 'share-password-error'
+                    : undefined
+                }
+                required
+                autoFocus
+              />
+              {access.reason === 'password_invalid' && (
+                <p
+                  id="share-password-error"
+                  role="alert"
+                  className="text-sm text-foreground"
+                >
+                  That password didn’t match. Check with the sender and try
+                  again.
                 </p>
-                <form className="space-y-4" action={urlPath}>
-                  <div className="space-y-2">
-                    <Input
-                      type="password"
-                      name="password"
-                      placeholder="Enter password"
-                      className="bg-background/60 backdrop-blur-sm border-border/50"
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    {buttonText}
-                  </Button>
-                </form>
-              </div>
-            </Card>
-          </div>
-          {showFooter && (
-            <div className="fixed bottom-0 left-0 right-0 z-10">
-              <Footer />
+              )}
             </div>
-          )}
-        </main>
-      </div>
+            <Button type="submit" className="h-11 w-full">
+              {buttonText}
+            </Button>
+            <p className="border-t border-border/60 pt-4 text-xs leading-relaxed text-muted-foreground">
+              The sender has added a password to this file. Ask them for it if
+              you haven’t received one.
+            </p>
+          </form>
+        </PublicState>
+        {showFooter && <Footer />}
+      </>
     )
   }
 

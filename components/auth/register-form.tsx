@@ -95,20 +95,12 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="space-y-2 text-center pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Create an account
-        </h1>
-        <p className="text-base text-muted-foreground">
-          Enter your details to get started
+    <form onSubmit={onSubmit} aria-busy={isLoading}>
+      {verificationRequired && (
+        <p className="mb-5 rounded-xl border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground">
+          We’ll ask you to confirm your email before using your account.
         </p>
-        {verificationRequired && (
-          <p className="text-sm text-muted-foreground">
-            You will confirm your email address before using your account.
-          </p>
-        )}
-      </div>
+      )}
       <div className="space-y-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium" htmlFor="name">
@@ -121,7 +113,7 @@ export function RegisterForm() {
             required
             disabled={isLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
-            autoComplete="name"
+            autoComplete="username"
             autoFocus
           />
         </div>
@@ -152,8 +144,13 @@ export function RegisterForm() {
             disabled={isLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="new-password"
-            placeholder="Create a strong password"
+            placeholder="At least 8 characters"
+            minLength={8}
+            aria-describedby="password-hint"
           />
+          <p id="password-hint" className="text-xs text-muted-foreground">
+            Use at least 8 characters.
+          </p>
         </div>
         <div className="space-y-2">
           <Label className="text-sm font-medium" htmlFor="confirmPassword">
@@ -171,8 +168,14 @@ export function RegisterForm() {
           />
         </div>
         {error && (
-          <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md flex items-center space-x-2">
-            <Icons.alertCircle className="h-4 w-4 flex-shrink-0" />
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-foreground"
+          >
+            <Icons.alertCircle
+              className="mt-0.5 h-4 w-4 shrink-0"
+              aria-hidden="true"
+            />
             <span>{error}</span>
           </div>
         )}
@@ -193,7 +196,7 @@ export function RegisterForm() {
               'Create account'
             )}
           </Button>
-          <div className="text-sm text-muted-foreground text-center">
+          <div className="border-t border-border/60 pt-5 text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <Link
               href="/auth/login"

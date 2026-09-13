@@ -3,7 +3,15 @@
 import { useEffect, useState } from 'react'
 
 import DOMPurify from 'dompurify'
-import { Copy, Download, ExternalLink, Link, ScanText } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  Link,
+  Loader2,
+  ScanText,
+} from 'lucide-react'
 
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
@@ -38,7 +46,10 @@ export function FileActions({
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
 
-  const { copyUrl, download, openRaw } = useFileActions({
+  const [copied, setCopied] = useState(false)
+  const [isCopyingText, setIsCopyingText] = useState(false)
+
+  const { download, openRaw } = useFileActions({
     urlPath,
     name,
     fileId,
@@ -51,7 +62,7 @@ export function FileActions({
 
   useEffect(() => {
     const passwordParam = verifiedPassword
-      ? `?password=${encodeURIComponent(DOMPurify.sanitize(verifiedPassword))}`
+      ? `?password=${encodeURIComponent(verifiedPassword)}`
       : ''
     const sanitizedUrlPath = DOMPurify.sanitize(urlPath)
     const fileUrl = `/api/files${sanitizedUrlPath}${passwordParam}`
@@ -59,30 +70,48 @@ export function FileActions({
     setUrls({ fileUrl, rawUrl })
   }, [urlPath, verifiedPassword])
 
-  const handleCopyText = async () => {
-    if (!urls) return
+  useEffect(() => {
+    if (!copied) return
+    const timeout = window.setTimeout(() => setCopied(false), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [copied])
+
+  const handleCopyLink = async () => {
     try {
-      if (content) {
-        await navigator.clipboard.writeText(content)
-        toast({
-          title: 'Text copied',
-          description: 'File content has been copied to clipboard',
-        })
-      } else {
-        const response = await fetch(sanitizeUrl(urls.fileUrl))
-        const text = await response.text()
-        await navigator.clipboard.writeText(text)
-        toast({
-          title: 'Text copied',
-          description: 'File content has been copied to clipboard',
-        })
-      }
+      await navigator.clipboard.writeText(`${window.location.origin}${urlPath}`)
+      setCopied(true)
     } catch {
       toast({
-        title: 'Failed to copy text',
-        description: 'Please try again',
+        title: 'Couldn’t copy the link',
+        description: 'Copy the address from your browser instead.',
         variant: 'destructive',
       })
+    }
+  }
+
+  const handleCopyText = async () => {
+    if (!urls) return
+    setIsCopyingText(true)
+    try {
+      let text = content
+      if (text === undefined) {
+        const response = await fetch(sanitizeUrl(urls.fileUrl))
+        if (!response.ok) throw new Error('Could not load file content')
+        text = await response.text()
+      }
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: 'Text copied',
+        description: 'File content is ready to paste.',
+      })
+    } catch {
+      toast({
+        title: 'Couldn’t copy the text',
+        description: 'Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsCopyingText(false)
     }
   }
 
@@ -99,105 +128,103 @@ export function FileActions({
     try {
       setIsLoadingOcr(true)
       setOcrError(null)
-      console.log('[OCR] Starting OCR request for file:', fileId)
+      setIsOcrDialogOpen(true)
       const sanitizedFileId = DOMPurify.sanitize(fileId)
       const passwordParam = verifiedPassword
-        ? `?password=${DOMPurify.sanitize(verifiedPassword)}`
+        ? `?password=${encodeURIComponent(verifiedPassword)}`
         : ''
       const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
 
       const response = await fetch(sanitizeUrl(ocrUrl))
-      console.log('[OCR] Response status:', response.status)
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error('[OCR] Error response:', errorData)
         throw new Error(errorData.error || 'Failed to process OCR')
       }
 
       const data = await response.json()
-      console.log('[OCR] Response data:', data)
 
       if (!data.success) {
-        console.error('[OCR] OCR processing failed:', data.error)
         setOcrError(data.error || 'There was an error processing the image')
         setOcrText(null)
         setOcrConfidence(null)
       } else {
-        console.log('[OCR] OCR processing successful')
         setOcrText(data.text)
         setOcrConfidence(data.confidence)
         setOcrError(null)
       }
-      setIsOcrDialogOpen(true)
     } catch (error) {
-      console.error('[OCR] Error in handleFetchOcr:', error)
-      toast({
-        title: 'Failed to fetch OCR text',
-        description:
-          error instanceof Error ? error.message : 'Please try again',
-        variant: 'destructive',
-      })
+      setOcrError(
+        error instanceof Error
+          ? error.message
+          : 'Couldn’t extract text. Please try again.'
+      )
+      setOcrText(null)
+      setOcrConfidence(null)
     } finally {
       setIsLoadingOcr(false)
     }
   }
 
-  if (!urls) return null
-
   return (
-    <div className="flex items-center justify-center flex-wrap gap-3">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={copyUrl}
-        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
-      >
-        <Link className="h-4 w-4 mr-2" />
-        Copy URL
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={download}
-        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
-      >
-        <Download className="h-4 w-4 mr-2" />
+    <div
+      className="flex flex-wrap items-center gap-2 sm:justify-center"
+      role="group"
+      aria-label="File actions"
+    >
+      <Button onClick={download} disabled={!urls} className="grow sm:grow-0">
+        <Download className="mr-2 h-4 w-4" aria-hidden="true" />
         Download
       </Button>
       <Button
         variant="outline"
-        size="sm"
-        onClick={openRaw}
-        className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+        onClick={handleCopyLink}
+        disabled={!urls}
+        className="grow sm:grow-0"
+        aria-live="polite"
       >
-        <ExternalLink className="h-4 w-4 mr-2" />
-        Raw
+        {copied ? (
+          <Check className="mr-2 h-4 w-4" aria-hidden="true" />
+        ) : (
+          <Link className="mr-2 h-4 w-4" aria-hidden="true" />
+        )}
+        {copied ? 'Link copied' : 'Copy link'}
       </Button>
-      {showOcr && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleOcr}
-          disabled={isLoadingOcr}
-          className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
-        >
-          <ScanText className="h-4 w-4 mr-2" />
-          Extract Text (OCR)
-        </Button>
-      )}
       {isTextBased && (
         <Button
           variant="outline"
-          size="sm"
           onClick={handleCopyText}
-          className="bg-background/50 backdrop-blur-sm border-border/40 hover:bg-background/80 rounded-xl"
+          disabled={!urls || isCopyingText}
+          className="grow sm:grow-0"
         >
-          <Copy className="h-4 w-4 mr-2" />
-          Copy Text
+          <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+          {isCopyingText ? 'Copying…' : 'Copy text'}
         </Button>
       )}
-
+      {showOcr && (
+        <Button
+          variant="outline"
+          onClick={handleOcr}
+          disabled={!urls || isLoadingOcr}
+          className="grow sm:grow-0"
+        >
+          {isLoadingOcr ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <ScanText className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isLoadingOcr ? 'Reading image…' : 'Extract text'}
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        onClick={openRaw}
+        disabled={!urls}
+        className="grow text-muted-foreground sm:grow-0"
+      >
+        <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
+        Open original<span className="sr-only"> in a new tab</span>
+      </Button>
       <OcrDialog
         isOpen={isOcrDialogOpen}
         onOpenChange={setIsOcrDialogOpen}

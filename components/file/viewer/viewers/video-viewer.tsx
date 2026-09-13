@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
@@ -6,6 +6,7 @@ import { useFileViewer } from '../context'
 
 export function VideoViewer() {
   const { file, state, fetchDirectUrl } = useFileViewer()
+  const [failedUrl, setFailedUrl] = useState<string>()
 
   useEffect(() => {
     fetchDirectUrl()
@@ -20,16 +21,22 @@ export function VideoViewer() {
   }
 
   if (!state.urls?.directUrl) {
-    return <ErrorState error="Failed to load video" />
+    return <LoadingState message="Loading video…" />
+  }
+
+  if (failedUrl === state.urls.directUrl) {
+    return <ErrorState error="This video couldn’t be played in your browser." />
   }
 
   return (
-    <div className="w-full flex items-center justify-center">
-      <div className="w-full max-w-4xl">
+    <div className="flex w-full items-center justify-center bg-muted/20">
+      <div className="w-full">
         <video
           src={state.urls.directUrl}
           controls
-          className="w-full max-h-[60vh] object-contain"
+          aria-label={`${file.name} video player`}
+          onError={() => setFailedUrl(state.urls?.directUrl)}
+          className="w-full max-h-[65vh] object-contain"
           controlsList="nodownload"
           preload="metadata"
           muted={false}

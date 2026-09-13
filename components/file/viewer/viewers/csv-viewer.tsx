@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 
 import Papa from 'papaparse'
-import type { ParseResult } from 'papaparse'
 
 import { MAX_CSV_SIZE } from '../../protected/mime-types'
 import { ErrorState } from '../components/error-state'
@@ -13,80 +12,108 @@ export function CsvViewer() {
   const [csvData, setCsvData] = useState<string[][]>([])
   const [error, setError] = useState<string>()
   const [isLoading, setIsLoading] = useState(true)
+  const fileUrl = state.urls?.fileUrl
 
   useEffect(() => {
-    if (!state.urls?.fileUrl) return
+    if (!fileUrl) return
+    const controller = new AbortController()
+    setIsLoading(true)
+    setError(undefined)
 
     const fetchAndParseCsv = async () => {
       try {
-        const response = await fetch(state.urls!.fileUrl)
-
-        const contentLength = response.headers.get('content-length')
-        if (contentLength && parseInt(contentLength) > MAX_CSV_SIZE) {
-          setError('File is too large for preview. Please download to view.')
-          setIsLoading(false)
-          return
-        }
-
-        const text = await response.text()
-        Papa.parse<string[]>(text, {
-          complete: (results: ParseResult<string[]>) => {
-            setCsvData(results.data)
-            setIsLoading(false)
-          },
-          error: (parseError: Error) => {
-            setError('Failed to parse CSV: ' + parseError.message)
-            setIsLoading(false)
-          },
+        const response = await fetch(fileUrl, { signal: controller.signal })
+        if (!response.ok)
+          throw new Error('This spreadsheet couldn’t be loaded.')
+        const contentLength = Number(response.headers.get('content-length'))
+        if (contentLength > MAX_CSV_SIZE)
+          throw new Error(
+            'This file is too large to preview. Download it to view all its data.'
+          )
+        const blob = await response.blob()
+        if (blob.size > MAX_CSV_SIZE)
+          throw new Error(
+            'This file is too large to preview. Download it to view all its data.'
+          )
+        const text = await blob.text()
+        const results = Papa.parse<string[]>(text, {
           header: false,
           skipEmptyLines: true,
-          delimiter: ',',
-          newline: '\n',
         })
-      } catch {
-        setError('Failed to load CSV file')
-        setIsLoading(false)
+        if (!controller.signal.aborted) setCsvData(results.data)
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setError(
+            error instanceof Error
+              ? error.message
+              : 'This spreadsheet couldn’t be loaded.'
+          )
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false)
       }
     }
 
-    fetchAndParseCsv()
-  }, [state.urls])
+    void fetchAndParseCsv()
+    return () => controller.abort()
+  }, [fileUrl])
 
-  if (isLoading) {
-    return <LoadingState message="Loading CSV data..." />
-  }
-
-  if (error) {
-    return <ErrorState error={error} />
-  }
+  if (isLoading) return <LoadingState message="Loading spreadsheet…" />
+  if (error) return <ErrorState error={error} />
+  if (csvData.length === 0)
+    return (
+      <p className="w-full px-6 py-16 text-center text-sm text-muted-foreground">
+        This spreadsheet is empty.
+      </p>
+    )
 
   return (
-    <div className="w-full max-h-[60vh] overflow-auto">
-      <table className="w-full border-collapse">
-        <thead className="bg-muted sticky top-0">
-          <tr>
-            {csvData[0]?.map((header, i) => (
-              <th
-                key={i}
-                className="p-2 text-left border border-border font-medium"
-              >
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {csvData.slice(1).map((row, i) => (
-            <tr key={i} className="hover:bg-muted/50">
-              {row.map((cell, j) => (
-                <td key={j} className="p-2 border border-border">
-                  {cell}
-                </td>
+    <div className="w-full min-w-0">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+        <span className="font-medium">Spreadsheet</span>
+        <span>
+          {Math.max(0, csvData.length - 1).toLocaleString()} rows ·{' '}
+          {csvData[0]?.length ?? 0} columns
+        </span>
+      </div>
+      <div
+        className="max-h-[65vh] w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        role="region"
+        aria-label="Spreadsheet data"
+        tabIndex={0}
+      >
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 bg-muted">
+            <tr>
+              {csvData[0]?.map((header, index) => (
+                <th
+                  key={index}
+                  scope="col"
+                  className="border-b border-border px-4 py-3 text-left font-medium whitespace-nowrap"
+                >
+                  {header || `Column ${index + 1}`}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {csvData.slice(1).map((row, index) => (
+              <tr
+                key={index}
+                className="border-b border-border/50 last:border-0 even:bg-muted/20 hover:bg-muted/40"
+              >
+                {row.map((cell, column) => (
+                  <td
+                    key={column}
+                    className="px-4 py-3 align-top whitespace-nowrap"
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
