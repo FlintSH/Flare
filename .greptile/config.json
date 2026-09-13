@@ -1,0 +1,11 @@
+{
+  "statusCommentsEnabled": true,
+  "shouldUpdateDescription": false,
+  "includeConfidenceScore": true,
+  "summarySection": {
+    "included": true
+  },
+  "confidenceScoreSection": {
+    "included": true
+  }
+}
