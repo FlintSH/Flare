@@ -5,7 +5,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends postgresql tini
     && rm -rf /var/lib/apt/lists/*
 COPY scripts/meticulous/start.sh /app/meticulous-start.sh
 RUN chmod +x /app/meticulous-start.sh
+RUN mkdir -p /home/nextjs && chown nextjs:nodejs /home/nextjs
 USER nextjs
+# Cache the backend bundle as the runtime user so replay can boot without downloading it.
+RUN node -e "require('@alwaysmeticulous/backend-recorder-launcher').initBackendRecorder({enabled:false}).catch(e=>{console.error(e);process.exit(1)})"
 # Public fixture credentials, used exclusively with the disposable local database.
 ENV NEXTAUTH_SECRET=flare-meticulous-disposable-test-session-secret
 ENV NEXTAUTH_URL=http://localhost:3000

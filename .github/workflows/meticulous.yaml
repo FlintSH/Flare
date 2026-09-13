@@ -40,7 +40,10 @@ jobs:
 
       - name: Smoke test disposable database and application
         run: |
-          docker run -d --name flare-meticulous-smoke -p 3000:3000 "flare:meticulous-$METICULOUS_COMMIT_SHA"
+          docker run -d --name flare-meticulous-smoke -p 3000:3000 \
+            -e METICULOUS_BACKEND_RECORDER_MODE=replay \
+            -e METICULOUS_MOCK_SESSIONS_MAP='{}' \
+            "flare:meticulous-$METICULOUS_COMMIT_SHA"
           trap 'docker logs flare-meticulous-smoke; docker rm -f flare-meticulous-smoke' EXIT
           for attempt in $(seq 1 90); do
             if curl --fail --silent http://localhost:3000/api/health; then
