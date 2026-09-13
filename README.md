@@ -1,74 +1,155 @@
 <div align="center">
-  <img src="./public/banner.png" alt="Flare Banner" width="600px" />
-  <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
-  
-  ### A modern, lightning-fast file sharing platform built for self-hosting
+  <img src="./public/banner.png" alt="Flare" width="600" />
 
-[![Version](https://img.shields.io/github/v/release/FlintSH/flare?include_prereleases&style=flat-square&logo=github)](https://github.com/FlintSH/flare/releases)
-[![Last Commit](https://img.shields.io/github/last-commit/FlintSH/flare?style=flat-square&logo=git)](https://github.com/FlintSH/flare/commits/main)
-[![Stars](https://img.shields.io/github/stars/FlintSH/flare?style=flat-square&logo=github)](https://github.com/FlintSH/flare/stargazers)
-[![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
+  <h3>Share screenshots, files, and code from your own domain.</h3>
 
+[![Version](https://img.shields.io/github/v/release/FlintSH/flare?style=flat-square&logo=github)](https://github.com/FlintSH/flare/releases) [![Last Commit](https://img.shields.io/github/last-commit/FlintSH/flare?style=flat-square&logo=git)](https://github.com/FlintSH/flare/commits/main) [![Stars](https://img.shields.io/github/stars/FlintSH/flare?style=flat-square&logo=github)](https://github.com/FlintSH/flare/stargazers) [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
+
+  <p>
+    <a href="#-quick-start"><strong>Deploy Flare</strong></a> ·
+    <a href="#-features">Explore the features</a> ·
+    <a href="#-configuration">Documentation</a> ·
+    <a href="https://github.com/FlintSH/Flare/releases/tag/v2.0.0">What's new in 2.0</a>
+  </p>
 </div>
-Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX, Flameshot, and KDE Spectacle. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
+
+**Drop a file, grab a link, and share it.** Flare is a self-hosted home for your screenshots, files, pastes, and short links. Upload from your browser or favorite screenshot tool, give people a useful preview, and choose how your files look and who can open them.
+
+Make it your own with branding, reusable upload profiles, and integrations. Run it with **Docker and PostgreSQL**, using **local or S3-compatible storage**, or start with the Railway template below. Flare is open source and MIT licensed.
 
 ## ✨ Features
 
-- 🚀 **Universal Screenshot Integration**
-  - ShareX, Flameshot, KDE Spectacle, and Bash Script upload support
-  - One-click configuration/script downloads
-- 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
-- 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
-- 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
-- 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
-- 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
-- ⚙️ **Configurable**
-  - User storage quotas, registration controls, and instance settings
-  - [Unified setup](docs/onboarding.md): account, storage, access, optional personalization and email in one guided flow
-  - [Appearance studio](docs/appearance.md): branding, paired palettes, share layouts, previews and portable packs
-  - [Upload profiles](docs/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
-  - [Integrations](docs/integrations.md): scoped tokens and signed file-ready webhooks
-  - Personal light/dark/system preferences, CSS variables and custom colors
-  - Advanced settings for custom CSS and HTML injection
-- 📊 **Admin Dashboard** - Usage metrics, user management, and system configuration
-- 👥 **User Management** - Role assignment, storage quotas, and content moderation
-- 🔗 **URL Shortener** - Custom short URLs under your domain with click tracking
-- 📝 **Pastebin** - Code and text sharing with syntax highlighting
-- 🤖 **OCR Processing** - Automatic text extraction from images uploaded
-- 🔌 **Rich Embeds** - Content embeds naturally on all your social media platforms.
+Open a section for a closer look. Screenshots show Flare 2.0 with demonstration accounts.
+
+<details>
+<summary><strong>📸 Upload from your browser or screenshot tools</strong></summary>
+
+Drag files onto the dashboard, upload a batch, or share a capture straight from **ShareX, Flameshot, KDE Spectacle, or Bash**. Download the configuration or script from your profile to connect your tool.
+
+Save your visibility, expiration, file naming, share layout, and copied-link format as an **upload profile**. Pick one for an upload or paste, make it your default, or bring it to your screenshot tool. Export and import recipes to reuse the same preferences elsewhere.
+
+![Upload-profile creation and starter recipes](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-upload-profiles-viewport.png)
+
+[Explore upload profiles and recipes →](docs/upload-profiles.md)
+
+</details>
+
+<details>
+<summary><strong>🖼️ Share useful previews with the access controls you need</strong></summary>
+
+Let people view **images, video, audio, PDFs, text, code, and CSV files** in their browser. Code gets syntax highlighting; unsupported formats remain available to download. Public links include social preview metadata for services that support it.
+
+Choose public or private visibility, add a password, or give a file an expiration. Expired files can be deleted or made private. Choose **Minimal, Framed, or Delivery** layouts for public share pages, with controls for attribution, file details, and social preview text.
+
+[Explore public share layouts →](docs/appearance.md)
+
+</details>
+
+<details>
+<summary><strong>🔍 Find screenshots by their text and track file activity</strong></summary>
+
+Search filenames or text extracted from images with **OCR**. Narrow your library by file type, visibility, and upload date, then sort and page through the results.
+
+See view and download counts on file cards, copy links, and manage visibility, passwords, and expiration from the library. File actions are available on touch screens too.
+
+</details>
+
+<details>
+<summary><strong>📝 Share pastes and short links alongside your files</strong></summary>
+
+Create a paste for a snippet, log, or note and share it with syntax highlighting. Upload profiles also work with pastes, so you can reuse your preferred visibility and share style.
+
+Turn long URLs into short links under your own domain, copy them from the dashboard, and track clicks. Files, text, and links all live in the same app.
+
+</details>
+
+<details>
+<summary><strong>🎨 Make Flare look like your own platform</strong></summary>
+
+Set your instance name, tagline, logos, colors, fonts, and backgrounds in the **appearance studio**. Each person can choose a light, dark, system, or inherited dashboard preference.
+
+Preview a draft before publishing, restore the previous appearance, and import or export **appearance packs**. Advanced custom CSS and head HTML remain available, with an administrator recovery view for fixing a troublesome theme.
+
+![Appearance studio with branding controls and a public share-page preview](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-appearance-viewport.png)
+
+[Make Flare yours →](docs/appearance.md)
+
+</details>
+
+<details>
+<summary><strong>🔌 Connect your tools with API tokens and webhooks</strong></summary>
+
+Give each integration a **named API token** with its own scopes, expiration, and revocation. Bind a token to an upload profile to keep that tool's uploads within your chosen defaults.
+
+Send signed **file-ready webhooks** to external services when uploads finish. Flare records delivery history and retries eligible failures. A documented event schema and receiver example help you connect your own automations.
+
+![The integrations overview before adding API tokens and webhook receivers](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-integrations-viewport.png)
+
+[Connect an integration →](docs/integrations.md)
+
+</details>
+
+<details>
+<summary><strong>🔐 Manage accounts, SSO, and optional email recovery</strong></summary>
+
+Keep registration open or run a private instance. Manage users, administrator roles, and user content from the dashboard. Add **OIDC single sign-on** to connect your identity provider.
+
+Configure an SMTP provider for **password recovery, email verification, and confirmed address changes**. These are optional controls, so you can choose what your instance needs. Existing local accounts are not automatically linked to SSO by matching email.
+
+![Registration and optional OIDC sign-in controls](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-access-viewport.png)
+
+![Optional email delivery and SMTP configuration](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-email-viewport.png)
+
+[Configure SSO →](#single-sign-on-oidc) · [Set up account email →](docs/email.md)
+
+</details>
+
+<details>
+<summary><strong>🏠 Run it on your infrastructure, with your storage</strong></summary>
+
+Deploy with **Docker and PostgreSQL** or use the Railway template. Official images support **AMD64 and ARM64**. Choose local storage or an S3-compatible provider, set upload limits and default user quotas, and manage the instance through Settings.
+
+First-run setup guides you through your account, storage, and registration settings, followed by optional appearance and email steps. Start with the Flare defaults or preview your own look before saving it.
+
+![A demo instance previewing a custom name and Tide theme during guided setup](https://github.com/FlintSH/Flare/releases/download/v2.0.0/demo-setup-viewport.png)
+
+[Walk through setup →](docs/onboarding.md)
+
+</details>
 
 ## 🚀 Quick Start
 
-Flare is quick to deploy—you only need a PostgreSQL server and Docker. Choose one of these options:
+Choose Railway for a guided deployment or Docker for your own server. Both take you to Flare's setup wizard.
 
 ### Railway (One-Click)
 
-Click the button below to deploy Flare on Railway. Once deployed, just set your authentication secret and create your admin account.
+Deploy the template, set your authentication secret, and open your instance to create your administrator account.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/JVT41u?referralCode=R5s8WT)
 
 ### Docker Deployment (Self-Hosted)
 
-1. Install `docker.io` and `docker-compose`
+1. Install Docker and the [Docker Compose plugin](https://docs.docker.com/compose/install/linux/).
 
-2. Create `docker-compose.yml` with the following template:
+2. Create `docker-compose.yml` with the template below. Replace the database password in both places and generate `NEXTAUTH_SECRET` with `openssl rand -base64 32`. Set `NEXTAUTH_URL` to the public URL you will use to access Flare, and keep your authentication secret stable across restarts.
 
-   ```bash
-   version: '3.8'
+   <details>
+   <summary>Copy the Docker Compose configuration</summary>
 
+   ```yaml
    services:
      db:
-       image: postgres:17-alpine   # lightweight, recent version; 16 or 15 also fine
+       image: postgres:17-alpine
        container_name: flare-db
        restart: unless-stopped
        environment:
-         POSTGRES_USER: flareuser          # change if you want
-         POSTGRES_PASSWORD: your-secure-password-here   #  ^f^p CHANGE THIS to something strong
-         POSTGRES_DB: flaredb              # database name Flare will use
+         POSTGRES_USER: flareuser
+         POSTGRES_PASSWORD: your-secure-password-here
+         POSTGRES_DB: flaredb # database name Flare will use
        volumes:
-         - ./postgres-data:/var/lib/postgresql/data   # persistent storage
+         - ./postgres-data:/var/lib/postgresql/data
        healthcheck:
-         test: ["CMD-SHELL", "pg_isready -U flareuser -d flaredb"]
+         test: ['CMD-SHELL', 'pg_isready -U flareuser -d flaredb']
          interval: 10s
          timeout: 5s
          retries: 5
@@ -78,40 +159,37 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
        container_name: flare-app
        restart: unless-stopped
        ports:
-         - "3000:3000"                     # change left side if you want different host port
+         - '3000:3000'
        environment:
          DATABASE_URL: postgresql://flareuser:your-secure-password-here@db:5432/flaredb?schema=public
-         NEXTAUTH_SECRET: securestuffhere   # generate with: openssl rand -base64 32
-         NEXTAUTH_URL: http://localhost:3000     # or https:// if using reverse proxy
+         NEXTAUTH_SECRET: replace-with-your-generated-secret
+         NEXTAUTH_URL: http://localhost:3000
        volumes:
-         - ./uploads:/app/uploads          # where files/screenshots/videos are stored
+         - ./uploads:/app/uploads
        depends_on:
          db:
            condition: service_healthy
-
    ```
 
-3. Run `docker-compose up -d`
+   </details>
 
-4. Open http://localhost:3000 to complete the setup and create your admin account.
+3. Run `docker compose up -d`.
 
-The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
+4. Open http://localhost:3000, or your configured public URL, to complete setup.
 
-## 💬 Support
-
-Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) for support, discussions, and updates!
+Images are available as `flintsh/flare:latest` on Docker Hub and `ghcr.io/flintsh/flare:latest` on GitHub Container Registry. You can also pin a release such as `2.0.0`.
 
 ## 📝 Configuration
 
-Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
+Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal appearance, uploads, integrations, and account controls live in **Profile** (`/dashboard/profile`).
 
-In Settings, administrators can configure:
-
-- Setting storage quotas and file size limits for users
-- Defining upload rules and restrictions
-- Configuring registration options and user permissions
-- Customizing the site's appearance and branding
-- Managing advanced settings like custom CSS and HTML
+| Guide                                      | What you can configure                                               |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| [First-run setup](docs/onboarding.md)      | Administrator account, storage, access, and optional personalization |
+| [Appearance](docs/appearance.md)           | Branding, palettes, public share layouts, packs, and recovery        |
+| [Upload profiles](docs/upload-profiles.md) | Reusable defaults, recipes, and screenshot-tool configurations       |
+| [Integrations](docs/integrations.md)       | Scoped tokens, signed webhooks, and delivery behavior                |
+| [Account email](docs/email.md)             | SMTP, recovery, verification, and environment overrides              |
 
 ### Account email
 
@@ -138,6 +216,14 @@ enable SSO. An explicit account-linking flow is not yet available.
 Older development configurations containing `allowLinking` are accepted, but
 that setting is ignored. Existing SSO links and local credentials are preserved.
 
+## 💬 Support
+
+Need help with your instance, or want to share what you've made? Join my [Discord](https://discord.gg/mwVAjKwPus) for support, discussions, and updates. Bug reports and feature ideas are welcome in [GitHub Issues](https://github.com/FlintSH/Flare/issues).
+
+Want to contribute? Start with the [contributing guide](CONTRIBUTING.md).
+
 ## 📜 License
 
-Flare is licensed under the MIT License.
+Flare is licensed under the [MIT License](LICENSE).
+
+<sub>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a>.</sub>
