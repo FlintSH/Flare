@@ -656,7 +656,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(await prisma.file.count()).toBe(0)
   })
 
-  it('redacts password hashes from the file listing used by scoped read tokens', async () => {
+  it('redacts password hashes from scoped file listings and owner updates', async () => {
     const file = await uploads.finalizeUpload(
       await prepared('Protected notes', { password: 'private-password' })
     )
@@ -680,6 +680,98 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(body).not.toContain(file.password!)
     expect(body).not.toContain('"password"')
     expect(body).toContain('"hasPassword":true')
+
+    authentication.user = { id: 'owner-one', role: 'USER' }
+    const updates = await import('@/app/api/files/[id]/route')
+    for (const changes of [
+      { password: 'replacement-password' },
+      { visibility: 'PRIVATE' },
+      { password: null },
+    ]) {
+      const updated = await updates.PATCH(
+        jsonRequest(`/api/files/${file.id}`, changes, 'PATCH'),
+        { params: Promise.resolve({ id: file.id }) }
+      )
+      expect(updated.status).toBe(200)
+      const metadata = await updated.json()
+      const persisted = await prisma.file.findUniqueOrThrow({
+        where: { id: file.id },
+      })
+      expect(metadata).not.toHaveProperty('password')
+      expect(metadata.hasPassword).toBe(Boolean(persisted.password))
+      expect(metadata.visibility).toBe(persisted.visibility)
+      expect(JSON.stringify(metadata)).not.toContain('replacement-password')
+      if (persisted.password) {
+        expect(JSON.stringify(metadata)).not.toContain(persisted.password)
+        expect(
+          await (
+            await import('bcryptjs')
+          ).compare('replacement-password', persisted.password)
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('serves restricted thumbnails only with access and keeps their bytes and denials out of shared caches', async () => {
+    const image = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
+      'base64'
+    )
+    const thumbnails = await import('@/app/api/files/[id]/thumbnail/route')
+    for (const variant of [
+      { visibility: 'PRIVATE' as const, password: null, deniedStatus: 404 },
+      {
+        visibility: 'PUBLIC' as const,
+        password: 'thumbnail-password',
+        deniedStatus: 401,
+      },
+      { visibility: 'PUBLIC' as const, password: null, deniedStatus: null },
+    ]) {
+      authentication.user = { id: 'owner-one', role: 'USER' }
+      const filePath = `${prefix}/${randomUUID()}.png`
+      await storage.uploadFile(image, filePath, 'image/png')
+      const file = await uploads.finalizeUpload({
+        user: await principal(),
+        storage,
+        filePath,
+        urlPath: `/owner-one/${randomUUID()}.png`,
+        displayName: 'screenshot.png',
+        mimeType: 'image/png',
+        size: image.length,
+        options: schema.mergeUploadOptions({}, {}, variant),
+      })
+      const requestThumbnail = (password?: string) =>
+        thumbnails.GET(
+          new Request(
+            `http://localhost/api/files/${file.id}/thumbnail${password ? `?password=${password}` : ''}`
+          ),
+          { params: Promise.resolve({ id: file.id }) }
+        )
+      const ownerResponse = await requestThumbnail()
+      expect(ownerResponse.status).toBe(200)
+      expect(ownerResponse.headers.get('Content-Type')).toBe('image/png')
+      const expectedCache = variant.deniedStatus
+        ? 'private, no-store'
+        : 'public, max-age=31536000, immutable'
+      expect(ownerResponse.headers.get('Cache-Control')).toBe(expectedCache)
+      expect(Buffer.from(await ownerResponse.arrayBuffer())).toEqual(image)
+
+      authentication.user = null
+      const anonymousResponse = await requestThumbnail()
+      expect(anonymousResponse.status).toBe(variant.deniedStatus ?? 200)
+      expect(anonymousResponse.headers.get('Cache-Control')).toBe(expectedCache)
+      expect(Buffer.from(await anonymousResponse.arrayBuffer())).toEqual(
+        variant.deniedStatus ? Buffer.alloc(0) : image
+      )
+      if (variant.password) {
+        const passwordResponse = await requestThumbnail(variant.password)
+        expect(passwordResponse.status).toBe(200)
+        expect(passwordResponse.headers.get('Cache-Control')).toBe(
+          'private, no-store'
+        )
+        expect(Buffer.from(await passwordResponse.arrayBuffer())).toEqual(image)
+      }
+    }
   })
 
   it('rejects cross-origin and non-JSON profile mutations without changing saved profiles', async () => {

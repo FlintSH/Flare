@@ -59,8 +59,14 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [password, setPassword] = useState(initialFile.password || '')
-  const [file, setFile] = useState(initialFile)
+  const [password, setPassword] = useState('')
+  const [file, setFile] = useState(() => {
+    const { password: legacyPassword, ...metadata } = initialFile
+    return {
+      ...metadata,
+      hasPassword: initialFile.hasPassword ?? Boolean(legacyPassword),
+    }
+  })
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
     file.visibility
   )
@@ -71,6 +77,11 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
+
+  const handlePasswordDialogOpenChange = (open: boolean) => {
+    setPassword('')
+    setIsPasswordDialogOpen(open)
+  }
 
   const handleCopyLink = () => {
     const safeUrl = sanitizeUrl(file.urlPath)
@@ -129,8 +140,8 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
           ? 'File is now password protected'
           : 'Password protection has been removed',
       })
-      setIsPasswordDialogOpen(false)
-      setFile((prev) => ({ ...prev, password: password || null }))
+      setFile((prev) => ({ ...prev, hasPassword: Boolean(password) }))
+      handlePasswordDialogOpenChange(false)
     } catch {
       toast({
         title: 'Failed to update password',
@@ -264,9 +275,13 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                 sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                 priority={false}
                 loading="lazy"
-                // The image optimizer flattens animated GIFs (and can fail to
-                // render them at all). Serve GIFs as-is so previews work.
-                unoptimized={file.mimeType === 'image/gif'}
+                // Direct requests preserve the viewer's session for restricted
+                // files and keep animated GIFs intact.
+                unoptimized={
+                  file.visibility === 'PRIVATE' ||
+                  file.hasPassword ||
+                  file.mimeType === 'image/gif'
+                }
               />
               {isLoadingOcr && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm">
@@ -348,7 +363,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
                     variant="secondary"
                     size="icon"
                     className="h-8 w-8 glass-hover"
-                    onClick={() => setIsPasswordDialogOpen(true)}
+                    onClick={() => handlePasswordDialogOpenChange(true)}
                   >
                     <KeyRound className="h-4 w-4" />
                   </Button>
@@ -404,7 +419,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
         {}
         <div className="absolute bottom-2 left-2">
           <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-background/80 text-xs backdrop-blur-sm">
-            {file.password ? (
+            {file.hasPassword ? (
               <>
                 <KeyRound className="h-3 w-3" />
                 Protected
@@ -521,7 +536,7 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
       {}
       <Dialog
         open={isPasswordDialogOpen}
-        onOpenChange={setIsPasswordDialogOpen}
+        onOpenChange={handlePasswordDialogOpenChange}
       >
         <DialogContent>
           <DialogHeader>
@@ -533,20 +548,32 @@ export function FileCard({ file: initialFile, onDelete }: FileCardProps) {
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Leave empty to remove protection"
+                placeholder={
+                  file.hasPassword
+                    ? 'Leave empty to remove protection'
+                    : 'Enter a password'
+                }
               />
             </div>
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setIsPasswordDialogOpen(false)}
+                onClick={() => handlePasswordDialogOpenChange(false)}
               >
                 Cancel
               </Button>
-              <Button onClick={handlePasswordUpdate}>
-                {password ? 'Enable Protection' : 'Remove Protection'}
+              <Button
+                onClick={handlePasswordUpdate}
+                disabled={!password && !file.hasPassword}
+              >
+                {file.hasPassword
+                  ? password
+                    ? 'Update Protection'
+                    : 'Remove Protection'
+                  : 'Enable Protection'}
               </Button>
             </div>
           </div>
