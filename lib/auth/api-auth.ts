@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
-
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { getEmailConfig } from '@/lib/email/config'
+import { requiresEmailVerification } from '@/lib/email/policy'
 
 export type AuthenticatedUser = {
   id: string
@@ -17,7 +17,7 @@ export type AuthenticatedUser = {
 export async function getAuthenticatedUser(
   req: Request
 ): Promise<AuthenticatedUser | null> {
-  const session = await getServerSession(authOptions)
+  const session = await getAccessSession()
   if (session?.user) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -28,9 +28,17 @@ export async function getAuthenticatedUser(
         vanityId: true,
         role: true,
         randomizeFileUrls: true,
+        email: true,
+        emailVerified: true,
+        emailVerifiedFor: true,
+        emailVerificationSource: true,
+        emailExempt: true,
+        createdAt: true,
       },
     })
-    return user
+    return user && !requiresEmailVerification(user, await getEmailConfig())
+      ? user
+      : null
   }
 
   const authHeader = req.headers.get('authorization')
@@ -45,9 +53,17 @@ export async function getAuthenticatedUser(
         vanityId: true,
         role: true,
         randomizeFileUrls: true,
+        email: true,
+        emailVerified: true,
+        emailVerifiedFor: true,
+        emailVerificationSource: true,
+        emailExempt: true,
+        createdAt: true,
       },
     })
-    return user
+    return user && !requiresEmailVerification(user, await getEmailConfig())
+      ? user
+      : null
   }
 
   return null
@@ -65,7 +81,7 @@ export async function requireAuth(req: Request) {
 }
 
 export async function requireAdmin() {
-  const session = await getServerSession(authOptions)
+  const session = await getAccessSession()
 
   if (!session?.user || session.user.role !== 'ADMIN') {
     return {

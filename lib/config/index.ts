@@ -2,6 +2,7 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
+import { DEFAULT_EMAIL_CONFIG, emailConfigSchema } from '@/lib/email/schema'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.config
@@ -9,6 +10,7 @@ const logger = loggers.config
 export const configSchema = z.object({
   version: z.string(),
   settings: z.object({
+    email: emailConfigSchema.default({}),
     general: z.object({
       setup: z.object({
         completed: z.boolean().default(false),
@@ -92,6 +94,7 @@ export type FlareConfig = z.infer<typeof configSchema>
 export const DEFAULT_CONFIG: FlareConfig = {
   version: '1.0.0',
   settings: {
+    email: DEFAULT_EMAIL_CONFIG,
     general: {
       setup: {
         completed: false,
@@ -216,91 +219,102 @@ export async function getConfig(): Promise<FlareConfig> {
   }
 }
 
+type ConfigUpdate = {
+  version?: string
+  settings?: {
+    [K in keyof FlareConfig['settings']]?: Partial<FlareConfig['settings'][K]>
+  }
+}
+
 export async function updateConfig(
-  newConfig: Partial<FlareConfig>
+  newConfig: ConfigUpdate
 ): Promise<FlareConfig> {
   try {
-    const currentConfig = await getConfig()
-    const mergedConfig = {
-      ...currentConfig,
-      ...newConfig,
-      settings: {
-        ...currentConfig.settings,
-        ...(newConfig.settings || {}),
-        general: {
-          ...currentConfig.settings.general,
-          ...(newConfig.settings?.general || {}),
-          setup: {
-            ...currentConfig.settings.general.setup,
-            ...(newConfig.settings?.general?.setup || {}),
-          },
-          registrations: {
-            ...currentConfig.settings.general.registrations,
-            ...(newConfig.settings?.general?.registrations || {}),
-          },
-          storage: {
-            ...currentConfig.settings.general.storage,
-            ...(newConfig.settings?.general?.storage || {}),
-            quotas: {
-              ...currentConfig.settings.general.storage.quotas,
-              ...(newConfig.settings?.general?.storage?.quotas || {}),
-              default: {
-                ...currentConfig.settings.general.storage.quotas.default,
-                ...(newConfig.settings?.general?.storage?.quotas?.default ||
-                  {}),
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
+      const currentConfig = row ? configSchema.parse(row.value) : DEFAULT_CONFIG
+      const mergedConfig = {
+        ...currentConfig,
+        ...newConfig,
+        settings: {
+          ...currentConfig.settings,
+          ...(newConfig.settings || {}),
+          general: {
+            ...currentConfig.settings.general,
+            ...(newConfig.settings?.general || {}),
+            setup: {
+              ...currentConfig.settings.general.setup,
+              ...(newConfig.settings?.general?.setup || {}),
+            },
+            registrations: {
+              ...currentConfig.settings.general.registrations,
+              ...(newConfig.settings?.general?.registrations || {}),
+            },
+            storage: {
+              ...currentConfig.settings.general.storage,
+              ...(newConfig.settings?.general?.storage || {}),
+              quotas: {
+                ...currentConfig.settings.general.storage.quotas,
+                ...(newConfig.settings?.general?.storage?.quotas || {}),
+                default: {
+                  ...currentConfig.settings.general.storage.quotas.default,
+                  ...(newConfig.settings?.general?.storage?.quotas?.default ||
+                    {}),
+                },
+              },
+              maxUploadSize: {
+                ...currentConfig.settings.general.storage.maxUploadSize,
+                ...(newConfig.settings?.general?.storage?.maxUploadSize || {}),
               },
             },
-            maxUploadSize: {
-              ...currentConfig.settings.general.storage.maxUploadSize,
-              ...(newConfig.settings?.general?.storage?.maxUploadSize || {}),
+            credits: {
+              ...currentConfig.settings.general.credits,
+              ...(newConfig.settings?.general?.credits || {}),
+            },
+            ocr: {
+              ...currentConfig.settings.general.ocr,
+              ...(newConfig.settings?.general?.ocr || {}),
+            },
+            oidc: {
+              ...currentConfig.settings.general.oidc,
+              ...(newConfig.settings?.general?.oidc || {}),
             },
           },
-          credits: {
-            ...currentConfig.settings.general.credits,
-            ...(newConfig.settings?.general?.credits || {}),
+          appearance: {
+            ...currentConfig.settings.appearance,
+            ...(newConfig.settings?.appearance || {}),
+            customColors: {
+              ...currentConfig.settings.appearance.customColors,
+              ...(newConfig.settings?.appearance?.customColors || {}),
+            },
           },
-          ocr: {
-            ...currentConfig.settings.general.ocr,
-            ...(newConfig.settings?.general?.ocr || {}),
-          },
-          oidc: {
-            ...currentConfig.settings.general.oidc,
-            ...(newConfig.settings?.general?.oidc || {}),
-          },
-        },
-        appearance: {
-          ...currentConfig.settings.appearance,
-          ...(newConfig.settings?.appearance || {}),
-          customColors: {
-            ...currentConfig.settings.appearance.customColors,
-            ...(newConfig.settings?.appearance?.customColors || {}),
+          advanced: {
+            ...currentConfig.settings.advanced,
+            ...(newConfig.settings?.advanced || {}),
           },
         },
-        advanced: {
-          ...currentConfig.settings.advanced,
-          ...(newConfig.settings?.advanced || {}),
-        },
-      },
-    }
+      }
 
-    const validatedConfig = configSchema.parse(mergedConfig)
+      const validatedConfig = configSchema.parse(mergedConfig)
 
-    await prisma.config.upsert({
-      where: { key: 'flare_config' },
-      create: {
-        key: 'flare_config',
-        value: validatedConfig as InputJsonValue,
-      },
-      update: {
-        value: validatedConfig as InputJsonValue,
-      },
+      await tx.config.upsert({
+        where: { key: 'flare_config' },
+        create: {
+          key: 'flare_config',
+          value: validatedConfig as InputJsonValue,
+        },
+        update: {
+          value: validatedConfig as InputJsonValue,
+        },
+      })
+
+      logger.info('Configuration updated successfully')
+      return validatedConfig
     })
-
-    logger.info('Configuration updated successfully')
-    return validatedConfig
   } catch (error) {
     logger.warn('Could not save config to database', { error })
-    return newConfig as FlareConfig
+    throw error
   }
 }
 
@@ -308,20 +322,12 @@ export async function updateConfigSection<
   T extends keyof FlareConfig['settings'],
 >(section: T, data: Partial<FlareConfig['settings'][T]>): Promise<void> {
   try {
-    const config = await getConfig()
-    const updatedConfig = {
-      ...config,
-      settings: {
-        ...config.settings,
-        [section]: {
-          ...config.settings[section],
-          ...data,
-        },
-      },
-    }
-    await updateConfig(updatedConfig)
+    // Pass only the edited section. Reading a whole snapshot here would let a
+    // concurrent email save be overwritten after updateConfig acquires its lock.
+    await updateConfig({ settings: { [section]: data } })
     logger.debug('Config section updated', { section })
   } catch (error) {
     logger.warn('Could not update config section', { section, error })
+    throw error
   }
 }

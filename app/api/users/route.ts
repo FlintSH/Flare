@@ -9,11 +9,21 @@ import {
 } from '@/lib/api/response'
 import { requireAdmin } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import {
+  lockEmailAddress,
+  lockEmailUser,
+  sendAccountToken,
+} from '@/lib/email/account'
+import { getEmailConfig, resolveEmailConfig } from '@/lib/email/config'
+import { hasDurableEmailAccess } from '@/lib/email/policy'
+import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 import { createUser } from '@/lib/users/create-user'
 
 const logger = loggers.users
+
+class UserEmailPolicyError extends Error {}
 
 export async function GET(req: Request) {
   try {
@@ -78,6 +88,19 @@ export async function POST(req: Request) {
     }
 
     const body = result.data
+    const emailConfig = await getEmailConfig()
+    if (
+      emailConfig.enabled &&
+      body.password &&
+      Buffer.byteLength(body.password, 'utf8') > 72
+    )
+      return apiError(
+        'Password must use at most 72 bytes.',
+        HTTP_STATUS.BAD_REQUEST
+      )
+    const sendVerification =
+      emailConfig.enabled &&
+      (emailConfig.verification.mode !== 'off' || emailConfig.recovery.enabled)
 
     const exists = await prisma.user.findUnique({
       where: { email: body.email },
@@ -91,14 +114,30 @@ export async function POST(req: Request) {
       ? await hash(body.password, 10)
       : undefined
 
-    const user = await prisma.$transaction((tx) =>
-      createUser(tx, {
+    const user = await prisma.$transaction(async (tx) => {
+      if (emailConfig.enabled) {
+        await lockEmailAddress(tx, body.email)
+        if (
+          await tx.user.findFirst({
+            where: { email: { equals: body.email, mode: 'insensitive' } },
+          })
+        )
+          throw new Error('Email already exists')
+      }
+      const created = await createUser(tx, {
         email: body.email,
         name: body.name,
         password: hashedPassword,
         role: body.role,
+        emailExempt: emailConfig.verification.adminCreated === 'exempt',
+        ...(sendVerification
+          ? { emailVerificationSource: 'pending_local' }
+          : {}),
       })
-    )
+      if (sendVerification)
+        await sendAccountToken(tx, created, 'verify', emailConfig)
+      return created
+    })
 
     return apiResponse<UserResponse>({
       id: user.id,
@@ -142,6 +181,18 @@ export async function PUT(req: Request) {
     if (!existingUser) {
       return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
+    const emailConfig = await getEmailConfig()
+    if (
+      emailConfig.enabled &&
+      body.password &&
+      Buffer.byteLength(body.password, 'utf8') > 72
+    )
+      return apiError(
+        'Password must use at most 72 bytes.',
+        HTTP_STATUS.BAD_REQUEST
+      )
+    const emailChanged =
+      body.email !== undefined && body.email !== existingUser.email
 
     if (body.urlId) {
       const existingUrlId = await prisma.user.findUnique({
@@ -182,6 +233,19 @@ export async function PUT(req: Request) {
       ...(body.email !== undefined && { email: body.email }),
       ...(body.role !== undefined && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
+      ...(emailChanged && {
+        emailVerified: null,
+        emailVerifiedFor: null,
+        emailVerificationSource: null,
+        pendingEmail: null,
+        pendingEmailOldConfirmed: false,
+      }),
+      ...(emailConfig.enabled && (emailChanged || body.password)
+        ? { sessionVersion: { increment: 1 } }
+        : {}),
+      ...(emailConfig.enabled && body.password
+        ? { pendingEmail: null, pendingEmailOldConfirmed: false }
+        : {}),
       ...(body.urlId && { urlId: body.urlId }),
       ...(body.vanityId !== undefined && {
         vanityId: body.vanityId || null,
@@ -221,29 +285,84 @@ export async function PUT(req: Request) {
       }
     }
 
-    const user = await prisma.user.update({
-      where: { id: body.id },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        role: true,
-        urlId: true,
-        vanityId: true,
-        storageUsed: true,
-        _count: {
-          select: {
-            files: true,
-            shortenedUrls: true,
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
+      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
+      const saved = row?.value as { settings?: { email?: unknown } } | undefined
+      const latestConfig = row
+        ? resolveEmailConfig(saved?.settings?.email).config
+        : emailConfig
+      const currentUser = await lockEmailUser(tx, existingUser.id)
+      if (
+        latestConfig.enabled &&
+        currentUser.role === 'ADMIN' &&
+        (emailChanged || body.role !== 'ADMIN')
+      ) {
+        const admins = await tx.user.findMany({ where: { role: 'ADMIN' } })
+        const remainsAccessible = admins.some((admin) => {
+          if (admin.id !== existingUser.id)
+            return hasDurableEmailAccess(admin, latestConfig)
+          if (body.role !== 'ADMIN') return false
+          return hasDurableEmailAccess(
+            emailChanged
+              ? {
+                  ...admin,
+                  emailVerified: null,
+                  emailVerifiedFor: null,
+                  emailVerificationSource: null,
+                }
+              : admin,
+            latestConfig
+          )
+        })
+        if (!remainsAccessible)
+          throw new UserEmailPolicyError(
+            'Verify or exempt another administrator before changing the last administrator recovery address or role'
+          )
+      }
+      if (emailChanged || body.password) {
+        await lockEmailUser(tx, existingUser.id)
+        if (emailConfig.enabled && emailChanged) {
+          await lockEmailAddress(tx, body.email)
+          if (
+            await tx.user.findFirst({
+              where: {
+                id: { not: existingUser.id },
+                email: { equals: body.email, mode: 'insensitive' },
+              },
+            })
+          )
+            throw new Error('Email already exists')
+        }
+        await invalidateEmailTokens(tx, existingUser.id)
+      }
+      return tx.user.update({
+        where: { id: body.id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          role: true,
+          urlId: true,
+          vanityId: true,
+          storageUsed: true,
+          _count: {
+            select: {
+              files: true,
+              shortenedUrls: true,
+            },
           },
         },
-      },
+      })
     })
 
     return apiResponse<UserResponse>(user)
   } catch (error) {
+    if (error instanceof UserEmailPolicyError)
+      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Error updating user', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

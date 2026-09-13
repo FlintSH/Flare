@@ -26,6 +26,7 @@ import {
   Video,
 } from 'lucide-react'
 
+import { UserEmailControls } from '@/components/email/user-email-controls'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -851,7 +852,7 @@ export function UserList() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingUser ? 'Edit User' : 'New User'}</DialogTitle>
             <DialogDescription>
@@ -991,6 +992,9 @@ export function UserList() {
               </Button>
             </DialogFooter>
           </form>
+          {editingUser && (
+            <UserEmailControls key={editingUser.id} userId={editingUser.id} />
+          )}
         </DialogContent>
       </Dialog>
 

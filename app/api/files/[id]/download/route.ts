@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
-
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
@@ -22,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     const { id: fileId } = await params
     const url = new URL(request.url)
     const providedPassword = url.searchParams.get('password')
@@ -115,7 +113,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     const { id: fileId } = await params
 
     let providedPassword: string | null = null

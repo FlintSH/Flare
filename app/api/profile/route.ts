@@ -7,6 +7,9 @@ import { join } from 'path'
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { lockEmailUser } from '@/lib/email/account'
+import { getEmailConfig } from '@/lib/email/config'
+import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.users
@@ -24,6 +27,25 @@ export async function PUT(req: Request) {
     }
 
     const body = result.data
+    const account = await prisma.user.findUnique({ where: { id: user.id } })
+    if (!account) return apiError('User not found', HTTP_STATUS.NOT_FOUND)
+    const emailConfig = await getEmailConfig()
+    if (
+      emailConfig.enabled &&
+      body.newPassword &&
+      Buffer.byteLength(body.newPassword, 'utf8') > 72
+    )
+      return apiError(
+        'Password must use at most 72 bytes.',
+        HTTP_STATUS.BAD_REQUEST
+      )
+    const emailChanged = Boolean(body.email && body.email !== account.email)
+    if (emailConfig.enabled && emailChanged) {
+      return apiError(
+        'Use the verified email change form to change your email address.',
+        HTTP_STATUS.BAD_REQUEST
+      )
+    }
 
     if (body.email) {
       const existingUser = await prisma.user.findUnique({
@@ -66,8 +88,20 @@ export async function PUT(req: Request) {
 
     const updateData: Prisma.UserUpdateInput = {}
     if (body.name) updateData.name = body.name
-    if (body.email) updateData.email = body.email
+    if (emailChanged) updateData.email = body.email
     if (body.newPassword) updateData.password = await hash(body.newPassword, 10)
+    if (emailChanged) {
+      updateData.emailVerified = null
+      updateData.emailVerifiedFor = null
+      updateData.emailVerificationSource = null
+      updateData.pendingEmail = null
+      updateData.pendingEmailOldConfirmed = false
+    }
+    if (emailConfig.enabled && body.newPassword) {
+      updateData.sessionVersion = { increment: 1 }
+      updateData.pendingEmail = null
+      updateData.pendingEmailOldConfirmed = false
+    }
     if (body.image) updateData.image = body.image
     if (typeof body.randomizeFileUrls === 'boolean')
       updateData.randomizeFileUrls = body.randomizeFileUrls
@@ -107,17 +141,28 @@ export async function PUT(req: Request) {
       }
     }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        randomizeFileUrls: true,
-        vanityId: true,
-      },
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      if (emailChanged || body.newPassword) {
+        const fresh = await lockEmailUser(tx, user.id)
+        if (
+          fresh.password !== account.password ||
+          fresh.email !== account.email
+        )
+          throw new Error('Account changed during update')
+        await invalidateEmailTokens(tx, user.id)
+      }
+      return tx.user.update({
+        where: { id: user.id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          randomizeFileUrls: true,
+          vanityId: true,
+        },
+      })
     })
 
     return apiResponse<ProfileResponse>(updatedUser)

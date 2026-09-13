@@ -1,9 +1,11 @@
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
+const DEFAULT_EMAIL_CONFIG = require('../lib/email/defaults.json')
 
 const DEFAULT_CONFIG = {
   version: '1.1.0',
   settings: {
+    email: DEFAULT_EMAIL_CONFIG,
     general: {
       setup: {
         completed: false,
@@ -94,6 +96,14 @@ async function migrateConfig() {
     }
 
     const currentConfig = config.value
+    if (!currentConfig.settings.email) {
+      currentConfig.settings.email = DEFAULT_EMAIL_CONFIG
+      await prisma.config.update({
+        where: { key: 'flare_config' },
+        data: { value: currentConfig },
+      })
+      console.log('Added disabled email settings; account access unchanged')
+    }
     if (!currentConfig.settings?.general?.ocr) {
       currentConfig.settings.general.ocr = {
         enabled: true,

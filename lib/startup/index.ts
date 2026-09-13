@@ -1,3 +1,4 @@
+import { startMailWorker } from '@/lib/email/worker'
 import { initializeEventSystem } from '@/lib/events/init'
 import { loggers } from '@/lib/logger'
 
@@ -16,6 +17,7 @@ export async function runStartupTasks() {
     logger.info('Running startup tasks...')
 
     await initializeEventSystem()
+    startMailWorker()
 
     startupComplete = true
     const duration = Date.now() - startTime

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { sanitizeFilename } from '@/lib/security/paths'
@@ -16,7 +15,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     const { id } = await params
 
     if (!session?.user || session.user.role !== 'ADMIN') {

@@ -12,6 +12,7 @@ import {
   updateConfig,
   updateConfigSection,
 } from '@/lib/config'
+import { redactEmailConfig } from '@/lib/email/config'
 import { loggers } from '@/lib/logger'
 import { invalidateStorageProvider } from '@/lib/storage'
 
@@ -73,7 +74,13 @@ export async function GET(req: Request) {
       return apiResponse<PublicSettings>(publicSettings)
     }
 
-    return apiResponse<FlareConfig>(config)
+    return apiResponse<FlareConfig>({
+      ...config,
+      settings: {
+        ...config.settings,
+        email: redactEmailConfig(config.settings.email),
+      },
+    })
   } catch (error) {
     logger.error('Failed to get config', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
@@ -90,6 +97,12 @@ export async function PATCH(request: Request) {
     const body = await request.json()
     const { section, data } =
       body as UpdateSettingSectionRequest<SettingSection>
+
+    if (section === 'email')
+      return apiError(
+        'Use the email settings endpoint',
+        HTTP_STATUS.BAD_REQUEST
+      )
 
     const config = await getConfig()
 
@@ -112,9 +125,18 @@ export async function PATCH(request: Request) {
       }
     }
 
-    await updateConfigSection(section, data)
+    await updateConfigSection(
+      section,
+      data as Partial<FlareConfig['settings'][Exclude<SettingSection, 'email'>]>
+    )
     const updatedConfig = await getConfig()
-    return apiResponse<FlareConfig>(updatedConfig)
+    return apiResponse<FlareConfig>({
+      ...updatedConfig,
+      settings: {
+        ...updatedConfig.settings,
+        email: redactEmailConfig(updatedConfig.settings.email),
+      },
+    })
   } catch (error) {
     logger.error('Failed to update config', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
@@ -127,6 +149,10 @@ export async function POST(req: Request) {
     if (response) return response
 
     const config: FlareConfig = await req.json()
+    // The Email tab owns this section. A stale whole-settings form must not
+    // overwrite its policy or submit masked SMTP credentials as a password.
+    if (config.settings)
+      delete (config.settings as Partial<FlareConfig['settings']>).email
 
     if (config.settings.advanced.customCSS) {
       config.settings.advanced.customCSS = config.settings.advanced.customCSS

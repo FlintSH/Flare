@@ -3,8 +3,6 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { getServerSession } from 'next-auth'
-
 import { ProtectedFile } from '@/components/file/protected-file'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
@@ -14,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
@@ -89,7 +87,7 @@ export async function generateMetadata({
 }: FilePageProps): Promise<Metadata> {
   const { userUrlId, filename } = await params
   const headersList = await headers()
-  const session = await getServerSession(authOptions)
+  const session = await getAccessSession()
   const providedPassword = (await searchParams).password as string | undefined
 
   const path = headersList.get('x-invoke-path') || ''
@@ -206,7 +204,7 @@ export default async function FilePage({
   params,
   searchParams,
 }: FilePageProps) {
-  const session = await getServerSession(authOptions)
+  const session = await getAccessSession()
   const config = await getConfig()
   const { userUrlId, filename } = await params
   const providedPassword = (await searchParams).password as string | undefined

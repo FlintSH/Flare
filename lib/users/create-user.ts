@@ -37,6 +37,9 @@ interface CreateUserInput {
   oidcSubject?: string
   role?: UserRole
   emailVerified?: Date
+  emailVerifiedFor?: string
+  emailVerificationSource?: string
+  emailExempt?: boolean
 }
 
 export async function createUser(
@@ -59,6 +62,9 @@ export async function createUser(
       password: input.password,
       oidcSubject: input.oidcSubject,
       emailVerified: input.emailVerified,
+      emailVerifiedFor: input.emailVerifiedFor,
+      emailVerificationSource: input.emailVerificationSource,
+      emailExempt: input.emailExempt,
       urlId,
       role,
       uploadToken: uuidv4(),

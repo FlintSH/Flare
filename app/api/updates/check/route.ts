@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 
 import pkg from '@/package.json'
-import { getServerSession } from 'next-auth'
 
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.api
@@ -28,7 +27,7 @@ function compareVersions(v1: string, v2: string): number {
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     if (!session?.user || session.user.role !== 'ADMIN') {
       return new NextResponse('Unauthorized', { status: 401 })
     }

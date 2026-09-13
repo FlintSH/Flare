@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 
+import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
-import { updateConfig } from '@/lib/config'
+import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
@@ -50,74 +51,48 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hash(validatedData.admin.password, 10)
 
-    const user = await prisma.$transaction(async (tx) => {
-      const userCount = await tx.user.count()
-      if (userCount > 0) {
-        throw new SetupAlreadyCompleteError()
-      }
-
-      return createUser(tx, {
-        name: validatedData.admin.name,
-        email: validatedData.admin.email,
-        password: hashedPassword,
-        role: 'ADMIN',
-        emailVerified: new Date(),
-      })
-    })
-
-    await updateConfig({
+    const initialConfig = configSchema.parse({
+      ...DEFAULT_CONFIG,
       settings: {
+        ...DEFAULT_CONFIG.settings,
         general: {
-          setup: {
-            completed: true,
-            completedAt: new Date(),
-          },
+          ...DEFAULT_CONFIG.settings.general,
+          setup: { completed: true, completedAt: new Date() },
           storage: {
+            ...DEFAULT_CONFIG.settings.general.storage,
             provider: validatedData.storage.provider,
             s3: validatedData.storage.s3,
-            quotas: {
-              enabled: false,
-              default: {
-                value: 10,
-                unit: 'GB',
-              },
-            },
-            maxUploadSize: {
-              value: 100,
-              unit: 'MB',
-            },
           },
           registrations: {
             enabled: validatedData.registrations.enabled,
             disabledMessage: validatedData.registrations.disabledMessage || '',
           },
-          credits: {
-            showFooter: true,
-          },
-          ocr: {
-            enabled: true,
-          },
-          oidc: {
-            enabled: false,
-            issuer: '',
-            clientId: '',
-            clientSecret: '',
-            buttonText: 'Sign in with SSO',
-            autoProvision: true,
-            requireEmailVerified: true,
-            enforceSso: false,
-          },
         },
-        appearance: {
-          theme: 'dark',
-          favicon: null,
-          customColors: {},
-        },
-        advanced: {
-          customCSS: '',
-          customHead: '',
-        },
+        appearance: { ...DEFAULT_CONFIG.settings.appearance, customColors: {} },
       },
+    })
+    const configValue = JSON.parse(
+      JSON.stringify(initialConfig)
+    ) as Prisma.InputJsonValue
+    // Account and settings succeed together. Serializing bootstrap also prevents
+    // simultaneous setup requests from creating multiple initial administrators.
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      const userCount = await tx.user.count()
+      if (userCount > 0) throw new SetupAlreadyCompleteError()
+      const admin = await createUser(tx, {
+        name: validatedData.admin.name,
+        email: validatedData.admin.email,
+        password: hashedPassword,
+        role: 'ADMIN',
+        emailExempt: true,
+      })
+      await tx.config.upsert({
+        where: { key: 'flare_config' },
+        create: { key: 'flare_config', value: configValue },
+        update: { value: configValue },
+      })
+      return admin
     })
 
     return NextResponse.json({

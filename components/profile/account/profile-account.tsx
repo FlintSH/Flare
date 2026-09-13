@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation'
 import { ProfileAccountProps } from '@/types/components/profile'
 import { useSession } from 'next-auth/react'
 
+import {
+  AccountEmail,
+  useAccountEmailStatus,
+} from '@/components/email/account-email'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +33,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const [vanityError, setVanityError] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
+  const { status: emailStatus, refresh: refreshEmail } = useAccountEmailStatus()
 
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -99,7 +104,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         },
         body: JSON.stringify({
           name: nameRef.current?.value,
-          email: emailRef.current?.value,
+          ...(emailStatus?.enabled ? {} : { email: emailRef.current?.value }),
         }),
       })
 
@@ -229,16 +234,18 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  ref={emailRef}
-                  defaultValue={user.email || ''}
-                  placeholder="Your email"
-                />
-              </div>
+              {!emailStatus?.enabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    ref={emailRef}
+                    defaultValue={user.email || ''}
+                    placeholder="Your email"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end">
@@ -249,6 +256,16 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           </form>
         </div>
       </div>
+
+      {emailStatus?.enabled && (
+        <div className="mt-6">
+          <AccountEmail
+            status={emailStatus}
+            email={user.email}
+            refresh={refreshEmail}
+          />
+        </div>
+      )}
 
       <div className="rounded-lg border p-4 mt-6">
         <div className="space-y-4">

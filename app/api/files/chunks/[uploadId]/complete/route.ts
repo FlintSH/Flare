@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server'
 
 import { FileUploadResponse } from '@/types/dto/file'
 import { hash } from 'bcryptjs'
-import { getServerSession } from 'next-auth'
 import { readFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { authOptions } from '@/lib/auth'
+import { getAuthenticatedUser } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { scheduleFileExpiration } from '@/lib/events/handlers/file-expiry'
 import { loggers } from '@/lib/logger'
@@ -20,41 +19,6 @@ const logger = loggers.files
 
 interface RouteParams {
   uploadId: string
-}
-
-async function getAuthenticatedUser(req: Request) {
-  const session = await getServerSession(authOptions)
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        role: true,
-      },
-    })
-    return user
-  }
-
-  const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: token },
-      select: {
-        id: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        role: true,
-      },
-    })
-    return user
-  }
-
-  return null
 }
 
 async function getUploadMetadata(localId: string) {

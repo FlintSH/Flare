@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 import { signIn } from 'next-auth/react'
 
+import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +33,15 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false)
   const [isOidcLoading, setIsOidcLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recoveryEnabled, setRecoveryEnabled] = useState(false)
+
+  useEffect(() => {
+    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
+      .then((email) =>
+        setRecoveryEnabled(email.enabled && email.recoveryEnabled)
+      )
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const errorCode = searchParams.get('error')
@@ -71,8 +81,10 @@ export function LoginForm({
         return
       }
 
-      // Keep this fixed callback on the current origin (including preview/replay hosts).
-      router.push('/dashboard')
+      // Only allow these fixed callbacks on the current origin.
+      router.push(
+        searchParams.get('setupEmail') === '1' ? '/setup/email' : '/dashboard'
+      )
     } catch {
       setError('An error occurred. Please try again.')
     } finally {
@@ -131,6 +143,14 @@ export function LoginForm({
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="current-password"
           />
+          {recoveryEnabled && (
+            <Link
+              href="/auth/forgot-password"
+              className="block text-right text-sm text-primary hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          )}
         </div>
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md flex items-center space-x-2">

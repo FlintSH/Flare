@@ -73,7 +73,11 @@ export function SetupChecker({ children }: SetupCheckerProps) {
         return
       }
 
-      if (setupStatus.completed && pathname.startsWith('/setup')) {
+      if (
+        setupStatus.completed &&
+        pathname.startsWith('/setup') &&
+        pathname !== '/setup/email'
+      ) {
         router.push('/dashboard')
         return
       }
