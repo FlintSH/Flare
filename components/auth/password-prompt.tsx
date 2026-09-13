@@ -44,7 +44,11 @@ export function PasswordPrompt({ onSubmit, onSuccess }: PasswordPromptProps) {
 
   return (
     <Dialog open>
-      <DialogContent>
+      <DialogContent
+        showCloseButton={false}
+        onEscapeKeyDown={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Password Protected File</DialogTitle>
           <DialogDescription>
