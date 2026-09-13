@@ -325,7 +325,10 @@ the shared workspace's existing hard limit as part of preview troubleshooting.
 
 Preview count and expiry do not cap GitHub CI or registry usage. The controller
 prunes its unused preview image versions; image build artifacts expire after one
-day. Monitor failed deletions and registry storage separately. Removing a preview
+day. If cleanup would empty the package, it retains the newest inactive image
+version to preserve the package's public visibility and Actions access. This
+retained image uses no Railway compute and becomes eligible for cleanup after a
+new image is published. Monitor failed deletions and registry storage separately. Removing a preview
 does not retract images or files already downloaded by visitors. These images
 are test artifacts, not supported releases.
 
