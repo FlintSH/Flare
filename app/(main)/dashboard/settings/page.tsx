@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import Link from 'next/link'
+
 import pkg from '@/package.json'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
@@ -1483,6 +1485,22 @@ export default function SettingsPage() {
             </TabsContent>
 
             <TabsContent value="appearance" className="space-y-4">
+              <Alert>
+                <InfoIcon className="h-4 w-4" />
+                <AlertDescription>
+                  {workingConfig?.settings.customization?.published.theme
+                    .enabled
+                    ? 'Your Appearance studio theme currently controls the instance colors. '
+                    : 'Create paired light/dark themes, change your brand, and design share pages in Appearance. '}
+                  <Link
+                    href="/dashboard/customize"
+                    className="font-medium underline underline-offset-4"
+                  >
+                    Open Appearance studio
+                  </Link>
+                  . Your favicon and advanced CSS remain managed here.
+                </AlertDescription>
+              </Alert>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>

@@ -75,7 +75,8 @@ export async function POST(
       return apiError('File not found', HTTP_STATUS.NOT_FOUND)
     }
 
-    await cancelFileExpiration(id)
+    if (![ExpiryAction.DELETE, ExpiryAction.SET_PRIVATE].includes(action))
+      return apiError('Invalid expiration action', HTTP_STATUS.BAD_REQUEST)
 
     await scheduleFileExpiration(id, user.id, file.name, expirationDate, action)
 

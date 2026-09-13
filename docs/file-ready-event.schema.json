@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flare file.ready event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "type", "occurredAt", "data"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
+    "type": { "const": "file.ready" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "test": { "const": true },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "mimeType",
+        "sizeBytes",
+        "visibility",
+        "passwordProtected"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
+        "passwordProtected": { "type": "boolean" }
+      }
+    }
+  }
+}

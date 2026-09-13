@@ -1,7 +1,7 @@
 import { LoginForm } from '@/components/auth/login-form'
 import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
+import { InstanceBrand } from '@/components/customization/instance-brand'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
-import { Icons } from '@/components/shared/icons'
 
 import { isOidcProviderConfigured } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
@@ -33,8 +33,10 @@ export default async function LoginPage({
             <div className="relative rounded-2xl bg-white/10 dark:bg-black/10 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-lg shadow-black/5 dark:shadow-black/20">
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/10 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
               <div className="relative flex items-center justify-center space-x-3 px-6 py-4">
-                <Icons.logo className="h-8 w-8 text-primary" />
-                <span className="flare-text text-2xl text-primary">Flare</span>
+                <InstanceBrand
+                  iconClassName="h-8 w-8 text-primary"
+                  textClassName="text-2xl text-primary"
+                />
               </div>
             </div>
           </div>

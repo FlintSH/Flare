@@ -1,8 +1,10 @@
 import { Metadata } from 'next'
 
-export const metadata: Metadata = {
-  title: 'Flare',
-  description: 'A free, modern, open source file upload platform',
+import { getConfig } from '@/lib/config'
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { brand } = (await getConfig()).settings.customization.published
+  return { title: brand.name, description: brand.tagline }
 }
 
 export default function MainLayout({

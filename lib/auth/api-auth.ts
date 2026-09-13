@@ -4,6 +4,11 @@ import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
+import {
+  TOKEN_PREFIX,
+  hashApiToken,
+  tokenAllowsRequest,
+} from '@/lib/integrations/tokens'
 
 export type AuthenticatedUser = {
   id: string
@@ -12,11 +17,50 @@ export type AuthenticatedUser = {
   vanityId: string | null
   role: string
   randomizeFileUrls: boolean
+  apiToken?: { id: string; scopes: string[]; profileId: string | null }
 }
 
 export async function getAuthenticatedUser(
   req: Request
 ): Promise<AuthenticatedUser | null> {
+  const bearer = req.headers.get('authorization')
+  const suppliedToken = bearer?.startsWith('Bearer ')
+    ? bearer.slice(7)
+    : undefined
+  // A named bearer token always uses its own authority, even if cookies coexist.
+  if (suppliedToken?.startsWith(TOKEN_PREFIX)) {
+    const token = await prisma.apiToken.findUnique({
+      where: { hash: hashApiToken(suppliedToken) },
+      include: { user: true },
+    })
+    if (
+      !token ||
+      token.revokedAt ||
+      (token.expiresAt && token.expiresAt <= new Date()) ||
+      !tokenAllowsRequest(token.scopes, req) ||
+      requiresEmailVerification(token.user, await getEmailConfig())
+    )
+      return null
+    // Best-effort activity metadata must not make an otherwise valid request fail.
+    await prisma.apiToken
+      .update({ where: { id: token.id }, data: { lastUsedAt: new Date() } })
+      .catch(() => {})
+    const { id, storageUsed, urlId, vanityId, role, randomizeFileUrls } =
+      token.user
+    return {
+      id,
+      storageUsed,
+      urlId,
+      vanityId,
+      role,
+      randomizeFileUrls,
+      apiToken: {
+        id: token.id,
+        scopes: token.scopes,
+        profileId: token.profileId,
+      },
+    }
+  }
   const session = await getAccessSession()
   if (session?.user) {
     const user = await prisma.user.findUnique({

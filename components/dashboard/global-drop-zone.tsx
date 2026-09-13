@@ -27,6 +27,7 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
       router.refresh()
       setShouldUpload(false)
     },
+    onUploadError: () => setShouldUpload(false),
   })
 
   const handleDragEnter = useCallback((e: DragEvent) => {
@@ -168,7 +169,7 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
             </h2>
 
             <p className="text-muted-foreground/80 text-center max-w-md text-lg">
-              Release to upload files to your account :3
+              Release to upload using your account’s default upload profile.
             </p>
 
             <div className="mt-8 flex gap-2">

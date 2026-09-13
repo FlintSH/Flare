@@ -8,33 +8,38 @@ datasource db {
 }
 
 model User {
-  id                          String         @id @default(cuid())
+  id                          String          @id @default(cuid())
   name                        String?
-  email                       String?        @unique
+  email                       String?         @unique
   emailVerified               DateTime?
   emailVerifiedFor            String?
   emailVerificationSource     String?
-  emailExempt                 Boolean        @default(false)
+  emailExempt                 Boolean         @default(false)
   pendingEmail                String?
-  pendingEmailOldConfirmed    Boolean        @default(false)
+  pendingEmailOldConfirmed    Boolean         @default(false)
   emailTokens                 EmailToken[]
   mailOutbox                  MailOutbox[]
   image                       String?
   password                    String?
-  role                        UserRole       @default(USER)
-  createdAt                   DateTime       @default(now())
-  updatedAt                   DateTime       @updatedAt
-  storageUsed                 Float          @default(0)
-  sessionVersion              Int            @default(1)
-  oidcSubject                 String?        @unique
-  vanityId                    String?        @unique
-  urlId                       String         @unique
-  uploadToken                 String         @unique
-  randomizeFileUrls           Boolean        @default(false)
+  role                        UserRole        @default(USER)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+  storageUsed                 Float           @default(0)
+  sessionVersion              Int             @default(1)
+  oidcSubject                 String?         @unique
+  vanityId                    String?         @unique
+  urlId                       String          @unique
+  uploadToken                 String          @unique
+  randomizeFileUrls           Boolean         @default(false)
   files                       File[]
   shortenedUrls               ShortenedUrl[]
-  defaultFileExpiration       FileExpiration @default(DISABLED)
-  defaultFileExpirationAction ExpiryAction   @default(DELETE)
+  defaultFileExpiration       FileExpiration  @default(DISABLED)
+  defaultFileExpirationAction ExpiryAction    @default(DELETE)
+  preferences                 Json            @default("{}")
+  defaultUploadProfileId      String?
+  uploadProfiles              UploadProfile[]
+  apiTokens                   ApiToken[]
+  webhooks                    Webhook[]
 }
 
 model EmailToken {
@@ -104,7 +109,72 @@ model File {
   ocrConfidence  Float?
   views          Int            @default(0)
   downloads      Int            @default(0)
+  uploadOptions  Json           @default("{}")
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UploadProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  options   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  hash       String    @unique
+  scopes     String[]
+  profileId  String?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Webhook {
+  id         String            @id @default(cuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  url        String
+  secret     String
+  enabled    Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  deliveries WebhookDelivery[]
+
+  @@index([userId])
+}
+
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  eventId     String
+  webhookId   String
+  webhook     Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  payload     Json
+  status      String    @default("pending")
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  leaseId     String?
+  leaseUntil  DateTime?
+  lastError   String?
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([webhookId, eventId])
+  @@index([status, availableAt])
+  @@index([leaseUntil])
 }
 
 model ShortenedUrl {

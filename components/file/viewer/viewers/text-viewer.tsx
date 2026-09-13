@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import CodeMirror from '@uiw/react-codemirror'
+import { useTheme } from 'next-themes'
 
 import { getLanguageExtension } from '../../protected/language-utils'
 import { ErrorState } from '../components/error-state'
@@ -9,6 +10,7 @@ import { useFileViewer } from '../context'
 
 export function TextViewer() {
   const { state, fetchContent } = useFileViewer()
+  const { resolvedTheme } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
   const [fixedWidth, setFixedWidth] = useState<number | null>(null)
 
@@ -57,7 +59,7 @@ export function TextViewer() {
           width={fixedWidth ? `${fixedWidth}px` : '100%'}
           extensions={[getLanguageExtension('text')]}
           editable={false}
-          theme="dark"
+          theme={resolvedTheme === 'light' ? 'light' : 'dark'}
           basicSetup={{
             lineNumbers: true,
             highlightActiveLineGutter: false,

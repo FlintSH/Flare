@@ -1,11 +1,5 @@
-import {
-  FileMetadata,
-  FileUploadResponse,
-  FileVisibility,
-} from '@/types/dto/file'
+import { FileMetadata } from '@/types/dto/file'
 import { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
-import { join } from 'path'
 
 import {
   HTTP_STATUS,
@@ -16,264 +10,101 @@ import {
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import {
-  getFileExpirationInfo,
-  scheduleFileExpiration,
-} from '@/lib/events/handlers/file-expiry'
-import { getUniqueFilename } from '@/lib/files/filename'
+import { getFileExpirationInfo } from '@/lib/events/handlers/file-expiry'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
-import { processImageOCR } from '@/lib/ocr'
-import { validateFileType } from '@/lib/security/file-validation'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
-import { getStorageProvider } from '@/lib/storage'
-import { bytesToMB } from '@/lib/utils'
+import { type StorageProvider, getStorageProvider } from '@/lib/storage'
+import {
+  cleanupUncommittedUpload,
+  finalizeUpload,
+  prepareUploadDestination,
+} from '@/lib/uploads/finalize'
+import { uploadLinks } from '@/lib/uploads/links'
+import {
+  UploadError,
+  applyUploadOverrides,
+  parseUploadFields,
+  requestUploadOptions,
+  resolveUploadOptions,
+  uploadErrorResponse,
+} from '@/lib/uploads/options'
 
 const logger = loggers.files
-
 export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
   const limited = await rateLimit(req, uploadLimiter)
   if (limited) return limited
-
   let filePath = ''
-  let userId: string | undefined
-
+  let storage: StorageProvider | undefined
   try {
     const { user, response } = await requireAuth(req)
-    userId = user?.id
     if (response) return response
-
-    const contentType = req.headers.get('content-type') || ''
-    if (!contentType.includes('multipart/form-data')) {
-      return apiError(
-        'Content-Type must be multipart/form-data',
-        HTTP_STATUS.BAD_REQUEST
-      )
-    }
-
+    if (!req.headers.get('content-type')?.includes('multipart/form-data'))
+      throw new UploadError('Content-Type must be multipart/form-data.')
+    const selection = requestUploadOptions(req)
+    const initialOptions = await resolveUploadOptions(user, selection)
     const config = await getConfig()
-    const maxSize = config.settings.general.storage.maxUploadSize
+    const limits = config.settings.general.storage
     const maxBytes =
-      maxSize.value * (maxSize.unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
-    const quotasEnabled = config.settings.general.storage.quotas.enabled
-    const defaultQuota = config.settings.general.storage.quotas.default
-
-    let quotaLimitBytes = Number.POSITIVE_INFINITY
-    if (quotasEnabled && user.role !== 'ADMIN') {
-      const quotaMB =
-        defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
-      const remainingMB = quotaMB - user.storageUsed
-      quotaLimitBytes = Math.max(0, remainingMB) * 1024 * 1024
-    }
-
-    if (quotaLimitBytes <= 0) {
-      return apiError(
-        `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
-        HTTP_STATUS.PAYLOAD_TOO_LARGE
-      )
-    }
-
-    const storageProvider = await getStorageProvider()
-
+      limits.maxUploadSize.value *
+      (limits.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
+    const quotaMB =
+      limits.quotas.default.value *
+      (limits.quotas.default.unit === 'GB' ? 1024 : 1)
+    const quotaLimitBytes =
+      limits.quotas.enabled && user.role !== 'ADMIN'
+        ? Math.max(0, quotaMB - user.storageUsed) * 1024 ** 2
+        : Infinity
+    if (quotaLimitBytes <= 0)
+      throw new UploadError('You have reached your storage quota.', 413)
+    storage = await getStorageProvider()
     const { upload, fields, limitHit } = await parseSingleFileUpload({
       req,
-      storageProvider,
+      storageProvider: storage,
       maxBytes,
       quotaLimitBytes,
       resolveDestination: async ({ filename }) => {
-        const { urlSafeName, displayName } = await getUniqueFilename(
-          join('uploads', user.urlId),
+        const destination = await prepareUploadDestination(
+          user,
           filename,
-          user.randomizeFileUrls
+          initialOptions
         )
-
-        filePath = join('uploads', user.urlId, urlSafeName)
-
-        return {
-          filePath,
-          urlPath: `/${user.urlId}/${urlSafeName}`,
-          displayName,
-          urlSafeName,
-        }
+        filePath = destination.filePath
+        return destination
       },
     })
-
-    const cleanupPartialUpload = async () => {
-      if (!filePath) return
-      try {
-        await storageProvider.deleteFile(filePath)
-      } catch (unlinkError) {
-        logger.debug('No partial upload to clean up', {
-          filePath,
-          error: unlinkError,
-        })
-      }
-    }
-
-    if (limitHit === 'quota') {
-      await cleanupPartialUpload()
-      return apiError(
-        `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
-        HTTP_STATUS.PAYLOAD_TOO_LARGE
+    if (limitHit)
+      throw new UploadError(
+        limitHit === 'quota'
+          ? 'The file would exceed your storage quota.'
+          : 'The file exceeds the upload size limit.',
+        413
       )
-    }
-
-    if (limitHit === 'size') {
-      await cleanupPartialUpload()
-      return apiError(
-        `Maximum file size is ${maxSize.value}${maxSize.unit}`,
-        HTTP_STATUS.PAYLOAD_TOO_LARGE
-      )
-    }
-
-    if (!upload) {
-      return apiError('No file provided', HTTP_STATUS.BAD_REQUEST)
-    }
-
-    const visibility =
-      fields.visibility === FileVisibility.PRIVATE
-        ? FileVisibility.PRIVATE
-        : FileVisibility.PUBLIC
-    const password = fields.password || null
-    const expiresAt = fields.expiresAt || null
-
-    let expirationDate: Date | null = null
-    if (expiresAt) {
-      expirationDate = new Date(expiresAt)
-      if (isNaN(expirationDate.getTime()) || expirationDate <= new Date()) {
-        await cleanupPartialUpload()
-        return apiError(
-          'Invalid expiration date. Must be in the future.',
-          HTTP_STATUS.BAD_REQUEST
-        )
-      }
-    }
-
-    const { displayName, urlPath, mimeType, size, urlSafeName } = upload
-
-    // Validate the real file type against the claimed MIME using only the header
-    // bytes read back from storage, so we never buffer the whole file in memory.
-    const headStream = await storageProvider.getFileStream(filePath, {
-      start: 0,
-      end: 4099,
-    })
-    const headChunks: Buffer[] = []
-    for await (const chunk of headStream) {
-      headChunks.push(Buffer.from(chunk))
-    }
-    const typeCheck = await validateFileType(
-      Buffer.concat(headChunks),
-      mimeType
+    if (!upload) throw new UploadError('No file provided.')
+    const overrides = parseUploadFields(fields)
+    // Profile and naming are fixed before any bytes are written. Other fields remain
+    // compatible with existing multipart clients regardless of field ordering.
+    if (
+      overrides.profileId !== undefined &&
+      overrides.profileId !== initialOptions.profileId
     )
-    if (!typeCheck.valid) {
-      logger.warn('File type mismatch on upload', {
-        claimed: mimeType,
-        detected: typeCheck.detectedType,
-        userId: user.id,
-      })
-      await cleanupPartialUpload()
-      return apiError(
-        `File type mismatch: detected ${typeCheck.detectedType}, claimed ${mimeType}`,
-        HTTP_STATUS.BAD_REQUEST
+      throw new UploadError(
+        'Select the profile using X-Upload-Profile before uploading.'
       )
-    }
-
-    const fileRecord = await prisma.$transaction(async (tx) => {
-      const file = await tx.file.create({
-        data: {
-          name: displayName,
-          urlPath,
-          mimeType,
-          size: bytesToMB(size),
-          path: filePath,
-          visibility,
-          password: password ? await hash(password, 10) : null,
-          userId: user.id,
-        },
-      })
-
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          storageUsed: {
-            increment: bytesToMB(size),
-          },
-        },
-      })
-
-      return file
-    })
-
-    if (mimeType.startsWith('image/')) {
-      processImageOCR(filePath, fileRecord.id).catch((error) => {
-        logger.error('Background OCR processing failed', error as Error, {
-          fileId: fileRecord.id,
-          filePath,
-        })
-      })
-    }
-
-    if (expirationDate) {
-      try {
-        await scheduleFileExpiration(
-          fileRecord.id,
-          user.id,
-          displayName,
-          expirationDate
-        )
-        logger.info('File expiration scheduled', {
-          fileId: fileRecord.id,
-          fileName: displayName,
-          expirationDate,
-        })
-      } catch (error) {
-        logger.error('Failed to schedule file expiration', error as Error, {
-          fileId: fileRecord.id,
-        })
-      }
-    }
-
-    const baseUrl =
-      process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3000'
-        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
-    const fullUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
-
-    const displayUrlPath = user.vanityId
-      ? `/${user.vanityId}/${urlSafeName}`
-      : urlPath
-
-    const responseData: FileUploadResponse = {
-      url: `${fullUrl}${displayUrlPath}`,
-      name: displayName,
-      size,
-      type: mimeType,
-    }
-
-    return apiResponse<FileUploadResponse>(responseData)
+    if (
+      overrides.randomizeFileUrls !== undefined &&
+      overrides.randomizeFileUrls !== initialOptions.randomizeFileUrls
+    )
+      throw new UploadError('Select a naming strategy in your upload profile.')
+    const options = applyUploadOverrides(user, initialOptions, overrides)
+    const file = await finalizeUpload({ user, storage, ...upload, options })
+    return apiResponse(uploadLinks(file, user, options))
   } catch (error) {
-    logger.error('Upload error', error as Error, {
-      userId,
-    })
-
-    if (filePath) {
-      try {
-        const storageProvider = await getStorageProvider()
-        await storageProvider.deleteFile(filePath)
-        logger.info('Cleaned up file after error', { filePath })
-      } catch (unlinkError) {
-        logger.error('Failed to clean up file', unlinkError as Error, {
-          filePath,
-        })
-      }
-    }
-
-    return apiError(
-      'An unexpected error occurred',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
+    if (storage && filePath) await cleanupUncommittedUpload(storage, filePath)
+    logger.error('Upload failed', error as Error)
+    return uploadErrorResponse(error)
   }
 }
 
@@ -405,9 +236,10 @@ export async function GET(request: Request) {
     const filesList = (await Promise.all(
       files.map(async (file) => {
         const expiresAt = await getFileExpirationInfo(file.id)
+        const { password, ...publicFile } = file
         return {
-          ...file,
-          hasPassword: Boolean(file.password),
+          ...publicFile,
+          hasPassword: Boolean(password),
           expiresAt,
         }
       })
@@ -420,7 +252,9 @@ export async function GET(request: Request) {
       limit,
     }
 
-    return paginatedResponse<FileMetadata[]>(filesList, pagination)
+    const result = paginatedResponse<FileMetadata[]>(filesList, pagination)
+    result.headers.set('Cache-Control', 'private, no-store')
+    return result
   } catch (error) {
     logger.error('Error fetching files', error as Error)
     return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)

@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { formatBytes } from '@/lib/utils'
 
@@ -35,32 +36,6 @@ interface UploadFormProps {
     defaultFileExpiration: $Enums.FileExpiration | null
     defaultFileExpirationAction: $Enums.ExpiryAction | null
   }
-}
-
-const getDefaultExpiryDate = (unit: $Enums.FileExpiration | null) => {
-  if (!unit || unit === 'DISABLED') return undefined
-
-  const date = new Date()
-
-  switch (unit) {
-    case 'HOUR':
-      date.setHours(date.getHours() + 1)
-      break
-    case 'DAY':
-      date.setDate(date.getDate() + 1)
-      date.setHours(23, 59, 59, 999)
-      break
-    case 'WEEK':
-      date.setDate(date.getDate() + 7)
-      date.setHours(23, 59, 59, 999)
-      break
-    case 'MONTH':
-      date.setMonth(date.getMonth() + 1)
-      date.setHours(23, 59, 59, 999)
-      break
-  }
-
-  return date
 }
 
 export function UploadForm({
@@ -82,9 +57,12 @@ export function UploadForm({
     setPassword,
     expiresAt,
     setExpiresAt,
+    expiryAction,
+    setExpiryAction,
+    profileId,
+    setProfileId,
   } = useFileUpload({
     maxSize,
-    expiresAt: getDefaultExpiryDate(user.defaultFileExpiration),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -166,18 +144,24 @@ export function UploadForm({
       )}
 
       <div className="space-y-4">
+        <ProfilePicker
+          value={profileId}
+          onChange={setProfileId}
+          disabled={isUploading}
+        />
         <div className="space-y-2">
           <Label>Visibility</Label>
           <Select
-            value={visibility}
-            onValueChange={(value: 'PUBLIC' | 'PRIVATE') =>
-              setVisibility(value)
+            value={visibility || 'inherit'}
+            onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
+              setVisibility(value === 'inherit' ? undefined : value)
             }
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="inherit">From upload profile</SelectItem>
               <SelectItem value="PUBLIC">Public</SelectItem>
               <SelectItem value="PRIVATE">Private (only me)</SelectItem>
             </SelectContent>
@@ -205,22 +189,48 @@ export function UploadForm({
             <CalendarIcon className="mr-2 h-4 w-4" />
             {expiresAt ? (
               <span>Expires: {format(expiresAt, 'PPP p')}</span>
+            ) : expiresAt === null ? (
+              'No expiration for this upload'
             ) : (
-              'Set expiration date'
+              'From upload profile'
             )}
           </Button>
 
+          <div className="flex gap-3 text-xs">
+            <button
+              type="button"
+              className="underline underline-offset-4"
+              onClick={() => {
+                setExpiresAt(undefined)
+                setExpiryAction(undefined)
+              }}
+            >
+              Use profile expiration
+            </button>
+            <button
+              type="button"
+              className="underline underline-offset-4"
+              onClick={() => setExpiresAt(null)}
+            >
+              No expiration
+            </button>
+          </div>
           {expiresAt && (
             <div className="rounded-md bg-orange-50 dark:bg-orange-950/20 p-3 border border-orange-200 dark:border-orange-800/50">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                 <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                  Auto-delete scheduled
+                  {expiryAction === 'SET_PRIVATE'
+                    ? 'Privacy change scheduled'
+                    : 'Expiration scheduled'}
                 </p>
               </div>
               <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                File will be permanently deleted on{' '}
-                {format(expiresAt, 'PPPP p')}
+                File will{' '}
+                {expiryAction === 'SET_PRIVATE'
+                  ? 'become private'
+                  : 'be permanently deleted'}{' '}
+                on {format(expiresAt, 'PPPP p')}
               </p>
             </div>
           )}
@@ -239,16 +249,18 @@ export function UploadForm({
       <ExpiryModal
         isOpen={isExpiryModalOpen}
         onOpenChange={setIsExpiryModalOpen}
-        onConfirm={async (date, _action) => {
+        onConfirm={async (date, action) => {
           setExpiresAt(date)
+          setExpiryAction(action)
         }}
-        initialDate={expiresAt}
+        initialDate={expiresAt ?? null}
         initialAction={
+          (expiryAction as ExpiryAction) ??
           (user.defaultFileExpirationAction as ExpiryAction) ??
           ExpiryAction.DELETE
         }
         title="Set File Expiration"
-        description="Configure when uploaded files should be automatically deleted"
+        description="Choose when files expire and whether to delete them or make them private."
       />
     </div>
   )

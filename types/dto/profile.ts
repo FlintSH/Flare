@@ -8,7 +8,9 @@ export const UpdateProfileSchema = z.object({
   newPassword: z.string().min(8).optional(),
   image: z.string().optional(),
   randomizeFileUrls: z.boolean().optional(),
-  defaultFileExpiration: z.enum(['HOUR', 'DAY', 'WEEK', 'MONTH']).optional(),
+  defaultFileExpiration: z
+    .enum(['DISABLED', 'HOUR', 'DAY', 'WEEK', 'MONTH'])
+    .optional(),
   defaultFileExpirationAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
   vanityId: VanityIdSchema.nullable().optional(),
 })

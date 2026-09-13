@@ -12,7 +12,8 @@ function addImportantToCSS(css: string): string {
   )
 }
 
-export async function CustomHead() {
+export async function CustomHead({ recovery = false }: { recovery?: boolean }) {
+  if (recovery) return null
   const config = await getConfig()
   const { customCSS, customHead } = config.settings.advanced
 

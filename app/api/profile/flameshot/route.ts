@@ -5,10 +5,13 @@ import { z } from 'zod'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
+import { generatorProfile } from '@/lib/uploads/profiles'
 
 const logger = loggers.users
 
 const flameshotSchema = z.object({
+  profileId: z.string().max(100).optional(),
   useWayland: z.boolean(),
   useCompositor: z.boolean(),
 })
@@ -35,11 +38,26 @@ export async function POST(req: Request) {
       )
     }
 
-    const script = generateFlameshotScript({
+    const profileId = await generatorProfile(
+      session.user.id,
+      body.profileId ?? new URL(req.url).searchParams.get('profileId')
+    )
+
+    let script = generateFlameshotScript({
       uploadToken: user.uploadToken,
       useWayland: body.useWayland,
       useCompositor: body.useCompositor,
     })
+
+    if (profileId)
+      script = script.replaceAll(
+        '/api/files"',
+        `/api/files?profileId=${encodeURIComponent(profileId)}"`
+      )
+    script = script.replaceAll(
+      '.url // .data.url // empty',
+      '.copyText // .data.copyText // .url // .data.url // empty'
+    )
 
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
@@ -52,6 +70,7 @@ export async function POST(req: Request) {
       },
     })
   } catch (error) {
+    if (error instanceof UploadError) return uploadErrorResponse(error)
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: error.issues[0].message },

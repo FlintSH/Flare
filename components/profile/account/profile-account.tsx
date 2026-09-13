@@ -459,8 +459,8 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="DISABLED">Disabled</SelectItem>
-              <SelectItem value="DAY">One hour</SelectItem>
-              <SelectItem value="HOUR">One day</SelectItem>
+              <SelectItem value="HOUR">One hour</SelectItem>
+              <SelectItem value="DAY">One day</SelectItem>
               <SelectItem value="WEEK">One week</SelectItem>
               <SelectItem value="MONTH">One month</SelectItem>
             </SelectContent>

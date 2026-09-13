@@ -1,7 +1,10 @@
+import { useAppearance } from '@/components/customization/appearance-provider'
+
 import { useFileViewer } from '../context'
 
 export function ImageViewer() {
   const { file, state } = useFileViewer()
+  const { sharing } = useAppearance()
 
   if (!state.urls) {
     return null
@@ -12,7 +15,11 @@ export function ImageViewer() {
       <img
         src={state.urls.fileUrl}
         alt={file.name}
-        className="max-w-full max-h-[60vh] object-contain"
+        className={
+          sharing.imageFit === 'cover'
+            ? 'w-full h-[60vh] object-cover'
+            : 'max-w-full max-h-[60vh] object-contain'
+        }
       />
     </div>
   )

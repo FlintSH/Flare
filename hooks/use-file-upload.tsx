@@ -18,6 +18,8 @@ export type UploadResponse = {
   name: string
   size: number
   type: string
+  pageUrl?: string
+  copyText?: string
 }
 
 export type FileUploadOptions = {
@@ -25,6 +27,8 @@ export type FileUploadOptions = {
   visibility?: 'PUBLIC' | 'PRIVATE'
   password?: string
   expiresAt?: Date | null
+  expiryAction?: 'DELETE' | 'SET_PRIVATE'
+  profileId?: string | null
   onUploadComplete?: (responses: UploadResponse[]) => void
   onUploadError?: (error: string) => void
 }
@@ -34,12 +38,18 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
-    options.visibility || 'PUBLIC'
-  )
+  const [visibility, setVisibility] = useState<
+    'PUBLIC' | 'PRIVATE' | undefined
+  >(options.visibility)
   const [password, setPassword] = useState(options.password || '')
-  const [expiresAt, setExpiresAt] = useState<Date | null>(
-    options.expiresAt || null
+  const [expiresAt, setExpiresAt] = useState<Date | null | undefined>(
+    options.expiresAt
+  )
+  const [expiryAction, setExpiryAction] = useState<
+    'DELETE' | 'SET_PRIVATE' | undefined
+  >(options.expiryAction)
+  const [profileId, setProfileId] = useState<string | null | undefined>(
+    options.profileId
   )
   const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
 
@@ -126,8 +136,16 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         },
         body: JSON.stringify({
           filename: file.name,
-          mimeType: file.type,
+          mimeType: file.type || 'application/octet-stream',
           size: file.size,
+          profileId,
+          visibility,
+          password: password || undefined,
+          expiresAt:
+            expiresAt === undefined
+              ? undefined
+              : (expiresAt?.toISOString() ?? null),
+          expiryAction,
         }),
       })
 
@@ -235,9 +253,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           },
           body: JSON.stringify({
             parts: uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber),
-            visibility,
-            password: password || null,
-            expiresAt: expiresAt?.toISOString() || null,
           }),
         }
       )
@@ -257,9 +272,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const uploadFileDirectly = async (file: FileWithPreview, index: number) => {
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('visibility', visibility)
+    if (visibility) formData.append('visibility', visibility)
     if (password) formData.append('password', password)
-    if (expiresAt) formData.append('expiresAt', expiresAt.toISOString())
+    if (expiresAt !== undefined)
+      formData.append('expiresAt', expiresAt?.toISOString() ?? '')
+    if (expiryAction) formData.append('expiryAction', expiryAction)
 
     const xhr = new XMLHttpRequest()
     return await new Promise<UploadResponse>((resolve, reject) => {
@@ -292,6 +309,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       })
 
       xhr.open('POST', '/api/files')
+      if (profileId !== undefined)
+        xhr.setRequestHeader('X-Upload-Profile', profileId ?? 'none')
       xhr.send(formData)
     })
   }
@@ -340,14 +359,20 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             <div className="flex gap-2">
               <ToastAction
                 altText="Open file"
-                onClick={() => window.open(file.url, '_blank')}
+                onClick={() =>
+                  window.open(
+                    file.pageUrl || file.url,
+                    '_blank',
+                    'noopener,noreferrer'
+                  )
+                }
               >
                 Open
               </ToastAction>
               <ToastAction
                 altText="Copy link"
                 onClick={() => {
-                  navigator.clipboard.writeText(file.url)
+                  navigator.clipboard.writeText(file.copyText || file.url)
                   toast({
                     title: 'Link copied',
                     description: 'File link copied to clipboard',
@@ -367,7 +392,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             <ToastAction
               altText="Copy all links"
               onClick={() => {
-                const links = responses.map((r) => r.url).join('\n')
+                const links = responses
+                  .map((r) => r.copyText || r.url)
+                  .join('\n')
                 navigator.clipboard.writeText(links)
                 toast({
                   title: 'Links copied',
@@ -417,5 +444,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setPassword,
     expiresAt,
     setExpiresAt,
+    expiryAction,
+    setExpiryAction,
+    profileId,
+    setProfileId,
   }
 }

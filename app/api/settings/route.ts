@@ -98,9 +98,9 @@ export async function PATCH(request: Request) {
     const { section, data } =
       body as UpdateSettingSectionRequest<SettingSection>
 
-    if (section === 'email')
+    if (section === 'email' || section === 'customization')
       return apiError(
-        'Use the email settings endpoint',
+        `Use the ${section} settings endpoint`,
         HTTP_STATUS.BAD_REQUEST
       )
 
@@ -127,7 +127,12 @@ export async function PATCH(request: Request) {
 
     await updateConfigSection(
       section,
-      data as Partial<FlareConfig['settings'][Exclude<SettingSection, 'email'>]>
+      data as Partial<
+        FlareConfig['settings'][Exclude<
+          SettingSection,
+          'email' | 'customization'
+        >]
+      >
     )
     const updatedConfig = await getConfig()
     return apiResponse<FlareConfig>({
@@ -153,6 +158,8 @@ export async function POST(req: Request) {
     // overwrite its policy or submit masked SMTP credentials as a password.
     if (config.settings)
       delete (config.settings as Partial<FlareConfig['settings']>).email
+    if (config.settings)
+      delete (config.settings as Partial<FlareConfig['settings']>).customization
 
     if (config.settings.advanced.customCSS) {
       config.settings.advanced.customCSS = config.settings.advanced.customCSS

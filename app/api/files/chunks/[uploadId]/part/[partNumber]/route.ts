@@ -1,116 +1,86 @@
-import { NextResponse } from 'next/server'
-
-import { readFile } from 'fs/promises'
-import { join } from 'path'
-
-import { getAuthenticatedUser } from '@/lib/auth/api-auth'
-import { loggers } from '@/lib/logger'
-import { validatePathSegment } from '@/lib/security/paths'
+import { requireAuth } from '@/lib/auth/api-auth'
 import { getStorageProvider } from '@/lib/storage'
+import {
+  requireUploadMetadata,
+  saveUploadMetadata,
+  withUploadLock,
+} from '@/lib/uploads/chunks'
+import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
 
-const logger = loggers.files
-
-interface RouteParams {
-  uploadId: string
-  partNumber: string
+type Context = { params: Promise<{ uploadId: string; partNumber: string }> }
+function validPart(value: string) {
+  const part = Number(value)
+  if (!Number.isInteger(part) || part < 1 || part > 10000)
+    throw new UploadError('Invalid part number.')
+  return part
 }
-
-async function getUploadMetadata(localId: string) {
+export async function GET(req: Request, { params }: Context) {
   try {
-    const safeId = validatePathSegment(localId)
-    const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
-    const metadataPath = join(TEMP_DIR, `meta-${safeId}`)
-    const data = await readFile(metadataPath, 'utf8')
-    return JSON.parse(data)
-  } catch (error) {
-    if (error instanceof Error) {
-      logger.debug(`Error reading metadata for upload ${localId}`, {
-        error: error.message,
-      })
-    }
-    return null
-  }
-}
-
-export async function GET(
-  req: Request,
-  context: { params: Promise<RouteParams> }
-) {
-  try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { uploadId: localId, partNumber } = await context.params
-
-    const metadata = await getUploadMetadata(localId)
-    if (!metadata) {
-      return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
-    }
-
-    if (metadata.userId !== user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const storageProvider = await getStorageProvider()
-    const url = await storageProvider.getPresignedPartUploadUrl(
+    const { user, response } = await requireAuth(req)
+    if (response) return response
+    const { uploadId, partNumber } = await params
+    const part = validPart(partNumber)
+    const metadata = await requireUploadMetadata(user, uploadId)
+    const storage = await getStorageProvider()
+    const url = await storage.getPresignedPartUploadUrl(
       metadata.fileKey,
       metadata.s3UploadId,
-      parseInt(partNumber)
+      part
     )
-
-    return NextResponse.json({
-      data: { url },
-    })
+    metadata.lastActivity = Date.now()
+    await saveUploadMetadata(uploadId, metadata)
+    return Response.json({ data: { url } })
   } catch (error) {
-    logger.error('Error getting presigned URL:', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to get presigned URL' },
-      { status: 500 }
-    )
+    return uploadErrorResponse(error)
   }
 }
-
-export async function PUT(
-  req: Request,
-  context: { params: Promise<RouteParams> }
-) {
+export async function PUT(req: Request, { params }: Context) {
   try {
-    const user = await getAuthenticatedUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { user, response } = await requireAuth(req)
+    if (response) return response
+    const { uploadId, partNumber } = await params
+    const part = validPart(partNumber)
+    const metadata = await requireUploadMetadata(user, uploadId)
+    if (!req.body) throw new UploadError('No upload part provided.')
+    const reader = req.body.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        size += value.byteLength
+        if (size > Math.min(metadata.totalSize, 64 * 1024 * 1024)) {
+          await reader.cancel()
+          throw new UploadError('Upload parts must be at most 64 MB.', 413)
+        }
+        chunks.push(value)
+      }
+    } finally {
+      reader.releaseLock()
     }
-
-    const { uploadId: localId, partNumber } = await context.params
-
-    const metadata = await getUploadMetadata(localId)
-    if (!metadata) {
-      return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
-    }
-
-    if (metadata.userId !== user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const chunk = await req.arrayBuffer()
-
-    const storageProvider = await getStorageProvider()
-    const response = await storageProvider.uploadPart(
-      metadata.fileKey,
-      metadata.s3UploadId,
-      parseInt(partNumber),
-      Buffer.from(chunk)
-    )
-
-    return NextResponse.json({
-      data: { etag: response.ETag },
+    const storage = await getStorageProvider()
+    const result = await withUploadLock(uploadId, async (transaction) => {
+      await requireUploadMetadata(user, uploadId, transaction)
+      if (
+        await transaction.file.findFirst({
+          where: { path: metadata.fileKey },
+          select: { id: true },
+        })
+      )
+        throw new UploadError('This upload is already complete.', 409)
+      const result = await storage.uploadPart(
+        metadata.fileKey,
+        metadata.s3UploadId,
+        part,
+        Buffer.concat(chunks)
+      )
+      metadata.lastActivity = Date.now()
+      await saveUploadMetadata(uploadId, metadata)
+      return result
     })
+    return Response.json({ data: { etag: result.ETag } })
   } catch (error) {
-    logger.error('Error uploading part:', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to upload part' },
-      { status: 500 }
-    )
+    return uploadErrorResponse(error)
   }
 }
