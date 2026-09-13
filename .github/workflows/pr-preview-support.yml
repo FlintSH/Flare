@@ -1,0 +1,108 @@
+name: PR Preview Support Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/pr-preview-support.yml
+      - .dockerignore
+      - Dockerfile.preview-gateway
+      - Dockerfile.preview-reaper
+      - scripts/preview/gateway.cjs
+      - scripts/preview/runtime.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-preview-support-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  trusted-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require the default branch
+        env:
+          SELECTED_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$SELECTED_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo '::error::Publish preview support images only from the reviewed default branch.'
+            exit 1
+          fi
+
+  publish:
+    needs: trusted-branch
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Resolve lowercase image names
+        id: images
+        run: |
+          repository=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          echo "gateway=ghcr.io/${repository}-preview-gateway" >> "$GITHUB_OUTPUT"
+          echo "reaper=ghcr.io/${repository}-preview-reaper" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the trusted gateway
+        id: gateway
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile.preview-gateway
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.images.outputs.gateway }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Publish the trusted cleanup service
+        id: reaper
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile.preview-reaper
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.images.outputs.reaper }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Record immutable support image references
+        env:
+          GATEWAY_IMAGE: ${{ steps.images.outputs.gateway }}@${{ steps.gateway.outputs.digest }}
+          REAPER_IMAGE: ${{ steps.images.outputs.reaper }}@${{ steps.reaper.outputs.digest }}
+        run: |
+          {
+            echo '### Preview support images'
+            echo
+            printf 'Gateway: `%s`\n\n' "$GATEWAY_IMAGE"
+            printf 'Cleanup service: `%s`\n\n' "$REAPER_IMAGE"
+            echo 'Make both GHCR packages public and verify anonymous pulls before configuring Railway.'
+          } >> "$GITHUB_STEP_SUMMARY"

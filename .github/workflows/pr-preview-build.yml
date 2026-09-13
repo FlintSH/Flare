@@ -1,0 +1,87 @@
+name: PR Preview Image
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-preview-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # The merge ref includes support files for older feature branches and
+          # exercises any proposed changes to the preview infrastructure itself.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Test preview lifecycle and public gateway
+        run: |
+          node --test scripts/preview/seed.test.cjs scripts/preview/test-gateway.cjs
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/preview -p 'test_*.py'
+          bash -n scripts/preview/boot.sh
+          sh -n scripts/preview/start.sh
+
+  image:
+    needs: checks
+    if: vars.PREVIEW_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # This job deliberately has no registry, Railway, or comment credentials.
+      # GitHub's fork-workflow approval policy still applies.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: app
+          persist-credentials: false
+
+      - name: Checkout trusted preview support
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: preview-tools
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Build disposable preview image
+        run: |
+          # Build the exact application head with the trusted default branch's
+          # wrapper/fixtures, including for PR branches predating preview support.
+          # Support changes take effect after merge. Never read PR bake files.
+          docker buildx bake --allow fs.write=/tmp/flare-preview-image.tar --file - preview <<'BAKE'
+          target "app" {
+            context = "./app"
+            dockerfile = "Dockerfile"
+            platforms = ["linux/amd64"]
+          }
+          target "preview" {
+            context = "./preview-tools"
+            dockerfile = "Dockerfile.preview"
+            contexts = { "flare-preview-app" = "target:app" }
+            platforms = ["linux/amd64"]
+            output = ["type=oci,dest=/tmp/flare-preview-image.tar"]
+            attest = ["type=provenance,disabled=true", "type=sbom,disabled=true"]
+          }
+          BAKE
+          mkdir -p "$RUNNER_TEMP/preview-artifact"
+          mv /tmp/flare-preview-image.tar "$RUNNER_TEMP/preview-artifact/image.tar"
+
+      - name: Upload image for the trusted controller
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: flare-pr-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/preview-artifact/image.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0

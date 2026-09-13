@@ -1,0 +1,11 @@
+# Build and publish from a reviewed default-branch checkout only. Run in the
+# control environment; its Railway token must never enter a PR environment.
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global @railway/cli@5.54.0
+WORKDIR /reaper
+COPY scripts/preview/runtime.py ./runtime.py
+USER node
+ENV RAILWAY_NO_TELEMETRY=1
+CMD ["python3", "/reaper/runtime.py", "reap"]

@@ -1,0 +1,8 @@
+# Built only from reviewed default-branch code and deployed by immutable digest.
+FROM node:24-alpine
+WORKDIR /gateway
+COPY scripts/preview/gateway.cjs ./gateway.cjs
+USER node
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "gateway.cjs"]

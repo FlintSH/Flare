@@ -66,6 +66,11 @@ Follow the PR template and fill in all required info. If your PR includes any fr
 
 All PRs will be manually reviewed by me.
 
+When preview infrastructure is enabled, a bot comment on each PR tracks its
+disposable Docker deployment and links to the running app. Previews are public,
+share a demo account, and expire automatically. Use test data only. See
+[pull request previews](docs/pr-previews.md) for access, limits, and maintainer setup.
+
 ---
 
 That's all, short and sweet. If you want any help or if you want my input on anything you're working on feel free to reach out on the [Discord](https://discord.gg/t4rGHBJy) and I'd be happy to help.

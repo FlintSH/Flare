@@ -1,0 +1,39 @@
+# Preview defaults use a clean runtime instead of inheriting application ENV or
+# ENTRYPOINT. A PR can change this image; the separate trusted gateway and
+# deployment controller enforce the public boundary, limits and expiry.
+FROM flare-preview-app AS application
+FROM node:24-bookworm-slim AS preview
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    COREPACK_ENABLE_NETWORK=0 \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_HOME=/usr/local/corepack \
+    pnpm_config_verify_deps_before_run=false \
+    HUSKY=0 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl openssl postgresql tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1001 nodejs \
+    && useradd --system --uid 1001 --gid nodejs --create-home nextjs \
+    && corepack enable pnpm
+
+WORKDIR /app
+COPY --from=application --chown=1001:1001 /app /app
+# The normal image already downloaded the pinned pnpm release at build time.
+COPY --from=application /usr/local/corepack /usr/local/corepack
+COPY scripts/preview/start.sh scripts/preview/seed.cjs scripts/preview/boot.sh /preview/
+RUN chmod 0555 /preview/start.sh /preview/boot.sh \
+    && chmod -R a+rX /usr/local/corepack \
+    && mkdir -p /app/uploads /app/tmp /app/public/avatars /app/.next/cache \
+    && chown -R nextjs:nodejs /app/uploads /app/tmp /app/public/avatars /app/.next/cache
+
+USER 1001:1001
+EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=90s --retries=3 \
+    CMD curl --fail --silent http://127.0.0.1:3000/api/health || exit 1
+ENTRYPOINT ["/usr/bin/tini", "--", "/preview/boot.sh"]
+CMD []
