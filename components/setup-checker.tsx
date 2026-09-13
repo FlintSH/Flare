@@ -73,14 +73,8 @@ export function SetupChecker({ children }: SetupCheckerProps) {
         return
       }
 
-      if (
-        setupStatus.completed &&
-        pathname.startsWith('/setup') &&
-        pathname !== '/setup/email'
-      ) {
-        router.push('/dashboard')
-        return
-      }
+      // /setup owns the authenticated continuation after account creation.
+      // Redirecting a completed instance here would skip the remaining steps.
     }
   }, [setupStatus, isLoading, error, pathname, router, shouldCheckSetup])
 

@@ -24,6 +24,7 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
+  - [Unified setup](docs/onboarding.md): account, storage, access, optional personalization and email in one guided flow
   - [Appearance studio](docs/appearance.md): branding, paired palettes, share layouts, previews and portable packs
   - [Upload profiles](docs/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
   - [Integrations](docs/integrations.md): scoped tokens and signed file-ready webhooks

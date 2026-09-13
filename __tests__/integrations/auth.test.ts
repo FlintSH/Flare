@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
+import { hashApiToken } from '@/lib/integrations/tokens'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -46,10 +47,14 @@ beforeEach(() => {
   mocks.policy.mockReturnValue(false)
   mocks.session.mockResolvedValue(null)
 })
-const request = (path: string, method = 'POST') =>
+const request = (
+  path: string,
+  method = 'POST',
+  authorization = 'Bearer flr_test'
+) =>
   new Request(`https://flare.test${path}`, {
     method,
-    headers: { authorization: 'Bearer flr_test' },
+    headers: { authorization },
   })
 
 describe('named bearer authentication', () => {
@@ -63,10 +68,40 @@ describe('named bearer authentication', () => {
     expect(user).not.toHaveProperty('password')
     expect(mocks.user).not.toHaveBeenCalled()
   })
-  it('does not upgrade a scoped token to a coexisting administrator session', async () => {
+  it.each(['Bearer', 'bearer', 'BEARER', 'bEaReR', 'Bearer  '])(
+    'accepts the %s scheme without changing the named token value',
+    async (scheme) => {
+      const user = await getAuthenticatedUser(
+        request('/api/files', 'POST', `${scheme} flr_MixedCaseToken`)
+      )
+      expect(user?.id).toBe('user-1')
+      expect(mocks.token).toHaveBeenCalledWith({
+        where: { hash: hashApiToken('flr_MixedCaseToken') },
+        include: { user: true },
+      })
+      expect(mocks.session).not.toHaveBeenCalled()
+    }
+  )
+  it.each(['Bearer', 'bearer', 'bEaReR'])(
+    'does not upgrade a scoped %s token to a coexisting administrator session',
+    async (scheme) => {
+      mocks.session.mockResolvedValue({ user: { id: 'admin' } })
+      expect(
+        await getAuthenticatedUser(
+          request('/api/profile/upload-token', 'GET', `${scheme} flr_test`)
+        )
+      ).toBeNull()
+      expect(mocks.session).not.toHaveBeenCalled()
+      expect(mocks.user).not.toHaveBeenCalled()
+    }
+  )
+  it('does not fall back to a session when a lowercase bearer token is invalid', async () => {
     mocks.session.mockResolvedValue({ user: { id: 'admin' } })
+    mocks.token.mockResolvedValue(null)
     expect(
-      await getAuthenticatedUser(request('/api/profile/upload-token', 'GET'))
+      await getAuthenticatedUser(
+        request('/api/files', 'POST', 'bearer flr_invalid')
+      )
     ).toBeNull()
     expect(mocks.session).not.toHaveBeenCalled()
     expect(mocks.user).not.toHaveBeenCalled()
@@ -83,16 +118,30 @@ describe('named bearer authentication', () => {
     mocks.policy.mockReturnValue(true)
     expect(await getAuthenticatedUser(request('/api/files'))).toBeNull()
   })
-  it('preserves legacy bearer authentication', async () => {
-    mocks.user.mockResolvedValue(token.user)
-    const result = await getAuthenticatedUser(
-      new Request('https://flare.test/api/files', {
-        headers: { authorization: 'Bearer legacy-token' },
-      })
-    )
-    expect(result?.id).toBe('user-1')
-    expect(mocks.user).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { uploadToken: 'legacy-token' } })
-    )
-  })
+  it.each(['Bearer', 'bearer', 'BEARER', 'bEaReR', 'Bearer  '])(
+    'preserves legacy token authentication with the %s scheme',
+    async (scheme) => {
+      mocks.user.mockResolvedValue(token.user)
+      const result = await getAuthenticatedUser(
+        request('/api/files', 'POST', `${scheme} legacy-MixedCaseToken`)
+      )
+      expect(result?.id).toBe('user-1')
+      expect(mocks.user).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { uploadToken: 'legacy-MixedCaseToken' },
+        })
+      )
+      expect(mocks.token).not.toHaveBeenCalled()
+    }
+  )
+  it.each(['Basic flr_test', 'Bearerflr_test', 'Bearer', 'Bearer\tflr_test'])(
+    'does not treat the malformed or unrelated header %s as bearer authentication',
+    async (authorization) => {
+      expect(
+        await getAuthenticatedUser(request('/api/files', 'POST', authorization))
+      ).toBeNull()
+      expect(mocks.token).not.toHaveBeenCalled()
+      expect(mocks.user).not.toHaveBeenCalled()
+    }
+  )
 })

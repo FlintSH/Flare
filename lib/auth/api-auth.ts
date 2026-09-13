@@ -23,10 +23,10 @@ export type AuthenticatedUser = {
 export async function getAuthenticatedUser(
   req: Request
 ): Promise<AuthenticatedUser | null> {
-  const bearer = req.headers.get('authorization')
-  const suppliedToken = bearer?.startsWith('Bearer ')
-    ? bearer.slice(7)
-    : undefined
+  // HTTP authentication schemes are case-insensitive; token values are not.
+  const suppliedToken = /^Bearer +(.+)$/i.exec(
+    req.headers.get('authorization') ?? ''
+  )?.[1]
   // A named bearer token always uses its own authority, even if cookies coexist.
   if (suppliedToken?.startsWith(TOKEN_PREFIX)) {
     const token = await prisma.apiToken.findUnique({
@@ -85,11 +85,9 @@ export async function getAuthenticatedUser(
       : null
   }
 
-  const authHeader = req.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
+  if (suppliedToken) {
     const user = await prisma.user.findUnique({
-      where: { uploadToken: token },
+      where: { uploadToken: suppliedToken },
       select: {
         id: true,
         storageUsed: true,

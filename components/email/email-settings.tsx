@@ -43,6 +43,7 @@ interface EmailDiagnostics {
 interface EmailSettingsProps {
   setup?: boolean
   onComplete?: (config: EmailConfig) => void
+  onBusyChange?: (busy: boolean) => void
 }
 
 const selectClass =
@@ -51,6 +52,7 @@ const selectClass =
 export function EmailSettings({
   setup = false,
   onComplete,
+  onBusyChange,
 }: EmailSettingsProps) {
   const id = useId()
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
@@ -68,6 +70,10 @@ export function EmailSettings({
   const [feedbackLocation, setFeedbackLocation] = useState<'test' | 'save'>(
     'save'
   )
+
+  useEffect(() => {
+    onBusyChange?.(Boolean(busy))
+  }, [busy, onBusyChange])
 
   const load = useCallback(async () => {
     try {
@@ -844,9 +850,7 @@ export function EmailSettings({
           {busy === 'save'
             ? 'Saving…'
             : setup
-              ? config.enabled
-                ? 'Save and verify my email'
-                : 'Save and finish setup'
+              ? 'Save and continue'
               : 'Save email settings'}
         </Button>
         {!setup && (
