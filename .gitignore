@@ -71,3 +71,6 @@ eng.traineddata
 
 # Meticulous AI onboard workspace
 .meticulous-onboard/
+
+# Python preview controller tests
+scripts/preview/__pycache__/
