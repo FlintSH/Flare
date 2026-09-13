@@ -4,6 +4,8 @@ Flare uses both the browser recorder and the backend recorder for Next.js server
 rendering. The browser passes a session ID to the backend recorder, which instruments
 Prisma and other supported clients. Production recording stays off unless explicitly
 enabled. Meticulous's injected replay mode enables backend instrumentation during tests.
+The Prisma client applies the recorder's extension explicitly, as required when
+Next.js bundles database calls.
 
 ## Disposable test environment
 
@@ -40,9 +42,12 @@ docker run --rm -p 3000:3000 \
 ```
 
 Use `npx @alwaysmeticulous/cli record session` to record authenticated flows: its
-browser captures HTTP-only cookies, unlike the page script alone. Navigate to
-`http://localhost:3000/auth/login`, sign in with the fixture user, and exercise the
-UI. When automating this browser, call `window.Meticulous.record.flush()` before
+browser captures HTTP-only cookies, unlike the page script alone. Sign in with the
+fixture user, then start a fresh recording by opening `http://localhost:3000/dashboard`
+in a new tab of the same recording browser. The session must start with its
+authentication cookie already present: a stubbed sign-in response does not create
+a server session for subsequent server-rendered requests. Exercise the UI from
+there. When automating this browser, call `window.Meticulous.record.flush()` before
 closing it so the final interactions are uploaded.
 
 ## CI activation
@@ -50,6 +55,11 @@ closing it so the final interactions are uploaded.
 The workflow builds the image and checks that the fresh database and app start.
 `METICULOUS_API_TOKEN` is the only required GitHub secret. No database or NextAuth
 secret needs to be provisioned externally.
+
+The project's Network Stubbing setting must be **Stub all requests, apart from
+requests for server components and static assets**. This is configured in the
+Meticulous dashboard, and lets each build render its own React Server Components
+instead of reusing recorded development-build responses.
 
 Before the setup is merged into `main`, CI uploads a reusable deployment and saves
 its ID as the `meticulous-deployment` artifact. This allows a cloud replay before
