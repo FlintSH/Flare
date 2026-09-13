@@ -71,7 +71,10 @@ the new address is confirmed, and can optionally require confirmation from the o
 address too. Cancellation invalidates pending links. A changed password/address
 invalidates obsolete recovery credentials. Changing a legacy unproven address
 does not require receiving mail at that old address unless the administrator has
-explicitly selected the two-address policy.
+explicitly selected the two-address policy. Policy changes are serialized with
+account updates. If old-address approval becomes required during a pending change
+that has no approval link, the user must restart the change to receive both links;
+a previously optional policy never counts as mailbox approval.
 
 ## SMTP and branding
 

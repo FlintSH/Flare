@@ -98,51 +98,66 @@ export function resolveEmailConfig(
   return { config: emailConfigSchema.parse(config), managedFields }
 }
 
-export async function getSavedEmailConfig(): Promise<EmailConfig> {
-  const row = await prisma.config.findUnique({ where: { key: 'flare_config' } })
+export async function getSavedEmailConfig(
+  client: Pick<Prisma.TransactionClient, 'config'> = prisma
+): Promise<EmailConfig> {
+  const row = await client.config.findUnique({ where: { key: 'flare_config' } })
   const settings = (row?.value as { settings?: { email?: unknown } } | null)
     ?.settings
   // Database errors deliberately propagate instead of relaxing a saved policy.
   return emailConfigSchema.parse(settings?.email ?? {})
 }
 
-export async function getEmailConfig(): Promise<EmailConfig> {
-  let saved = await getSavedEmailConfig()
-  let config = resolveEmailConfig(saved).config
+function validateEffectiveConfig(saved: EmailConfig): EmailConfig {
+  const config = resolveEmailConfig(saved).config
   validateEnabledEmail(config)
   if (config.enabled) assertEmailEncryptionKey()
-  // Record environment policy transitions as well as dashboard changes. A new
-  // activation applies to users created from that activation, never retroactively.
+  return config
+}
+
+/** Read policy under the same lock as settings writers, before taking user locks. */
+export async function getEmailConfigForUpdate(
+  tx: Prisma.TransactionClient
+): Promise<EmailConfig> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
+  const value = row?.value as ObjectValue | undefined
+  const settings = value?.settings as ObjectValue | undefined
+  const saved = emailConfigSchema.parse(settings?.email ?? {})
+  const config = validateEffectiveConfig(saved)
+  if (
+    row &&
+    config.verification.appliedMode !==
+      (config.enabled ? config.verification.mode : 'off')
+  ) {
+    const transition = transitionEmailPolicy(saved, config)
+    // Persist only server-owned transition state, never environment overrides.
+    saved.verification.requiredSince = transition.requiredSince
+    saved.verification.graceEndsAt = transition.graceEndsAt
+    saved.verification.appliedMode = transition.appliedMode
+    await tx.config.update({
+      where: { key: 'flare_config' },
+      data: {
+        value: {
+          ...value,
+          settings: { ...settings, email: saved },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    return validateEffectiveConfig(saved)
+  }
+  return config
+}
+
+export async function getEmailConfig(): Promise<EmailConfig> {
+  const config = validateEffectiveConfig(await getSavedEmailConfig())
+  // A mutation uses getEmailConfigForUpdate directly, keeping policy stable until
+  // commit. Ordinary reads take the lock only to record an environment transition.
   if (
     config.verification.appliedMode !==
     (config.enabled ? config.verification.mode : 'off')
-  ) {
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
-      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-      if (!row) return
-      const value = row.value as ObjectValue
-      const settings = value.settings as ObjectValue
-      saved = emailConfigSchema.parse(settings.email ?? {})
-      const transition = transitionEmailPolicy(
-        saved,
-        resolveEmailConfig(saved).config
-      )
-      saved.verification.requiredSince = transition.requiredSince
-      saved.verification.graceEndsAt = transition.graceEndsAt
-      saved.verification.appliedMode = transition.appliedMode
-      await tx.config.update({
-        where: { key: 'flare_config' },
-        data: {
-          value: {
-            ...value,
-            settings: { ...settings, email: saved },
-          } as Prisma.InputJsonValue,
-        },
-      })
-    })
-    config = resolveEmailConfig(saved).config
-  }
+  )
+    return prisma.$transaction(getEmailConfigForUpdate)
   return config
 }
 
@@ -188,9 +203,10 @@ export async function getEmailSettingsView() {
 
 export async function prepareEmailConfig(
   input: unknown,
-  clearPassword = false
+  clearPassword = false,
+  client: Pick<Prisma.TransactionClient, 'config'> = prisma
 ) {
-  const previous = await getSavedEmailConfig()
+  const previous = await getSavedEmailConfig(client)
   const candidate = emailConfigSchema.parse(input)
   const managed = resolveEmailConfig(previous, process.env, {
     decryptPassword: false,
@@ -223,29 +239,30 @@ export async function saveEmailConfig(
   input: unknown,
   options: { clearPassword?: boolean; applyToExisting?: boolean } = {}
 ) {
-  const { candidate, previous, effective } = await prepareEmailConfig(
-    input,
-    options.clearPassword
-  )
-  if (
-    effective.enabled &&
-    effective.verification.mode === 'all_users' &&
-    previous.verification.appliedMode !== 'all_users'
-  ) {
-    if (!options.applyToExisting)
-      throw new Error(
-        'Review affected existing users and confirm applying verification to them'
-      )
-  }
-  const transition = transitionEmailPolicy(previous, effective)
-  candidate.verification.requiredSince = transition.requiredSince
-  candidate.verification.graceEndsAt = transition.graceEndsAt
-  candidate.verification.appliedMode = transition.appliedMode
-  validateEnabledEmail(resolveEmailConfig(candidate).config)
-  if (effective.enabled) assertEmailEncryptionKey()
-  // Serialize JSON read/modify/write with all normal settings writers.
+  // Prepare against the latest saved settings while serializing policy changes
+  // with account mutations and all other JSON settings writers.
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+    const { candidate, previous, effective } = await prepareEmailConfig(
+      input,
+      options.clearPassword,
+      tx
+    )
+    if (
+      effective.enabled &&
+      effective.verification.mode === 'all_users' &&
+      previous.verification.appliedMode !== 'all_users'
+    ) {
+      if (!options.applyToExisting)
+        throw new Error(
+          'Review affected existing users and confirm applying verification to them'
+        )
+    }
+    const transition = transitionEmailPolicy(previous, effective)
+    candidate.verification.requiredSince = transition.requiredSince
+    candidate.verification.graceEndsAt = transition.graceEndsAt
+    candidate.verification.appliedMode = transition.appliedMode
+    validateEffectiveConfig(candidate)
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
     const finalConfig = resolveEmailConfig(candidate).config
     if (finalConfig.enabled && finalConfig.verification.mode === 'all_users') {

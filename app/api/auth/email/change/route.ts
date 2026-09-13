@@ -6,6 +6,7 @@ import {
   lockEmailUser,
   sendAccountToken,
 } from '@/lib/email/account'
+import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { EmailHttpError, emailRoute, emailSession } from '@/lib/email/http'
 import { hasVerifiedEmail } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
@@ -24,7 +25,10 @@ export async function POST(req: Request) {
       .parse(await req.json())
     await limitEmailRequest(req, config, email)
     await assertRecentIdentity(user, password, session)
-    await prisma.$transaction(async (tx) => {
+    const requiresOldEmail = await prisma.$transaction(async (tx) => {
+      const currentConfig = await getEmailConfigForUpdate(tx)
+      if (!currentConfig.enabled || !currentConfig.changes.enabled)
+        throw new EmailHttpError('Email changes are disabled.')
       const fresh = await lockEmailUser(tx, user.id)
       if (
         fresh.email !== user.email ||
@@ -34,7 +38,10 @@ export async function POST(req: Request) {
         throw new EmailHttpError('Account changed. Sign in and try again.')
       if (email === fresh.email)
         throw new EmailHttpError('Choose a different email address.')
-      if (config.changes.requireOldEmail && !hasVerifiedEmail(fresh, config))
+      if (
+        currentConfig.changes.requireOldEmail &&
+        !hasVerifiedEmail(fresh, currentConfig)
+      )
         throw new EmailHttpError(
           'Your current email must be verified before changing it.'
         )
@@ -51,15 +58,17 @@ export async function POST(req: Request) {
         where: { id: user.id },
         data: {
           pendingEmail: email,
-          pendingEmailOldConfirmed: !config.changes.requireOldEmail,
+          // This records actual approval, independently of the current policy.
+          pendingEmailOldConfirmed: false,
         },
       })
-      await sendAccountToken(tx, pending, 'change', config, email)
-      if (config.changes.requireOldEmail)
-        await sendAccountToken(tx, pending, 'change_approval', config)
+      await sendAccountToken(tx, pending, 'change', currentConfig, email)
+      if (currentConfig.changes.requireOldEmail)
+        await sendAccountToken(tx, pending, 'change_approval', currentConfig)
+      return currentConfig.changes.requireOldEmail
     })
     return {
-      message: config.changes.requireOldEmail
+      message: requiresOldEmail
         ? 'Approve the change from your current address, then confirm your new address.'
         : 'Confirm the link sent to your new address to finish.',
     }

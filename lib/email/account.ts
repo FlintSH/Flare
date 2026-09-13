@@ -3,9 +3,10 @@ import { compare, hash } from 'bcryptjs'
 import type { Session } from 'next-auth'
 import { randomUUID } from 'node:crypto'
 
-import { getConfig } from '@/lib/config'
+import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 
+import { getEmailConfigForUpdate } from './config'
 import { MailLimitError, enqueueMail } from './outbox'
 import { canRecoverPassword, hasVerifiedEmail } from './policy'
 import type { EmailConfig } from './schema'
@@ -108,6 +109,8 @@ export async function requestPasswordReset(email: string, config: EmailConfig) {
   })
   if (matches.length !== 1 || !canRecoverPassword(matches[0], config)) return
   await prisma.$transaction(async (tx) => {
+    config = await getEmailConfigForUpdate(tx)
+    if (!(await isPasswordRecoveryAvailable(config, tx))) return
     const user = await lockEmailUser(tx, matches[0].id)
     if (!canRecoverPassword(user, config)) return
     await sendAccountToken(tx, user, 'reset', config)
@@ -123,6 +126,9 @@ export async function resetPassword(
     throw new Error('Password recovery is disabled.')
   const passwordHash = await hash(password, 10)
   await prisma.$transaction(async (tx) => {
+    config = await getEmailConfigForUpdate(tx)
+    if (!(await isPasswordRecoveryAvailable(config, tx)))
+      throw new Error('Password recovery is disabled.')
     const record = await consumeEmailToken(tx, token, ['reset'])
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
@@ -162,15 +168,29 @@ export async function resetPassword(
   })
 }
 
-export async function isPasswordRecoveryAvailable(config: EmailConfig) {
+export async function isPasswordRecoveryAvailable(
+  config: EmailConfig,
+  tx?: Prisma.TransactionClient
+) {
   if (!config.enabled || !config.recovery.enabled) return false
-  const oidc = (await getConfig()).settings.general.oidc
+  // When changing account state, read SSO policy under the same settings lock.
+  const fullConfig = tx
+    ? configSchema.parse(
+        (await tx.config.findUnique({ where: { key: 'flare_config' } }))
+          ?.value ?? DEFAULT_CONFIG
+      )
+    : await getConfig()
+  const oidc = fullConfig.settings.general.oidc
   return !(oidc?.enabled && oidc.enforceSso)
 }
 
 export async function confirmEmailToken(token: string, config: EmailConfig) {
   if (!config.enabled) throw new Error('Email is disabled.')
   return prisma.$transaction(async (tx) => {
+    // Policy changes and account mutations share a lock; never approve against
+    // a request snapshot captured before an administrator tightened the policy.
+    config = await getEmailConfigForUpdate(tx)
+    if (!config.enabled) throw new Error('Email is disabled.')
     const record = await consumeEmailToken(tx, token, [
       'verify',
       'change',
@@ -203,10 +223,25 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
     }
     if (record.email !== user.pendingEmail)
       throw new Error('This email link is invalid or expired.')
-    if (config.changes.requireOldEmail && !user.pendingEmailOldConfirmed)
+    if (config.changes.requireOldEmail && !user.pendingEmailOldConfirmed) {
+      const approval = await tx.emailToken.findFirst({
+        where: {
+          userId: user.id,
+          purpose: 'change_approval',
+          email: user.email!,
+          createdAt: { gte: record.createdAt },
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+      })
+      if (!approval)
+        throw new Error(
+          'This email change requires approval from your current address. Start the email change again to request an approval link.'
+        )
       throw new Error(
         'Approve the change using the link sent to your current address first.'
       )
+    }
     await lockEmailAddress(tx, record.email)
     const conflict = await tx.user.findFirst({
       where: {

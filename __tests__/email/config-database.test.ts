@@ -1,5 +1,6 @@
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -7,6 +8,14 @@ import {
   it,
   vi,
 } from 'vitest'
+
+const authentication = vi.hoisted(() => ({ id: '' }))
+vi.mock('@/lib/auth/api-auth', () => ({
+  requireAuth: async () => ({
+    user: { id: authentication.id },
+    response: null,
+  }),
+}))
 
 const databaseUrl = process.env.FLARE_EMAIL_CONFIG_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
@@ -16,6 +25,8 @@ suite('email configuration against disposable PostgreSQL', () => {
   let configModule: typeof import('@/lib/email/config')
   let appConfig: typeof import('@/lib/config')
   let schema: typeof import('@/lib/email/schema')
+  let profile: typeof import('@/app/api/profile/route')
+  let accountModule: typeof import('@/lib/email/account')
 
   beforeAll(async () => {
     const url = new URL(databaseUrl!)
@@ -30,6 +41,8 @@ suite('email configuration against disposable PostgreSQL', () => {
     configModule = await import('@/lib/email/config')
     appConfig = await import('@/lib/config')
     schema = await import('@/lib/email/schema')
+    profile = await import('@/app/api/profile/route')
+    accountModule = await import('@/lib/email/account')
   })
   beforeEach(async () => {
     await prisma.mailOutbox.deleteMany()
@@ -42,6 +55,7 @@ suite('email configuration against disposable PostgreSQL', () => {
       },
     })
   })
+  afterEach(() => vi.restoreAllMocks())
   afterAll(async () => {
     await prisma?.$disconnect()
     vi.unstubAllEnvs()
@@ -176,5 +190,137 @@ suite('email configuration against disposable PostgreSQL', () => {
     expect(
       (await configModule.getSavedEmailConfig()).verification.appliedMode
     ).toBe('off')
+  })
+
+  function deferred() {
+    let resolve!: () => void
+    const promise = new Promise<void>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  async function profileAccount() {
+    const { hash } = await import('bcryptjs')
+    const account = await prisma.user.create({
+      data: {
+        email: 'profile@example.test',
+        password: await hash('old-password', 10),
+        urlId: 'profile-user',
+        uploadToken: 'profile-test-token',
+      },
+    })
+    authentication.id = account.id
+    return account
+  }
+
+  function profileRequest(body: object) {
+    return new Request('https://flare.example.test/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('rejects a direct profile address change when email is enabled after its initial policy read', async () => {
+    const account = await profileAccount()
+    const waiting = deferred()
+    const resume = deferred()
+    const readPolicy = configModule.getEmailConfigForUpdate
+    vi.spyOn(configModule, 'getEmailConfigForUpdate').mockImplementationOnce(
+      async (tx) => {
+        waiting.resolve()
+        await resume.promise
+        return readPolicy(tx)
+      }
+    )
+    const update = profile.PUT(
+      profileRequest({ email: 'unconfirmed@example.test' })
+    )
+    await waiting.promise
+    try {
+      await configModule.saveEmailConfig(workingConfig())
+    } finally {
+      resume.resolve()
+    }
+    const response = await update
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining('verified email change'),
+    })
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: account.id } })).email
+    ).toBe(account.email)
+  })
+
+  it('holds policy activation until an in-flight legacy profile change commits', async () => {
+    const account = await profileAccount()
+    const waiting = deferred()
+    const resume = deferred()
+    const lockUser = accountModule.lockEmailUser
+    vi.spyOn(accountModule, 'lockEmailUser').mockImplementationOnce(
+      async (tx, id) => {
+        waiting.resolve()
+        await resume.promise
+        return lockUser(tx, id)
+      }
+    )
+    const update = profile.PUT(
+      profileRequest({ email: 'legacy-change@example.test' })
+    )
+    await waiting.promise
+    const activation = configModule.saveEmailConfig(workingConfig())
+    try {
+      await vi.waitFor(
+        async () => {
+          const locks = await prisma.$queryRaw<Array<{ waiting: boolean }>>`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_locks
+            WHERE locktype = 'advisory' AND objid = 721150092 AND NOT granted
+          ) AS waiting`
+          expect(locks[0].waiting).toBe(true)
+        },
+        { timeout: 1500, interval: 10 }
+      )
+    } finally {
+      resume.resolve()
+      await Promise.allSettled([update, activation])
+    }
+    expect((await update).status).toBe(200)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: account.id } })).email
+    ).toBe('legacy-change@example.test')
+    expect((await configModule.getEmailConfig()).enabled).toBe(true)
+  })
+
+  it('uses newly enabled policy for password-change session invalidation', async () => {
+    const account = await profileAccount()
+    const waiting = deferred()
+    const resume = deferred()
+    const readPolicy = configModule.getEmailConfigForUpdate
+    vi.spyOn(configModule, 'getEmailConfigForUpdate').mockImplementationOnce(
+      async (tx) => {
+        waiting.resolve()
+        await resume.promise
+        return readPolicy(tx)
+      }
+    )
+    const update = profile.PUT(
+      profileRequest({
+        currentPassword: 'old-password',
+        newPassword: 'updated-password',
+      })
+    )
+    await waiting.promise
+    try {
+      await configModule.saveEmailConfig(workingConfig())
+    } finally {
+      resume.resolve()
+    }
+    expect((await update).status).toBe(200)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+        .sessionVersion
+    ).toBe(account.sessionVersion + 1)
   })
 })

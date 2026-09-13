@@ -1,3 +1,4 @@
+import { POST as changeEmail } from '@/app/api/auth/email/change/route'
 import { POST as enroll } from '@/app/api/auth/email/enroll/route'
 import { POST as resend } from '@/app/api/auth/email/resend/route'
 import { POST as register } from '@/app/api/auth/register/route'
@@ -17,6 +18,7 @@ import {
 } from 'vitest'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
+import { DEFAULT_CONFIG } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import {
   confirmEmailToken,
@@ -50,7 +52,8 @@ vi.mock('@/lib/email/config', async (original) => ({
   ...(await original<object>()),
   getEmailConfig: async () => state.config,
 }))
-vi.mock('@/lib/config', () => ({
+vi.mock('@/lib/config', async (original) => ({
+  ...(await original<object>()),
   getConfig: async () => ({
     settings: {
       general: {
@@ -80,18 +83,26 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         where: { key: { startsWith: 'mail:daily:' } },
       })
     })
-    beforeEach(() => {
+    beforeEach(async () => {
       config = {
         ...structuredClone(DEFAULT_EMAIL_CONFIG),
         enabled: true,
+        smtp: {
+          ...DEFAULT_EMAIL_CONFIG.smtp,
+          host: 'smtp.example',
+          authentication: false,
+        },
+        fromAddress: 'no-reply@example.com',
         publicUrl: 'https://flare.example',
         recovery: { ...DEFAULT_EMAIL_CONFIG.recovery, enabled: true },
       }
       state.config = config
       state.session = null
       state.enforceSso = false
+      await persistConfig(config)
     })
     afterEach(async () => {
+      await prisma.config.deleteMany({ where: { key: 'flare_config' } })
       await prisma.user.deleteMany({ where: { id: { in: ids.splice(0) } } })
       await prisma.emailRateLimit.deleteMany({
         where: { key: { startsWith: 'mail:daily:' } },
@@ -123,6 +134,63 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           ...overrides,
         },
       })
+    }
+
+    async function persistConfig(
+      email: EmailConfig,
+      tx: Pick<Prisma.TransactionClient, 'config'> = prisma
+    ) {
+      const value = JSON.parse(
+        JSON.stringify({
+          ...DEFAULT_CONFIG,
+          settings: {
+            ...DEFAULT_CONFIG.settings,
+            email,
+            general: {
+              ...DEFAULT_CONFIG.settings.general,
+              oidc: {
+                ...DEFAULT_CONFIG.settings.general.oidc,
+                enabled: true,
+                enforceSso: state.enforceSso,
+              },
+            },
+          },
+        })
+      ) as Prisma.InputJsonValue
+      await tx.config.upsert({
+        where: { key: 'flare_config' },
+        create: { key: 'flare_config', value },
+        update: { value },
+      })
+    }
+
+    async function changeLink(userId: string, purpose = 'change') {
+      const mail = await prisma.mailOutbox.findFirstOrThrow({
+        where: { userId, purpose },
+        orderBy: { createdAt: 'desc' },
+      })
+      const payload = JSON.parse(decryptSecret(mail.payload, 'outbox')) as {
+        text: string
+      }
+      const match = payload.text.match(
+        /https:\/\/flare\.example\/auth\/verify-email\?token=([A-Za-z0-9_-]+)/
+      )
+      expect(match).not.toBeNull()
+      return match![1]
+    }
+
+    async function waitForSettingsLockWaiter() {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const [result] = await prisma.$queryRaw<Array<{ waiting: number }>>`
+          SELECT COUNT(*)::int AS waiting FROM pg_locks
+          WHERE locktype = 'advisory' AND objid = 721150092 AND NOT granted
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`
+        if (result.waiting > 0) return
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      throw new Error(
+        'Account confirmation did not wait for the settings transaction'
+      )
     }
     function token(
       account: User,
@@ -180,10 +248,13 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         where: { key: cooldownKey },
         data: { resetAt: new Date(0) },
       })
-      config.limits.resendSeconds = 0
       expect(
         (await enroll(request({ password: 'wrong-password' }))).status
       ).toBe(400)
+      await prisma.emailRateLimit.update({
+        where: { key: cooldownKey },
+        data: { resetAt: new Date(0) },
+      })
       const response = await enroll(request({ password: 'old-password' }))
       expect(
         response.status,
@@ -298,6 +369,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('requires both mailboxes when configured and keeps the new-address link usable after early confirmation', async () => {
       config.changes.requireOldEmail = true
+      await persistConfig(config)
       const newEmail = `${randomUUID()}@new.example`
       const account = await user({
         pendingEmail: newEmail,
@@ -355,9 +427,140 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(1)
     })
 
+    it('does not fabricate old-address approval when the policy makes it optional', async () => {
+      const account = await user()
+      state.session = { user: { id: account.id } }
+      const email = `${randomUUID()}@new.example`
+      const response = await changeEmail(
+        request({ email, password: 'old-password' })
+      )
+      expect(response.status).toBe(200)
+      const pending = await prisma.user.findUniqueOrThrow({
+        where: { id: account.id },
+      })
+      expect(pending.pendingEmailOldConfirmed).toBe(false)
+      expect(
+        await prisma.emailToken.count({
+          where: { userId: account.id, purpose: 'change_approval' },
+        })
+      ).toBe(0)
+      await confirmEmailToken(await changeLink(account.id), config)
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .email
+      ).toBe(email)
+    })
+
+    it('requires real old-address approval when an administrator tightens policy during a pending change', async () => {
+      const account = await user()
+      state.session = { user: { id: account.id } }
+      const email = `${randomUUID()}@new.example`
+      expect(
+        (await changeEmail(request({ email, password: 'old-password' }))).status
+      ).toBe(200)
+      const staleConfig = structuredClone(config)
+      const link = await changeLink(account.id)
+      config.changes.requireOldEmail = true
+      await persistConfig(config)
+      await expect(confirmEmailToken(link, staleConfig)).rejects.toThrow(
+        'Start the email change again'
+      )
+      const pending = await prisma.user.findUniqueOrThrow({
+        where: { id: account.id },
+      })
+      expect(pending.email).toBe(account.email)
+      expect(pending.pendingEmail).toBe(email)
+      expect(pending.pendingEmailOldConfirmed).toBe(false)
+      expect(
+        await prisma.emailToken.count({
+          where: { userId: account.id, purpose: 'change', consumedAt: null },
+        })
+      ).toBe(1)
+
+      // Restart under the new policy; the endpoint now sends both confirmations.
+      const cooldownKey = createHash('sha256')
+        .update(`email:cooldown:${email}`)
+        .digest('hex')
+      await prisma.emailRateLimit.update({
+        where: { key: cooldownKey },
+        data: { resetAt: new Date(0) },
+      })
+      expect(
+        (await changeEmail(request({ email, password: 'old-password' }))).status
+      ).toBe(200)
+      const newLink = await changeLink(account.id)
+      await expect(confirmEmailToken(newLink, config)).rejects.toThrow(
+        'Approve the change'
+      )
+      await confirmEmailToken(
+        await changeLink(account.id, 'change_approval'),
+        config
+      )
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .pendingEmailOldConfirmed
+      ).toBe(true)
+      await confirmEmailToken(newLink, config)
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .email
+      ).toBe(email)
+    })
+
+    it('waits for a concurrent settings transaction before deciding whether old-address approval is required', async () => {
+      const account = await user()
+      state.session = { user: { id: account.id } }
+      const email = `${randomUUID()}@new.example`
+      expect(
+        (await changeEmail(request({ email, password: 'old-password' }))).status
+      ).toBe(200)
+      const link = await changeLink(account.id)
+      let release!: () => void
+      let ready!: () => void
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const locked = new Promise<void>((resolve) => {
+        ready = resolve
+      })
+      const settings = prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+          await persistConfig(
+            {
+              ...config,
+              changes: { ...config.changes, requireOldEmail: true },
+            },
+            tx
+          )
+          ready()
+          await blocked
+        },
+        { timeout: 10000 }
+      )
+      await locked
+      const confirmation = confirmEmailToken(link, config)
+      const outcome = confirmation.then(
+        () => null,
+        (error: Error) => error
+      )
+      try {
+        await waitForSettingsLockWaiter()
+      } finally {
+        release()
+        await settings
+      }
+      expect((await outcome)?.message).toContain('Start the email change again')
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .email
+      ).toBe(account.email)
+    })
+
     it('can rotate upload credentials and completes recovery when the notification quota is exhausted', async () => {
       config.recovery.rotateUploadToken = true
       config.limits.dailyLimit = 1
+      await persistConfig(config)
       const account = await user()
       await exhaustDailyQuota()
       const reset = await token(account)
@@ -409,6 +612,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       const account = await user()
       const reset = await token(account)
       state.enforceSso = true
+      await persistConfig(config)
+      // Simulate a request whose earlier ordinary config read is already stale.
+      state.enforceSso = false
       await requestPasswordReset(account.email!, config)
       expect(
         await prisma.emailToken.count({ where: { userId: account.id } })
@@ -436,6 +642,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         emailVerifiedFor: null,
         emailVerificationSource: null,
       })
+      await persistConfig(config)
       state.session = { user: { id: account.id, role: 'ADMIN' } }
       const response = await adminEmail(request({ action: 'require' }), {
         params: Promise.resolve({ id: account.id }),
@@ -445,6 +652,44 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
           .emailExempt
       ).toBe(true)
+    })
+
+    it('does not issue or consume reset tokens using a stale enabled policy', async () => {
+      const account = await user()
+      const reset = await token(account)
+      await persistConfig({ ...config, enabled: false })
+      await requestPasswordReset(account.email!, config)
+      expect(
+        await prisma.emailToken.count({ where: { userId: account.id } })
+      ).toBe(1)
+      await expect(
+        resetPassword(reset.token, 'new-password', config)
+      ).rejects.toThrow('recovery is disabled')
+      expect(
+        (
+          await prisma.emailToken.findUniqueOrThrow({
+            where: { id: reset.record.id },
+          })
+        ).consumedAt
+      ).toBeNull()
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .password
+      ).toBe(passwordHash)
+    })
+
+    it('applies the current upload-token rotation policy when a reset request has an older snapshot', async () => {
+      const account = await user()
+      const reset = await token(account)
+      await persistConfig({
+        ...config,
+        recovery: { ...config.recovery, rotateUploadToken: true },
+      })
+      await resetPassword(reset.token, 'new-password', config)
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
+          .uploadToken
+      ).not.toBe(account.uploadToken)
     })
 
     it('accepts the configured external origin behind a proxy and rejects an unrelated origin', async () => {

@@ -8,11 +8,13 @@ import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser } from '@/lib/email/account'
-import { getEmailConfig } from '@/lib/email/config'
+import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.users
+
+class ProfileUpdateError extends Error {}
 
 export async function PUT(req: Request) {
   try {
@@ -97,11 +99,6 @@ export async function PUT(req: Request) {
       updateData.pendingEmail = null
       updateData.pendingEmailOldConfirmed = false
     }
-    if (emailConfig.enabled && body.newPassword) {
-      updateData.sessionVersion = { increment: 1 }
-      updateData.pendingEmail = null
-      updateData.pendingEmailOldConfirmed = false
-    }
     if (body.image) updateData.image = body.image
     if (typeof body.randomizeFileUrls === 'boolean')
       updateData.randomizeFileUrls = body.randomizeFileUrls
@@ -143,12 +140,28 @@ export async function PUT(req: Request) {
 
     const updatedUser = await prisma.$transaction(async (tx) => {
       if (emailChanged || body.newPassword) {
+        // Serialize the effective policy with this account mutation. An admin
+        // enabling email must commit either before this check or after our save.
+        const currentEmailConfig = await getEmailConfigForUpdate(tx)
+        if (currentEmailConfig.enabled && emailChanged)
+          throw new ProfileUpdateError(
+            'Use the verified email change form to change your email address.'
+          )
+        if (currentEmailConfig.enabled && body.newPassword) {
+          if (Buffer.byteLength(body.newPassword, 'utf8') > 72)
+            throw new ProfileUpdateError('Password must use at most 72 bytes.')
+          updateData.sessionVersion = { increment: 1 }
+          updateData.pendingEmail = null
+          updateData.pendingEmailOldConfirmed = false
+        }
         const fresh = await lockEmailUser(tx, user.id)
         if (
           fresh.password !== account.password ||
           fresh.email !== account.email
         )
-          throw new Error('Account changed during update')
+          throw new ProfileUpdateError(
+            'Account changed during update. Please try again.'
+          )
         await invalidateEmailTokens(tx, user.id)
       }
       return tx.user.update({
@@ -167,6 +180,8 @@ export async function PUT(req: Request) {
 
     return apiResponse<ProfileResponse>(updatedUser)
   } catch (error) {
+    if (error instanceof ProfileUpdateError)
+      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Profile update error:', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

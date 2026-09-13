@@ -14,7 +14,7 @@ import {
   lockEmailUser,
   sendAccountToken,
 } from '@/lib/email/account'
-import { getEmailConfig, resolveEmailConfig } from '@/lib/email/config'
+import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { hasDurableEmailAccess } from '@/lib/email/policy'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
@@ -88,20 +88,6 @@ export async function POST(req: Request) {
     }
 
     const body = result.data
-    const emailConfig = await getEmailConfig()
-    if (
-      emailConfig.enabled &&
-      body.password &&
-      Buffer.byteLength(body.password, 'utf8') > 72
-    )
-      return apiError(
-        'Password must use at most 72 bytes.',
-        HTTP_STATUS.BAD_REQUEST
-      )
-    const sendVerification =
-      emailConfig.enabled &&
-      (emailConfig.verification.mode !== 'off' || emailConfig.recovery.enabled)
-
     const exists = await prisma.user.findUnique({
       where: { email: body.email },
     })
@@ -115,6 +101,17 @@ export async function POST(req: Request) {
       : undefined
 
     const user = await prisma.$transaction(async (tx) => {
+      const emailConfig = await getEmailConfigForUpdate(tx)
+      if (
+        emailConfig.enabled &&
+        body.password &&
+        Buffer.byteLength(body.password, 'utf8') > 72
+      )
+        throw new UserEmailPolicyError('Password must use at most 72 bytes.')
+      const sendVerification =
+        emailConfig.enabled &&
+        (emailConfig.verification.mode !== 'off' ||
+          emailConfig.recovery.enabled)
       if (emailConfig.enabled) {
         await lockEmailAddress(tx, body.email)
         if (
@@ -151,6 +148,8 @@ export async function POST(req: Request) {
       _count: { files: 0, shortenedUrls: 0 },
     })
   } catch (error) {
+    if (error instanceof UserEmailPolicyError)
+      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Error creating user', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
@@ -181,18 +180,9 @@ export async function PUT(req: Request) {
     if (!existingUser) {
       return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
-    const emailConfig = await getEmailConfig()
-    if (
-      emailConfig.enabled &&
-      body.password &&
-      Buffer.byteLength(body.password, 'utf8') > 72
-    )
-      return apiError(
-        'Password must use at most 72 bytes.',
-        HTTP_STATUS.BAD_REQUEST
-      )
-    const emailChanged =
+    const requestedEmailChange =
       body.email !== undefined && body.email !== existingUser.email
+    const requestedRoleChange = body.role !== existingUser.role
 
     if (body.urlId) {
       const existingUrlId = await prisma.user.findUnique({
@@ -230,22 +220,9 @@ export async function PUT(req: Request) {
     const updateData = {
       updatedAt: new Date(),
       ...(body.name !== undefined && { name: body.name }),
-      ...(body.email !== undefined && { email: body.email }),
-      ...(body.role !== undefined && { role: body.role }),
+      ...(requestedEmailChange && { email: body.email }),
+      ...(requestedRoleChange && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
-      ...(emailChanged && {
-        emailVerified: null,
-        emailVerifiedFor: null,
-        emailVerificationSource: null,
-        pendingEmail: null,
-        pendingEmailOldConfirmed: false,
-      }),
-      ...(emailConfig.enabled && (emailChanged || body.password)
-        ? { sessionVersion: { increment: 1 } }
-        : {}),
-      ...(emailConfig.enabled && body.password
-        ? { pendingEmail: null, pendingEmailOldConfirmed: false }
-        : {}),
       ...(body.urlId && { urlId: body.urlId }),
       ...(body.vanityId !== undefined && {
         vanityId: body.vanityId || null,
@@ -286,24 +263,41 @@ export async function PUT(req: Request) {
     }
 
     const user = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      const latestConfig = await getEmailConfigForUpdate(tx)
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
-      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-      const saved = row?.value as { settings?: { email?: unknown } } | undefined
-      const latestConfig = row
-        ? resolveEmailConfig(saved?.settings?.email).config
-        : emailConfig
       const currentUser = await lockEmailUser(tx, existingUser.id)
+      if (
+        (requestedEmailChange && currentUser.email !== existingUser.email) ||
+        (requestedRoleChange && currentUser.role !== existingUser.role) ||
+        (body.password &&
+          (currentUser.password !== existingUser.password ||
+            currentUser.sessionVersion !== existingUser.sessionVersion))
+      )
+        throw new UserEmailPolicyError(
+          'Account changed during update. Refresh the user and try again.'
+        )
+      if (
+        latestConfig.enabled &&
+        body.password &&
+        Buffer.byteLength(body.password, 'utf8') > 72
+      )
+        throw new UserEmailPolicyError('Password must use at most 72 bytes.')
+
+      // Full user forms carry unchanged identity fields. Preserve concurrent
+      // verification or role changes unless this request actually edited them.
+      const emailChanged =
+        requestedEmailChange && body.email !== currentUser.email
+      const nextRole = requestedRoleChange ? body.role : currentUser.role
       if (
         latestConfig.enabled &&
         currentUser.role === 'ADMIN' &&
-        (emailChanged || body.role !== 'ADMIN')
+        (emailChanged || nextRole !== 'ADMIN')
       ) {
         const admins = await tx.user.findMany({ where: { role: 'ADMIN' } })
         const remainsAccessible = admins.some((admin) => {
           if (admin.id !== existingUser.id)
             return hasDurableEmailAccess(admin, latestConfig)
-          if (body.role !== 'ADMIN') return false
+          if (nextRole !== 'ADMIN') return false
           return hasDurableEmailAccess(
             emailChanged
               ? {
@@ -322,8 +316,7 @@ export async function PUT(req: Request) {
           )
       }
       if (emailChanged || body.password) {
-        await lockEmailUser(tx, existingUser.id)
-        if (emailConfig.enabled && emailChanged) {
+        if (latestConfig.enabled && emailChanged) {
           await lockEmailAddress(tx, body.email)
           if (
             await tx.user.findFirst({
@@ -333,13 +326,28 @@ export async function PUT(req: Request) {
               },
             })
           )
-            throw new Error('Email already exists')
+            throw new UserEmailPolicyError('Email already exists')
         }
         await invalidateEmailTokens(tx, existingUser.id)
       }
       return tx.user.update({
         where: { id: body.id },
-        data: updateData,
+        data: {
+          ...updateData,
+          ...(emailChanged && {
+            emailVerified: null,
+            emailVerifiedFor: null,
+            emailVerificationSource: null,
+            pendingEmail: null,
+            pendingEmailOldConfirmed: false,
+          }),
+          ...(latestConfig.enabled && (emailChanged || body.password)
+            ? { sessionVersion: { increment: 1 } }
+            : {}),
+          ...(latestConfig.enabled && body.password
+            ? { pendingEmail: null, pendingEmailOldConfirmed: false }
+            : {}),
+        },
         select: {
           id: true,
           name: true,
