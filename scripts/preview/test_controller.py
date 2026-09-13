@@ -432,6 +432,67 @@ class ReconcileTests(unittest.TestCase):
 
 
 class RegistryCleanupTests(unittest.TestCase):
+    @staticmethod
+    def version(identifier, created_at, tags):
+        return {"id": identifier, "created_at": created_at, "metadata": {"container": {"tags": tags}}}
+
+    def cleanup(self, versions, keep=()):
+        gh = object.__new__(c.GitHub)
+        gh.repository = "FlintSH/Flare"
+        gh.repo = {"owner": {"type": "Organization"}}
+        remaining = {version["id"]: version for version in versions}
+        gh.pages = lambda *args: list(remaining.values())
+        deleted = []
+        def delete(path, method):
+            self.assertEqual(method, "DELETE")
+            self.assertRegex(path, r"^/orgs/FlintSH/packages/container/flare-pr-previews/versions/[0-9]+$")
+            if len(remaining) <= 1:
+                raise c.PreviewError("GitHub API DELETE failed (HTTP 400)")
+            identifier = int(path.rsplit("/", 1)[1])
+            del remaining[identifier]
+            deleted.append(identifier)
+        gh.api = delete
+        c.cleanup_registry(gh, set(keep))
+        return deleted, list(remaining.values())
+
+    def test_keeps_last_stale_version_without_deleting_package(self):
+        version = self.version(1, "2026-09-13T00:00:00Z", ["pr-1-101-1"])
+        deleted, remaining = self.cleanup([version])
+        self.assertEqual(deleted, [])
+        self.assertEqual(remaining, [version])
+
+    def test_all_stale_keeps_newest_by_creation_time_independent_of_api_order(self):
+        oldest = self.version(30, "2026-09-11T00:00:00Z", ["pr-1-101-1"])
+        newest = self.version(20, "2026-09-13T00:00:00Z", ["pr-2-102-1"])
+        middle = self.version(10, "2026-09-12T00:00:00Z", ["pr-3-103-1"])
+        for versions in ([oldest, newest, middle], [middle, oldest, newest]):
+            deleted, remaining = self.cleanup(versions)
+            self.assertCountEqual(deleted, [30, 10])
+            self.assertEqual(remaining, [newest])
+
+    def test_current_version_allows_every_other_stale_version_to_be_deleted(self):
+        current = self.version(1, "2026-09-11T00:00:00Z", ["pr-1-101-1"])
+        stale = self.version(2, "2026-09-13T00:00:00Z", ["pr-2-102-1"])
+        deleted, remaining = self.cleanup([stale, current], {(1, 101, 1)})
+        self.assertEqual(deleted, [2])
+        self.assertEqual(remaining, [current])
+
+    def test_later_publication_collects_the_previously_retained_version(self):
+        old = self.version(1, "2026-09-11T00:00:00Z", ["pr-1-101-1"])
+        _, remaining = self.cleanup([old])
+        new = self.version(2, "2026-09-13T00:00:00Z", ["pr-1-102-1"])
+        deleted, remaining = self.cleanup(remaining + [new], {(1, 102, 1)})
+        self.assertEqual(deleted, [1])
+        self.assertEqual(remaining, [new])
+
+    def test_foreign_or_untagged_version_preserves_package_without_retaining_stale_preview(self):
+        stale = self.version(1, "2026-09-13T00:00:00Z", ["pr-1-101-1"])
+        for tags in (["production"], [], ["pr-1-100-1", "production"]):
+            foreign = self.version(2, "2026-09-11T00:00:00Z", tags)
+            deleted, remaining = self.cleanup([stale, foreign])
+            self.assertEqual(deleted, [1])
+            self.assertEqual(remaining, [foreign])
+
     def test_preserves_foreign_untagged_and_in_use_shared_digest(self):
         gh = object.__new__(c.GitHub)
         gh.repository = "FlintSH/Flare"

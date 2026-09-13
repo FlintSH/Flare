@@ -335,12 +335,21 @@ def cleanup_registry(gh: GitHub, keep: set[tuple[int, int, int]]):
         if str(exc).endswith("(HTTP 404)"):
             return
         raise
+    stale = []
     for version in versions:
         tags = version.get("metadata", {}).get("container", {}).get("tags", [])
         parsed = [IMAGE_TAG.fullmatch(tag) for tag in tags]
         # Do not delete foreign/untagged versions or a shared digest still in use.
         if tags and all(parsed) and not any(tuple(map(int, match.groups())) in keep for match in parsed):
-            gh.api(path + f"/versions/{int(version['id'])}", "DELETE")
+            stale.append(version)
+    if stale and len(stale) == len(versions):
+        # GHCR rejects deleting a package's last version. Retain its newest
+        # image so package visibility and Actions permissions survive inactivity.
+        # A later publication makes this version eligible for ordinary cleanup.
+        newest = max(stale, key=lambda version: (timestamp(version["created_at"]), int(version["id"])))
+        stale = [version for version in stale if version["id"] != newest["id"]]
+    for version in stale:
+        gh.api(path + f"/versions/{int(version['id'])}", "DELETE")
 
 
 class Controller:
