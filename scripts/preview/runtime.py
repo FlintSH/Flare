@@ -360,37 +360,51 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def smoke(url):
-    """Exercise the real database-backed login without following PR redirects."""
+    """Acknowledge the public notice, then exercise real database-backed login."""
     origin = urllib.parse.urlsplit(url)
     if (origin.scheme != "https" or not DOMAIN.fullmatch(origin.netloc)
             or origin.path or origin.query or origin.fragment):
         raise ValueError("Unexpected health check origin")
     jar = http.cookiejar.CookieJar()
-    jar.set_cookie(http.cookiejar.Cookie(
-        version=0, name="flare_preview_ack", value="1", port=None, port_specified=False,
-        domain=urllib.parse.urlsplit(url).hostname, domain_specified=False,
-        domain_initial_dot=False, path="/", path_specified=True, secure=True,
-        expires=None, discard=True, comment=None, comment_url=None, rest={}, rfc2109=False,
-    ))
     opener = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(jar))
 
-    def request(path, form=None):
+    def fetch(path, form=None, expected_status=200):
         headers = {}
         body = urllib.parse.urlencode(form).encode() if form is not None else None
         if body is not None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
-        with opener.open(urllib.request.Request(url + path, data=body, headers=headers), timeout=15) as response:
+            headers["Origin"] = url
+        try:
+            response = opener.open(urllib.request.Request(url + path, data=body, headers=headers), timeout=15)
+        except urllib.error.HTTPError as error:
+            # Accept the acknowledgment's expected redirect without following
+            # it. CookieJar has already processed its Set-Cookie response.
+            if error.code != expected_status:
+                raise
+            response = error
+        with response:
+            if response.getcode() != expected_status:
+                raise RuntimeError("Unexpected preview smoke response status")
             data = response.read(65537)
             if len(data) > 65536:
                 raise RuntimeError("Preview health response exceeds limit")
-            return json.loads(data)
+            return response.headers, data
 
+    def request(path, form=None):
+        return json.loads(fetch(path, form)[1])
+
+    notice, _ = fetch("/_preview")
+    if notice.get("Referrer-Policy", "").lower() != "same-origin":
+        raise RuntimeError("Preview notice does not preserve same-origin form submissions")
+    entered, _ = fetch("/_preview/enter", {}, expected_status=303)
+    if entered.get("Location") != "/" or not any(
+            cookie.name == "flare_preview_ack" and cookie.value == "1" and cookie.secure for cookie in jar):
+        raise RuntimeError("Preview notice acknowledgment failed")
     request("/_preview/health")
     csrf = request("/api/auth/csrf")["csrfToken"]
     if not isinstance(csrf, str) or len(csrf) > 256:
         raise RuntimeError("Invalid CSRF response")
-    # CookieJar stores Secure NextAuth cookies. Add acknowledgment without
-    # overriding those cookies on subsequent requests.
+    # CookieJar preserves the gateway acknowledgment and Secure NextAuth cookies.
     request("/api/auth/callback/credentials", {"csrfToken": csrf, "email": "demo@example.test",
             "password": "Flare-preview-only!2026", "json": "true", "callbackUrl": url + "/dashboard"})
     session = request("/api/auth/session")

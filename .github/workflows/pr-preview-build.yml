@@ -59,7 +59,13 @@ jobs:
           # Build the exact application head with the trusted default branch's
           # wrapper/fixtures, including for PR branches predating preview support.
           # Support changes take effect after merge. Never read PR bake files.
-          docker buildx bake --allow fs.write=/tmp/flare-preview-image.tar --file - preview <<'BAKE'
+          export PREVIEW_ARTIFACT_DIR="$RUNNER_TEMP/preview-artifact"
+          mkdir -p "$PREVIEW_ARTIFACT_DIR"
+          # Buildx requires the export's parent directory as a filesystem grant.
+          docker buildx bake --allow "fs.write=$PREVIEW_ARTIFACT_DIR" --file - preview <<'BAKE'
+          variable "PREVIEW_ARTIFACT_DIR" {
+            default = ""
+          }
           target "app" {
             context = "./app"
             dockerfile = "Dockerfile"
@@ -70,12 +76,10 @@ jobs:
             dockerfile = "Dockerfile.preview"
             contexts = { "flare-preview-app" = "target:app" }
             platforms = ["linux/amd64"]
-            output = ["type=oci,dest=/tmp/flare-preview-image.tar"]
+            output = ["type=oci,dest=${PREVIEW_ARTIFACT_DIR}/image.tar"]
             attest = ["type=provenance,disabled=true", "type=sbom,disabled=true"]
           }
           BAKE
-          mkdir -p "$RUNNER_TEMP/preview-artifact"
-          mv /tmp/flare-preview-image.tar "$RUNNER_TEMP/preview-artifact/image.tar"
 
       - name: Upload image for the trusted controller
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

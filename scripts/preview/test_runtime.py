@@ -640,12 +640,16 @@ class RuntimeTests(unittest.TestCase):
 class InMemoryHTTPS(urllib.request.HTTPSHandler):
     """Fake only transport, retaining urllib cookie and redirect behavior."""
 
-    def __init__(self, case, role="USER", redirect=False, oversized=False):
+    def __init__(self, case, role="USER", redirect=False, oversized=False,
+                 notice_policy="same-origin", acknowledgment_cookie=True, acknowledgment_location="/"):
         super().__init__()
         self.case = case
         self.role = role
         self.redirect = redirect
         self.oversized = oversized
+        self.notice_policy = notice_policy
+        self.acknowledgment_cookie = acknowledgment_cookie
+        self.acknowledgment_location = acknowledgment_location
         self.requests = []
 
     def https_open(self, request):
@@ -654,13 +658,29 @@ class InMemoryHTTPS(urllib.request.HTTPSHandler):
         status = 200
         path = urllib.parse.urlsplit(request.full_url).path
         cookie = request.get_header("Cookie", "")
-        self.case.assertIn("flare_preview_ack=1", cookie)
+        if path in ("/_preview", "/_preview/enter"):
+            self.case.assertNotIn("flare_preview_ack=1", cookie)
+        else:
+            self.case.assertIn("flare_preview_ack=1", cookie)
         if self.redirect:
             status = 302
             headers["Location"] = "https://external.example.test/collect"
             body = b""
         elif self.oversized:
             body = b" " * 65537
+        elif path == "/_preview":
+            self.case.assertEqual(request.get_method(), "GET")
+            headers["Content-Type"] = "text/html; charset=utf-8"
+            headers["Referrer-Policy"] = self.notice_policy
+            body = b'<form method="post" action="/_preview/enter"><button>Open preview</button></form>'
+        elif path == "/_preview/enter":
+            self.case.assertEqual(request.get_method(), "POST")
+            self.case.assertEqual(request.get_header("Origin"), URL)
+            status = 303
+            headers["Location"] = self.acknowledgment_location
+            if self.acknowledgment_cookie:
+                headers["Set-Cookie"] = "flare_preview_ack=1; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=Lax"
+            body = b""
         elif path == "/_preview/health":
             body = b'{"status":"ready"}'
         elif path == "/api/auth/csrf":
@@ -700,7 +720,28 @@ class SmokeTests(unittest.TestCase):
     def test_real_cookiejar_preserves_ack_csrf_and_session_cookies(self):
         transport = self.transport()
         runtime.smoke(URL)
-        self.assertEqual(len(transport.requests), 4)
+        self.assertEqual([urllib.parse.urlsplit(request.full_url).path for request in transport.requests], [
+            "/_preview", "/_preview/enter", "/_preview/health", "/api/auth/csrf",
+            "/api/auth/callback/credentials", "/api/auth/session",
+        ])
+
+    def test_smoke_rejects_notice_policy_that_nulls_browser_form_origin(self):
+        transport = self.transport(notice_policy="no-referrer")
+        with self.assertRaisesRegex(RuntimeError, "same-origin form"):
+            runtime.smoke(URL)
+        self.assertEqual(len(transport.requests), 1)
+
+    def test_smoke_requires_real_acknowledgment_cookie_and_local_redirect(self):
+        transport = self.transport(acknowledgment_cookie=False)
+        with self.assertRaisesRegex(RuntimeError, "notice acknowledgment"):
+            runtime.smoke(URL)
+        self.assertEqual(len(transport.requests), 2)
+        transport.requests.clear()
+        transport.acknowledgment_cookie = True
+        transport.acknowledgment_location = "https://external.example.test/collect"
+        with self.assertRaisesRegex(RuntimeError, "notice acknowledgment"):
+            runtime.smoke(URL)
+        self.assertEqual(len(transport.requests), 2)
 
     def test_smoke_requires_demo_user_and_bounded_responses(self):
         transport = self.transport(role="ADMIN")

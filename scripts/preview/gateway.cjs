@@ -223,7 +223,12 @@ function createGateway(env = process.env, options = {}) {
       return reply(
         200,
         '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Flare public PR preview</title><body><main><h1>Public, disposable PR preview</h1><p>This site runs unreviewed pull request code. Everyone shares its test data. Use made-up data only; never enter real passwords, personal files, or production credentials.</p><p>Demo login: <code>demo@example.test</code><br>Password: <code>Flare-preview-only!2026</code></p><p>This preview expires automatically. Some settings and integrations are disabled.</p><form method="post" action="/_preview/enter"><button>I understand — open preview</button></form></main></body></html>',
-        { 'content-type': 'text/html; charset=utf-8' }
+        {
+          'content-type': 'text/html; charset=utf-8',
+          // A no-referrer document submits navigation forms with Origin:null.
+          // Preserve this same-origin POST while withholding cross-origin referrers.
+          'referrer-policy': 'same-origin',
+        }
       )
     }
     if (path === '/_preview/enter' && req.method === 'POST') {
