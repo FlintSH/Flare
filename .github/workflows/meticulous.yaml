@@ -61,6 +61,25 @@ jobs:
           api-token: '${{ secrets.METICULOUS_API_TOKEN }}'
           ref: '${{ env.METICULOUS_COMMIT_SHA }}'
 
+      # Allows the first cloud replay to be verified before enabling PR comparisons.
+      - name: Upload bootstrap deployment
+        if: vars.METICULOUS_REPLAY_READY != 'true'
+        env:
+          METICULOUS_API_TOKEN: '${{ secrets.METICULOUS_API_TOKEN }}'
+        run: |
+          npx --yes @alwaysmeticulous/cli@2.340.0 agent upload-build \
+            --localImageTag "flare:meticulous-$METICULOUS_COMMIT_SHA" \
+            --containerPort 3000 --containerHealthCheckEndpoint /api/health \
+            --commitSha "$METICULOUS_COMMIT_SHA" --json > meticulous-deployment.json
+          cat meticulous-deployment.json
+
+      - name: Save bootstrap deployment reference
+        if: vars.METICULOUS_REPLAY_READY != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: meticulous-deployment
+          path: meticulous-deployment.json
+
       - name: Run Meticulous tests
         if: vars.METICULOUS_REPLAY_READY == 'true'
         uses: alwaysmeticulous/report-diffs-action/upload-container@v1
