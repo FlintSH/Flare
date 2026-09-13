@@ -90,11 +90,22 @@ test('notice and acknowledgment precede access without calling the app', async (
   assert.equal(notice.status, 200)
   assert.match(notice.body, /unreviewed pull request code/)
   assert.match(notice.body, /demo@example.test/)
+  assert.match(notice.body, /<form method="post" action="\/_preview\/enter">/)
   assert.equal(notice.headers['x-robots-tag'], 'noindex, nofollow, noarchive')
+  // Navigation form POSTs from no-referrer documents send Origin:null.
+  assert.equal(notice.headers['referrer-policy'], 'same-origin')
   assert.equal(
     (await request(url, '/_preview/enter', { method: 'POST' })).status,
     403
   )
+  for (const origin of ['null', 'https://unrelated.example.test']) {
+    const rejected = await request(url, '/_preview/enter', {
+      method: 'POST',
+      headers: { origin },
+    })
+    assert.equal(rejected.status, 403)
+    assert.equal(rejected.headers['set-cookie'], undefined)
+  }
   const enter = await request(url, '/_preview/enter', {
     method: 'POST',
     headers: { origin: ORIGIN },
@@ -102,6 +113,12 @@ test('notice and acknowledgment precede access without calling the app', async (
   assert.equal(enter.status, 303)
   assert.match(enter.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Lax/)
   assert.equal(calls.length, 0)
+  const opened = await request(url, enter.headers.location, {
+    headers: { cookie: enter.headers['set-cookie'][0].split(';')[0] },
+  })
+  assert.equal(opened.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(opened.headers['referrer-policy'], 'no-referrer')
 })
 
 test('proxy preserves application traffic and replaces spoofed internal headers', async (t) => {
