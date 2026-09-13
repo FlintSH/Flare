@@ -58,6 +58,10 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const pendingRequest = useRef<AbortController | null>(null)
   const search = options.search || ''
   const role = options.role || 'ALL'
+  const latestQuery = useRef({ search, role })
+  useEffect(() => {
+    latestQuery.current = { search, role }
+  }, [search, role])
   useEffect(() => () => pendingRequest.current?.abort(), [])
   const { toast } = useToast()
   const router = useRouter()
@@ -70,11 +74,16 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
       try {
         setIsLoading(true)
         setLoadError(false)
+        // An in-flight mutation can retain an older fetch callback. Refresh the
+        // current query, resetting its page if the filters changed meanwhile.
+        const query = latestQuery.current
+        const requestedPage =
+          query.search === search && query.role === role ? page : 1
         const params = new URLSearchParams({
-          page: String(page),
+          page: String(requestedPage),
           limit: '25',
-          search,
-          role,
+          search: query.search,
+          role: query.role,
         })
         const response = await fetch(`/api/users?${params}`, {
           signal: controller.signal,
@@ -88,7 +97,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
             ? { ...data.pagination, pages: data.pagination.pageCount }
             : null
         )
-        setCurrentPage(data.pagination?.page ?? page)
+        setCurrentPage(data.pagination?.page ?? requestedPage)
       } catch (error) {
         if (controller.signal.aborted) return
         setLoadError(true)

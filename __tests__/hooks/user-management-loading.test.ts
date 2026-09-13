@@ -7,6 +7,7 @@ import { useUserManagement } from '@/hooks/use-user-management'
 const harness = vi.hoisted(() => ({
   slots: [] as unknown[],
   cursor: 0,
+  effects: [] as (() => void)[],
   fetch: vi.fn(),
   toast: vi.fn(),
   refresh: vi.fn(),
@@ -30,7 +31,9 @@ vi.mock('react', () => ({
     return harness.slots[index]
   },
   useCallback: (callback: unknown) => callback,
-  useEffect: () => {},
+  useEffect: (effect: () => void) => {
+    harness.effects.push(effect)
+  },
 }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: harness.refresh }),
@@ -41,7 +44,10 @@ vi.mock('@/hooks/use-toast', () => ({
 
 function render(search = '') {
   harness.cursor = 0
-  return useUserManagement({ search })
+  harness.effects = []
+  const result = useUserManagement({ search })
+  harness.effects.forEach((effect) => effect())
+  return result
 }
 
 function listResponse(name: string) {
@@ -60,6 +66,33 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('user-list loading ownership', () => {
+  it('refreshes the latest filter when it changes before a mutation returns', async () => {
+    harness.fetch.mockResolvedValueOnce(listResponse('Existing user'))
+    await render().fetchUsers()
+    let completeCreate!: (response: Response) => void
+    harness.fetch.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          completeCreate = resolve
+        })
+    )
+    const mutation = render().createUser({
+      name: 'New user',
+      email: 'new@example.test',
+      role: 'USER',
+    })
+    harness.fetch.mockResolvedValueOnce(listResponse('Matching user'))
+    await render('Matching').fetchUsers()
+    harness.fetch.mockResolvedValueOnce(listResponse('Matching user'))
+    completeCreate(Response.json({ data: { id: 'created' } }))
+    await mutation
+    expect(harness.fetch).toHaveBeenLastCalledWith(
+      expect.stringContaining('search=Matching'),
+      expect.anything()
+    )
+    expect(render('Matching').isLoading).toBe(false)
+  })
+
   it('keeps overlapping avatar mutations loading until both finish', async () => {
     harness.fetch.mockResolvedValueOnce(listResponse('Existing user'))
     await render().fetchUsers()
