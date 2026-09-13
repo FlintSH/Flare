@@ -6,7 +6,10 @@ const nextConfig: NextConfig = {
   experimental: {
     reactCompiler: true,
   },
-  serverExternalPackages: ['tesseract.js'],
+  serverExternalPackages: [
+    'tesseract.js',
+    '@alwaysmeticulous/backend-recorder-launcher',
+  ],
   async headers() {
     return [
       {

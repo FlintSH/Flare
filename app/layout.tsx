@@ -69,7 +69,8 @@ export default async function RootLayout({
   const config = await getConfig()
   const recordMeticulous =
     (process.env.NODE_ENV === 'development' ||
-      process.env.VERCEL_ENV === 'preview') &&
+      process.env.VERCEL_ENV === 'preview' ||
+      process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
     Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
   const hasCustomFont =
     config.settings.advanced.customCSS.includes('font-family')
@@ -86,7 +87,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Record only in development or preview environments, never production. */}
+        {/* Explicit opt-in also supports the isolated recording container. */}
         {recordMeticulous && (
           // eslint-disable-next-line @next/next/no-sync-scripts
           <script
@@ -94,6 +95,7 @@ export default async function RootLayout({
               process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN
             }
             data-is-production-environment="false"
+            data-inject-session-id-header="true"
             src="https://snippet.meticulous.ai/v1/meticulous.js"
           />
         )}

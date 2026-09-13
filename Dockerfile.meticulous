@@ -1,0 +1,13 @@
+# Build the normal image as flare-meticulous-app first. This image is for tests only.
+FROM flare-meticulous-app
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql tini \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/meticulous/start.sh /app/meticulous-start.sh
+RUN chmod +x /app/meticulous-start.sh
+USER nextjs
+# Public fixture credentials, used exclusively with the disposable local database.
+ENV NEXTAUTH_SECRET=flare-meticulous-disposable-test-session-secret
+ENV NEXTAUTH_URL=http://localhost:3000
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/meticulous-start.sh"]
+CMD []

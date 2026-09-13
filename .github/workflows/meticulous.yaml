@@ -23,16 +23,8 @@ env:
 jobs:
   test:
     name: Meticulous
-    # Enable after Meticulous confirms database and authenticated SSR replay setup.
-    if: vars.METICULOUS_REPLAY_READY == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure base tests exist
-        uses: alwaysmeticulous/report-diffs-action/ensure-base@v1
-        with:
-          api-token: '${{ secrets.METICULOUS_API_TOKEN }}'
-          ref: '${{ env.METICULOUS_COMMIT_SHA }}'
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -41,25 +33,39 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Meticulous image
-        uses: docker/build-push-action@v6
+      - name: Build self-contained Meticulous image
+        run: |
+          docker build --build-arg METICULOUS_BUILD=true -t flare-meticulous-app .
+          docker build -f Dockerfile.meticulous -t "flare:meticulous-$METICULOUS_COMMIT_SHA" .
+
+      - name: Smoke test disposable database and application
+        run: |
+          docker run -d --name flare-meticulous-smoke -p 3000:3000 "flare:meticulous-$METICULOUS_COMMIT_SHA"
+          trap 'docker logs flare-meticulous-smoke; docker rm -f flare-meticulous-smoke' EXIT
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://localhost:3000/api/health; then
+              curl --fail --silent http://localhost:3000/auth/login > /dev/null
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' flare-meticulous-smoke)" != true ]; then
+              exit 1
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Ensure base tests exist
+        if: vars.METICULOUS_REPLAY_READY == 'true'
+        uses: alwaysmeticulous/report-diffs-action/ensure-base@v1
         with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: 'flare:meticulous-${{ env.METICULOUS_COMMIT_SHA }}'
-          build-args: |
-            METICULOUS_BUILD=true
+          api-token: '${{ secrets.METICULOUS_API_TOKEN }}'
+          ref: '${{ env.METICULOUS_COMMIT_SHA }}'
 
       - name: Run Meticulous tests
+        if: vars.METICULOUS_REPLAY_READY == 'true'
         uses: alwaysmeticulous/report-diffs-action/upload-container@v1
         with:
           api-token: '${{ secrets.METICULOUS_API_TOKEN }}'
           image-tag: 'flare:meticulous-${{ env.METICULOUS_COMMIT_SHA }}'
           container-port: 3000
-          container-env: |
-            METICULOUS_BUILD=true
-            DATABASE_URL=${{ secrets.METICULOUS_DATABASE_URL }}
-            NEXTAUTH_SECRET=${{ secrets.METICULOUS_NEXTAUTH_SECRET }}
-            NEXTAUTH_URL=http://localhost:3000
+          container-health-check-endpoint: /api/health
