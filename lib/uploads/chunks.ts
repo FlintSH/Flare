@@ -15,7 +15,7 @@ import { z } from 'zod'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { validatePathSegment } from '@/lib/security/paths'
+import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 import {
@@ -42,11 +42,11 @@ const cleanupTimer = setInterval(async () => {
     for (const name of await readdir(TEMP_DIR)) {
       if (!/^meta-[a-z0-9]+$/.test(name)) continue
       try {
+        const path = safeJoin(TEMP_DIR, name)
         const metadata = JSON.parse(
-          await readFile(join(TEMP_DIR, name), 'utf8')
+          await readFile(path, 'utf8')
         ) as UploadMetadata
-        if (Date.now() - metadata.lastActivity > 3_600_000)
-          await unlink(join(TEMP_DIR, name))
+        if (Date.now() - metadata.lastActivity > 3_600_000) await unlink(path)
       } catch {
         /* Another process may have removed the expired session. */
       }
@@ -91,7 +91,7 @@ export async function getUploadMetadata(
   id: string
 ): Promise<UploadMetadata | null> {
   if (!/^[a-z0-9]{1,100}$/.test(id)) throw new UploadError('Invalid upload ID.')
-  const path = join(TEMP_DIR, `meta-${validatePathSegment(id)}`)
+  const path = safeJoin(TEMP_DIR, `meta-${validatePathSegment(id)}`)
   try {
     const value = JSON.parse(await readFile(path, 'utf8')) as UploadMetadata
     if (Date.now() - value.lastActivity > 3_600_000) {
@@ -106,9 +106,11 @@ export async function getUploadMetadata(
 }
 
 export async function saveUploadMetadata(id: string, metadata: UploadMetadata) {
+  if (!/^[a-z0-9]{1,100}$/.test(id)) throw new UploadError('Invalid upload ID.')
+  const filename = `meta-${validatePathSegment(id)}`
+  const path = safeJoin(TEMP_DIR, filename)
+  const temporary = safeJoin(TEMP_DIR, `${filename}.${randomUUID()}.tmp`)
   await mkdir(TEMP_DIR, { recursive: true, mode: 0o700 })
-  const path = join(TEMP_DIR, `meta-${validatePathSegment(id)}`)
-  const temporary = `${path}.${randomUUID()}.tmp`
   await writeFile(temporary, JSON.stringify(metadata), { mode: 0o600 })
   await rename(temporary, path)
 }

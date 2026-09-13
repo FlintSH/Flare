@@ -8,7 +8,7 @@ import {
   signWebhook,
 } from '@/lib/integrations/security'
 import {
-  createApiToken,
+  createRandomApiToken,
   hashApiToken,
   tokenAllowsRequest,
 } from '@/lib/integrations/tokens'
@@ -23,8 +23,8 @@ afterEach(() => {
 
 describe('scoped API tokens', () => {
   it('reveals a high entropy key whose persisted hash is independent of the secret', () => {
-    const first = createApiToken()
-    const second = createApiToken()
+    const first = createRandomApiToken()
+    const second = createRandomApiToken()
     expect(first.token).toMatch(/^flr_[\w-]{43}$/)
     expect(first.hash).toMatch(/^[a-f0-9]{64}$/)
     expect(hashApiToken(first.token)).toBe(first.hash)

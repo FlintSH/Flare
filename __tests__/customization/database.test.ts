@@ -788,4 +788,28 @@ suite('customization contracts against disposable PostgreSQL', () => {
     ).not.toBeNull()
     expect(await expiry.getFileExpirationInfo(retained.id)).toBeNull()
   })
+
+  it('rejects traversal and malformed IDs for metadata reads and writes without changing a valid session', async () => {
+    await routeFixture()
+    const { data, metadata } = await startChunk('Retain this upload session')
+    const chunks = await import('@/lib/uploads/chunks')
+    for (const id of [
+      '../escape',
+      'a/../../escape',
+      'a\\..\\escape',
+      '/tmp/escape',
+      'a%2fescape',
+      'a\u0000b',
+      '',
+      'a'.repeat(101),
+    ]) {
+      await expect(chunks.getUploadMetadata(id)).rejects.toMatchObject({
+        status: 400,
+      })
+      await expect(
+        chunks.saveUploadMetadata(id, metadata)
+      ).rejects.toMatchObject({ status: 400 })
+    }
+    expect(await chunks.getUploadMetadata(data.uploadId)).toEqual(metadata)
+  })
 })

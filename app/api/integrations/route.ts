@@ -7,7 +7,7 @@ import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { encryptSecret } from '@/lib/email/crypto'
 import { resolveWebhookTarget } from '@/lib/integrations/security'
-import { API_SCOPES, createApiToken } from '@/lib/integrations/tokens'
+import { API_SCOPES, createRandomApiToken } from '@/lib/integrations/tokens'
 import {
   WEBHOOK_MAX_PENDING,
   WEBHOOK_MAX_PENDING_PER_USER,
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
         const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
         if (expiresAt && expiresAt <= new Date())
           return { error: 'Token expiration must be in the future.' }
-        const generated = createApiToken()
+        const generated = createRandomApiToken()
         const token = await tx.apiToken.create({
           data: {
             userId,

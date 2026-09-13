@@ -9,11 +9,13 @@ export const API_SCOPES = [
 export type ApiScope = (typeof API_SCOPES)[number]
 export const TOKEN_PREFIX = 'flr_'
 
+// Tokens contain 32 cryptographically random bytes (256 bits), so SHA-256 is a
+// lookup digest for a high-entropy secret. This is not a password hashing helper.
 export function hashApiToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export function createApiToken(): { token: string; hash: string } {
+export function createRandomApiToken(): { token: string; hash: string } {
   const token = TOKEN_PREFIX + randomBytes(32).toString('base64url')
   return { token, hash: hashApiToken(token) }
 }
