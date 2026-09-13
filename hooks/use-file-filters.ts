@@ -1,12 +1,74 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import {
   FileFilter,
   FileFilterOptions,
   SortOption,
 } from '@/types/components/file'
+
+const sortOptions: SortOption[] = [
+  'newest',
+  'oldest',
+  'largest',
+  'smallest',
+  'most-viewed',
+  'least-viewed',
+  'most-downloaded',
+  'least-downloaded',
+]
+const visibilityOptions = ['public', 'private', 'hasPassword']
+
+function positiveInteger(value: string | null, fallback: number) {
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function validDate(value: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function readFilters(
+  params: URLSearchParams,
+  defaultLimit: number
+): FileFilterOptions {
+  const sortBy = params.get('sortBy') as SortOption
+  return {
+    search: params.get('search') || '',
+    types: [...new Set(params.get('types')?.split(',').filter(Boolean) || [])],
+    dateFrom: validDate(params.get('dateFrom')),
+    dateTo: validDate(params.get('dateTo')),
+    visibility: [
+      ...new Set(
+        params
+          .get('visibility')
+          ?.split(',')
+          .filter((value) => visibilityOptions.includes(value)) || []
+      ),
+    ],
+    sortBy: sortOptions.includes(sortBy) ? sortBy : 'newest',
+    page: positiveInteger(params.get('page'), 1),
+    limit: Math.min(positiveInteger(params.get('limit'), defaultLimit), 100),
+  }
+}
+
+function writeFilters(filters: FileFilterOptions, defaultLimit: number) {
+  const params = new URLSearchParams()
+  if (filters.search) params.set('search', filters.search)
+  if (filters.types.length) params.set('types', filters.types.join(','))
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+  if (filters.dateTo) params.set('dateTo', filters.dateTo)
+  if (filters.visibility.length)
+    params.set('visibility', filters.visibility.join(','))
+  if (filters.sortBy !== 'newest') params.set('sortBy', filters.sortBy)
+  if (filters.page !== 1) params.set('page', filters.page.toString())
+  if (filters.limit !== defaultLimit)
+    params.set('limit', filters.limit.toString())
+  return params.toString()
+}
 
 export function useFileFilters(
   options: {
@@ -15,95 +77,98 @@ export function useFileFilters(
   } = {}
 ) {
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const router = useRouter()
-  const defaultLimit = options.defaultLimit || 24
+  const defaultLimit = Math.min(
+    positiveInteger(String(options.defaultLimit ?? 24), 24),
+    100
+  )
+  const query = searchParams.toString()
+  const [filters, setFilters] = useState(() =>
+    readFilters(new URLSearchParams(query), defaultLimit)
+  )
+  const currentFilters = useRef(filters)
 
-  const [filters, setFilters] = useState<FileFilterOptions>({
-    search: searchParams.get('search') || '',
-    types: searchParams.get('types')?.split(',').filter(Boolean) || [],
-    dateFrom: searchParams.get('dateFrom'),
-    dateTo: searchParams.get('dateTo'),
-    visibility:
-      searchParams.get('visibility')?.split(',').filter(Boolean) || [],
-    sortBy: (searchParams.get('sortBy') as SortOption) || 'newest',
-    page: parseInt(searchParams.get('page') || '1'),
-    limit: parseInt(searchParams.get('limit') || defaultLimit.toString()),
-  })
-
+  // Browser back/forward and links to a filtered library restore the controls
+  // along with the results. URL writes happen only in explicit user actions.
   useEffect(() => {
-    const params = new URLSearchParams()
-
-    if (filters.search) params.set('search', filters.search)
-    if (filters.types.length) params.set('types', filters.types.join(','))
-    if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
-    if (filters.dateTo) params.set('dateTo', filters.dateTo)
-    if (filters.visibility.length)
-      params.set('visibility', filters.visibility.join(','))
-    if (filters.sortBy !== 'newest') params.set('sortBy', filters.sortBy)
-    if (filters.page !== 1) params.set('page', filters.page.toString())
-    if (filters.limit !== defaultLimit)
-      params.set('limit', filters.limit.toString())
-
-    const newParamsString = params.toString()
-    const currentParamsString = new URLSearchParams(
-      window.location.search
-    ).toString()
-
-    if (newParamsString !== currentParamsString) {
-      router.push(
-        window.location.pathname +
-          (newParamsString ? `?${newParamsString}` : '')
-      )
+    const restored = readFilters(new URLSearchParams(query), defaultLimit)
+    if (
+      writeFilters(currentFilters.current, defaultLimit) !==
+      writeFilters(restored, defaultLimit)
+    ) {
+      currentFilters.current = restored
+      setFilters(restored)
     }
+  }, [query, defaultLimit])
 
-    if (options.onFilterChange) {
-      options.onFilterChange(filters)
-    }
-  }, [filters, router, defaultLimit, options])
-
-  const setSearch = useCallback((search: string) => {
-    setFilters((prev) => ({ ...prev, search, page: 1 }))
-  }, [])
-
-  const setTypes = useCallback((types: string[]) => {
-    setFilters((prev) => ({ ...prev, types, page: 1 }))
-  }, [])
-
-  const setDateRange = useCallback(
-    (dateFrom: string | null, dateTo: string | null) => {
-      setFilters((prev) => ({ ...prev, dateFrom, dateTo, page: 1 }))
+  const updateFilters = useCallback(
+    (changes: Partial<FileFilterOptions>) => {
+      const next = { ...currentFilters.current, ...changes }
+      const nextQuery = writeFilters(next, defaultLimit)
+      if (nextQuery === writeFilters(currentFilters.current, defaultLimit))
+        return
+      currentFilters.current = next
+      setFilters(next)
+      router.push(`${pathname}${nextQuery ? `?${nextQuery}` : ''}`, {
+        scroll: false,
+      })
     },
-    []
+    [defaultLimit, pathname, router]
   )
 
-  const setVisibility = useCallback((visibility: string[]) => {
-    setFilters((prev) => ({ ...prev, visibility, page: 1 }))
-  }, [])
+  const onFilterChange = options.onFilterChange
+  useEffect(() => {
+    onFilterChange?.(filters)
+  }, [filters, onFilterChange])
 
-  const setSortBy = useCallback((sortBy: SortOption) => {
-    setFilters((prev) => ({ ...prev, sortBy, page: 1 }))
-  }, [])
-
-  const setPage = useCallback((page: number) => {
-    setFilters((prev) => ({ ...prev, page }))
-  }, [])
-
-  const setLimit = useCallback((limit: number) => {
-    setFilters((prev) => ({ ...prev, limit, page: 1 }))
-  }, [])
-
-  const resetFilters = useCallback(() => {
-    setFilters({
-      search: '',
-      types: [],
-      dateFrom: null,
-      dateTo: null,
-      visibility: [],
-      sortBy: 'newest' as SortOption,
-      page: 1,
-      limit: defaultLimit,
-    })
-  }, [defaultLimit])
+  const setSearch = useCallback(
+    (search: string) => updateFilters({ search, page: 1 }),
+    [updateFilters]
+  )
+  const setTypes = useCallback(
+    (types: string[]) => updateFilters({ types, page: 1 }),
+    [updateFilters]
+  )
+  const setDateRange = useCallback(
+    (dateFrom: string | null, dateTo: string | null) =>
+      updateFilters({ dateFrom, dateTo, page: 1 }),
+    [updateFilters]
+  )
+  const setVisibility = useCallback(
+    (visibility: string[]) => updateFilters({ visibility, page: 1 }),
+    [updateFilters]
+  )
+  const setSortBy = useCallback(
+    (sortBy: SortOption) => updateFilters({ sortBy, page: 1 }),
+    [updateFilters]
+  )
+  const setPage = useCallback(
+    (page: number) => updateFilters({ page: positiveInteger(String(page), 1) }),
+    [updateFilters]
+  )
+  const setLimit = useCallback(
+    (limit: number) =>
+      updateFilters({
+        limit: Math.min(positiveInteger(String(limit), defaultLimit), 100),
+        page: 1,
+      }),
+    [defaultLimit, updateFilters]
+  )
+  const resetFilters = useCallback(
+    () =>
+      updateFilters({
+        search: '',
+        types: [],
+        dateFrom: null,
+        dateTo: null,
+        visibility: [],
+        sortBy: 'newest',
+        page: 1,
+        limit: defaultLimit,
+      }),
+    [defaultLimit, updateFilters]
+  )
 
   return {
     filters,

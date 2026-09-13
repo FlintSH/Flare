@@ -11,6 +11,7 @@ import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -109,13 +110,10 @@ export function ExpiryModal({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
-          )}
+          {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
 
         <div className="space-y-4">
-          {}
           <div className="space-y-2">
             <Label className="text-sm font-medium">When file expires</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -123,6 +121,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 size="sm"
+                aria-pressed={action === ExpiryAction.DELETE}
                 onClick={() => setAction(ExpiryAction.DELETE)}
                 className={cn(
                   action === ExpiryAction.DELETE &&
@@ -135,6 +134,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 size="sm"
+                aria-pressed={action === ExpiryAction.SET_PRIVATE}
                 onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
                   action === ExpiryAction.SET_PRIVATE &&
@@ -146,7 +146,6 @@ export function ExpiryModal({
             </div>
           </div>
 
-          {}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Quick Options</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -218,7 +217,6 @@ export function ExpiryModal({
             </div>
           </div>
 
-          {}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Custom Date & Time</Label>
             <Popover modal={true}>
@@ -238,13 +236,13 @@ export function ExpiryModal({
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="w-auto p-0"
+                className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-auto max-w-[calc(100vw-2rem)] overflow-y-auto p-0"
                 align="start"
                 side="bottom"
                 sideOffset={4}
+                collisionPadding={16}
               >
-                <div className="flex">
-                  {}
+                <div className="flex flex-col sm:flex-row">
                   <div className="p-3">
                     <Calendar
                       mode="single"
@@ -277,9 +275,8 @@ export function ExpiryModal({
                     />
                   </div>
 
-                  {}
                   {expiresAt && (
-                    <div className="border-l p-4 space-y-4 min-w-[200px]">
+                    <div className="space-y-4 border-t p-4 sm:min-w-[200px] sm:border-l sm:border-t-0">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">Time</Label>
                         <Button
@@ -292,7 +289,6 @@ export function ExpiryModal({
                         </Button>
                       </div>
 
-                      {}
                       <div className="text-center">
                         <div className="font-mono text-2xl font-medium">
                           {String(expiresAt.getHours()).padStart(2, '0')}:
@@ -303,7 +299,6 @@ export function ExpiryModal({
                         </div>
                       </div>
 
-                      {}
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">
                           Add time
@@ -364,7 +359,6 @@ export function ExpiryModal({
                         </div>
                       </div>
 
-                      {}
                       <div className="space-y-2">
                         <Label
                           htmlFor="manual-time"
@@ -422,12 +416,11 @@ export function ExpiryModal({
                         />
                       </div>
 
-                      {}
                       {expiresAt &&
                         expiresAt.toDateString() ===
                           new Date().toDateString() &&
                         expiresAt <= new Date() && (
-                          <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground">
                             Time must be at least 5 minutes from now
                           </div>
                         )}
@@ -438,7 +431,6 @@ export function ExpiryModal({
             </Popover>
           </div>
 
-          {}
           {expiresAt && (
             <Button
               type="button"
@@ -450,18 +442,17 @@ export function ExpiryModal({
             </Button>
           )}
 
-          {}
           {expiresAt && (
-            <div className="rounded-md bg-orange-50 dark:bg-orange-950/20 p-3 border border-orange-200 dark:border-orange-800/50">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
               <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                <CalendarIcon className="h-4 w-4 shrink-0 text-primary" />
+                <p className="text-sm font-medium">
                   {action === ExpiryAction.DELETE
                     ? 'Auto-delete scheduled'
                     : 'Auto-private scheduled'}
                 </p>
               </div>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {action === ExpiryAction.DELETE
                   ? `File will be permanently deleted on ${format(expiresAt, 'PPPP p')}`
                   : `File will be set to private on ${format(expiresAt, 'PPPP p')}`}

@@ -31,46 +31,65 @@ export function ShareLayout({
   const { sharing } = appearance
   const details = (
     <>
-      {sharing.showFilename && (
-        <h1 className="text-base font-medium text-foreground/90 truncate max-w-[600px] mx-auto">
+      {sharing.showFilename ? (
+        <h1 className="mx-auto max-w-[600px] break-words text-base font-medium leading-relaxed [overflow-wrap:anywhere]">
           {filename}
         </h1>
+      ) : (
+        <h1 className="sr-only">Shared file</h1>
       )}
       {sharing.showSize && (
-        <p className="text-xs text-muted-foreground/60 font-medium">{size}</p>
+        <p className="text-xs font-medium text-muted-foreground">{size}</p>
       )}
     </>
   )
   const author = sharing.showUploader && (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-muted-foreground">Uploaded by</span>
-      <Avatar className="h-8 w-8">
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="shrink-0 text-sm text-muted-foreground">
+        Uploaded by
+      </span>
+      <Avatar className="h-8 w-8 shrink-0">
         <AvatarImage src={uploader.image} alt="" />
-        <AvatarFallback>{uploader.name.charAt(0) || '?'}</AvatarFallback>
+        <AvatarFallback className="text-xs">
+          {uploader.name.charAt(0) || '?'}
+        </AvatarFallback>
       </Avatar>
-      <span className="text-sm font-medium truncate max-w-40">
+      <span className="max-w-40 truncate text-sm font-medium">
         {uploader.name}
       </span>
     </div>
+  )
+  const brand = (
+    <Link
+      href="/dashboard"
+      className="inline-flex min-w-0 max-w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label="Open your dashboard"
+    >
+      <InstanceBrand />
+    </Link>
   )
 
   if (style === 'minimal')
     return (
       <div
-        className="relative min-h-screen flex flex-col"
+        className="relative isolate flex min-h-dvh min-w-0 flex-col"
         data-share-style="minimal"
       >
         <DynamicBackground />
-        <header className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
-          <Link href="/dashboard">
-            <InstanceBrand />
-          </Link>
+        <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          {brand}
           {author}
         </header>
-        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-8 flex flex-col justify-center gap-5">
-          {(sharing.showFilename || sharing.showSize) && (
-            <div className="text-center space-y-1">{details}</div>
-          )}
+        <main className="relative z-10 mx-auto flex w-full min-w-0 max-w-7xl flex-1 flex-col justify-center gap-5 p-4 sm:p-8">
+          <div
+            className={
+              sharing.showFilename || sharing.showSize
+                ? 'space-y-1 text-center'
+                : 'sr-only'
+            }
+          >
+            {details}
+          </div>
           {children}
         </main>
         {showFooter && <Footer />}
@@ -80,21 +99,19 @@ export function ShareLayout({
   if (style === 'delivery')
     return (
       <div
-        className="relative min-h-screen flex flex-col"
+        className="relative isolate flex min-h-dvh min-w-0 flex-col"
         data-share-style="delivery"
       >
         <DynamicBackground />
-        <header className="max-w-6xl w-full mx-auto px-6 py-8">
-          <Link href="/dashboard">
-            <InstanceBrand />
-          </Link>
+        <header className="relative z-10 mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+          {brand}
         </header>
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pb-10">
+        <main className="relative z-10 mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 pb-10 sm:px-6">
           <Card
-            className="overflow-hidden bg-background/70 backdrop-blur-xl"
+            className="overflow-hidden border-border/70 bg-card/80 shadow-sm backdrop-blur-xl"
             data-flare-surface
           >
-            <div className="border-b p-6 sm:p-8 flex flex-wrap justify-between gap-5 items-center">
+            <div className="flex flex-wrap items-center justify-between gap-5 border-b border-border/60 p-6 sm:p-8">
               <div className="min-w-0 space-y-2">
                 <p className="text-xs uppercase tracking-[.2em] text-muted-foreground">
                   A file for you
@@ -103,7 +120,7 @@ export function ShareLayout({
               </div>
               {author}
             </div>
-            <div className="py-8">{children}</div>
+            <div className="py-6 sm:py-8">{children}</div>
           </Card>
         </main>
         {showFooter && <Footer />}
@@ -112,54 +129,38 @@ export function ShareLayout({
 
   return (
     <div
-      className="flex-1 relative min-h-screen overflow-hidden"
+      className="relative isolate flex min-h-dvh min-w-0 flex-col"
       data-share-style="framed"
     >
       <DynamicBackground />
-      <div className="absolute top-6 left-6 z-20">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-            <Link href="/dashboard" className="flex items-center space-x-2.5">
-              <InstanceBrand />
-            </Link>
-          </div>
+      <header className="relative z-20 flex flex-wrap items-start justify-between gap-4 p-4 sm:p-6">
+        <div className="max-w-full rounded-xl border border-border/60 bg-card/70 px-4 py-2 shadow-sm backdrop-blur-xl">
+          {brand}
         </div>
-      </div>
-      {sharing.showUploader && (
-        <div className="absolute top-24 sm:top-6 right-6 z-20">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-            <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-              {author}
-            </div>
-          </div>
-        </div>
-      )}
-      <main
-        className={`flex items-center justify-center px-6 relative z-10 ${showFooter ? 'pb-24' : 'pb-6'} ${sharing.showUploader ? 'pt-40 sm:pt-28' : 'pt-28'}`}
-        style={{ minHeight: 'calc(100vh - 7rem)' }}
-      >
-        <div className="relative max-w-full">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-          <Card
-            className={`relative overflow-hidden bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 ${isMedia ? 'max-w-[95vw]' : 'w-full sm:max-w-[50vw]'}`}
-            data-flare-surface
-          >
-            {(sharing.showFilename || sharing.showSize) && (
-              <div className="px-6 pt-4 pb-2">
-                <div className="text-center space-y-1">{details}</div>
-              </div>
-            )}
-            {children}
-          </Card>
-        </div>
-        {showFooter && (
-          <div className="fixed bottom-0 left-0 right-0 z-10">
-            <Footer />
+        {author && (
+          <div className="ml-auto max-w-full rounded-xl border border-border/60 bg-card/70 px-4 py-2 shadow-sm backdrop-blur-xl">
+            {author}
           </div>
         )}
+      </header>
+      <main className="relative z-10 flex min-w-0 flex-1 items-center justify-center px-4 py-6 sm:px-6">
+        <Card
+          className={`min-w-0 overflow-hidden border-border/60 bg-card/80 shadow-sm backdrop-blur-xl ${isMedia ? 'w-fit max-w-full' : 'w-fit max-w-full sm:max-w-3xl'}`}
+          data-flare-surface
+        >
+          <div
+            className={
+              sharing.showFilename || sharing.showSize
+                ? 'space-y-1 px-6 pb-3 pt-4 text-center'
+                : 'sr-only'
+            }
+          >
+            {details}
+          </div>
+          {children}
+        </Card>
       </main>
+      {showFooter && <Footer />}
     </div>
   )
 }

@@ -7,12 +7,19 @@ import Image from 'next/image'
 import { ExpiryAction } from '@/types/events'
 import { $Enums } from '@prisma/client'
 import { format } from 'date-fns'
-import { CalendarIcon, FileIcon, UploadIcon, XIcon } from 'lucide-react'
+import {
+  CalendarClock,
+  Check,
+  Copy,
+  File,
+  Loader2,
+  Upload,
+  X,
+} from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -25,9 +32,10 @@ import {
 } from '@/components/ui/select'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
-import { formatBytes } from '@/lib/utils'
+import { cn, formatBytes } from '@/lib/utils'
 
-import { FileWithPreview, useFileUpload } from '@/hooks/use-file-upload'
+import { UploadResponse, useFileUpload } from '@/hooks/use-file-upload'
+import { useToast } from '@/hooks/use-toast'
 
 interface UploadFormProps {
   maxSize: number
@@ -44,12 +52,16 @@ export function UploadForm({
   user,
 }: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
-
+  const [completed, setCompleted] = useState<UploadResponse[]>([])
+  const [uploadError, setUploadError] = useState('')
+  const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const { toast } = useToast()
   const {
     files,
     isUploading,
     onDrop,
     removeFile,
+    clearFiles,
     uploadFiles,
     visibility,
     setVisibility,
@@ -63,83 +75,155 @@ export function UploadForm({
     setProfileId,
   } = useFileUpload({
     maxSize,
+    onUploadComplete: (responses) => {
+      setCompleted((previous) => [...responses, ...previous])
+      setUploadError('')
+    },
+    onUploadError: setUploadError,
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+    onDrop: (acceptedFiles, rejections) => {
+      onDrop(acceptedFiles)
+      setUploadError(
+        rejections.length
+          ? `${rejections.length} ${rejections.length === 1 ? 'file could' : 'files could'} not be added. Each file must be ${formattedMaxSize} or smaller.`
+          : ''
+      )
+    },
     maxSize,
+    disabled: isUploading,
   })
+  const totalSize = files.reduce((total, file) => total + file.size, 0)
+
+  const copyLinks = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedLink(value)
+      toast({ title: 'Copied to clipboard' })
+    } catch {
+      toast({
+        title: 'Could not copy link',
+        description: 'Open the file to copy its address.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   return (
-    <div className="space-y-8">
-      <Card
-        {...getRootProps()}
-        className={`p-8 border-2 border-dashed transition-colors ${
-          isDragActive ? 'border-primary bg-primary/5' : 'border-muted'
-        }`}
+    <div className="space-y-6">
+      <div
+        {...getRootProps({
+          role: 'button',
+          'aria-label': 'Choose files to upload',
+          'aria-disabled': isUploading,
+        })}
+        className={cn(
+          'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/20 px-4 py-8 text-center outline-none transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          isDragActive && 'border-primary bg-primary/5',
+          isUploading && 'pointer-events-none opacity-60'
+        )}
       >
         <input {...getInputProps()} />
-        <div className="flex flex-col items-center justify-center text-center">
-          <UploadIcon className="w-12 h-12 mb-4 text-muted-foreground" />
-          <p className="text-lg font-medium">
-            {isDragActive
-              ? 'Drop the files here'
-              : 'Drag and drop files here, or click to select files'}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Maximum file size: {formattedMaxSize}
-          </p>
-        </div>
-      </Card>
+        <Upload
+          className="mb-3 h-9 w-9 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <p className="text-base font-medium">
+          {isDragActive
+            ? 'Drop your files here'
+            : 'Drag and drop files here, or click to select'}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Maximum file size: {formattedMaxSize}
+        </p>
+      </div>
+
+      {uploadError && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground"
+        >
+          {uploadError}
+        </p>
+      )}
 
       {files.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Selected Files</h2>
-          <div className="space-y-2">
-            {files.map((file: FileWithPreview, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-4 p-4 rounded-lg bg-muted"
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">
+              Selected files{' '}
+              <span className="font-normal text-muted-foreground">
+                ({files.length} · {formatBytes(totalSize)})
+              </span>
+            </h2>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearFiles}
+              disabled={isUploading}
+            >
+              Clear all
+            </Button>
+          </div>
+          <ul className="divide-y rounded-lg border">
+            {files.map((file, index) => (
+              <li
+                key={`${file.name}-${file.lastModified}-${index}`}
+                className="flex items-center gap-3 p-3"
               >
-                {file.preview ? (
-                  <Image
-                    src={file.preview}
-                    alt={file.name}
-                    width={48}
-                    height={48}
-                    className="object-cover rounded"
-                  />
-                ) : (
-                  <FileIcon className="w-12 h-12 text-muted-foreground" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{file.name}</p>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      {file.uploaded !== undefined
-                        ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
-                        : formatBytes(file.size)}
-                    </p>
-                    {file.progress !== undefined && file.progress > 0 && (
-                      <Progress
-                        value={Math.min(file.progress, 100)}
-                        className="h-1"
-                      />
-                    )}
-                  </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                  {file.preview ? (
+                    <Image
+                      src={file.preview}
+                      alt=""
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 object-cover"
+                    />
+                  ) : (
+                    <File
+                      className="h-5 w-5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  )}
                 </div>
-                {!isUploading && (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium" title={file.name}>
+                    {file.name}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {isUploading
+                      ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
+                      : formatBytes(file.size)}
+                  </p>
+                  {isUploading && (
+                    <Progress
+                      value={Math.min(file.progress, 100)}
+                      aria-label={`Upload progress for ${file.name}`}
+                      className="mt-2 h-1.5"
+                    />
+                  )}
+                </div>
+                {isUploading ? (
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {Math.min(file.progress, 100)}%
+                  </span>
+                ) : (
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove ${file.name}`}
                     onClick={() => removeFile(index)}
                   >
-                    <XIcon className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </Button>
                 )}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
@@ -150,56 +234,70 @@ export function UploadForm({
           disabled={isUploading}
         />
         <div className="space-y-2">
-          <Label>Visibility</Label>
+          <Label htmlFor="upload-visibility">Visibility</Label>
           <Select
             value={visibility || 'inherit'}
+            disabled={isUploading}
             onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
               setVisibility(value === 'inherit' ? undefined : value)
             }
           >
-            <SelectTrigger>
+            <SelectTrigger id="upload-visibility">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="inherit">From upload profile</SelectItem>
-              <SelectItem value="PUBLIC">Public</SelectItem>
+              <SelectItem value="PUBLIC">
+                Public (anyone with the link)
+              </SelectItem>
               <SelectItem value="PRIVATE">Private (only me)</SelectItem>
             </SelectContent>
           </Select>
         </div>
-
         <div className="space-y-2">
-          <Label>Password Protection (Optional)</Label>
+          <Label htmlFor="upload-password">
+            Password protection{' '}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
           <Input
+            id="upload-password"
             type="password"
+            autoComplete="new-password"
+            disabled={isUploading}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             placeholder="Leave empty for no password"
           />
         </div>
-
         <div className="space-y-2">
-          <Label>File Expiration (Optional)</Label>
+          <Label htmlFor="upload-expiration">
+            File expiration{' '}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
           <Button
+            id="upload-expiration"
             type="button"
             variant="outline"
-            className="w-full justify-start text-left font-normal"
+            disabled={isUploading}
+            className="h-auto min-h-10 w-full justify-start whitespace-normal py-2 text-left font-normal"
             onClick={() => setIsExpiryModalOpen(true)}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {expiresAt ? (
-              <span>Expires: {format(expiresAt, 'PPP p')}</span>
-            ) : expiresAt === null ? (
-              'No expiration for this upload'
-            ) : (
-              'From upload profile'
-            )}
+            <CalendarClock className="mr-2 h-4 w-4 shrink-0" />
+            {expiresAt
+              ? format(expiresAt, 'PPP p')
+              : expiresAt === null
+                ? 'No expiration for this upload'
+                : 'From upload profile'}
           </Button>
-
-          <div className="flex gap-3 text-xs">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <button
               type="button"
-              className="underline underline-offset-4"
+              disabled={isUploading}
+              className="min-h-8 rounded-sm text-muted-foreground underline underline-offset-4 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               onClick={() => {
                 setExpiresAt(undefined)
                 setExpiryAction(undefined)
@@ -209,42 +307,107 @@ export function UploadForm({
             </button>
             <button
               type="button"
-              className="underline underline-offset-4"
+              disabled={isUploading}
+              className="min-h-8 rounded-sm text-muted-foreground underline underline-offset-4 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               onClick={() => setExpiresAt(null)}
             >
               No expiration
             </button>
           </div>
           {expiresAt && (
-            <div className="rounded-md bg-orange-50 dark:bg-orange-950/20 p-3 border border-orange-200 dark:border-orange-800/50">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-                  {expiryAction === 'SET_PRIVATE'
-                    ? 'Privacy change scheduled'
-                    : 'Expiration scheduled'}
-                </p>
-              </div>
-              <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                File will{' '}
-                {expiryAction === 'SET_PRIVATE'
-                  ? 'become private'
-                  : 'be permanently deleted'}{' '}
-                on {format(expiresAt, 'PPPP p')}
-              </p>
-            </div>
+            <p className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+              These files will{' '}
+              {expiryAction === 'SET_PRIVATE'
+                ? 'become private'
+                : 'be permanently deleted'}{' '}
+              on {format(expiresAt, 'PPPP p')}.
+            </p>
           )}
         </div>
-
         <Button
           className="w-full"
-          size="lg"
-          onClick={uploadFiles}
+          onClick={() => {
+            setUploadError('')
+            void uploadFiles()
+          }}
           disabled={files.length === 0 || isUploading}
         >
-          {isUploading ? 'Uploading...' : 'Upload Files'}
+          {isUploading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="mr-2 h-4 w-4" />
+          )}
+          {isUploading
+            ? 'Uploading…'
+            : files.length
+              ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
+              : 'Upload files'}
         </Button>
       </div>
+
+      {completed.length > 0 && (
+        <div className="space-y-2 border-t pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium" role="status">
+              Upload complete
+            </h2>
+            {completed.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  copyLinks(
+                    completed
+                      .map((file) => file.copyText || file.url)
+                      .join('\n')
+                  )
+                }
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Copy all links
+              </Button>
+            )}
+          </div>
+          <ul className="divide-y">
+            {completed.map((file, index) => (
+              <li
+                key={`${file.url}-${index}`}
+                className="flex flex-wrap items-center gap-2 py-2"
+              >
+                <Check
+                  className="h-4 w-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+                <a
+                  href={file.pageUrl || file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 truncate rounded-sm text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Open ${file.name}`}
+                  title={file.url}
+                >
+                  {file.name}
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Copy link for ${file.name}`}
+                  onClick={() => copyLinks(file.copyText || file.url)}
+                >
+                  {copiedLink === (file.copyText || file.url) ? (
+                    <Check className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Copy className="mr-2 h-4 w-4" />
+                  )}
+                  {copiedLink === (file.copyText || file.url)
+                    ? 'Copied'
+                    : 'Copy link'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <ExpiryModal
         isOpen={isExpiryModalOpen}
@@ -259,7 +422,7 @@ export function UploadForm({
           (user.defaultFileExpirationAction as ExpiryAction) ??
           ExpiryAction.DELETE
         }
-        title="Set File Expiration"
+        title="Set file expiration"
         description="Choose when files expire and whether to delete them or make them private."
       />
     </div>

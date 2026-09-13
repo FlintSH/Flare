@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Image from 'next/image'
 
@@ -20,6 +20,8 @@ import {
   MoreVertical,
   Music,
   Plus,
+  RefreshCw,
+  Search,
   Shield,
   Trash2,
   UserX,
@@ -151,51 +153,52 @@ interface UrlResponse {
 
 function UserTableSkeleton() {
   return (
-    <div className="rounded-md border">
+    <div
+      className="overflow-hidden rounded-xl border bg-card"
+      aria-label="Loading users"
+      aria-busy="true"
+    >
       <Table>
-        <TableHeader>
+        <TableHeader className="bg-muted/30">
           <TableRow>
-            <TableHead>User</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>URL ID</TableHead>
-            <TableHead>Files</TableHead>
-            <TableHead>Storage Used</TableHead>
-            <TableHead>URLs</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="pl-4">User</TableHead>
+            <TableHead className="hidden sm:table-cell">Role</TableHead>
+            <TableHead className="hidden lg:table-cell">URL ID</TableHead>
+            <TableHead className="hidden lg:table-cell">Files</TableHead>
+            <TableHead className="hidden lg:table-cell">Storage Used</TableHead>
+            <TableHead className="hidden lg:table-cell">URLs</TableHead>
+            <TableHead className="pr-4 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {[...Array(3)].map((_, i) => (
-            <TableRow key={i}>
-              <TableCell>
+          {Array.from({ length: 3 }, (_, index) => (
+            <TableRow key={index}>
+              <TableCell className="py-3 pl-4">
                 <div className="flex items-center gap-3">
-                  <Skeleton className="h-8 w-8 rounded-full" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-4 w-[150px]" />
-                    <Skeleton className="h-3 w-[120px]" />
+                  <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24 sm:w-36" />
+                    <Skeleton className="h-3 w-28 sm:w-44" />
                   </div>
                 </div>
               </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-[60px]" />
+              <TableCell className="hidden sm:table-cell">
+                <Skeleton className="h-4 w-14" />
               </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-[50px]" />
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-14" />
               </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-[40px]" />
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-8" />
               </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-[80px]" />
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-16" />
               </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-[40px]" />
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-8" />
               </TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <Skeleton className="h-8 w-8" />
-                  <Skeleton className="h-8 w-8" />
-                </div>
+              <TableCell className="pr-4">
+                <Skeleton className="ml-auto h-8 w-24" />
               </TableCell>
             </TableRow>
           ))}
@@ -323,22 +326,34 @@ function FileSettingsDialog({
 }
 
 export function UserList() {
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [role, setRole] = useState('ALL')
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search), 250)
+    return () => clearTimeout(timer)
+  }, [search])
   const {
     users,
     isLoading,
     currentPage,
     pagination,
+    loadError,
     fetchUsers,
     createUser,
     updateUser,
     deleteUser,
     removeUserAvatar,
-  } = useUserManagement()
+  } = useUserManagement({ search: query, role })
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isViewingFiles, setIsViewingFiles] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [viewingUser, setViewingUser] = useState<User | null>(null)
+  const filesRequest = useRef(0)
+  const urlsRequest = useRef(0)
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [urlsLoading, setUrlsLoading] = useState(false)
   const [userFiles, setUserFiles] = useState<File[]>([])
   const [userUrls, setUserUrls] = useState<ShortenedUrl[]>([])
   const [formData, setFormData] = useState<UserFormData>({
@@ -370,6 +385,8 @@ export function UserList() {
 
   const fetchUserFiles = useCallback(
     async (userId: string, page: number) => {
+      const requestId = ++filesRequest.current
+      setFilesLoading(true)
       try {
         const params = new URLSearchParams({
           page: page.toString(),
@@ -389,16 +406,20 @@ export function UserList() {
         const response = await fetch(`/api/users/${userId}/files?${params}`)
         if (!response.ok) throw new Error('Failed to fetch user files')
         const data: FileResponse = await response.json()
+        if (requestId !== filesRequest.current) return
         setUserFiles(data.files)
         setFilePagination(data.pagination)
         setFilePage(page)
       } catch (error) {
+        if (requestId !== filesRequest.current) return
         console.error('Error fetching user files:', error)
         toast({
           title: 'Error',
           description: 'Failed to fetch user files',
           variant: 'destructive',
         })
+      } finally {
+        if (requestId === filesRequest.current) setFilesLoading(false)
       }
     },
     [fileFilters, toast]
@@ -406,6 +427,8 @@ export function UserList() {
 
   const fetchUserUrls = useCallback(
     async (userId: string, page: number) => {
+      const requestId = ++urlsRequest.current
+      setUrlsLoading(true)
       try {
         const params = new URLSearchParams({
           page: page.toString(),
@@ -419,16 +442,20 @@ export function UserList() {
         const response = await fetch(`/api/users/${userId}/urls?${params}`)
         if (!response.ok) throw new Error('Failed to fetch user URLs')
         const data: UrlResponse = await response.json()
+        if (requestId !== urlsRequest.current) return
         setUserUrls(data.urls)
         setUrlPagination(data.pagination)
         setUrlPage(page)
       } catch (error) {
+        if (requestId !== urlsRequest.current) return
         console.error('Error fetching user URLs:', error)
         toast({
           title: 'Error',
           description: 'Failed to fetch user URLs',
           variant: 'destructive',
         })
+      } finally {
+        if (requestId === urlsRequest.current) setUrlsLoading(false)
       }
     },
     [urlSearch, toast]
@@ -506,11 +533,19 @@ export function UserList() {
     setIsDialogOpen(true)
   }
 
-  const handleViewFiles = async (user: User) => {
+  const handleViewFiles = (user: User) => {
+    filesRequest.current++
+    urlsRequest.current++
+    setUserFiles([])
+    setUserUrls([])
+    setFilePagination(null)
+    setUrlPagination(null)
+    setFilesLoading(true)
+    setUrlsLoading(true)
+    setFileFilters({ search: '', visibility: null, type: '' })
+    setUrlSearch('')
     setViewingUser(user)
     setIsViewingFiles(true)
-    await fetchUserFiles(user.id, 1)
-    await fetchUserUrls(user.id, 1)
   }
 
   const handleFileFilterChange = (filters: Partial<FileFilters>) => {
@@ -597,7 +632,10 @@ export function UserList() {
         description: 'File deleted successfully',
       })
 
-      fetchUserFiles(viewingUser.id, filePage)
+      fetchUserFiles(
+        viewingUser.id,
+        userFiles.length === 1 ? Math.max(1, filePage - 1) : filePage
+      )
     } catch (error) {
       console.error('Error deleting file:', error)
       toast({
@@ -628,7 +666,10 @@ export function UserList() {
         description: 'URL deleted successfully',
       })
 
-      fetchUserUrls(viewingUser.id, urlPage)
+      fetchUserUrls(
+        viewingUser.id,
+        userUrls.length === 1 ? Math.max(1, urlPage - 1) : urlPage
+      )
     } catch (error) {
       console.error('Error deleting URL:', error)
       toast({
@@ -701,155 +742,272 @@ export function UserList() {
     }
   }
 
-  if (isLoading) {
-    return <UserTableSkeleton />
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold tracking-tight">Users</h2>
-        <Button onClick={handleNew}>
-          <Plus className="mr-2 h-4 w-4" />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 basis-full sm:max-w-sm sm:flex-1 sm:basis-auto">
+          <Search
+            className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            aria-label="Search users"
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={role} onValueChange={setRole}>
+          <SelectTrigger aria-label="Filter users by role" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All roles</SelectItem>
+            <SelectItem value="ADMIN">Admin</SelectItem>
+            <SelectItem value="USER">User</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={handleNew} className="ml-auto">
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           New User
         </Button>
       </div>
-
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>URL ID</TableHead>
-              <TableHead>Files</TableHead>
-              <TableHead>Storage Used</TableHead>
-              <TableHead>URLs</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={user.image || undefined} />
-                      <AvatarFallback>
-                        {user.name
-                          ?.split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="space-y-1">
-                      <p className="font-medium leading-none">{user.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Shield
-                      className={`h-4 w-4 ${user.role === 'ADMIN' ? 'text-primary' : 'text-muted-foreground'}`}
-                    />
-                    {user.role}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
-                      {user.urlId}
-                    </code>
-                    {user.vanityId && (
-                      <code className="relative rounded bg-primary/10 text-primary px-[0.3rem] py-[0.2rem] font-mono text-xs">
-                        {user.vanityId}
-                      </code>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>{user._count.files}</TableCell>
-                <TableCell>{formatFileSize(user.storageUsed)}</TableCell>
-                <TableCell>{user._count.shortenedUrls}</TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-2">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(user)}
+      <div className="flex min-h-8 items-center justify-between gap-3 text-sm text-muted-foreground">
+        <p role="status">
+          {loadError
+            ? 'Users unavailable'
+            : isLoading
+              ? 'Loading users…'
+              : `${pagination?.total ?? users.length} ${(pagination?.total ?? users.length) === 1 ? 'user' : 'users'}${query || role !== 'ALL' ? ' found' : ''}`}
+        </p>
+        {(search || role !== 'ALL') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearch('')
+              setQuery('')
+              setRole('ALL')
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+      {loadError ? (
+        <div
+          role="alert"
+          className="rounded-xl border bg-card px-4 py-8 text-center"
+        >
+          <p className="font-medium">Couldn’t load users</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => fetchUsers(currentPage)}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      ) : isLoading && users.length === 0 ? (
+        <UserTableSkeleton />
+      ) : users.length === 0 ? (
+        <div className="rounded-xl border bg-card px-4 py-8 text-center">
+          <p className="font-medium">No users found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try another name, email address, or role.
+          </p>
+        </div>
+      ) : (
+        <div
+          className="overflow-hidden rounded-xl border bg-card"
+          aria-busy={isLoading}
+        >
+          <TooltipProvider>
+            <Table className="table-fixed lg:table-auto" aria-label="Users">
+              <TableHeader className="bg-muted/30">
+                <TableRow>
+                  <TableHead className="pl-3 sm:pl-4">User</TableHead>
+                  <TableHead className="hidden w-24 sm:table-cell lg:w-auto">
+                    Role
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">URL ID</TableHead>
+                  <TableHead className="hidden lg:table-cell">Files</TableHead>
+                  <TableHead className="hidden whitespace-nowrap lg:table-cell">
+                    Storage Used
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">URLs</TableHead>
+                  <TableHead className="w-[140px] pr-3 text-right sm:pr-4 lg:w-auto">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="py-3 pl-3 sm:pl-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="hidden h-8 w-8 shrink-0 sm:flex">
+                          <AvatarImage src={user.image || undefined} alt="" />
+                          <AvatarFallback>
+                            {user.name
+                              ?.split(' ')
+                              .map((name) => name[0])
+                              .join('')
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 lg:max-w-[240px] xl:max-w-sm">
+                          <p className="truncate font-medium" title={user.name}>
+                            {user.name}
+                          </p>
+                          <p
+                            className="truncate text-xs text-muted-foreground"
+                            title={user.email}
                           >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Edit User</p>
-                        </TooltipContent>
-                      </Tooltip>
-
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewFiles(user)}
+                            {user.email}
+                          </p>
+                          <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
+                            <p className="sm:hidden">
+                              {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                            </p>
+                            <p
+                              className="truncate font-mono"
+                              title={
+                                user.vanityId
+                                  ? `${user.urlId} / ${user.vanityId}`
+                                  : user.urlId
+                              }
+                            >
+                              {user.urlId}
+                              {user.vanityId && ` / ${user.vanityId}`}
+                            </p>
+                            <p className="flex flex-wrap gap-x-2">
+                              <span>{user._count.files} files</span>
+                              <span>{formatFileSize(user.storageUsed)}</span>
+                              <span>{user._count.shortenedUrls} URLs</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        <Shield
+                          className={cn(
+                            'h-3.5 w-3.5',
+                            user.role === 'ADMIN'
+                              ? 'text-primary'
+                              : 'text-muted-foreground'
+                          )}
+                          aria-hidden="true"
+                        />
+                        {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="flex flex-col items-start gap-1">
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                          {user.urlId}
+                        </code>
+                        {user.vanityId && (
+                          <code
+                            className="max-w-40 truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs"
+                            title={user.vanityId}
                           >
-                            <FolderOpen className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>View Content</p>
-                        </TooltipContent>
-                      </Tooltip>
-
-                      {user.image && (
+                            {user.vanityId}
+                          </code>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums lg:table-cell">
+                      {user._count.files}
+                    </TableCell>
+                    <TableCell className="hidden whitespace-nowrap tabular-nums lg:table-cell">
+                      {formatFileSize(user.storageUsed)}
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums lg:table-cell">
+                      {user._count.shortenedUrls}
+                    </TableCell>
+                    <TableCell className="pr-3 sm:pr-4">
+                      <div className="flex justify-end gap-0.5">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleRemoveAvatar(user.id)}
+                              className="h-8 w-8"
+                              onClick={() => handleEdit(user)}
+                              aria-label={`Edit ${user.name}`}
                             >
-                              <UserX className="h-4 w-4" />
+                              <Edit2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Remove Avatar</p>
-                          </TooltipContent>
+                          <TooltipContent>Edit User</TooltipContent>
                         </Tooltip>
-                      )}
-
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setUserToDelete(user)
-                              setIsDeleteDialogOpen(true)
-                            }}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Delete User</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleViewFiles(user)}
+                              aria-label={`View content for ${user.name}`}
+                            >
+                              <FolderOpen
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>View Content</TooltipContent>
+                        </Tooltip>
+                        {user.image && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleRemoveAvatar(user.id)}
+                                aria-label={`Remove avatar for ${user.name}`}
+                              >
+                                <UserX className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove Avatar</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => {
+                                setUserToDelete(user)
+                                setIsDeleteDialogOpen(true)
+                              }}
+                              aria-label={`Delete ${user.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete User</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
+        </div>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto">
@@ -987,8 +1145,12 @@ export function UserList() {
               )}
             </div>
             <DialogFooter>
-              <Button type="submit">
-                {editingUser ? 'Save Changes' : 'Create User'}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading
+                  ? 'Saving…'
+                  : editingUser
+                    ? 'Save Changes'
+                    : 'Create User'}
               </Button>
             </DialogFooter>
           </form>
@@ -998,8 +1160,18 @@ export function UserList() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isViewingFiles} onOpenChange={setIsViewingFiles}>
-        <DialogContent className="max-w-4xl">
+      <Dialog
+        open={isViewingFiles}
+        onOpenChange={(open) => {
+          setIsViewingFiles(open)
+          if (!open) {
+            filesRequest.current++
+            urlsRequest.current++
+            setViewingUser(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{viewingUser?.name}&apos;s Content</DialogTitle>
             <DialogDescription>
@@ -1019,9 +1191,10 @@ export function UserList() {
 
             <TabsContent value="files">
               <div className="space-y-4">
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-3">
                   <div className="flex-1">
                     <Input
+                      aria-label="Search this user’s files"
                       placeholder="Search files..."
                       value={fileFilters.search}
                       onChange={(e) =>
@@ -1041,7 +1214,10 @@ export function UserList() {
                       })
                     }
                   >
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger
+                      aria-label="Filter user files by visibility"
+                      className="w-full sm:w-[150px]"
+                    >
                       <SelectValue placeholder="Visibility" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1058,7 +1234,10 @@ export function UserList() {
                       })
                     }
                   >
-                    <SelectTrigger className="w-[150px]">
+                    <SelectTrigger
+                      aria-label="Filter user files by type"
+                      className="w-full sm:w-[150px]"
+                    >
                       <SelectValue placeholder="File Type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1083,85 +1262,102 @@ export function UserList() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {userFiles.map((file: File) => (
-                        <TableRow key={file.id}>
-                          <TableCell className="w-[50px]">
-                            <div className="flex items-center justify-center">
-                              {getFilePreview(file)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium max-w-[300px]">
-                            <div className="flex items-center justify-between gap-2">
-                              <a
-                                href={sanitizeUrl(file.urlPath)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline flex items-center gap-2 truncate"
-                              >
-                                {file.name}
-                              </a>
-                              <div className="flex-shrink-0">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      onClick={() => {
-                                        setSelectedFile(file)
-                                        setIsFileSettingsOpen(true)
-                                      }}
-                                    >
-                                      <Lock className="h-4 w-4 mr-2" />
-                                      Settings
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive"
-                                      onClick={() => {
-                                        setSelectedFile(file)
-                                        setIsFileDeleteDialogOpen(true)
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[200px]">
-                            <span
-                              className="truncate block"
-                              title={file.mimeType}
-                            >
-                              {file.mimeType}
-                            </span>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {formatFileSize(file.size)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <span
-                              className={cn(
-                                'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                                file.password
-                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-100'
-                                  : file.visibility === 'PRIVATE'
-                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100'
-                                    : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100'
-                              )}
-                            >
-                              {file.password ? 'PROTECTED' : file.visibility}
-                            </span>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {new Date(file.uploadedAt).toLocaleDateString()}
+                      {(filesLoading || userFiles.length === 0) && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="h-28 text-center text-sm text-muted-foreground"
+                          >
+                            {filesLoading
+                              ? 'Loading files…'
+                              : 'No files match this view.'}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
+                      {!filesLoading &&
+                        userFiles.map((file: File) => (
+                          <TableRow key={file.id}>
+                            <TableCell className="w-[50px]">
+                              <div className="flex items-center justify-center">
+                                {getFilePreview(file)}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-medium max-w-[300px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <a
+                                  href={sanitizeUrl(file.urlPath)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-2 truncate"
+                                >
+                                  {file.name}
+                                </a>
+                                <div className="flex-shrink-0">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Actions for ${file.name}`}
+                                      >
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedFile(file)
+                                          setIsFileSettingsOpen(true)
+                                        }}
+                                      >
+                                        <Lock className="h-4 w-4 mr-2" />
+                                        Settings
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-destructive"
+                                        onClick={() => {
+                                          setSelectedFile(file)
+                                          setIsFileDeleteDialogOpen(true)
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <span
+                                className="truncate block"
+                                title={file.mimeType}
+                              >
+                                {file.mimeType}
+                              </span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {formatFileSize(file.size)}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
+                                  file.password
+                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-100'
+                                    : file.visibility === 'PRIVATE'
+                                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100'
+                                      : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100'
+                                )}
+                              >
+                                {file.password ? 'PROTECTED' : file.visibility}
+                              </span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {new Date(file.uploadedAt).toLocaleDateString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -1188,6 +1384,7 @@ export function UserList() {
                         (p) => (
                           <PaginationItem key={p}>
                             <PaginationLink
+                              href="#"
                               onClick={(
                                 e: React.MouseEvent<HTMLAnchorElement>
                               ) => {
@@ -1227,7 +1424,8 @@ export function UserList() {
             <TabsContent value="urls">
               <div className="space-y-4">
                 <Input
-                  placeholder="Search URLs..."
+                  aria-label="Search this user’s links"
+                  placeholder="Search links..."
                   value={urlSearch}
                   onChange={(e) => handleUrlSearchChange(e.target.value)}
                   className="w-full"
@@ -1244,53 +1442,70 @@ export function UserList() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {userUrls.map((url) => (
-                        <TableRow key={url.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center justify-between">
-                              <a
-                                href={`/u/${url.shortCode}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline flex items-center gap-2"
-                              >
-                                <Link2 className="h-4 w-4" />
-                                {url.shortCode}
-                              </a>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onClick={() => handleDeleteUrl(url.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-[300px] truncate">
-                            <a
-                              href={url.targetUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:underline"
-                            >
-                              {url.targetUrl}
-                            </a>
-                          </TableCell>
-                          <TableCell>{url.clicks}</TableCell>
-                          <TableCell>
-                            {new Date(url.createdAt).toLocaleDateString()}
+                      {(urlsLoading || userUrls.length === 0) && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="h-28 text-center text-sm text-muted-foreground"
+                          >
+                            {urlsLoading
+                              ? 'Loading links…'
+                              : 'No links match this view.'}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )}
+                      {!urlsLoading &&
+                        userUrls.map((url) => (
+                          <TableRow key={url.id}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center justify-between">
+                                <a
+                                  href={`/u/${url.shortCode}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-2"
+                                >
+                                  <Link2 className="h-4 w-4" />
+                                  {url.shortCode}
+                                </a>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label={`Actions for ${url.shortCode}`}
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => handleDeleteUrl(url.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </TableCell>
+                            <TableCell className="max-w-[300px] truncate">
+                              <a
+                                href={url.targetUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline"
+                              >
+                                {url.targetUrl}
+                              </a>
+                            </TableCell>
+                            <TableCell>{url.clicks}</TableCell>
+                            <TableCell>
+                              {new Date(url.createdAt).toLocaleDateString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -1317,6 +1532,7 @@ export function UserList() {
                         (p) => (
                           <PaginationItem key={p}>
                             <PaginationLink
+                              href="#"
                               onClick={(
                                 e: React.MouseEvent<HTMLAnchorElement>
                               ) => {
@@ -1451,7 +1667,8 @@ export function UserList() {
                     e.preventDefault()
                     fetchUsers(currentPage - 1)
                   }}
-                  disabled={currentPage === 1}
+                  aria-label="Previous users page"
+                  disabled={currentPage === 1 || isLoading}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -1459,6 +1676,7 @@ export function UserList() {
               {getPaginationRange(currentPage, pagination.pages).map((p) => (
                 <PaginationItem key={p}>
                   <PaginationLink
+                    href="#"
                     onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                       e.preventDefault()
                       fetchUsers(p)
@@ -1477,7 +1695,8 @@ export function UserList() {
                     e.preventDefault()
                     fetchUsers(currentPage + 1)
                   }}
-                  disabled={currentPage === pagination.pages}
+                  aria-label="Next users page"
+                  disabled={currentPage === pagination.pages || isLoading}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

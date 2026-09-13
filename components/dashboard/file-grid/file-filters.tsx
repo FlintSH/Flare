@@ -1,24 +1,14 @@
-import React, { memo } from 'react'
+import { Fragment, memo } from 'react'
 
 import { SortOption } from '@/types/components/file'
 import { format } from 'date-fns'
 import {
-  ArrowDown,
-  ArrowUp,
   Calendar as CalendarIcon,
-  Check,
-  Clock,
-  Download,
   Eye,
-  FileText,
   Filter,
   Globe,
-  HardDrive,
-  Image,
-  Key,
+  KeyRound,
   Lock,
-  Music,
-  Video,
 } from 'lucide-react'
 import { DateRange } from 'react-day-picker'
 
@@ -26,8 +16,8 @@ import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -37,6 +27,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import { cn } from '@/lib/utils'
 
@@ -52,126 +49,49 @@ interface FileFiltersProps {
   onVisibilityChange: (visibility: string[]) => void
 }
 
-type SortCategory = 'date' | 'size' | 'views' | 'downloads'
-type SortDirection = 'desc' | 'asc'
+const sortOptions: { value: SortOption; label: string }[] = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'largest', label: 'Largest first' },
+  { value: 'smallest', label: 'Smallest first' },
+  { value: 'most-viewed', label: 'Most viewed' },
+  { value: 'least-viewed', label: 'Least viewed' },
+  { value: 'most-downloaded', label: 'Most downloaded' },
+  { value: 'least-downloaded', label: 'Least downloaded' },
+]
 
-const getSortInfo = (
-  sortBy: SortOption
-): {
-  category: SortCategory
-  direction: SortDirection
-  label: string
-  icon: React.ElementType
-} => {
-  switch (sortBy) {
-    case 'newest':
-      return { category: 'date', direction: 'desc', label: 'Date', icon: Clock }
-    case 'oldest':
-      return { category: 'date', direction: 'asc', label: 'Date', icon: Clock }
-    case 'largest':
-      return {
-        category: 'size',
-        direction: 'desc',
-        label: 'Size',
-        icon: HardDrive,
-      }
-    case 'smallest':
-      return {
-        category: 'size',
-        direction: 'asc',
-        label: 'Size',
-        icon: HardDrive,
-      }
-    case 'most-viewed':
-      return { category: 'views', direction: 'desc', label: 'Views', icon: Eye }
-    case 'least-viewed':
-      return { category: 'views', direction: 'asc', label: 'Views', icon: Eye }
-    case 'most-downloaded':
-      return {
-        category: 'downloads',
-        direction: 'desc',
-        label: 'Downloads',
-        icon: Download,
-      }
-    case 'least-downloaded':
-      return {
-        category: 'downloads',
-        direction: 'asc',
-        label: 'Downloads',
-        icon: Download,
-      }
-    default:
-      return { category: 'date', direction: 'desc', label: 'Date', icon: Clock }
-  }
-}
+const visibilityOptions = [
+  { value: 'public', label: 'Public', icon: Globe },
+  { value: 'private', label: 'Private', icon: Lock },
+  { value: 'hasPassword', label: 'Password protected', icon: KeyRound },
+]
 
-const getSortOptionFromCategory = (
-  category: SortCategory,
-  direction: SortDirection
-): SortOption => {
-  switch (category) {
-    case 'date':
-      return direction === 'desc' ? 'newest' : 'oldest'
-    case 'size':
-      return direction === 'desc' ? 'largest' : 'smallest'
-    case 'views':
-      return direction === 'desc' ? 'most-viewed' : 'least-viewed'
-    case 'downloads':
-      return direction === 'desc' ? 'most-downloaded' : 'least-downloaded'
-  }
-}
-
-const getFileTypeIcon = (type: string): React.ElementType => {
-  const lowerType = type.toLowerCase()
-
+function getFileTypeCategory(type: string) {
+  if (type.startsWith('image/')) return 'Images'
+  if (type.startsWith('video/')) return 'Videos'
+  if (type.startsWith('audio/')) return 'Audio'
   if (
-    [
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'image/svg+xml',
-    ].includes(lowerType)
-  ) {
-    return Image
-  }
-
-  if (['video/mp4', 'video/webm', 'video/mpeg'].includes(lowerType)) {
-    return Video
-  }
-
-  if (['audio/mpeg', 'audio/wav', 'audio/ogg'].includes(lowerType)) {
-    return Music
-  }
-
-  if (
-    [
-      'application/pdf',
-      'text/plain',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ].includes(lowerType)
-  ) {
-    return FileText
-  }
-
-  return FileText
-}
-
-const getFileTypeCategory = (type: string): string => {
-  const lowerType = type.toLowerCase()
-
-  if (lowerType.startsWith('image/')) return 'Images'
-  if (lowerType.startsWith('video/')) return 'Videos'
-  if (lowerType.startsWith('audio/')) return 'Audio'
-  if (
-    lowerType.includes('pdf') ||
-    lowerType.includes('document') ||
-    lowerType.startsWith('text/')
+    type.includes('pdf') ||
+    type.includes('document') ||
+    type.startsWith('text/')
   )
     return 'Documents'
+  return 'Other files'
+}
 
-  return 'Other'
+function getFileTypeLabel(type: string) {
+  const knownTypes: Record<string, string> = {
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      'Word document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+      'Excel spreadsheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+      'PowerPoint presentation',
+    'application/octet-stream': 'Other file',
+    'text/plain': 'Plain text',
+    'image/svg+xml': 'SVG',
+  }
+  return knownTypes[type] || (type.split('/')[1] || type).toUpperCase()
 }
 
 export const FileFilters = memo(function FileFilters({
@@ -185,354 +105,149 @@ export const FileFilters = memo(function FileFilters({
   visibility,
   onVisibilityChange,
 }: FileFiltersProps) {
-  const { category, direction, label } = getSortInfo(sortBy)
-  const SortIcon = direction === 'desc' ? ArrowDown : ArrowUp
-
-  const handleSortSelect = (
-    newCategory: SortCategory,
-    newDirection: SortDirection
-  ) => {
-    const newSortOption = getSortOptionFromCategory(newCategory, newDirection)
-    onSortChange(newSortOption)
-  }
-
-  const fileTypesByCategory = fileTypes.reduce(
-    (acc, type) => {
-      const category = getFileTypeCategory(type)
-      if (!acc[category]) acc[category] = []
-      acc[category].push(type)
-      return acc
-    },
-    {} as Record<string, string[]>
-  )
+  const fileTypesByCategory = [...new Set([...fileTypes, ...selectedTypes])]
+    .sort()
+    .reduce(
+      (groups, type) => {
+        const category = getFileTypeCategory(type)
+        ;(groups[category] ||= []).push(type)
+        return groups
+      },
+      {} as Record<string, string[]>
+    )
+  const filterClass =
+    'relative h-10 w-10 shrink-0 justify-center rounded-lg bg-background/70 p-0 sm:w-auto sm:justify-between sm:gap-2 sm:px-3'
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2">
+      <Select value={sortBy} onValueChange={onSortChange}>
+        <SelectTrigger
+          aria-label="Sort files"
+          className="h-10 min-w-0 flex-1 rounded-lg bg-background/70 sm:w-[172px] sm:flex-none"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {sortOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="min-w-[120px] flex items-center justify-between bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
+            aria-label="Visibility"
+            className={cn(
+              filterClass,
+              visibility.length > 0 && 'border-primary/40 bg-primary/5'
+            )}
           >
-            <span>{label}</span>
-            <SortIcon className="ml-2 h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-          {}
-          <div className="px-2 py-1.5">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                Date
-              </div>
-            </div>
-            <div className="flex gap-1 mt-2">
-              <Button
-                variant={
-                  category === 'date' && direction === 'desc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('date', 'desc')}
-              >
-                Newest
-              </Button>
-              <Button
-                variant={
-                  category === 'date' && direction === 'asc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('date', 'asc')}
-              >
-                Oldest
-              </Button>
-            </div>
-          </div>
-          <DropdownMenuSeparator />
-          {}
-          <div className="px-2 py-1.5">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <div className="flex items-center gap-2">
-                <HardDrive className="h-4 w-4" />
-                Size
-              </div>
-            </div>
-            <div className="flex gap-1 mt-2">
-              <Button
-                variant={
-                  category === 'size' && direction === 'desc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('size', 'desc')}
-              >
-                Largest
-              </Button>
-              <Button
-                variant={
-                  category === 'size' && direction === 'asc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('size', 'asc')}
-              >
-                Smallest
-              </Button>
-            </div>
-          </div>
-          <DropdownMenuSeparator />
-          {}
-          <div className="px-2 py-1.5">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <div className="flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                Views
-              </div>
-            </div>
-            <div className="flex gap-1 mt-2">
-              <Button
-                variant={
-                  category === 'views' && direction === 'desc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('views', 'desc')}
-              >
-                Most
-              </Button>
-              <Button
-                variant={
-                  category === 'views' && direction === 'asc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('views', 'asc')}
-              >
-                Least
-              </Button>
-            </div>
-          </div>
-          <DropdownMenuSeparator />
-          {}
-          <div className="px-2 py-1.5">
-            <div className="flex items-center justify-between text-sm font-medium">
-              <div className="flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Downloads
-              </div>
-            </div>
-            <div className="flex gap-1 mt-2">
-              <Button
-                variant={
-                  category === 'downloads' && direction === 'desc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('downloads', 'desc')}
-              >
-                Most
-              </Button>
-              <Button
-                variant={
-                  category === 'downloads' && direction === 'asc'
-                    ? 'default'
-                    : 'outline'
-                }
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={() => handleSortSelect('downloads', 'asc')}
-              >
-                Least
-              </Button>
-            </div>
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            className="min-w-[120px] flex items-center justify-between bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
-          >
-            <span>Visibility</span>
-            {visibility.length > 0 ? (
-              <span className="ml-2 rounded-full bg-primary w-5 h-5 flex items-center justify-center text-[10px] font-medium text-primary-foreground">
+            <Eye className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden sm:inline">Visibility</span>
+            {visibility.length > 0 && (
+              <span className="absolute -right-1 -top-1 rounded-full bg-background px-1 text-xs text-primary sm:static sm:bg-transparent sm:p-0">
                 {visibility.length}
               </span>
-            ) : (
-              <Eye className="ml-2 h-4 w-4" />
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>Filter by visibility</DropdownMenuLabel>
-          <DropdownMenuItem
-            onClick={() => {
-              const newVisibility = visibility.includes('public')
-                ? visibility.filter((v) => v !== 'public')
-                : [...visibility, 'public']
-              onVisibilityChange(newVisibility)
-            }}
-            onSelect={(e) => e.preventDefault()}
-            className={cn(
-              'flex items-center justify-between',
-              visibility.includes('public') && 'bg-accent'
-            )}
-          >
-            <div className="flex items-center">
-              <Globe className="mr-2 h-4 w-4 opacity-70" />
-              Public Files
-            </div>
-            {visibility.includes('public') && (
-              <Check className="ml-auto h-4 w-4" />
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              const newVisibility = visibility.includes('private')
-                ? visibility.filter((v) => v !== 'private')
-                : [...visibility, 'private']
-              onVisibilityChange(newVisibility)
-            }}
-            onSelect={(e) => e.preventDefault()}
-            className={cn(
-              'flex items-center justify-between',
-              visibility.includes('private') && 'bg-accent'
-            )}
-          >
-            <div className="flex items-center">
-              <Lock className="mr-2 h-4 w-4 opacity-70" />
-              Private Files
-            </div>
-            {visibility.includes('private') && (
-              <Check className="ml-auto h-4 w-4" />
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              const newVisibility = visibility.includes('hasPassword')
-                ? visibility.filter((v) => v !== 'hasPassword')
-                : [...visibility, 'hasPassword']
-              onVisibilityChange(newVisibility)
-            }}
-            onSelect={(e) => e.preventDefault()}
-            className={cn(
-              'flex items-center justify-between',
-              visibility.includes('hasPassword') && 'bg-accent'
-            )}
-          >
-            <div className="flex items-center">
-              <Key className="mr-2 h-4 w-4 opacity-70" />
-              Password Protected
-            </div>
-            {visibility.includes('hasPassword') && (
-              <Check className="ml-auto h-4 w-4" />
-            )}
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end" className="w-56 bg-popover">
+          <DropdownMenuLabel>Who can access</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {visibilityOptions.map(({ value, label, icon: Icon }) => (
+            <DropdownMenuCheckboxItem
+              key={value}
+              checked={visibility.includes(value)}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(checked) =>
+                onVisibilityChange(
+                  checked
+                    ? [...visibility, value]
+                    : visibility.filter((item) => item !== value)
+                )
+              }
+            >
+              <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+              {label}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="min-w-[120px] flex items-center justify-between bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200"
+            aria-label="File type"
+            className={cn(
+              filterClass,
+              selectedTypes.length > 0 && 'border-primary/40 bg-primary/5'
+            )}
           >
-            <span>File Type</span>
-            {selectedTypes.length > 0 ? (
-              <span className="ml-2 rounded-full bg-primary w-5 h-5 flex items-center justify-center text-[10px] font-medium text-primary-foreground">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden sm:inline">File type</span>
+            {selectedTypes.length > 0 && (
+              <span className="absolute -right-1 -top-1 rounded-full bg-background px-1 text-xs text-primary sm:static sm:bg-transparent sm:p-0">
                 {selectedTypes.length}
               </span>
-            ) : (
-              <Filter className="ml-2 h-4 w-4" />
             )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-64 max-h-[400px] overflow-y-auto"
+          className="max-h-80 w-64 overflow-y-auto bg-popover"
         >
-          <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
-          {Object.entries(fileTypesByCategory).map(
-            ([categoryName, types], categoryIndex) => (
-              <React.Fragment key={categoryName}>
-                {categoryIndex > 0 && <DropdownMenuSeparator />}
-                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                  {categoryName}
-                </div>
-                {types.map((type) => {
-                  const TypeIcon = getFileTypeIcon(type)
-                  return (
-                    <DropdownMenuItem
-                      key={type}
-                      onClick={() => {
-                        onTypesChange(
-                          selectedTypes.includes(type)
-                            ? selectedTypes.filter((t) => t !== type)
-                            : [...selectedTypes, type]
-                        )
-                      }}
-                      onSelect={(e) => e.preventDefault()}
-                      className={cn(
-                        'flex items-center justify-between',
-                        selectedTypes.includes(type) && 'bg-accent'
-                      )}
-                    >
-                      <div className="flex items-center">
-                        <TypeIcon className="mr-2 h-4 w-4 opacity-70" />
-                        {type}
-                      </div>
-                      {selectedTypes.includes(type) && (
-                        <Check className="ml-auto h-4 w-4" />
-                      )}
-                    </DropdownMenuItem>
-                  )
-                })}
-              </React.Fragment>
-            )
+          <DropdownMenuLabel>Filter by file type</DropdownMenuLabel>
+          {Object.entries(fileTypesByCategory).map(([category, types]) => (
+            <Fragment key={category}>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                {category}
+              </DropdownMenuLabel>
+              {types.map((type) => (
+                <DropdownMenuCheckboxItem
+                  key={type}
+                  title={type}
+                  checked={selectedTypes.includes(type)}
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={(checked) =>
+                    onTypesChange(
+                      checked
+                        ? [...selectedTypes, type]
+                        : selectedTypes.filter((item) => item !== type)
+                    )
+                  }
+                >
+                  <span className="truncate">{getFileTypeLabel(type)}</span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </Fragment>
+          ))}
+          {Object.keys(fileTypesByCategory).length === 0 && (
+            <p className="px-2 py-3 text-sm text-muted-foreground">
+              File types appear after your first upload.
+            </p>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-
       <Popover>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
+            aria-label="Upload date"
             className={cn(
-              'min-w-[120px] justify-start text-left font-normal bg-background/60 backdrop-blur-sm border-border/50 hover:bg-background/80 transition-all duration-200',
-              !date && 'text-muted-foreground'
+              filterClass,
+              date?.from && 'border-primary/40 bg-primary/5'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {date?.from ? (
-              date.to ? (
-                <>
-                  {format(date.from, 'LLL dd')} - {format(date.to, 'LLL dd')}
-                </>
-              ) : (
-                format(date.from, 'LLL dd')
-              )
-            ) : (
-              <span>Date range</span>
-            )}
+            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden truncate sm:inline">
+              {date?.from
+                ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
+                : 'Upload date'}
+            </span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
@@ -542,8 +257,19 @@ export const FileFilters = memo(function FileFilters({
             defaultMonth={date?.from}
             selected={date}
             onSelect={onDateChange}
-            numberOfMonths={2}
+            numberOfMonths={1}
           />
+          {date?.from && (
+            <div className="border-t p-2">
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => onDateChange(undefined)}
+              >
+                Clear date range
+              </Button>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     </div>

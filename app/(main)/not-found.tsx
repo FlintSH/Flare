@@ -1,32 +1,26 @@
 import Link from 'next/link'
 
-import { InstanceBrand } from '@/components/customization/instance-brand'
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { ArrowRight } from 'lucide-react'
+
+import { PublicState } from '@/components/auth/public-state'
+import { Button } from '@/components/ui/button'
 
 export default function NotFound() {
   return (
-    <div className="flex-1 relative min-h-screen flex flex-col">
-      <div className="absolute top-6 left-6">
-        <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <InstanceBrand />
+    <PublicState
+      statusCode="404"
+      title="Page not found"
+      description="The link may have changed, the file may have expired, or you may not have access to it. Check the address or head back to your files."
+    >
+      <Button asChild className="w-full">
+        <Link href="/dashboard">
+          Go to your files
+          <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
         </Link>
-      </div>
-
-      <main className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md mx-auto">
-          <CardHeader className="text-center">
-            <CardTitle className="text-7xl font-bold">404</CardTitle>
-            <CardDescription className="text-xl mt-2">
-              Page Not Found
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </main>
-    </div>
+      </Button>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Expecting a shared file? Ask its owner for a new link.
+      </p>
+    </PublicState>
   )
 }

@@ -39,7 +39,7 @@ export function FileViewerProvider({
 
   const urls = useMemo(() => {
     const passwordParam = verifiedPassword
-      ? `?password=${verifiedPassword}`
+      ? `?password=${encodeURIComponent(verifiedPassword)}`
       : ''
     return {
       fileUrl: DOMPurify.sanitize(
@@ -81,7 +81,7 @@ export function FileViewerProvider({
 
     try {
       const passwordParam = verifiedPassword
-        ? `?password=${verifiedPassword}`
+        ? `?password=${encodeURIComponent(verifiedPassword)}`
         : ''
       const response = await fetch(
         `${sanitizeUrl(file.urlPath)}/direct${passwordParam}`

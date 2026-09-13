@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Progress } from '@/components/ui/progress'
 import { ToastAction } from '@/components/ui/toast'
 
+import {
+  type UploadResponse,
+  parseUploadResponse,
+} from '@/lib/uploads/response'
+
 import { useToast } from './use-toast'
 
 export type FileWithPreview = File & {
@@ -13,14 +18,7 @@ export type FileWithPreview = File & {
   uploaded: number
 }
 
-export type UploadResponse = {
-  url: string
-  name: string
-  size: number
-  type: string
-  pageUrl?: string
-  copyText?: string
-}
+export type { UploadResponse } from '@/lib/uploads/response'
 
 export type FileUploadOptions = {
   maxSize?: number
@@ -36,6 +34,8 @@ export type FileUploadOptions = {
 export function useFileUpload(options: FileUploadOptions = {}) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const uploadingRef = React.useRef(false)
+  const filesRef = React.useRef<FileWithPreview[]>([])
   const router = useRouter()
   const { toast } = useToast()
   const [visibility, setVisibility] = useState<
@@ -54,34 +54,35 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles((prev) => [
-      ...prev,
-      ...acceptedFiles.map((file) =>
-        Object.assign(file, {
-          preview: file.type.startsWith('image/')
-            ? URL.createObjectURL(file)
-            : undefined,
-          progress: 0,
-          uploaded: 0,
-        })
-      ),
-    ])
+    const nextFiles = acceptedFiles.map((file) =>
+      Object.assign(file, {
+        preview: file.type.startsWith('image/')
+          ? URL.createObjectURL(file)
+          : undefined,
+        progress: 0,
+        uploaded: 0,
+      })
+    )
+    setFiles((prev) => [...prev, ...nextFiles])
   }, [])
 
   useEffect(() => {
+    filesRef.current = files
+  }, [files])
+
+  useEffect(() => {
     return () => {
-      for (const file of files) {
-        if (file.preview) {
-          URL.revokeObjectURL(file.preview)
-        }
+      for (const file of filesRef.current) {
+        if (file.preview) URL.revokeObjectURL(file.preview)
       }
     }
-  }, [files])
+  }, [])
 
   const removeFile = (index: number) => {
     setFiles((prev) => {
       const newFiles = [...prev]
       const file = newFiles[index]
+      if (!file) return prev
       if (file.preview) {
         URL.revokeObjectURL(file.preview)
       }
@@ -99,11 +100,15 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setFiles([])
   }
 
-  const updateFileProgress = (index: number, uploaded: number, now: number) => {
+  const updateFileProgress = (index: number, uploaded: number) => {
     setFiles((prev) => {
       const newFiles = [...prev]
       const file = newFiles[index]
-      file.progress = Math.min(100, Math.round((uploaded / file.size) * 100))
+      if (!file) return prev
+      file.progress =
+        file.size > 0
+          ? Math.min(100, Math.round((uploaded / file.size) * 100))
+          : 100
       file.uploaded = uploaded
       return [...newFiles]
     })
@@ -111,7 +116,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     if (progressToastRef.current && files[index]) {
       const progress = Math.min(
         100,
-        Math.round((uploaded / files[index].size) * 100)
+        files[index].size > 0
+          ? Math.round((uploaded / files[index].size) * 100)
+          : 100
       )
       progressToastRef.current.update({
         id: progressToastRef.current.id,
@@ -177,12 +184,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           (sum, progress) => sum + progress,
           0
         )
-        updateFileProgress(index, totalUploaded, Date.now())
+        updateFileProgress(index, totalUploaded)
       }
 
       const uploadedParts: { ETag: string; PartNumber: number }[] = []
       const batchSize = 3
-      let completed = 0
 
       for (let i = 0; i < Math.ceil(chunks.length / batchSize); i++) {
         const batchStart = i * batchSize
@@ -209,7 +215,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
               xhr.addEventListener('load', () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                  completed++
                   chunkProgress.set(partNumber, chunk.size)
                   updateTotalProgress()
                   try {
@@ -218,7 +223,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                       ETag: response.data.etag,
                       PartNumber: partNumber,
                     })
-                  } catch (error) {
+                  } catch {
                     reject(new Error('Failed to parse response'))
                   }
                 } else {
@@ -241,7 +246,11 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           })
         })
 
-        await Promise.all(promises)
+        const results = await Promise.allSettled(promises)
+        const failedPart = results.find(
+          (result) => result.status === 'rejected'
+        )
+        if (failedPart?.status === 'rejected') throw failedPart.reason
       }
 
       const completeResponse = await fetch(
@@ -261,8 +270,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         throw new Error('Failed to complete upload')
       }
 
-      const result = await completeResponse.json()
-      return result.data || result
+      return parseUploadResponse(await completeResponse.json())
     } catch (error) {
       console.error('Error in chunk upload:', error)
       throw error
@@ -282,15 +290,19 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     return await new Promise<UploadResponse>((resolve, reject) => {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
-          updateFileProgress(index, event.loaded, Date.now())
+          updateFileProgress(index, event.loaded)
         }
       })
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          updateFileProgress(index, file.size, Date.now())
-          const response = JSON.parse(xhr.responseText)
-          resolve(response.data || response)
+          try {
+            const response = parseUploadResponse(JSON.parse(xhr.responseText))
+            updateFileProgress(index, file.size)
+            resolve(response)
+          } catch {
+            reject(new Error('Could not read the upload response.'))
+          }
         } else {
           if (xhr.status === 413) {
             reject(
@@ -315,9 +327,23 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     })
   }
 
-  const uploadFiles = async () => {
-    if (files.length === 0) return
+  const copyLinks = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({ title: 'Copied to clipboard' })
+    } catch {
+      toast({
+        title: 'Could not copy link',
+        description: 'Open the file to copy its address.',
+        variant: 'destructive',
+      })
+    }
+  }
 
+  const uploadFiles = async () => {
+    if (files.length === 0 || uploadingRef.current) return
+
+    uploadingRef.current = true
     setIsUploading(true)
     const responses: UploadResponse[] = []
 
@@ -371,13 +397,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
               </ToastAction>
               <ToastAction
                 altText="Copy link"
-                onClick={() => {
-                  navigator.clipboard.writeText(file.copyText || file.url)
-                  toast({
-                    title: 'Link copied',
-                    description: 'File link copied to clipboard',
-                  })
-                }}
+                onClick={() => copyLinks(file.copyText || file.url)}
               >
                 Copy Link
               </ToastAction>
@@ -395,11 +415,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 const links = responses
                   .map((r) => r.copyText || r.url)
                   .join('\n')
-                navigator.clipboard.writeText(links)
-                toast({
-                  title: 'Links copied',
-                  description: 'All file links copied to clipboard',
-                })
+                void copyLinks(links)
               }}
             >
               Copy All Links
@@ -415,8 +431,21 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       clearFiles()
       router.refresh()
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Upload failed'
+      const failure = error instanceof Error ? error.message : 'Upload failed'
+      const errorMessage = responses.length
+        ? `${responses.length} ${responses.length === 1 ? 'file uploaded' : 'files uploaded'}. ${failure}. Retry the remaining files.`
+        : failure
+      if (responses.length > 0) {
+        const uploadedFiles = new Set(files.slice(0, responses.length))
+        for (const file of uploadedFiles) {
+          if (file.preview) URL.revokeObjectURL(file.preview)
+        }
+        setFiles((current) =>
+          current.filter((file) => !uploadedFiles.has(file))
+        )
+        options.onUploadComplete?.(responses)
+        router.refresh()
+      }
       toast({
         title: 'Upload Failed',
         description: errorMessage,
@@ -427,6 +456,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         options.onUploadError(errorMessage)
       }
     } finally {
+      progressToastRef.current?.dismiss()
+      progressToastRef.current = null
+      uploadingRef.current = false
       setIsUploading(false)
     }
   }

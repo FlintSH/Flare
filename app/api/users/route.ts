@@ -1,4 +1,5 @@
 import { UserResponse, UserSchema } from '@/types/dto/user'
+import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 
 import {
@@ -31,13 +32,35 @@ export async function GET(req: Request) {
     if (response) return response
 
     const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '25')
+    const requestedPage = Number(searchParams.get('page') || '1')
+    const requestedLimit = Number(searchParams.get('limit') || '25')
+    const safePage =
+      Number.isSafeInteger(requestedPage) && requestedPage > 0
+        ? requestedPage
+        : 1
+    const limit =
+      Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 100)
+        : 25
+    const search = (searchParams.get('search') || '').trim().slice(0, 200)
+    const role = searchParams.get('role')
+    const where: Prisma.UserWhereInput = {
+      ...(role === 'ADMIN' || role === 'USER' ? { role } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { email: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    }
+    const total = await prisma.user.count({ where })
+    const page = Math.min(safePage, Math.max(1, Math.ceil(total / limit)))
     const skip = (page - 1) * limit
 
-    const total = await prisma.user.count()
-
     const users = await prisma.user.findMany({
+      where,
       select: {
         id: true,
         name: true,

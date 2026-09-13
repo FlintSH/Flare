@@ -34,17 +34,19 @@ export function OidcAutoRedirect({
   }, [])
 
   return (
-    <div className="space-y-6 text-center">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {errorCode ? 'Sign-in failed' : 'Redirecting to sign-in'}
-        </h1>
-        <p className="text-base text-muted-foreground">
-          {errorCode
-            ? getOidcErrorMessage(errorCode)
-            : "Taking you to your organization's sign-in page..."}
-        </p>
-      </div>
+    <div className="space-y-6">
+      <p
+        role={errorCode ? 'alert' : 'status'}
+        className={
+          errorCode
+            ? 'rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground'
+            : 'text-sm leading-relaxed text-muted-foreground'
+        }
+      >
+        {errorCode
+          ? getOidcErrorMessage(errorCode)
+          : 'Taking you to your organization’s sign-in page…'}
+      </p>
       <Button
         type="button"
         className="w-full h-11 font-medium bg-primary hover:bg-primary/90 transition-colors"
@@ -61,7 +63,7 @@ export function OidcAutoRedirect({
       </Button>
       <Link
         href="/auth/login?local=1"
-        className="block text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+        className="block border-t border-border/60 pt-5 text-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
       >
         Use local sign-in instead
       </Link>

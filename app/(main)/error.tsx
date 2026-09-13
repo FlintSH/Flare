@@ -4,15 +4,8 @@ import Link from 'next/link'
 
 import { RefreshCcw } from 'lucide-react'
 
-import { InstanceBrand } from '@/components/customization/instance-brand'
+import { PublicState } from '@/components/auth/public-state'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 
 export default function Error({
   reset,
@@ -21,29 +14,20 @@ export default function Error({
   reset: () => void
 }) {
   return (
-    <div className="flex-1 relative min-h-screen flex flex-col">
-      <div className="absolute top-6 left-6">
-        <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <InstanceBrand />
-        </Link>
+    <PublicState
+      statusCode="500"
+      title="Something went wrong"
+      description="We couldn’t load this page. Try again or return to your files."
+    >
+      <div className="flex flex-col gap-3">
+        <Button onClick={() => reset()}>
+          <RefreshCcw className="mr-2 h-4 w-4" aria-hidden="true" />
+          Try again
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/dashboard">Go to your files</Link>
+        </Button>
       </div>
-
-      <main className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md mx-auto">
-          <CardHeader className="text-center">
-            <CardTitle className="text-7xl font-bold">500</CardTitle>
-            <CardDescription className="text-xl mt-2">
-              Something went wrong
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center">
-            <Button onClick={() => reset()} className="gap-2">
-              <RefreshCcw className="h-4 w-4" />
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+    </PublicState>
   )
 }
