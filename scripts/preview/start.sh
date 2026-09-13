@@ -27,10 +27,9 @@ until pnpm prisma migrate deploy; do
   sleep 2
 done
 
-node /preview/seed.cjs --check-empty
 node /app/scripts/migrate-config.js
-node /preview/seed.cjs
+node /app/scripts/hash-file-passwords.js
 
-# Seeding must finish before the HTTP server can serve setup or registration.
+# Ordinary Flare migrations leave a fresh database ready for first-run setup.
 # The deployment controller owns lifetime and deletes app and PostgreSQL state.
 exec node /app/server.js

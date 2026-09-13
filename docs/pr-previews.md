@@ -12,21 +12,20 @@ can run. An existing paid workspace can be used without another subscription.
 
 ## Trying a PR
 
-Sign in with `demo@example.test` / `Flare-preview-only!2026`. These credentials
-are deliberately public and belong to a regular user. All visitors to one preview
-share its account, database, and uploads, so someone else can change or delete
-the data. Use made-up test data only. Never upload personal files, enter real
-credentials, reuse a password, or connect production integrations. A preview runs
-the PR author's unreviewed code, including JavaScript in your browser.
+Each deployment starts with Flare's normal initial setup, a fresh local PostgreSQL
+database, and disposable uploads. There is no seeded account, completed setup,
+preview branding, or replacement login flow. After the separate public-preview
+notice, the first visitor can create an administrator and configure Flare through
+its normal setup screens. Setup, accounts, settings, and integrations remain
+available for testing.
 
-Each deployment starts with a new local PostgreSQL database and disposable
-uploads. Registration and outbound integrations are disabled in the seeded
-configuration. The public gateway also blocks setup, registration, email,
-integration and short-link endpoints, plus mutations to settings, users, and
-profiles. The app's read-only setup-status endpoint remains available.
-Administrator, account, and integration changes need local testing.
-The demo upload limit is 5 MiB per file and 50 MiB per account; the gateway caps
-the entire request at 6 MiB, allowing for multipart overhead.
+The deployment is shared by everyone who can view the PR. It does not create a
+fresh instance for each visitor: someone may have completed setup or changed its
+data before you arrive. Use only disposable credentials and made-up test data.
+Never upload personal files, reuse a password, enter real credentials, or connect
+production integrations. A preview runs the PR author's unreviewed code, including
+JavaScript in your browser. The gateway caps each entire request at 6 MiB,
+including multipart upload overhead, independently of settings chosen in Flare.
 
 Previews expire after 24 hours even when the PR remains open. Closing or merging
 the PR tears down its environment, and pushing a new commit replaces it. At most
@@ -45,7 +44,7 @@ if a new contributor's build is waiting to start.
 
 The PR build uses an ephemeral GitHub-hosted runner, a read-only repository token,
 and no deployment secrets. The app is built from the exact PR head; the disposable
-database wrapper and fixtures come from a separate default-branch checkout, so
+database wrapper comes from a separate default-branch checkout, so
 older feature branches do not need to carry the preview tooling. Changes to that
 tooling take effect in deployed previews after they merge. It exports an OCI
 image artifact. A separate controller
@@ -55,14 +54,16 @@ Railway environment. It never executes the PR image on the credentialed controll
 runner or imports deployment commands from the artifact. Railway runs the images
 by immutable digest.
 
-| Service | Source                                           | Public access                                       | Credentials                        |
-| ------- | ------------------------------------------------ | --------------------------------------------------- | ---------------------------------- |
-| App     | PR image with disposable PostgreSQL and fixtures | Private network only; no public domain or TCP proxy | Disposable demo configuration only |
-| Gateway | Separately built, trusted gateway image          | Railway-generated HTTPS domain                      | No Railway or GitHub token         |
+| Service | Source                                  | Public access                                       | Credentials                                |
+| ------- | --------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
+| App     | PR image with disposable PostgreSQL     | Private network only; no public domain or TCP proxy | Fresh database password and session secret |
+| Gateway | Separately built, trusted gateway image | Railway-generated HTTPS domain                      | No Railway or GitHub token                 |
 
-The gateway shows a public-preview notice before entering the app, discourages
-indexing, limits bodies and request rates, blocks sensitive routes, and refuses
-requests at the fixed expiry. Its limits apply independently of the PR code.
+The gateway shows a public-preview notice outside the app, discourages indexing,
+limits bodies and request rates, and refuses requests at the fixed expiry. It
+does not replace Flare's setup or login screens or block application features.
+Its infrastructure limits apply independently of the PR code. No provider,
+GitHub, or production secrets are injected into the app.
 Keep gateway and controller updates on the trusted branch until reviewed.
 Credentialed `workflow_run` jobs must never execute artifact contents; see
 [GitHub's security guidance](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run).
@@ -77,8 +78,8 @@ domains keep previews off your production domain.
 See [Railway private-network scope](https://docs.railway.com/networking/domains/working-with-domains).
 
 **This is not an outbound-network sandbox.** PR code can make outbound connections,
-send data to external hosts, or create its own outbound tunnel. Seeded settings
-and application quotas can be bypassed by modified code. The gateway controls
+send data to external hosts, or create its own outbound tunnel. Application
+settings and quotas can be bypassed by modified code. The gateway controls
 traffic through the published URL; it does not constrain every action of the app
 process. Keep the preview project separate, keep real credentials out of the app,
 and monitor its resource use and spend. A workspace token can also access other
@@ -130,7 +131,7 @@ railway status --json
 ```
 
 Record the project ID and both service IDs. Leave these definitions empty in
-`preview-control`: do not connect a GitHub source or start a permanent demo there.
+`preview-control`: do not connect a GitHub source or start a permanent app there.
 The controller configures instances of these IDs in each new preview environment.
 The initially created `production` environment is merely Railway's default name;
 keep it empty, with no production workload or secrets. If the preview project
@@ -180,8 +181,10 @@ belongs in a preview service.
 The automatically published PR package is
 `ghcr.io/flintsh/flare-pr-previews`: the lowercase repository name with
 `-pr-previews` appended. GHCR creates packages private by default. After the first
-PR publish, make this third package public, verify an anonymous pull, and rerun
-**PR Preview Image**. If the package already exists, link it to Flare and grant
+PR publish, make this third package public, verify an anonymous pull, and choose
+**Re-run all jobs** on **PR Preview Image** to create a new attempt and artifact.
+Rerunning only the controller does not retry a failed deployment attempt.
+If the package already exists, link it to Flare and grant
 the repository's Actions workflow package access. Railway cannot pull the image
 until this bootstrap is complete. See
 [GitHub's container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
@@ -241,6 +244,9 @@ Merge the trusted workflows and scripts onto the default branch before activatio
 `workflow_run` and scheduled workflows depend on it. Once resources, budget,
 images, credentials, and cron are ready, set `PREVIEW_ENABLED=true` and test a
 disposable PR. The first publish may require the GHCR visibility step above.
+Use a fresh PR event after activation. Runs created before configuration changes
+may retain earlier variable values when rerun; a new commit or branch update
+creates a fresh `pull_request` event using the current configuration.
 Adding these files does not itself provision or activate external infrastructure.
 
 ### Preview-project budget behavior
@@ -261,29 +267,35 @@ Neither job changes the workspace's soft or hard spending limits or shuts down
 other projects. Preview costs still contribute to the workspace's existing hard
 limit, which Railway may enforce across all its projects.
 
+If usage cannot be checked reliably, the controller and reaper fail closed: they
+stop new deployments and remove managed previews, including unexpired ones.
+The control environment and unrelated environments are preserved. Investigate API
+or accounting errors before requesting a new preview.
+
 ## Acceptance checks
 
 Record the commit, digest, workflow run, Railway environment, and results. Inspect
 the effective Railway configuration as well as controller logs.
 
-| Check                     | Expected result                                                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Fork/draft PR             | One comment follows building and deployment; GitHub fork approval still applies.                                                                             |
-| Successful deployment     | Valid HTTPS; ready status identifies the current commit and deployed digest; the real demo login passes.                                                     |
-| Public fixtures           | Demo login works; data is disposable; no real integration or administrator credentials are present.                                                          |
-| Environment configuration | Only app and gateway instances exist; no persistent storage, copied secret, GitHub source, or app public domain/TCP proxy exists.                            |
-| Gateway restrictions      | Oversized requests and sensitive mutations are blocked, bursts throttled, and responses discourage indexing.                                                 |
-| Private isolation         | App cannot reach another environment's private services; control-service credentials are absent from the app.                                                |
-| Resources                 | Test effective CPU/memory/disk caps, one replica, and restart policy Never.                                                                                  |
-| Preview budget            | Set a small test threshold and verify only managed preview environments stop; deleted-environment usage remains counted and unrelated projects stay running. |
-| Existing billing settings | Record the workspace's soft/hard limits before setup and confirm neither controller nor reaper changes them.                                                 |
-| Stale revisions           | Push during build and startup; old runs cannot replace the current preview or publish its ready link.                                                        |
-| Close during startup      | Close during build and deployment; the environment disappears and late completion cannot recreate it.                                                        |
-| Failure                   | Broken build/startup yields a failure comment without an old ready link; rerunning the image workflow recovers.                                              |
-| Capacity                  | Six PRs produce at most five active previews; queued work progresses when a slot opens.                                                                      |
-| Expiry                    | Shorten a test expiry and leave the PR open: gateway refuses traffic and the environment is deleted.                                                         |
-| Independent cleanup       | Temporarily disable GitHub cleanup; Railway cron deletes an expired environment. Restore GitHub cleanup afterward.                                           |
-| Interrupted controller    | Cancel during creation/startup; reconciliation removes orphaned or superseded environments.                                                                  |
+| Check                     | Expected result                                                                                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fork/draft PR             | One comment follows building and deployment; GitHub fork approval still applies.                                                                              |
+| Successful deployment     | Valid HTTPS; ready status identifies the current commit and deployed digest; a fresh deployment reaches the normal initial setup.                             |
+| Fresh and shared setup    | No account or completed setup is seeded; after one visitor configures a disposable test instance, another sees the same instance.                             |
+| Environment configuration | Only app and gateway instances exist; no persistent storage, copied secret, GitHub source, or app public domain/TCP proxy exists.                             |
+| Gateway controls          | The separate notice precedes normal Flare screens; setup and application features work; oversized requests and bursts are bounded, with indexing discouraged. |
+| Private isolation         | App cannot reach another environment's private services; control-service credentials are absent from the app.                                                 |
+| Resources                 | Test effective CPU/memory/disk caps, one replica, and restart policy Never.                                                                                   |
+| Preview budget            | Set a small test threshold and verify only managed preview environments stop; deleted-environment usage remains counted and unrelated projects stay running.  |
+| Budget check failure      | An unavailable or invalid usage response blocks new previews and removes managed previews; control and unrelated environments remain.                         |
+| Existing billing settings | Record the workspace's soft/hard limits before setup and confirm neither controller nor reaper changes them.                                                  |
+| Stale revisions           | Push during build and startup; old runs cannot replace the current preview or publish its ready link.                                                         |
+| Close during startup      | Close during build and deployment; the environment disappears and late completion cannot recreate it.                                                         |
+| Failure                   | Broken build/startup yields a failure comment without an old ready link; rerunning the image workflow recovers.                                               |
+| Capacity                  | Six PRs produce at most five active previews; queued work progresses when a slot opens.                                                                       |
+| Expiry                    | Shorten a test expiry and leave the PR open: gateway refuses traffic and the environment is deleted.                                                          |
+| Independent cleanup       | Temporarily disable GitHub cleanup; Railway cron deletes an expired environment. Restore GitHub cleanup afterward.                                            |
+| Interrupted controller    | Cancel during creation/startup; reconciliation removes orphaned or superseded environments.                                                                   |
 
 Do not claim outbound isolation after these checks: app code retains outbound
 connectivity. Test other environments by private address, since public endpoints
@@ -298,7 +310,7 @@ observations; it is not continuous uptime monitoring. Assign an owner to alerts.
 
 To suspend new previews, set `PREVIEW_ENABLED=false`. Verify that the controller
 removes existing preview environments, or manually remove only its managed
-`flare-pr-...` environments in Railway. Keep `preview-control` and its reaper
+`flpr-...` environments in Railway. Keep `preview-control` and its reaper
 until teardown is complete. Rotate/revoke credentials after cleanup; revoking
 first prevents environment deletion. Hitting the spending limit can also stop
 the reaper if it is the workspace's native hard limit, so verify cleanup when

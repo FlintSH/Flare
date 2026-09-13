@@ -319,7 +319,8 @@ def render_comment(repository: str, pr: dict, status: str, detail: str,
         expiry = datetime.fromtimestamp(entry["expires_at"], timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         lines.extend(["", f"[Open preview]({entry['url']})", "", f"Image: `{entry['image']}`", "",
                       f"Expires: **{expiry}**; also removed on PR closure or replacement.", "",
-                      "Public test login: `demo@example.test` / `Flare-preview-only!2026`."])
+                      "Starts at Flare's normal first-run setup with no pre-created account. "
+                      "This is a shared instance: the first visitor can complete setup."])
     lines.extend(["", "> Public, disposable test instance running untrusted PR code. Anyone can view or change its test data. Do not enter passwords you use elsewhere, credentials, or private files."])
     return "\n".join(lines)
 

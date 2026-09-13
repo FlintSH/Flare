@@ -68,7 +68,9 @@ All PRs will be manually reviewed by me.
 
 When preview infrastructure is enabled, a bot comment on each PR tracks its
 disposable Docker deployment and links to the running app. Previews are public,
-share a demo account, and expire automatically. Use test data only. See
+start with Flare's normal initial setup, and expire automatically. Everyone shares
+the same disposable instance; the first visitor can configure it. Use only
+disposable credentials and test data. See
 [pull request previews](docs/pr-previews.md) for access, limits, and maintainer setup.
 
 ---

@@ -554,7 +554,7 @@ class RuntimeTests(unittest.TestCase):
         arguments.update(overrides)
         return runtime.deploy(**arguments)
 
-    def test_deployment_verifies_limits_before_assigning_images_and_smokes_login(self):
+    def test_deployment_verifies_limits_before_assigning_images_and_checks_setup(self):
         events, saved, _, _, _, _, remove = self.mock_deployment()
         result = self.deploy()
         self.assertTrue(result["ready"])
@@ -572,6 +572,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(saved[APP]["variables"]["HOSTNAME"]["value"], "::")
         self.assertEqual(saved[GATEWAY]["variables"]["PREVIEW_HEAD_SHA"]["value"], SHA)
         self.assertNotIn("PREVIEW_HEAD_SHA", saved[APP]["variables"])
+        self.assertEqual(set(saved[APP]["variables"]), {
+            "PORT", "HOSTNAME", "NEXTAUTH_URL", "PREVIEW_EXPIRES_AT", "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN",
+        })
         self.assertNotIn("synthetic-controller-token", json.dumps(saved))
         self.assertNotIn("synthetic-project-token", json.dumps(saved))
         remove.assert_not_called()
@@ -640,11 +643,11 @@ class RuntimeTests(unittest.TestCase):
 class InMemoryHTTPS(urllib.request.HTTPSHandler):
     """Fake only transport, retaining urllib cookie and redirect behavior."""
 
-    def __init__(self, case, role="USER", redirect=False, oversized=False,
+    def __init__(self, case, completed=False, redirect=False, oversized=False,
                  notice_policy="same-origin", acknowledgment_cookie=True, acknowledgment_location="/"):
         super().__init__()
         self.case = case
-        self.role = role
+        self.completed = completed
         self.redirect = redirect
         self.oversized = oversized
         self.notice_policy = notice_policy
@@ -683,20 +686,13 @@ class InMemoryHTTPS(urllib.request.HTTPSHandler):
             body = b""
         elif path == "/_preview/health":
             body = b'{"status":"ready"}'
-        elif path == "/api/auth/csrf":
-            headers["Set-Cookie"] = "__Host-next-auth.csrf-token=csrf%7Chash; Path=/; Secure; HttpOnly"
-            body = b'{"csrfToken":"csrf"}'
-        elif path == "/api/auth/callback/credentials":
-            self.case.assertIn("__Host-next-auth.csrf-token=csrf%7Chash", cookie)
-            form = urllib.parse.parse_qs(request.data.decode())
-            self.case.assertEqual(form["csrfToken"], ["csrf"])
-            self.case.assertEqual(form["email"], ["demo@example.test"])
-            self.case.assertEqual(form["password"], ["Flare-preview-only!2026"])
-            headers["Set-Cookie"] = "__Secure-next-auth.session-token=synthetic-session; Path=/; Secure; HttpOnly"
-            body = json.dumps({"url": URL + "/dashboard"}).encode()
-        elif path == "/api/auth/session":
-            self.case.assertIn("__Secure-next-auth.session-token=synthetic-session", cookie)
-            body = json.dumps({"user": {"email": "demo@example.test", "role": self.role}}).encode()
+        elif path == "/api/setup/check":
+            self.case.assertEqual(request.get_method(), "GET")
+            body = json.dumps({"completed": self.completed}).encode()
+        elif path == "/setup":
+            self.case.assertEqual(request.get_method(), "GET")
+            headers["Content-Type"] = "text/html; charset=utf-8"
+            body = b'<!doctype html><html><body>Flare setup</body></html>'
         else:
             raise AssertionError("Unexpected smoke request")
         response = urllib.response.addinfourl(io.BytesIO(body), headers, request.full_url, status)
@@ -717,13 +713,14 @@ class SmokeTests(unittest.TestCase):
         self.addCleanup(replacement.stop)
         return transport
 
-    def test_real_cookiejar_preserves_ack_csrf_and_session_cookies(self):
+    def test_real_acknowledgment_leaves_first_run_setup_untouched(self):
         transport = self.transport()
         runtime.smoke(URL)
         self.assertEqual([urllib.parse.urlsplit(request.full_url).path for request in transport.requests], [
-            "/_preview", "/_preview/enter", "/_preview/health", "/api/auth/csrf",
-            "/api/auth/callback/credentials", "/api/auth/session",
+            "/_preview", "/_preview/enter", "/_preview/health", "/api/setup/check", "/setup",
         ])
+        self.assertEqual([urllib.parse.urlsplit(request.full_url).path for request in transport.requests
+                          if request.get_method() != "GET"], ["/_preview/enter"])
 
     def test_smoke_rejects_notice_policy_that_nulls_browser_form_origin(self):
         transport = self.transport(notice_policy="no-referrer")
@@ -743,10 +740,12 @@ class SmokeTests(unittest.TestCase):
             runtime.smoke(URL)
         self.assertEqual(len(transport.requests), 2)
 
-    def test_smoke_requires_demo_user_and_bounded_responses(self):
-        transport = self.transport(role="ADMIN")
-        with self.assertRaisesRegex(RuntimeError, "login smoke"):
-            runtime.smoke(URL)
+    def test_smoke_rejects_preconfigured_setup_and_requires_bounded_responses(self):
+        transport = self.transport(completed=True)
+        for value in (True, None, 0, "false"):
+            transport.completed = value
+            with self.subTest(value=value), self.assertRaisesRegex(RuntimeError, "first-run setup"):
+                runtime.smoke(URL)
         transport.oversized = True
         with self.assertRaisesRegex(RuntimeError, "exceeds limit"):
             runtime.smoke(URL)

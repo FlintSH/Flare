@@ -360,7 +360,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def smoke(url):
-    """Acknowledge the public notice, then exercise real database-backed login."""
+    """Verify acknowledgment and an untouched first-run setup without creating an account."""
     origin = urllib.parse.urlsplit(url)
     if (origin.scheme != "https" or not DOMAIN.fullmatch(origin.netloc)
             or origin.path or origin.query or origin.fragment):
@@ -368,7 +368,7 @@ def smoke(url):
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(jar))
 
-    def fetch(path, form=None, expected_status=200):
+    def fetch(path, form=None, expected_status=200, max_bytes=65536):
         headers = {}
         body = urllib.parse.urlencode(form).encode() if form is not None else None
         if body is not None:
@@ -385,8 +385,8 @@ def smoke(url):
         with response:
             if response.getcode() != expected_status:
                 raise RuntimeError("Unexpected preview smoke response status")
-            data = response.read(65537)
-            if len(data) > 65536:
+            data = response.read(max_bytes + 1)
+            if len(data) > max_bytes:
                 raise RuntimeError("Preview health response exceeds limit")
             return response.headers, data
 
@@ -400,16 +400,14 @@ def smoke(url):
     if entered.get("Location") != "/" or not any(
             cookie.name == "flare_preview_ack" and cookie.value == "1" and cookie.secure for cookie in jar):
         raise RuntimeError("Preview notice acknowledgment failed")
-    request("/_preview/health")
-    csrf = request("/api/auth/csrf")["csrfToken"]
-    if not isinstance(csrf, str) or len(csrf) > 256:
-        raise RuntimeError("Invalid CSRF response")
-    # CookieJar preserves the gateway acknowledgment and Secure NextAuth cookies.
-    request("/api/auth/callback/credentials", {"csrfToken": csrf, "email": "demo@example.test",
-            "password": "Flare-preview-only!2026", "json": "true", "callbackUrl": url + "/dashboard"})
-    session = request("/api/auth/session")
-    if session.get("user", {}).get("email") != "demo@example.test" or session["user"].get("role") != "USER":
-        raise RuntimeError("Preview login smoke check failed")
+    if request("/_preview/health").get("status") != "ready":
+        raise RuntimeError("Preview health check failed")
+    if request("/api/setup/check").get("completed") is not False:
+        raise RuntimeError("Preview must start at Flare's untouched first-run setup")
+    # Read the normal setup page without submitting its form or modifying data.
+    setup, body = fetch("/setup", max_bytes=512 * 1024)
+    if not setup.get("Content-Type", "").lower().startswith("text/html") or b"<html" not in body.lower():
+        raise RuntimeError("Preview setup page is unavailable")
 
 
 def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
@@ -449,9 +447,7 @@ def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
         patch(environment_id, {
             app: {"source": {"image": image, "autoUpdates": {"type": "disabled"}},
                   "variables": variable_config({"PORT": 3000, "HOSTNAME": "::", "NEXTAUTH_URL": url,
-                     "PREVIEW_EXPIRES_AT": expires_at, "FLARE_PR_PREVIEW": "true",
-                     "FLARE_EMAIL_ENABLED": "false", "FLARE_EMAIL_RECOVERY_ENABLED": "false",
-                     "FLARE_EMAIL_VERIFICATION_MODE": "off", "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN": ""})},
+                     "PREVIEW_EXPIRES_AT": expires_at, "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN": ""})},
             gateway: {"source": {"image": os.environ["PREVIEW_GATEWAY_IMAGE"], "autoUpdates": {"type": "disabled"}},
                       "variables": variable_config({"PORT": 8080, "PREVIEW_PUBLIC_URL": url,
                          "PREVIEW_UPSTREAM": "http://preview-app.railway.internal:3000",
@@ -466,7 +462,7 @@ def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
                     return result
                 except (urllib.error.URLError, ValueError, KeyError, RuntimeError):
                     # Edge routing/TLS can lag deployment success. Give the real
-                    # login check the same bounded readiness window.
+                    # first-run setup check the same bounded readiness window.
                     pass
             if result["failed"]:
                 raise RuntimeError("Preview deployment failed")
