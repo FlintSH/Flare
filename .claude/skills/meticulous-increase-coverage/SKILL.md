@@ -217,14 +217,14 @@ When something doesn't take effect, find out which half is broken before
 changing tactics — install a capturing probe and repeat the action:
 
 ```js
-window.__ev = [];
-["pointerdown", "click", "keydown", "change"].forEach((t) =>
+window.__ev = []
+;['pointerdown', 'click', 'keydown', 'change'].forEach((t) =>
   window.addEventListener(
     t,
     (e) => window.__ev.push({ t, trusted: e.isTrusted }),
-    true,
-  ),
-);
+    true
+  )
+)
 ```
 
 - nothing captured → your input never reached the page; a different selector
