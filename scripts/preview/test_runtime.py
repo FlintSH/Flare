@@ -423,6 +423,23 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn("synthetic-secret", str(error.exception))
         self.assertEqual([call.args[0] for call in remove.call_args_list], [NAME, another])
 
+    def test_reaper_still_cleans_up_after_usage_response_body_socket_failures(self):
+        patch.object(runtime, "environments", return_value=[
+            {"id": ENVIRONMENT, "name": NAME}, {"id": PRIMARY, "name": "preview-control"},
+        ]).start()
+        for failure in (TimeoutError("synthetic-sensitive-timeout"),
+                        ConnectionResetError("synthetic-sensitive-connection-reset")):
+            class FailingBody(io.BytesIO):
+                def read(self, size=-1):
+                    raise failure
+
+            with self.subTest(failure=type(failure).__name__), patch.object(runtime.urllib.request, "build_opener") as factory, patch.object(runtime, "remove") as remove:
+                factory.return_value.open.return_value = FailingBody()
+                with self.assertRaisesRegex(RuntimeError, "budget is unavailable") as raised:
+                    runtime.reap_expired()
+                remove.assert_called_once_with(NAME)
+                self.assertNotIn("synthetic-sensitive", str(raised.exception))
+
     def expected_services(self):
         return {
             APP: runtime.service_config(1, 2 * 1024**3, 4 * 1024**3, "/api/health", "/preview/boot.sh"),

@@ -469,9 +469,10 @@ def reap_expired():
     budget_error = None
     try:
         stop_all = budget_status()["over"]
-    except (ValueError, RuntimeError) as error:
+    except Exception as error:
         # Fail closed if cost cannot be established, while still attempting
-        # cleanup with independently available environment/deletion APIs.
+        # cleanup with independently available environment/deletion APIs. Body
+        # reads can raise raw TimeoutError/OSError outside urllib's URLError.
         stop_all = True
         budget_error = error
     cleanup_failed = False

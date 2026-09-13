@@ -188,6 +188,52 @@ test('sensitive routes and encoded bypasses never reach the app', async (t) => {
   assert.equal(calls.length, 0)
 })
 
+test('request targets cannot redirect the connection to another host', async (t) => {
+  let foreignCalls = 0
+  const foreign = http.createServer((_req, res) => {
+    foreignCalls += 1
+    res.end('Unexpected foreign request')
+  })
+  const foreignURL = new URL(await listen(foreign))
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        foreign.close(resolve)
+        foreign.closeAllConnections()
+      })
+  )
+  const { url, calls } = await fixture(t)
+  for (const path of [
+    `${foreignURL.origin}/captured`,
+    `//${foreignURL.host}/captured`,
+    `/\\${foreignURL.host}/captured`,
+    `\\${foreignURL.host}/captured`,
+    `/%2f${foreignURL.host}/captured`,
+    `/%5c${foreignURL.host}/captured`,
+    `/%252f%252f${foreignURL.host}/captured`,
+    `/http%3a%2f%2f${foreignURL.host}/captured`,
+  ]) {
+    const response = await request(url, path, {
+      headers: { ...ACK, host: foreignURL.host },
+    })
+    assert.equal(response.status, 400, path)
+  }
+  assert.equal(calls.length, 0)
+  assert.equal(foreignCalls, 0)
+
+  // An ordinary query may contain a URL, but only the configured application
+  // receives that path. The visitor's Host header does not select a destination.
+  const path = `/api/files?next=${encodeURIComponent(`${foreignURL.origin}/captured`)}`
+  const response = await request(url, path, {
+    headers: { ...ACK, host: foreignURL.host },
+  })
+  assert.equal(response.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].path, path)
+  assert.equal(calls[0].headers.host, 'flare-test.up.railway.app')
+  assert.equal(foreignCalls, 0)
+})
+
 test('read-only setup status remains available to the root page checker', async (t) => {
   const { url, calls } = await fixture(t)
   assert.equal(

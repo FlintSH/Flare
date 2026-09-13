@@ -46,7 +46,11 @@ function configuration(env, options) {
   )
     throw new Error('Invalid preview gateway configuration')
   // Tests may inject a local upstream explicitly; production never reads an override.
-  return { upstream: options.upstreamForTests || upstream, origin, expires }
+  return {
+    upstream: new URL(options.upstreamForTests || upstream),
+    origin,
+    expires,
+  }
 }
 
 function pathname(target) {
@@ -247,8 +251,13 @@ function createGateway(env = process.env, options = {}) {
     outgoing['x-forwarded-proto'] = 'https'
     outgoing['x-forwarded-for'] = '127.0.0.1'
     const proxy = http.request(
-      new URL(req.url, config.upstream),
       {
+        // Visitor input is only the validated request path. Connection routing
+        // always comes from the fixed private upstream, never URL resolution.
+        protocol: config.upstream.protocol,
+        hostname: config.upstream.hostname,
+        port: config.upstream.port,
+        path: req.url,
         method: req.method,
         headers: outgoing,
         timeout: 15000,
