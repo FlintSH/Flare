@@ -57,7 +57,7 @@ jobs:
       - name: Build disposable preview image
         run: |
           # Build the exact application head with the trusted default branch's
-          # wrapper/fixtures, including for PR branches predating preview support.
+          # disposable startup, including for PR branches predating preview support.
           # Support changes take effect after merge. Never read PR bake files.
           export PREVIEW_ARTIFACT_DIR="$RUNNER_TEMP/preview-artifact"
           mkdir -p "$PREVIEW_ARTIFACT_DIR"

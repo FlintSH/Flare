@@ -53,12 +53,6 @@ database_password=$(cat "$password_file")
 export DATABASE_URL="postgresql://flare_preview:${database_password}@127.0.0.1:5432/flare_preview?schema=public"
 export NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("hex"))')
-export FLARE_PR_PREVIEW=true
-export FLARE_EMAIL_ENABLED=false
-export FLARE_EMAIL_RECOVERY_ENABLED=false
-export FLARE_EMAIL_VERIFICATION_MODE=off
-export FLARE_EMAIL_CHANGES_ENABLED=false
-export FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK=false
 
 # Validate the public URL and disposable environment before database work.
 node /preview/seed.cjs --check-environment

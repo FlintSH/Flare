@@ -14,8 +14,11 @@ const HOP_HEADERS = new Set([
   'transfer-encoding',
   'upgrade',
 ])
-const SAFE_HEADERS = {
+const PUBLIC_HEADERS = {
   'x-robots-tag': 'noindex, nofollow, noarchive',
+}
+const SAFE_HEADERS = {
+  ...PUBLIC_HEADERS,
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
@@ -68,21 +71,6 @@ function pathname(target) {
   )
     throw new Error('Invalid path')
   return decoded.toLowerCase().replace(/\/$/, '') || '/'
-}
-
-function restricted(path, method) {
-  // The root SetupChecker needs this read on every normal page load.
-  if (path === '/api/setup/check' && ['GET', 'HEAD'].includes(method))
-    return false
-  if (/^\/(?:setup|register|u)(?:\/|$)/.test(path)) return true
-  if (
-    /^\/api\/(?:setup|auth\/(?:register|email)|integrations|urls)(?:\/|$)/.test(
-      path
-    )
-  )
-    return true
-  if (['GET', 'HEAD'].includes(method)) return false
-  return /^\/api\/(?:settings|users|profile)(?:\/|$)/.test(path)
 }
 
 function headers(source, incoming = false) {
@@ -205,11 +193,11 @@ function createGateway(env = process.env, options = {}) {
           probe(config.upstream, '/api/health'),
         ])
         if (
-          setup.completed !== true ||
+          typeof setup?.completed !== 'boolean' ||
           health.success !== true ||
           health.data?.status !== 'ok'
         )
-          throw new Error('Preview not initialized')
+          throw new Error('Preview not healthy')
         return reply(200, '{"status":"ready"}', {
           'content-type': 'application/json',
         })
@@ -222,7 +210,7 @@ function createGateway(env = process.env, options = {}) {
     if (path === '/_preview' && ['GET', 'HEAD'].includes(req.method)) {
       return reply(
         200,
-        '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Flare public PR preview</title><body><main><h1>Public, disposable PR preview</h1><p>This site runs unreviewed pull request code. Everyone shares its test data. Use made-up data only; never enter real passwords, personal files, or production credentials.</p><p>Demo login: <code>demo@example.test</code><br>Password: <code>Flare-preview-only!2026</code></p><p>This preview expires automatically. Some settings and integrations are disabled.</p><form method="post" action="/_preview/enter"><button>I understand — open preview</button></form></main></body></html>',
+        '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Flare public PR preview</title><body><main><h1>Public, disposable PR preview</h1><p>This site runs unreviewed pull request code. Everyone shares its test data. Use made-up data only; never enter real passwords, personal files, or production credentials.</p><p>This preview starts with Flare’s normal setup and is deleted automatically.</p><form method="post" action="/_preview/enter"><button>I understand — open preview</button></form></main></body></html>',
         {
           'content-type': 'text/html; charset=utf-8',
           // A no-referrer document submits navigation forms with Origin:null.
@@ -241,8 +229,6 @@ function createGateway(env = process.env, options = {}) {
       })
     }
     if (path.startsWith('/_preview')) return reply(404, 'Not found.')
-    if (restricted(path, req.method))
-      return reply(403, 'This operation is disabled in public previews.')
     if (
       !String(req.headers.cookie || '')
         .split(';')
@@ -269,26 +255,16 @@ function createGateway(env = process.env, options = {}) {
       },
       (upstream) => {
         const responseHeaders = headers(upstream.headers)
-        if (responseHeaders.location) {
-          try {
-            const redirect = new URL(responseHeaders.location, config.origin)
-            if (redirect.origin !== config.origin.origin)
-              throw new Error('External redirect')
-          } catch {
-            upstream.destroy()
-            return reply(
-              502,
-              'External redirects are disabled in public previews.'
-            )
-          }
-        }
         if (Number(responseHeaders['content-length'] || 0) > MAX_RESPONSE) {
           upstream.destroy()
           return reply(502, 'Preview response exceeds the size limit.')
         }
         res.writeHead(upstream.statusCode, {
           ...responseHeaders,
-          ...SAFE_HEADERS,
+          // Flare controls its own content policies and redirects, including
+          // setup, integrations and custom assets. This proxy never follows a
+          // redirect itself and always connects to the fixed private upstream.
+          ...PUBLIC_HEADERS,
         })
         let received = 0
         upstream.on('data', (chunk) => {
@@ -338,4 +314,4 @@ if (require.main === module) {
   createGateway().listen(port, '::')
 }
 
-module.exports = { createGateway, pathname, restricted, MAX_BODY }
+module.exports = { createGateway, pathname, MAX_BODY }
