@@ -39,7 +39,10 @@ export async function GET(
 
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
-      return new NextResponse(null, { status: access.status })
+      return new NextResponse(null, {
+        status: access.status,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
     }
 
     const storageProvider = await getStorageProvider()
@@ -50,7 +53,10 @@ export async function GET(
       headers: {
         'Content-Type': file.mimeType,
         'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control':
+          file.visibility === 'PRIVATE' || file.password
+            ? 'private, no-store'
+            : 'public, max-age=31536000, immutable',
       },
     })
   } catch (error) {

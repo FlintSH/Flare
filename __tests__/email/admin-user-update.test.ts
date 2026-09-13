@@ -65,6 +65,8 @@ const initial: User = {
   randomizeFileUrls: false,
   defaultFileExpiration: 'DISABLED',
   defaultFileExpirationAction: 'DELETE',
+  preferences: {},
+  defaultUploadProfileId: null,
 }
 
 function request(changes: Record<string, unknown> = {}, method = 'PUT') {

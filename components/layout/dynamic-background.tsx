@@ -1,4 +1,22 @@
+'use client'
+
+import { useAppearance } from '@/components/customization/appearance-provider'
+
 export function DynamicBackground() {
+  const { theme } = useAppearance()
+  if (theme.enabled && theme.background === 'plain')
+    return <div className="fixed inset-0 -z-10 bg-background" />
+  if (theme.enabled && theme.background === 'grid')
+    return (
+      <div
+        className="fixed inset-0 -z-10 bg-background"
+        style={{
+          backgroundImage:
+            'linear-gradient(hsl(var(--border) / .4) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / .4) 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+        }}
+      />
+    )
   return (
     <div className="fixed inset-0 -z-10">
       {}

@@ -72,7 +72,11 @@ export async function PATCH(
       data: updates,
     })
 
-    return NextResponse.json(updatedFile)
+    const { password: passwordHash, ...fileMetadata } = updatedFile
+    return NextResponse.json({
+      ...fileMetadata,
+      hasPassword: Boolean(passwordHash),
+    })
   } catch (error) {
     logger.error('File update error', error as Error)
     return NextResponse.json(

@@ -109,8 +109,8 @@ export function SpectacleTool() {
   }
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="space-y-1">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Spectacle</h3>
         <p className="text-sm text-muted-foreground">
           KDE&apos;s screenshot and screen recording utility with extensive

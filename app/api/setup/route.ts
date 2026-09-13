@@ -8,6 +8,8 @@ import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
+import { setupSchema } from '@/lib/setup/schema'
+import { invalidateStorageProvider } from '@/lib/storage'
 import { createUser } from '@/lib/users/create-user'
 
 const logger = loggers.startup
@@ -17,29 +19,6 @@ class SetupAlreadyCompleteError extends Error {
     super('Setup already completed')
   }
 }
-
-const setupSchema = z.object({
-  admin: z.object({
-    name: z.string().min(1, 'Username is required'),
-    email: z.string().email('Enter a valid email address'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-  }),
-  storage: z.object({
-    provider: z.enum(['local', 's3']),
-    s3: z.object({
-      bucket: z.string(),
-      region: z.string(),
-      accessKeyId: z.string(),
-      secretAccessKey: z.string(),
-      endpoint: z.string().optional(),
-      forcePathStyle: z.boolean().default(false),
-    }),
-  }),
-  registrations: z.object({
-    enabled: z.boolean(),
-    disabledMessage: z.string().optional(),
-  }),
-})
 
 export async function POST(req: Request) {
   const limited = await rateLimit(req, setupLimiter)
@@ -68,7 +47,6 @@ export async function POST(req: Request) {
             disabledMessage: validatedData.registrations.disabledMessage || '',
           },
         },
-        appearance: { ...DEFAULT_CONFIG.settings.appearance, customColors: {} },
       },
     })
     const configValue = JSON.parse(
@@ -94,6 +72,10 @@ export async function POST(req: Request) {
       })
       return admin
     })
+
+    // A public storage-type request can initialize local storage before setup.
+    // The next upload must use the provider that was just saved.
+    invalidateStorageProvider()
 
     return NextResponse.json({
       success: true,

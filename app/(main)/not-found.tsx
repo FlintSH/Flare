@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { Icons } from '@/components/shared/icons'
+import { InstanceBrand } from '@/components/customization/instance-brand'
 import {
   Card,
   CardDescription,
@@ -13,8 +13,7 @@ export default function NotFound() {
     <div className="flex-1 relative min-h-screen flex flex-col">
       <div className="absolute top-6 left-6">
         <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <Icons.logo className="h-6 w-6" />
-          <span className="flare-text text-lg">Flare</span>
+          <InstanceBrand />
         </Link>
       </div>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 
+import { AppearanceProvider } from '@/components/customization/appearance-provider'
 import { CustomHead } from '@/components/layout/custom-head'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { MeticulousContext } from '@/components/providers/meticulous-context'
@@ -11,6 +12,8 @@ import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 
 import { getConfig } from '@/lib/config'
+import { isAppearanceRecovery } from '@/lib/customization/recovery'
+import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 
 import './globals.css'
 
@@ -67,13 +70,20 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const config = await getConfig()
+  const recovery = await isAppearanceRecovery()
+  const appearance = recovery
+    ? {
+        ...DEFAULT_APPEARANCE,
+        theme: { ...DEFAULT_APPEARANCE.theme, enabled: true },
+      }
+    : config.settings.customization.published
   const recordMeticulous =
     (process.env.NODE_ENV === 'development' ||
       process.env.VERCEL_ENV === 'preview' ||
       process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
     Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
   const hasCustomFont =
-    config.settings.advanced.customCSS.includes('font-family')
+    !recovery && config.settings.advanced.customCSS.includes('font-family')
 
   if (config.settings.appearance.favicon) {
     metadata.icons = {
@@ -101,28 +111,37 @@ export default async function RootLayout({
         )}
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <ThemeInitializer />
-        <CustomHead />
+        <ThemeInitializer recovery={recovery} />
+        <CustomHead recovery={recovery} />
       </head>
       <body
         className={`${!hasCustomFont ? inter.variable + ' font-sans' : ''} min-h-screen flex flex-col`}
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme={config.settings.appearance.theme}
+          defaultTheme={
+            appearance.theme.enabled
+              ? appearance.theme.defaultMode
+              : config.settings.appearance.theme
+          }
           enableSystem
           disableTransitionOnChange
         >
           <QueryProvider>
             <AuthProvider>
-              {recordMeticulous && (
-                <MeticulousContext
-                  flags={collectBooleanFlags(config.settings.general)}
-                />
-              )}
-              <SetupChecker>
-                <div className="flex-1">{children}</div>
-              </SetupChecker>
+              <AppearanceProvider
+                appearance={appearance}
+                legacyTheme={config.settings.appearance.theme}
+              >
+                {recordMeticulous && (
+                  <MeticulousContext
+                    flags={collectBooleanFlags(config.settings.general)}
+                  />
+                )}
+                <SetupChecker>
+                  <div className="flex-1">{children}</div>
+                </SetupChecker>
+              </AppearanceProvider>
             </AuthProvider>
           </QueryProvider>
           <Toaster />

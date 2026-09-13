@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
+import { InstanceBrand } from '@/components/customization/instance-brand'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
-import { Icons } from '@/components/shared/icons'
 
 export function EmailAuthCard({
   title,
@@ -21,8 +21,7 @@ export function EmailAuthCard({
             href="/auth/login"
             className="flex items-center justify-center gap-3 text-primary"
           >
-            <Icons.logo className="h-8 w-8" />
-            <span className="flare-text text-2xl">Flare</span>
+            <InstanceBrand iconClassName="h-8 w-8" textClassName="text-2xl" />
           </Link>
           <div className="space-y-6 rounded-2xl border border-white/20 bg-white/10 p-6 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-black/10 sm:p-8">
             <div className="space-y-2">

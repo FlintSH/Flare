@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
+import { generatorProfile } from '@/lib/uploads/profiles'
 
 const logger = loggers.users
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getAccessSession()
     if (!session?.user) {
@@ -25,15 +27,30 @@ export async function GET() {
       )
     }
 
+    const profileId = await generatorProfile(
+      session.user.id,
+      new URL(req.url).searchParams.get('profileId')
+    )
+
     const baseUrl =
       process.env.NODE_ENV === 'development'
         ? 'http://localhost:3000'
         : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
 
-    const script = generateBashScript({
+    let script = generateBashScript({
       uploadToken: user.uploadToken,
       baseUrl,
     })
+
+    if (profileId)
+      script = script.replaceAll(
+        '/api/files"',
+        `/api/files?profileId=${encodeURIComponent(profileId)}"`
+      )
+    script = script.replaceAll(
+      '.url // .data.url // empty',
+      '.copyText // .data.copyText // .url // .data.url // empty'
+    )
 
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
@@ -46,6 +63,7 @@ export async function GET() {
       },
     })
   } catch (error) {
+    if (error instanceof UploadError) return uploadErrorResponse(error)
     logger.error('Error generating bash script:', error as Error)
     return NextResponse.json(
       { error: 'Failed to generate bash script' },

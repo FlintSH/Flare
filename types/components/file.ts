@@ -4,7 +4,9 @@ export interface FileType {
   urlPath: string
   mimeType: string
   visibility: 'PUBLIC' | 'PRIVATE'
-  password: string | null
+  hasPassword: boolean
+  /** Legacy responses may include this; use hasPassword for display state. */
+  password?: string | null
   size: number
   uploadedAt: string
   views: number

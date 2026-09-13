@@ -17,7 +17,10 @@ export function UserNav() {
 
   return (
     <Button variant="ghost" className="relative h-8 w-8 rounded-full" asChild>
-      <Link href="/dashboard/profile">
+      <Link
+        href="/dashboard/profile"
+        aria-label="Open your profile and preferences"
+      >
         <Avatar className="h-8 w-8">
           <AvatarImage
             src={session?.user?.image || undefined}

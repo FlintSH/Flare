@@ -3,17 +3,19 @@ import { headers } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { InstanceBrand } from '@/components/customization/instance-brand'
+import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
-import { Icons } from '@/components/shared/icons'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
 import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
+import { resolveShareStyle } from '@/lib/customization/schema'
+import { shareMetadataText } from '@/lib/customization/sharing'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
@@ -86,6 +88,7 @@ export async function generateMetadata({
   searchParams,
 }: FilePageProps): Promise<Metadata> {
   const { userUrlId, filename } = await params
+  const appearance = (await getConfig()).settings.customization.published
   const headersList = await headers()
   const session = await getAccessSession()
   const providedPassword = (await searchParams).password as string | undefined
@@ -113,7 +116,7 @@ export async function generateMetadata({
   const access = await checkFileAccess(file, session, providedPassword)
   if (!access.allowed) {
     return {
-      title: 'Protected File - Flare',
+      title: `Protected File - ${appearance.brand.name}`,
       description: 'This file is protected',
     }
   }
@@ -135,10 +138,16 @@ export async function generateMetadata({
   const isMediaFile = isImage || isVideo || isAudio
   const formattedSize = formatFileSize(cleanFile.size)
 
-  const ogTitle = `${cleanFile.name} (${formattedSize})`
-  const ogDescription = isMediaFile
-    ? `Uploaded by ${cleanUser.name}`
-    : `${cleanFile.name} - ${formattedSize}, uploaded by ${cleanUser.name}`
+  const {
+    title: ogTitle,
+    description: ogDescription,
+    alt,
+  } = shareMetadataText(appearance, {
+    name: cleanFile.name,
+    formattedSize,
+    uploader: cleanUser.name,
+    isMedia: isMediaFile,
+  })
 
   const host = headersList.get('host') || 'localhost:3000'
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
@@ -170,7 +179,7 @@ export async function generateMetadata({
               url: rawUrl,
               width: 1200,
               height: 630,
-              alt: cleanFile.name,
+              alt,
               type: cleanFile.mimeType,
             },
           ]
@@ -206,6 +215,9 @@ export default async function FilePage({
 }: FilePageProps) {
   const session = await getAccessSession()
   const config = await getConfig()
+  const appearance = config.settings.customization.published
+  const showFooter =
+    appearance.sharing.showFooter ?? config.settings.general.credits.showFooter
   const { userUrlId, filename } = await params
   const providedPassword = (await searchParams).password as string | undefined
 
@@ -261,8 +273,7 @@ export default async function FilePage({
             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
             <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
               <Link href="/dashboard" className="flex items-center space-x-2.5">
-                <Icons.logo className="h-6 w-6" />
-                <span className="flare-text text-lg">Flare</span>
+                <InstanceBrand />
               </Link>
             </div>
           </div>
@@ -295,7 +306,7 @@ export default async function FilePage({
               </div>
             </Card>
           </div>
-          {config.settings.general.credits.showFooter && (
+          {showFooter && (
             <div className="fixed bottom-0 left-0 right-0 z-10">
               <Footer />
             </div>
@@ -310,74 +321,36 @@ export default async function FilePage({
   const isPdf = serializedFile.mimeType === 'application/pdf'
   const isMediaFile = isImage || isVideo || isPdf
 
+  // Send only viewer fields to the client. In particular, never serialize the
+  // uploader profile or the stored password hash into a public page.
+  const viewerFile = {
+    id: file.id,
+    name: appearance.sharing.showFilename ? file.name : 'Shared file',
+    urlPath: file.urlPath,
+    visibility: file.visibility,
+    password:
+      file.password && !access.isOwner && !access.isAdmin ? 'protected' : null,
+    userId: access.isOwner ? file.userId : '',
+    mimeType: file.mimeType,
+  }
+
   return (
-    <div className="flex-1 relative min-h-screen overflow-hidden">
-      <DynamicBackground />
-
-      <div className="absolute top-6 left-6 z-20">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-            <Link href="/dashboard" className="flex items-center space-x-2.5">
-              <Icons.logo className="h-6 w-6" />
-              <span className="flare-text text-lg">Flare</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute top-6 right-6 z-20">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-xl" />
-          <div className="relative bg-background/60 backdrop-blur-xl border border-border/50 rounded-xl px-4 py-2 shadow-lg shadow-black/5">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Uploaded by</span>
-              <Avatar className="h-8 w-8">
-                <AvatarImage
-                  src={serializedFile.user.image}
-                  alt={serializedFile.user.name}
-                />
-                <AvatarFallback>
-                  {serializedFile.user.name?.charAt(0) || '?'}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-sm font-medium">
-                {serializedFile.user.name}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <main
-        className={`flex items-center justify-center px-6 relative z-10 ${config.settings.general.credits.showFooter ? 'pb-24' : 'pb-6'}`}
-        style={{ minHeight: 'calc(100vh - 7rem)', paddingTop: '7rem' }}
-      >
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl" />
-          <Card
-            className={`relative overflow-hidden bg-background/60 backdrop-blur-xl border-border/50 shadow-lg shadow-black/5 ${isMediaFile ? 'max-w-[95vw]' : 'max-w-[50vw]'}`}
-          >
-            <div className="px-6 pt-4 pb-2">
-              <div className="text-center space-y-1">
-                <h1 className="text-base font-medium text-foreground/90 truncate max-w-[600px] mx-auto">
-                  {serializedFile.name}
-                </h1>
-                <p className="text-xs text-muted-foreground/60 font-medium">
-                  {formatFileSize(serializedFile.size)}
-                </p>
-              </div>
-            </div>
-
-            <ProtectedFile file={serializedFile} />
-          </Card>
-        </div>
-        {config.settings.general.credits.showFooter && (
-          <div className="fixed bottom-0 left-0 right-0 z-10">
-            <Footer />
-          </div>
-        )}
-      </main>
-    </div>
+    <ShareLayout
+      appearance={appearance}
+      style={resolveShareStyle(
+        file.uploadOptions,
+        appearance.sharing.defaultStyle
+      )}
+      filename={file.name}
+      size={formatFileSize(file.size)}
+      uploader={{
+        name: file.user?.name || 'Anonymous',
+        image: file.user?.image || undefined,
+      }}
+      isMedia={isMediaFile}
+      showFooter={showFooter}
+    >
+      <ProtectedFile file={viewerFile} verifiedPassword={providedPassword} />
+    </ShareLayout>
   )
 }

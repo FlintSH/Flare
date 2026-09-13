@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import CodeMirror from '@uiw/react-codemirror'
+import { useTheme } from 'next-themes'
 
 import { getLanguageExtension } from '../../protected/language-utils'
 import { CODE_FILE_TYPES } from '../../protected/mime-types'
@@ -10,6 +11,7 @@ import { useFileViewer } from '../context'
 
 export function CodeViewer() {
   const { file, state, fetchContent } = useFileViewer()
+  const { resolvedTheme } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
   const [fixedWidth, setFixedWidth] = useState<number | null>(null)
 
@@ -60,7 +62,7 @@ export function CodeViewer() {
           width={fixedWidth ? `${fixedWidth}px` : '100%'}
           extensions={[getLanguageExtension(language)]}
           editable={false}
-          theme="dark"
+          theme={resolvedTheme === 'light' ? 'light' : 'dark'}
           basicSetup={{
             lineNumbers: true,
             highlightActiveLineGutter: false,

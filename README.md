@@ -24,7 +24,11 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
-  - Theme customization with CSS variables and custom colors
+  - [Unified setup](docs/onboarding.md): account, storage, access, optional personalization and email in one guided flow
+  - [Appearance studio](docs/appearance.md): branding, paired palettes, share layouts, previews and portable packs
+  - [Upload profiles](docs/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
+  - [Integrations](docs/integrations.md): scoped tokens and signed file-ready webhooks
+  - Personal light/dark/system preferences, CSS variables and custom colors
   - Advanced settings for custom CSS and HTML injection
 - 📊 **Admin Dashboard** - Usage metrics, user management, and system configuration
 - 👥 **User Management** - Role assignment, storage quotas, and content moderation
@@ -99,7 +103,9 @@ Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) f
 
 ## 📝 Configuration
 
-Flare is built to be as configurable as possible. Head to `/dashboard/settings` to tweak different settings like:
+Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
+
+In Settings, administrators can configure:
 
 - Setting storage quotas and file size limits for users
 - Defining upload rules and restrictions
@@ -117,7 +123,7 @@ environment overrides, and recovery](docs/email.md).
 
 ### Single Sign-On (OIDC)
 
-Configure your identity provider in `/dashboard/settings`, with
+Configure your identity provider in **Settings → Access** (`/dashboard/settings?section=access`), with
 `https://your-flare-host/api/auth/callback/oidc` as its redirect URI. Keep a local
 administrator login available; `/auth/login?local=1` bypasses OIDC auto-login.
 

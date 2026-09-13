@@ -12,11 +12,12 @@ import {
   Menu,
   Settings,
   Upload,
+  UserRound,
   Users,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
-import { Icons } from '@/components/shared/icons'
+import { InstanceBrand } from '@/components/customization/instance-brand'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -45,6 +46,11 @@ const baseRoutes = [
     href: '/dashboard/urls',
     label: 'Links',
     icon: LinkIcon,
+  },
+  {
+    href: '/dashboard/profile',
+    label: 'Profile',
+    icon: UserRound,
   },
 ]
 
@@ -75,22 +81,24 @@ export function DashboardNav() {
     <nav className="flex items-center w-full">
       <div className="flex items-center">
         <Link href="/dashboard" className="flex items-center space-x-2.5">
-          <Icons.logo className="h-6 w-6" />
-          <span className="flare-text text-lg font-medium">Flare</span>
+          <InstanceBrand />
         </Link>
       </div>
 
-      <div className="flex md:hidden ml-auto">
+      <div className="flex xl:hidden ml-auto mr-3">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label="Open navigation">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="right">
             <SheetTitle>Navigation</SheetTitle>
             <div className="flex flex-col space-y-3 mt-4">
-              {routes.map((route) => (
+              {[
+                ...baseRoutes,
+                ...(session?.user?.role === 'ADMIN' ? adminRoutes : []),
+              ].map((route) => (
                 <Link
                   key={route.href}
                   href={route.href}
@@ -110,7 +118,7 @@ export function DashboardNav() {
         </Sheet>
       </div>
 
-      <div className="hidden md:flex flex-1 justify-center">
+      <div className="hidden xl:flex flex-1 justify-center">
         <div className="flex items-center space-x-1 bg-muted/20 backdrop-blur-sm rounded-xl p-1 border border-border/30">
           {routes.map((route) => {
             const isActive = pathname === route.href

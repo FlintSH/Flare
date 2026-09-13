@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
+import { generatorProfile } from '@/lib/uploads/profiles'
 
 const logger = loggers.users
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getAccessSession()
     if (!session?.user) {
@@ -21,6 +23,11 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
+
+    const profileId = await generatorProfile(
+      session.user.id,
+      new URL(req.url).searchParams.get('profileId')
+    )
 
     const baseUrl =
       process.env.NODE_ENV === 'development'
@@ -50,13 +57,13 @@ export async function GET() {
       Name: 'Flare',
       DestinationType: 'ImageUploader, TextUploader, FileUploader',
       RequestMethod: 'POST',
-      RequestURL: `${normalizedBaseUrl}/api/files`,
+      RequestURL: `${normalizedBaseUrl}/api/files${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`,
       Headers: {
         Authorization: `Bearer ${user.uploadToken}`,
       },
       Body: 'MultipartFormData',
       FileFormName: 'file',
-      URL: '{json:data.url}',
+      URL: '{json:data.copyText}',
       ThumbnailURL: '{json:data.url}',
       DeletionURL: '',
       ErrorMessage: '{json:error}',
@@ -73,6 +80,7 @@ export async function GET() {
       },
     })
   } catch (error) {
+    if (error instanceof UploadError) return uploadErrorResponse(error)
     logger.error('ShareX config generation error:', error as Error)
     return NextResponse.json(
       { error: 'Internal server error' },

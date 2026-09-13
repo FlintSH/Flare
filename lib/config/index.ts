@@ -1,6 +1,10 @@
 import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
+import {
+  DEFAULT_CUSTOMIZATION,
+  customizationSchema,
+} from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
 import { DEFAULT_EMAIL_CONFIG, emailConfigSchema } from '@/lib/email/schema'
 import { loggers } from '@/lib/logger'
@@ -10,6 +14,7 @@ const logger = loggers.config
 export const configSchema = z.object({
   version: z.string(),
   settings: z.object({
+    customization: customizationSchema.default({}),
     email: emailConfigSchema.default({}),
     general: z.object({
       setup: z.object({
@@ -94,6 +99,7 @@ export type FlareConfig = z.infer<typeof configSchema>
 export const DEFAULT_CONFIG: FlareConfig = {
   version: '1.0.0',
   settings: {
+    customization: DEFAULT_CUSTOMIZATION,
     email: DEFAULT_EMAIL_CONFIG,
     general: {
       setup: {
@@ -240,6 +246,10 @@ export async function updateConfig(
         settings: {
           ...currentConfig.settings,
           ...(newConfig.settings || {}),
+          customization: {
+            ...currentConfig.settings.customization,
+            ...(newConfig.settings?.customization || {}),
+          },
           general: {
             ...currentConfig.settings.general,
             ...(newConfig.settings?.general || {}),

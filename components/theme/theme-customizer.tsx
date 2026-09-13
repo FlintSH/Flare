@@ -38,6 +38,7 @@ interface ColorConfig {
 interface ThemeCustomizerProps {
   onColorChange: (colors: Partial<ColorConfig>) => void
   initialColors?: Partial<ColorConfig>
+  livePreview?: boolean
 }
 
 function hslToHex(h: number, s: number, l: number): string {
@@ -148,6 +149,7 @@ const PRESET_HUES = [
 function SimpleThemeCustomizer({
   onColorChange,
   initialColors,
+  livePreview = true,
 }: ThemeCustomizerProps) {
   const [baseHue, setBaseHue] = useState(222.2)
   const [colors, setColors] = useState<ColorConfig>({
@@ -198,19 +200,21 @@ function SimpleThemeCustomizer({
       newColors[key as keyof ColorConfig] = `${newHue} ${s} ${l}`
     })
 
-    Object.entries(newColors).forEach(([key, value]) => {
-      const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
-      document.documentElement.style.setProperty(`--${cssKey}`, value)
-    })
+    if (livePreview)
+      Object.entries(newColors).forEach(([key, value]) => {
+        const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
+        document.documentElement.style.setProperty(`--${cssKey}`, value)
+      })
 
     onColorChange(newColors)
   }
 
   const handleReset = () => {
-    Object.entries(DEFAULT_COLORS).forEach(([key, value]) => {
-      const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
-      document.documentElement.style.setProperty(`--${cssKey}`, value)
-    })
+    if (livePreview)
+      Object.entries(DEFAULT_COLORS).forEach(([key, value]) => {
+        const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
+        document.documentElement.style.setProperty(`--${cssKey}`, value)
+      })
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
 
@@ -231,7 +235,8 @@ function SimpleThemeCustomizer({
     }
 
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
-    document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
+    if (livePreview)
+      document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
     setColors((prev) => ({ ...prev, [key]: value }))
 
     onColorChange({ [key]: value })
@@ -263,7 +268,7 @@ function SimpleThemeCustomizer({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {PRESET_HUES.map(({ hue, name, saturation, lightness }) => (
           <button
             key={hue}
@@ -298,7 +303,7 @@ function SimpleThemeCustomizer({
         </CollapsibleTrigger>
 
         <CollapsibleContent className="space-y-4 pt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {renderColorInput('background', 'Background')}
             {renderColorInput('foreground', 'Foreground')}
             {renderColorInput('card', 'Card')}
@@ -331,11 +336,13 @@ function SimpleThemeCustomizer({
 export function ThemeCustomizer({
   onColorChange,
   initialColors,
+  livePreview = true,
 }: ThemeCustomizerProps) {
   return (
     <SimpleThemeCustomizer
       onColorChange={onColorChange}
       initialColors={initialColors}
+      livePreview={livePreview}
     />
   )
 }

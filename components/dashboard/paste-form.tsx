@@ -15,13 +15,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { useToast } from '@/hooks/use-toast'
 
 export function PasteForm() {
   const [content, setContent] = useState('')
   const [filename, setFilename] = useState('')
-  const [visibility, setVisibility] = useState('PUBLIC')
+  const [visibility, setVisibility] = useState('inherit')
+  const [profileId, setProfileId] = useState<string | null | undefined>(
+    undefined
+  )
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
@@ -47,11 +51,15 @@ export function PasteForm() {
 
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('visibility', visibility)
+      if (visibility !== 'inherit') formData.append('visibility', visibility)
       if (password) formData.append('password', password)
 
       const response = await fetch('/api/files', {
         method: 'POST',
+        headers:
+          profileId !== undefined
+            ? { 'X-Upload-Profile': profileId ?? 'none' }
+            : undefined,
         body: formData,
       })
 
@@ -76,7 +84,9 @@ export function PasteForm() {
       try {
         const responseData = await response.json()
         if (responseData?.data?.url) {
-          const urlPath = new URL(responseData.data.url).pathname
+          const urlPath = new URL(
+            responseData.data.pageUrl || responseData.data.url
+          ).pathname
           router.push(urlPath)
         } else {
           console.warn(
@@ -107,6 +117,11 @@ export function PasteForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <ProfilePicker
+        value={profileId}
+        onChange={setProfileId}
+        disabled={isSubmitting}
+      />
       <div className="space-y-2">
         <Label htmlFor="content">Content</Label>
         <Textarea
@@ -137,6 +152,7 @@ export function PasteForm() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="inherit">From upload profile</SelectItem>
               <SelectItem value="PUBLIC">Public</SelectItem>
               <SelectItem value="PRIVATE">Private (only me)</SelectItem>
             </SelectContent>

@@ -1,3 +1,5 @@
+import type { PersonalAppearance } from '@/lib/customization/schema'
+
 import { User } from './user'
 
 export interface ProfileClientProps {
@@ -7,6 +9,8 @@ export interface ProfileClientProps {
   formattedUsed: string
   usagePercentage: number
   isAdmin: boolean
+  initialSection: string
+  initialPreference: PersonalAppearance
 }
 
 export interface ProfileStorageProps {
