@@ -112,7 +112,7 @@ export function ProfileClient({
     <PreferencesShell
       eyebrow="Your space"
       title="Profile"
-      description="Everything that makes Flare work your way, in one place."
+      description="Everything that makes Flare work your way, in one place. Meticulous visual check."
       sections={sections}
       activeSection={activeSection}
       onSectionChange={setSection}
