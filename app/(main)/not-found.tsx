@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { ArrowRight, FileQuestion } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
 import { PublicState } from '@/components/auth/public-state'
 import { Button } from '@/components/ui/button'
@@ -8,9 +8,8 @@ import { Button } from '@/components/ui/button'
 export default function NotFound() {
   return (
     <PublicState
-      icon={FileQuestion}
-      eyebrow="404 · Page not found"
-      title="This page isn’t here"
+      statusCode="404"
+      title="Page not found"
       description="The link may have changed, the file may have expired, or you may not have access to it. Check the address or head back to your files."
     >
       <Button asChild className="w-full">

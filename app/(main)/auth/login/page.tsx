@@ -23,18 +23,17 @@ export default async function LoginPage({
 
   return (
     <AuthShell
-      eyebrow="Your account"
       title={
         oidcAutoRedirect
           ? error
-            ? 'Let’s try that again'
-            : 'Continue to sign in'
+            ? 'Sign-in failed'
+            : 'Redirecting to sign-in'
           : 'Welcome back'
       }
       description={
         oidcAutoRedirect
           ? 'Use your organization’s sign-in to access your space.'
-          : 'Sign in to pick up where you left off.'
+          : 'Sign in to your account.'
       }
     >
       {oidcAutoRedirect ? (

@@ -9,15 +9,13 @@ export function LoadingState({
 }: LoadingStateProps) {
   return (
     <div
-      className="flex min-h-56 w-full flex-col items-center justify-center gap-4 px-6 py-12 text-center"
+      className="flex w-full items-center justify-center gap-3 p-8 text-center"
       role="status"
     >
-      <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-muted/30">
-        <Loader2
-          className="h-5 w-5 animate-spin text-muted-foreground"
-          aria-hidden="true"
-        />
-      </span>
+      <Loader2
+        className="h-4 w-4 shrink-0 animate-spin text-muted-foreground"
+        aria-hidden="true"
+      />
       <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   )

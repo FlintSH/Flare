@@ -3,14 +3,7 @@
 import { useState } from 'react'
 
 import { CreateUrlSchema } from '@/types/dto/url'
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  CheckCircle2,
-  Copy,
-  Loader2,
-} from 'lucide-react'
+import { ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 import { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
@@ -86,31 +79,27 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
   return (
     <div className="space-y-5">
       <form onSubmit={handleSubmit} className="space-y-2">
-        <Label htmlFor="url">Destination URL</Label>
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <Label htmlFor="url">URL to shorten</Label>
+        <div className="flex gap-2">
           <Input
             id="url"
             type="url"
-            placeholder="https://example.com/something-worth-sharing"
+            placeholder="https://example.com"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             required
             disabled={isLoading}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? 'url-error' : 'url-help'}
-            className="h-11 min-w-0 flex-1"
+            className="min-w-0 flex-1"
           />
           <Button
             type="submit"
             disabled={isLoading || !url.trim()}
-            className="h-11 shrink-0"
+            className="shrink-0"
           >
-            {isLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowRight className="mr-2 h-4 w-4" />
-            )}
-            {isLoading ? 'Creating…' : 'Create short link'}
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading ? 'Creating…' : 'Shorten'}
           </Button>
         </div>
         {error ? (
@@ -130,12 +119,9 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
       {createdUrl && (
         <div
           role="status"
-          className="rounded-xl border border-primary/20 bg-primary/5 p-4"
+          className="space-y-2 rounded-lg border bg-muted/20 p-3"
         >
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-            Your short link is ready
-          </div>
+          <p className="text-sm font-medium">Short link created</p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Input
               aria-label="New short link"

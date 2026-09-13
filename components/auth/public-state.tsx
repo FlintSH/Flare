@@ -9,56 +9,73 @@ import { DynamicBackground } from '@/components/layout/dynamic-background'
 
 export function PublicState({
   icon: Icon,
-  eyebrow,
+  statusCode,
   title,
   description,
   children,
+  footer,
+  compact = false,
 }: {
-  icon: LucideIcon
-  eyebrow: string
+  icon?: LucideIcon
+  statusCode?: string
   title: string
   description: string
   children: ReactNode
+  footer?: ReactNode
+  compact?: boolean
 }) {
   return (
     <div className="relative isolate flex min-h-dvh flex-col">
       <DynamicBackground />
-      <header className="relative z-10 mx-auto w-full max-w-6xl px-5 py-7 sm:px-8">
+      <header className="relative z-10 px-4 py-6 sm:px-6">
         <Link
-          href="/"
-          className="inline-flex max-w-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Go to home"
+          href="/dashboard"
+          className="inline-flex max-w-full rounded-xl border border-border/60 bg-card/70 px-4 py-2 shadow-sm backdrop-blur-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Go to your files"
         >
           <InstanceBrand />
         </Link>
       </header>
-      <main className="relative z-10 flex flex-1 items-center justify-center px-5 pb-16 pt-6 sm:px-8">
+      <main className="relative z-10 flex flex-1 items-center justify-center px-4 pb-10 pt-4 sm:px-6">
         <section
-          className="w-full max-w-md rounded-2xl border border-border/70 bg-card p-6 shadow-sm sm:p-8"
+          className={`w-full rounded-2xl border border-border/70 bg-card/80 p-6 shadow-sm backdrop-blur-xl ${compact ? 'max-w-[340px]' : 'max-w-md sm:p-8'}`}
           aria-labelledby="public-state-title"
           data-flare-surface
         >
-          <span className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-muted/30">
-            <Icon
-              className="h-5 w-5 text-muted-foreground"
-              aria-hidden="true"
-            />
-          </span>
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
-            {eyebrow}
-          </p>
-          <h1
-            id="public-state-title"
-            className="text-2xl font-semibold tracking-tight sm:text-3xl"
+          <div
+            className={
+              compact
+                ? 'mb-4 space-y-2 text-center'
+                : 'mb-6 space-y-3 text-center'
+            }
           >
-            {title}
-          </h1>
-          <p className="mb-7 mt-3 text-sm leading-relaxed text-muted-foreground">
-            {description}
-          </p>
+            {statusCode ? (
+              <p
+                className="text-6xl font-semibold tracking-tight"
+                aria-hidden="true"
+              >
+                {statusCode}
+              </p>
+            ) : Icon ? (
+              <Icon
+                className="mx-auto h-6 w-6 text-muted-foreground"
+                aria-hidden="true"
+              />
+            ) : null}
+            <h1
+              id="public-state-title"
+              className="text-xl font-semibold tracking-tight"
+            >
+              {title}
+            </h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          </div>
           {children}
         </section>
       </main>
+      {footer}
     </div>
   )
 }

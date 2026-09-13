@@ -80,8 +80,6 @@ export function DashboardNav() {
       ? [...baseRoutes, ...adminRoutes]
       : baseRoutes
 
-  const activeRoute = routes.find((route) => route.href === pathname)
-
   return (
     <nav
       aria-label="Main navigation"
@@ -96,9 +94,6 @@ export function DashboardNav() {
       </Link>
 
       <div className="ml-auto flex items-center gap-2 xl:hidden">
-        <span className="hidden text-sm text-muted-foreground sm:inline">
-          {activeRoute?.label}
-        </span>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open navigation">
@@ -106,50 +101,27 @@ export function DashboardNav() {
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="overflow-y-auto">
-            <SheetTitle className="flex items-center gap-2">
-              <InstanceBrand />
-            </SheetTitle>
-            <SheetDescription className="mt-3">
-              Your files, tools, and preferences.
+            <SheetTitle>Navigation</SheetTitle>
+            <SheetDescription className="sr-only">
+              Navigate your files, tools, and preferences.
             </SheetDescription>
-            <div className="mt-8 space-y-6">
-              {[
-                { label: 'Workspace', items: baseRoutes.slice(0, 4) },
-                { label: 'Account', items: baseRoutes.slice(4) },
-                ...(session?.user?.role === 'ADMIN'
-                  ? [{ label: 'Administration', items: adminRoutes }]
-                  : []),
-              ].map((group) => (
-                <div key={group.label}>
-                  <p className="mb-2 px-3 text-[10px] font-medium uppercase tracking-[.18em] text-muted-foreground">
-                    {group.label}
-                  </p>
-                  <div className="space-y-1">
-                    {group.items.map((route) => (
-                      <Button
-                        key={route.href}
-                        variant="ghost"
-                        asChild
-                        className={cn(
-                          'h-12 w-full justify-start gap-3 rounded-xl',
-                          pathname === route.href &&
-                            'bg-primary/10 text-foreground'
-                        )}
-                      >
-                        <Link
-                          href={route.href}
-                          onClick={() => setOpen(false)}
-                          aria-current={
-                            pathname === route.href ? 'page' : undefined
-                          }
-                        >
-                          <route.icon className="h-4 w-4" aria-hidden="true" />
-                          {route.label}
-                        </Link>
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+            <div className="mt-4 space-y-1">
+              {routes.map((route) => (
+                <Button
+                  key={route.href}
+                  variant={pathname === route.href ? 'default' : 'ghost'}
+                  asChild
+                  className="h-10 w-full justify-start gap-2 rounded-lg"
+                >
+                  <Link
+                    href={route.href}
+                    onClick={() => setOpen(false)}
+                    aria-current={pathname === route.href ? 'page' : undefined}
+                  >
+                    <route.icon className="h-4 w-4" aria-hidden="true" />
+                    {route.label}
+                  </Link>
+                </Button>
               ))}
             </div>
           </SheetContent>
@@ -157,7 +129,7 @@ export function DashboardNav() {
       </div>
 
       <div className="hidden min-w-0 flex-1 justify-center xl:flex">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-xl border border-border/40 bg-muted/25 p-1">
           {routes.map((route) => {
             const isActive = pathname === route.href
             return (
@@ -165,8 +137,9 @@ export function DashboardNav() {
                 key={route.href}
                 variant="ghost"
                 className={cn(
-                  'h-10 gap-2 rounded-xl px-3.5 text-sm font-medium text-muted-foreground',
-                  isActive && 'bg-muted text-foreground'
+                  'h-9 gap-2 rounded-lg border border-transparent px-3.5 text-sm font-medium text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                  isActive &&
+                    'border-border/60 bg-background text-foreground shadow-sm'
                 )}
                 asChild
               >

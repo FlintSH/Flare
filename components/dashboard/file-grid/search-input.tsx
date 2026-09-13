@@ -44,7 +44,7 @@ export const SearchInput = memo(function SearchInput({
         type="search"
         aria-label="Search files by name"
         placeholder="Search your files…"
-        className="h-10 rounded-xl bg-background pl-10 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
+        className="h-10 rounded-lg bg-background/70 pl-10 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
         value={value}
         onChange={(event) => updateSearch(event.target.value)}
       />

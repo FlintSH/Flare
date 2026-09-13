@@ -1,11 +1,6 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { ArrowLeft } from 'lucide-react'
-
-import { WorkspacePage } from '@/components/dashboard/page-shell'
 import { PasteForm } from '@/components/dashboard/paste-form'
-import { Button } from '@/components/ui/button'
 
 import { getPageSession } from '@/lib/auth/page-session'
 
@@ -17,19 +12,18 @@ export default async function PastePage() {
   }
 
   return (
-    <WorkspacePage
-      title="Create a paste"
-      description="Give your code, notes, or plain text a home and a link to share."
-      actions={
-        <Button asChild variant="outline">
-          <Link href="/dashboard">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            File library
-          </Link>
-        </Button>
-      }
-    >
-      <PasteForm />
-    </WorkspacePage>
+    <div className="container space-y-6">
+      <header className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Create New Paste
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Create text pastes with syntax highlighting
+        </p>
+      </header>
+      <div className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <PasteForm />
+      </div>
+    </div>
   )
 }

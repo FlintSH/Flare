@@ -276,32 +276,27 @@ export function FileCard({
   if (isDeleted) return null
 
   const isImage = file.mimeType.startsWith('image/')
-  const fileExtension = file.name.includes('.')
-    ? file.name.split('.').pop()?.slice(0, 12).toUpperCase()
-    : 'FILE'
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const safeUrl = sanitizeUrl(file.urlPath)
 
   return (
-    <Card className="group min-w-0 overflow-hidden rounded-2xl border bg-card shadow-none transition-colors hover:border-primary/30">
-      <div className="relative border-b">
+    <Card className="group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-background/70 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/30 hover:bg-background/90">
+      <div className="relative">
         <Link
           href={safeUrl}
           aria-label={`Open ${file.name}`}
-          className="relative block aspect-[4/3] overflow-hidden bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="relative block aspect-square overflow-hidden bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           {isImage && !previewFailed ? (
             <Image
               src={`/api/files/${file.id}/thumbnail`}
               alt={file.name}
               fill
-              className="object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.03]"
-              sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+              className="object-cover"
+              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
               loading="lazy"
               onError={() => setPreviewFailed(true)}
-              // Direct requests preserve the viewer's session for restricted
-              // files and keep animated GIFs intact.
               unoptimized={
                 file.visibility === 'PRIVATE' ||
                 file.hasPassword ||
@@ -309,120 +304,101 @@ export function FileCard({
               }
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3">
-              <div className="rounded-2xl border bg-card p-5 text-primary/80">
-                {getFileIcon(file.mimeType, 'h-9 w-9')}
-              </div>
-              <span className="text-xs font-medium tracking-wider text-muted-foreground">
-                {fileExtension}
-              </span>
-            </div>
-          )}
-          {isLoadingOcr && (
-            <div
-              role="status"
-              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
-            >
-              <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              <span className="text-sm font-medium">Extracting text…</span>
+            <div className="flex h-full items-center justify-center">
+              {getFileIcon(file.mimeType, 'h-16 w-16 text-muted-foreground')}
             </div>
           )}
         </Link>
-        <div className="pointer-events-none absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-1.5">
-          <span className="inline-flex items-center gap-1.5 rounded-lg border bg-background/95 px-2 py-1 text-[11px] font-medium shadow-sm">
-            <VisibilityIcon className="h-3 w-3" />
-            {visibilityLabel}
-          </span>
-          {file.hasPassword && (
-            <span className="inline-flex items-center gap-1.5 rounded-lg border bg-background/95 px-2 py-1 text-[11px] font-medium shadow-sm">
-              <KeyRound className="h-3 w-3" />
-              Protected
-            </span>
-          )}
-        </div>
-        {file.expiresAt && (
-          <button
-            type="button"
-            onClick={() => setIsExpiryModalOpen(true)}
-            title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
-            className="absolute bottom-3 left-3 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-lg border bg-background/95 px-2 py-1 text-[11px] font-medium shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Timer className="h-3 w-3 shrink-0" />
-            <span className="truncate">
-              Expires{' '}
-              {formatDistanceToNow(new Date(file.expiresAt), {
-                addSuffix: true,
-              })}
-            </span>
-          </button>
-        )}
-      </div>
-      <div className="p-4">
-        <Link
-          href={safeUrl}
-          title={file.name}
-          className="flex items-center gap-2 rounded-sm text-sm font-semibold hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="truncate">{file.name}</span>
-          <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{formatFileSize(file.size)}</span>
-          <span
-            className="inline-flex items-center gap-1"
-            title={format(new Date(file.uploadedAt), 'PPP p')}
-          >
-            <Clock className="h-3 w-3" />
-            {getRelativeTime(new Date(file.uploadedAt))}
-          </span>
-        </div>
-        <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-          <span
-            className="inline-flex items-center gap-1.5"
-            aria-label={`${file.views} views`}
-          >
-            <Eye className="h-3.5 w-3.5" />
-            {file.views.toLocaleString()}
-          </span>
-          <span
-            className="inline-flex items-center gap-1.5"
-            aria-label={`${file.downloads} downloads`}
-          >
-            <Download className="h-3.5 w-3.5" />
-            {file.downloads.toLocaleString()}
-          </span>
-        </div>
-        <div className="mt-4 flex items-center gap-1.5 border-t pt-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="mr-auto h-8 rounded-lg px-2.5 text-xs"
-            onClick={handleCopyLink}
-          >
-            <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
-            Copy link
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
+          <Button variant="secondary" size="sm" asChild>
+            <Link href={safeUrl}>View</Link>
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-lg"
-            asChild
-          >
-            <a
-              href={`/api/files/${file.id}/download`}
-              download={file.name}
-              aria-label={`Download ${file.name}`}
-              title="Download file"
+          <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleCopyLink}
+              aria-label={`Copy link to ${file.name}`}
+              title="Copy link"
             >
-              <Download className="h-4 w-4" />
-            </a>
-          </Button>
+              <LinkIcon className="h-4 w-4" />
+            </Button>
+            <Button variant="secondary" size="icon" className="h-8 w-8" asChild>
+              <a
+                href={`/api/files/${file.id}/download`}
+                download={file.name}
+                aria-label={`Download ${file.name}`}
+                title="Download"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => {
+                setVisibility(file.visibility)
+                setIsVisibilityDialogOpen(true)
+              }}
+              aria-label={`Change visibility of ${file.name}`}
+              title="Change visibility"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handlePasswordDialogOpenChange(true)}
+              aria-label={`Password protection for ${file.name}`}
+              title="Password protection"
+            >
+              <KeyRound className="h-4 w-4" />
+            </Button>
+            {isImage && (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8"
+                disabled={isLoadingOcr}
+                onClick={() => void handleFetchOcr()}
+                aria-label={`Extract text from ${file.name}`}
+                title="Extract text (OCR)"
+              >
+                <ScanText className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setIsExpiryModalOpen(true)}
+              aria-label={`Manage expiration of ${file.name}`}
+              title="Manage expiration"
+            >
+              <Timer className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              aria-label={`Delete ${file.name}`}
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="absolute right-2 top-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg"
+                className="h-8 w-8 rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background"
                 aria-label={`Manage ${file.name}`}
                 title="Manage file"
               >
@@ -438,6 +414,17 @@ export function FileCard({
                   Open file
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleCopyLink()}>
+                <LinkIcon />
+                Copy link
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a href={`/api/files/${file.id}/download`} download={file.name}>
+                  <Download />
+                  Download file
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
                   setVisibility(file.visibility)
@@ -476,6 +463,77 @@ export function FileCard({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+        <div className="pointer-events-none absolute bottom-2 inset-x-2 flex items-end justify-between gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm">
+            {file.hasPassword ? (
+              <KeyRound className="h-3 w-3" />
+            ) : (
+              <VisibilityIcon className="h-3 w-3" />
+            )}
+            {file.hasPassword ? 'Protected' : visibilityLabel}
+          </span>
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm"
+            title={format(new Date(file.uploadedAt), 'PPP p')}
+          >
+            <Clock className="h-3 w-3" />
+            {getRelativeTime(new Date(file.uploadedAt))}
+          </span>
+        </div>
+        {file.expiresAt && (
+          <button
+            type="button"
+            onClick={() => setIsExpiryModalOpen(true)}
+            title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
+            className="absolute left-2 top-2 inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Timer className="h-3 w-3 shrink-0 text-primary" />
+            <span className="truncate">
+              {formatDistanceToNow(new Date(file.expiresAt), {
+                addSuffix: true,
+              })}
+            </span>
+          </button>
+        )}
+        {isLoadingOcr && (
+          <div
+            role="status"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
+          >
+            <Loader2 className="h-7 w-7 animate-spin text-primary" />
+            <span className="text-sm font-medium">Extracting text…</span>
+          </div>
+        )}
+      </div>
+      <div className="border-t border-border/40 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href={safeUrl}
+            title={file.name}
+            className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {file.name}
+          </Link>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {formatFileSize(file.size)}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+          <span
+            className="inline-flex items-center gap-1"
+            aria-label={`${file.views} views`}
+          >
+            <Eye className="h-3 w-3" />
+            {file.views.toLocaleString()}
+          </span>
+          <span
+            className="inline-flex items-center gap-1"
+            aria-label={`${file.downloads} downloads`}
+          >
+            <Download className="h-3 w-3" />
+            {file.downloads.toLocaleString()}
+          </span>
         </div>
       </div>
 

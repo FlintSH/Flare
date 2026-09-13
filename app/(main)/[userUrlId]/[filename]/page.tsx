@@ -2,8 +2,6 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
-import { LockKeyhole } from 'lucide-react'
-
 import { PublicState } from '@/components/auth/public-state'
 import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
@@ -266,54 +264,46 @@ export default async function FilePage({
       access.reason === 'password_invalid' ? 'Try Again' : 'Access File'
 
     return (
-      <>
-        <PublicState
-          icon={LockKeyhole}
-          eyebrow="Protected share"
-          title={title}
-          description={description}
-        >
-          <form className="space-y-5" action={urlPath}>
-            <div className="space-y-2">
-              <Label htmlFor="share-password">File password</Label>
-              <Input
-                id="share-password"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                placeholder="Enter the password from the sender"
-                className="h-11"
-                aria-invalid={access.reason === 'password_invalid'}
-                aria-describedby={
-                  access.reason === 'password_invalid'
-                    ? 'share-password-error'
-                    : undefined
-                }
-                required
-                autoFocus
-              />
-              {access.reason === 'password_invalid' && (
-                <p
-                  id="share-password-error"
-                  role="alert"
-                  className="text-sm text-foreground"
-                >
-                  That password didn’t match. Check with the sender and try
-                  again.
-                </p>
-              )}
-            </div>
-            <Button type="submit" className="h-11 w-full">
-              {buttonText}
-            </Button>
-            <p className="border-t border-border/60 pt-4 text-xs leading-relaxed text-muted-foreground">
-              The sender has added a password to this file. Ask them for it if
-              you haven’t received one.
-            </p>
-          </form>
-        </PublicState>
-        {showFooter && <Footer />}
-      </>
+      <PublicState
+        compact
+        title={title}
+        description={description}
+        footer={showFooter ? <Footer /> : undefined}
+      >
+        <form className="space-y-4" action={urlPath}>
+          <div className="space-y-2">
+            <Label htmlFor="share-password">File password</Label>
+            <Input
+              id="share-password"
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              placeholder="Enter the password from the sender"
+              className="h-11"
+              aria-invalid={access.reason === 'password_invalid'}
+              aria-describedby={
+                access.reason === 'password_invalid'
+                  ? 'share-password-error'
+                  : undefined
+              }
+              required
+              autoFocus
+            />
+            {access.reason === 'password_invalid' && (
+              <p
+                id="share-password-error"
+                role="alert"
+                className="text-sm text-foreground"
+              >
+                That password didn’t match. Check with the sender and try again.
+              </p>
+            )}
+          </div>
+          <Button type="submit" className="h-11 w-full">
+            {buttonText}
+          </Button>
+        </form>
+      </PublicState>
     )
   }
 

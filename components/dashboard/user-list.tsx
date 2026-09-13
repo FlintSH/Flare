@@ -25,11 +25,9 @@ import {
   Shield,
   Trash2,
   UserX,
-  Users,
   Video,
 } from 'lucide-react'
 
-import { WorkspacePanel } from '@/components/dashboard/page-shell'
 import { UserEmailControls } from '@/components/email/user-email-controls'
 import {
   AlertDialog,
@@ -82,6 +80,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 import { formatFileSize } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -150,27 +154,56 @@ interface UrlResponse {
 function UserTableSkeleton() {
   return (
     <div
-      className="grid gap-4 lg:grid-cols-2"
+      className="overflow-hidden rounded-xl border bg-card"
       aria-label="Loading users"
       aria-busy="true"
     >
-      {Array.from({ length: 4 }, (_, index) => (
-        <div
-          key={index}
-          className="space-y-5 rounded-2xl border border-border/70 bg-card p-6"
-        >
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-11 w-11 rounded-full" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-36" />
-              <Skeleton className="h-3 w-44" />
-            </div>
-          </div>
-          <Skeleton className="h-6 w-24 rounded-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-9 w-40" />
-        </div>
-      ))}
+      <Table>
+        <TableHeader className="bg-muted/30">
+          <TableRow>
+            <TableHead className="pl-4">User</TableHead>
+            <TableHead className="hidden sm:table-cell">Role</TableHead>
+            <TableHead className="hidden lg:table-cell">URL ID</TableHead>
+            <TableHead className="hidden lg:table-cell">Files</TableHead>
+            <TableHead className="hidden lg:table-cell">Storage Used</TableHead>
+            <TableHead className="hidden lg:table-cell">URLs</TableHead>
+            <TableHead className="pr-4 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: 3 }, (_, index) => (
+            <TableRow key={index}>
+              <TableCell className="py-3 pl-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24 sm:w-36" />
+                    <Skeleton className="h-3 w-28 sm:w-44" />
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell className="hidden sm:table-cell">
+                <Skeleton className="h-4 w-14" />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-14" />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-8" />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <Skeleton className="h-4 w-8" />
+              </TableCell>
+              <TableCell className="pr-4">
+                <Skeleton className="ml-auto h-8 w-24" />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -710,55 +743,44 @@ export function UserList() {
   }
 
   return (
-    <div className="space-y-6">
-      <WorkspacePanel
-        title="People on your instance"
-        description="Manage access, review shared content, and help people with their accounts."
-        action={
-          <Button onClick={handleNew}>
-            <Plus className="mr-2 h-4 w-4" />
-            New user
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative min-w-0 flex-1">
-            <Search
-              className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              aria-label="Search users"
-              placeholder="Search by name or email…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="rounded-xl pl-9"
-            />
-          </div>
-          <Select value={role} onValueChange={setRole}>
-            <SelectTrigger
-              aria-label="Filter users by role"
-              className="rounded-xl sm:w-48"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All roles</SelectItem>
-              <SelectItem value="ADMIN">Administrators</SelectItem>
-              <SelectItem value="USER">Members</SelectItem>
-            </SelectContent>
-          </Select>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 basis-full sm:max-w-sm sm:flex-1 sm:basis-auto">
+          <Search
+            className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            aria-label="Search users"
+            placeholder="Search by name or email…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+          />
         </div>
-      </WorkspacePanel>
-      <div
-        className="flex items-center justify-between gap-3 text-sm text-muted-foreground"
-        role="status"
-      >
-        <p>
-          {isLoading
-            ? 'Loading users…'
-            : `${pagination?.total ?? users.length} ${(pagination?.total ?? users.length) === 1 ? 'person' : 'people'}${query || role !== 'ALL' ? ' matching your filters' : ' on this instance'}`}
+        <Select value={role} onValueChange={setRole}>
+          <SelectTrigger aria-label="Filter users by role" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All roles</SelectItem>
+            <SelectItem value="ADMIN">Admin</SelectItem>
+            <SelectItem value="USER">User</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={handleNew} className="ml-auto">
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+          New User
+        </Button>
+      </div>
+      <div className="flex min-h-8 items-center justify-between gap-3 text-sm text-muted-foreground">
+        <p role="status">
+          {loadError
+            ? 'Users unavailable'
+            : isLoading
+              ? 'Loading users…'
+              : `${pagination?.total ?? users.length} ${(pagination?.total ?? users.length) === 1 ? 'user' : 'users'}${query || role !== 'ALL' ? ' found' : ''}`}
         </p>
         {(search || role !== 'ALL') && (
           <Button
@@ -775,156 +797,215 @@ export function UserList() {
         )}
       </div>
       {loadError ? (
-        <WorkspacePanel>
-          <div role="alert" className="py-8 text-center">
-            <h2 className="text-lg font-medium">Couldn’t load users</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Your accounts are still there. Try loading the list again.
-            </p>
-            <Button
-              variant="outline"
-              className="mt-5"
-              onClick={() => fetchUsers(currentPage)}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Try again
-            </Button>
-          </div>
-        </WorkspacePanel>
+        <div
+          role="alert"
+          className="rounded-xl border bg-card px-4 py-8 text-center"
+        >
+          <p className="font-medium">Couldn’t load users</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => fetchUsers(currentPage)}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
       ) : isLoading && users.length === 0 ? (
         <UserTableSkeleton />
       ) : users.length === 0 ? (
-        <WorkspacePanel>
-          <div className="py-12 text-center">
-            <Users className="mx-auto mb-4 h-8 w-8 text-muted-foreground" />
-            <h2 className="text-lg font-medium">No users found</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Try another name, email address, or role.
-            </p>
-          </div>
-        </WorkspacePanel>
+        <div className="rounded-xl border bg-card px-4 py-8 text-center">
+          <p className="font-medium">No users found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try another name, email address, or role.
+          </p>
+        </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2" aria-busy={isLoading}>
-          {users.map((user) => (
-            <article
-              key={user.id}
-              className="min-w-0 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
-            >
-              <div className="flex items-start gap-3">
-                <Avatar className="h-11 w-11 shrink-0">
-                  <AvatarImage src={user.image || undefined} alt="" />
-                  <AvatarFallback>
-                    {user.name
-                      ?.split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate font-semibold">{user.name}</h2>
-                  <p
-                    className="mt-1 truncate text-sm text-muted-foreground"
-                    title={user.email}
-                  >
-                    {user.email}
-                  </p>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      aria-label={`More actions for ${user.name}`}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {user.image && (
-                      <DropdownMenuItem
-                        onSelect={() => handleRemoveAvatar(user.id)}
-                      >
-                        <UserX className="mr-2 h-4 w-4" />
-                        Remove avatar
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onSelect={() => {
-                        setUserToDelete(user)
-                        setIsDeleteDialogOpen(true)
-                      }}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete user
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1',
-                    user.role === 'ADMIN'
-                      ? 'border-primary/20 bg-primary/5'
-                      : 'border-border text-muted-foreground'
-                  )}
-                >
-                  <Shield className="h-3 w-3" />
-                  {user.role === 'ADMIN' ? 'Administrator' : 'Member'}
-                </span>
-                <span
-                  className="max-w-full truncate rounded-md bg-muted/50 px-2 py-1 font-mono text-muted-foreground"
-                  title="Share URL ID"
-                >
-                  /{user.vanityId || user.urlId}
-                </span>
-              </div>
-              <dl className="my-5 grid grid-cols-3 gap-2 border-y border-border/60 py-4">
-                <div>
-                  <dt className="text-xs text-muted-foreground">Files</dt>
-                  <dd className="mt-1 text-sm font-medium tabular-nums">
-                    {user._count.files}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Storage</dt>
-                  <dd className="mt-1 text-sm font-medium tabular-nums">
-                    {formatFileSize(user.storageUsed)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Links</dt>
-                  <dd className="mt-1 text-sm font-medium tabular-nums">
-                    {user._count.shortenedUrls}
-                  </dd>
-                </div>
-              </dl>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEdit(user)}
-                  aria-label={`Edit ${user.name}`}
-                >
-                  <Edit2 className="mr-2 h-3.5 w-3.5" />
-                  Edit account
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleViewFiles(user)}
-                  aria-label={`View content for ${user.name}`}
-                >
-                  <FolderOpen className="mr-2 h-3.5 w-3.5" />
-                  View content
-                </Button>
-              </div>
-            </article>
-          ))}
+        <div
+          className="overflow-hidden rounded-xl border bg-card"
+          aria-busy={isLoading}
+        >
+          <TooltipProvider>
+            <Table className="table-fixed lg:table-auto" aria-label="Users">
+              <TableHeader className="bg-muted/30">
+                <TableRow>
+                  <TableHead className="pl-3 sm:pl-4">User</TableHead>
+                  <TableHead className="hidden w-24 sm:table-cell lg:w-auto">
+                    Role
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">URL ID</TableHead>
+                  <TableHead className="hidden lg:table-cell">Files</TableHead>
+                  <TableHead className="hidden whitespace-nowrap lg:table-cell">
+                    Storage Used
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">URLs</TableHead>
+                  <TableHead className="w-[140px] pr-3 text-right sm:pr-4 lg:w-auto">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="py-3 pl-3 sm:pl-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="hidden h-8 w-8 shrink-0 sm:flex">
+                          <AvatarImage src={user.image || undefined} alt="" />
+                          <AvatarFallback>
+                            {user.name
+                              ?.split(' ')
+                              .map((name) => name[0])
+                              .join('')
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 lg:max-w-[240px] xl:max-w-sm">
+                          <p className="truncate font-medium" title={user.name}>
+                            {user.name}
+                          </p>
+                          <p
+                            className="truncate text-xs text-muted-foreground"
+                            title={user.email}
+                          >
+                            {user.email}
+                          </p>
+                          <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
+                            <p className="sm:hidden">
+                              {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                            </p>
+                            <p
+                              className="truncate font-mono"
+                              title={
+                                user.vanityId
+                                  ? `${user.urlId} / ${user.vanityId}`
+                                  : user.urlId
+                              }
+                            >
+                              {user.urlId}
+                              {user.vanityId && ` / ${user.vanityId}`}
+                            </p>
+                            <p className="flex flex-wrap gap-x-2">
+                              <span>{user._count.files} files</span>
+                              <span>{formatFileSize(user.storageUsed)}</span>
+                              <span>{user._count.shortenedUrls} URLs</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <span className="inline-flex items-center gap-1.5 text-xs">
+                        <Shield
+                          className={cn(
+                            'h-3.5 w-3.5',
+                            user.role === 'ADMIN'
+                              ? 'text-primary'
+                              : 'text-muted-foreground'
+                          )}
+                          aria-hidden="true"
+                        />
+                        {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="flex flex-col items-start gap-1">
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                          {user.urlId}
+                        </code>
+                        {user.vanityId && (
+                          <code
+                            className="max-w-40 truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs"
+                            title={user.vanityId}
+                          >
+                            {user.vanityId}
+                          </code>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums lg:table-cell">
+                      {user._count.files}
+                    </TableCell>
+                    <TableCell className="hidden whitespace-nowrap tabular-nums lg:table-cell">
+                      {formatFileSize(user.storageUsed)}
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums lg:table-cell">
+                      {user._count.shortenedUrls}
+                    </TableCell>
+                    <TableCell className="pr-3 sm:pr-4">
+                      <div className="flex justify-end gap-0.5">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleEdit(user)}
+                              aria-label={`Edit ${user.name}`}
+                            >
+                              <Edit2 className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit User</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleViewFiles(user)}
+                              aria-label={`View content for ${user.name}`}
+                            >
+                              <FolderOpen
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>View Content</TooltipContent>
+                        </Tooltip>
+                        {user.image && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleRemoveAvatar(user.id)}
+                                aria-label={`Remove avatar for ${user.name}`}
+                              >
+                                <UserX className="h-4 w-4" aria-hidden="true" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove Avatar</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => {
+                                setUserToDelete(user)
+                                setIsDeleteDialogOpen(true)
+                              }}
+                              aria-label={`Delete ${user.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete User</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
         </div>
       )}
 

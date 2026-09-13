@@ -16,9 +16,8 @@ export default async function RegisterPage() {
 
   return (
     <AuthShell
-      eyebrow="Make yourself at home"
       title="Create an account"
-      description="A place for your files, pastes, and links. Start with a few details."
+      description="Enter your details to get started."
     >
       <RegisterForm />
     </AuthShell>

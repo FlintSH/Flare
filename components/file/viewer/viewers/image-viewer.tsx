@@ -19,15 +19,15 @@ export function ImageViewer() {
   }
 
   return (
-    <div className="flex min-h-40 w-full items-center justify-center bg-muted/20">
+    <div className="flex w-full items-center justify-center">
       <img
         src={state.urls.fileUrl}
         alt={file.name}
         onError={() => setFailedUrl(state.urls?.fileUrl)}
         className={
           sharing.imageFit === 'cover'
-            ? 'h-[65vh] w-full object-cover'
-            : 'max-h-[65vh] max-w-full object-contain'
+            ? 'h-[60vh] w-full object-cover'
+            : 'max-h-[60vh] max-w-full object-contain'
         }
       />
     </div>

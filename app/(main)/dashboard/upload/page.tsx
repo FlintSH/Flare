@@ -1,11 +1,6 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { ArrowLeft } from 'lucide-react'
-
-import { WorkspacePage } from '@/components/dashboard/page-shell'
 import { UploadForm } from '@/components/file/upload-form'
-import { Button } from '@/components/ui/button'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
@@ -38,23 +33,20 @@ export default async function UploadPage() {
     value * (unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
 
   return (
-    <WorkspacePage
-      title="Upload files"
-      description="Drop in your files, choose how to share them, and get a link for each one."
-      actions={
-        <Button asChild variant="outline">
-          <Link href="/dashboard">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            File library
-          </Link>
-        </Button>
-      }
-    >
-      <UploadForm
-        user={user}
-        maxSize={maxSizeBytes}
-        formattedMaxSize={formatBytes(maxSizeBytes)}
-      />
-    </WorkspacePage>
+    <div className="container space-y-6">
+      <header className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <h1 className="text-3xl font-semibold tracking-tight">Upload Files</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Upload and share files with optional password protection
+        </p>
+      </header>
+      <div className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <UploadForm
+          user={user}
+          maxSize={maxSizeBytes}
+          formattedMaxSize={formatBytes(maxSizeBytes)}
+        />
+      </div>
+    </div>
   )
 }

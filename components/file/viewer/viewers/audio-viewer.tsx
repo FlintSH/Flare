@@ -1,7 +1,5 @@
 import { useState } from 'react'
 
-import { AudioLines } from 'lucide-react'
-
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
 import { useFileViewer } from '../context'
@@ -16,18 +14,12 @@ export function AudioViewer() {
   }
 
   return (
-    <div className="flex min-h-64 w-full flex-col items-center justify-center gap-6 px-5 py-10 sm:px-8">
-      <span className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/30">
-        <AudioLines
-          className="h-7 w-7 text-muted-foreground"
-          aria-hidden="true"
-        />
-      </span>
+    <div className="flex w-full items-center justify-center px-4 py-4 sm:px-6">
       <audio
         src={state.urls.fileUrl}
         controls
         aria-label={`${file.name} audio player`}
-        className="w-full max-w-xl"
+        className="w-full max-w-2xl"
         controlsList="nodownload"
         preload="metadata"
         onError={() => setFailedUrl(state.urls?.fileUrl)}

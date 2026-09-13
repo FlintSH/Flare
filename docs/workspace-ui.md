@@ -1,36 +1,40 @@
-# A cohesive Flare workspace
+# A cohesive uplift of Flare’s existing UI
 
-The workspace continues the design introduced by the unified setup, Settings, and
-Profile pages: generous headings, calm theme-aware surfaces, clear primary actions,
-and the familiar Flare identity. Instance branding and personal appearance still
-apply throughout the app.
+The UI extends the theme-aware surfaces, readable controls, and consistent spacing
+introduced by the unified setup, Settings, and Profile pages. Existing layouts,
+control order, and information density remain familiar: Flare’s floating navigation,
+compact file grid, stacked creation forms, tables, centered authentication cards,
+and public share layouts remain the foundation. Instance branding and personal
+appearance apply throughout the app.
 
 ## Everyday tasks
 
-- **Files:** search, sort, filter, and reset the library; copy or open a file without
-  hovering; use its menu for visibility, password, expiration, and deletion. Loading,
-  no results, an empty library, and a failed request have distinct states.
-- **Upload:** choose files in the main workspace and review sharing defaults beside
-  the queue. Completed files retain their open/copy actions. Saved upload profiles,
-  explicit overrides, progress, queue removal, and retry remain available. Partial
-  failures keep completed links and retry only the files that still need uploading.
-- **Paste:** start with content and an optional filename; review sharing options in
-  the adjoining panel. The result stays visible with open/copy/create-another actions.
-- **Links:** create an address, copy its result, and find it in a searchable list.
-  Destination and traffic are readable on phones. Deletion requires confirmation.
-- **Users:** search all accounts by name/email, filter by role, review content and
-  storage, and manage accounts from responsive cards. Pagination follows filtered
-  results and recovers after deleting the last item on a page.
+- **Files:** square previews in the original four-column desktop grid, compact
+  filename/size and activity rows, and familiar preview actions. A small menu makes
+  every action available on touch screens; keyboard focus reveals preview actions.
+  Search, sort, filters, refresh, compact pagination, and retry stay together.
+- **Upload:** the original vertical flow of file selection, queue, upload profile,
+  visibility, password, expiration, and upload. Inline completion links, explicit
+  progress, and retry support the existing form. Partial failures retain completed
+  links and retry only files that still need uploading.
+- **Paste:** the original profile, editor, filename/visibility row, password, and
+  create action. A compact result provides open/copy/create-another actions.
+- **Links:** the original URL input and Shorten action above the five-column table.
+  Tables scroll on narrow screens, copy failures are explained, and deletion asks
+  for confirmation.
+- **Users:** the original seven-column table and direct edit/content/avatar/delete
+  actions, with search and role filtering in a compact toolbar. Mobile rows retain
+  account metadata and accessible actions. Pagination follows filtered results.
 
-Navigation groups workspace, account, and administrator destinations on mobile.
-A keyboard skip link leads to page content. Dialogs retain margins and scrolling
-on smaller screens. The global file-drop overlay uses the same design and refreshes
-an open library when the upload completes.
+Navigation retains its original floating bar, tab group, and flat mobile menu.
+A keyboard skip link leads to page content. Dialogs keep Flare’s translucent surface
+with reliable margins and scrolling on smaller screens. The existing file-drop
+overlay refreshes an open library when an upload completes.
 
 ## Public pages
 
 Login, registration, account recovery, verification, and exceptional states share a
-branded shell with clear next actions. Public files keep all three share layouts
+centered card and brand badge with clear next actions. Public files keep all three share layouts
 (minimal, framed, and delivery), disclosure choices, and access checks. Their actions
 and image, text, code, CSV, audio, video, PDF, loading, error, and unsupported states
 use the same surface and typography conventions. Protected video playback preserves
@@ -50,7 +54,7 @@ The review covers every rendered route family:
 | `/dashboard`                   | Search, sort/filter/reset/history, refresh, file actions, protection, pagination, empty/retry, mobile |
 | `/dashboard/upload`            | File selection, queue, real upload, profile/visibility/password/expiry, completion copy, mobile       |
 | `/dashboard/paste`             | Content, filename, real creation, result copy/open, mobile                                            |
-| `/dashboard/urls`              | Create, search, copy/open, delete/cancel, empty/error, mobile                                         |
+| `/dashboard/urls`              | Create, copy/open, delete/cancel, empty/error, mobile                                                 |
 | `/dashboard/users`             | Create, edit, search/roles, content, delete/pagination, administrator gating, mobile                  |
 | `/dashboard/settings`          | General, Access, Storage, Appearance, Email, Advanced, About; desktop/mobile                          |
 | `/dashboard/profile`           | Account, Appearance, Uploads, Integrations, Security, Your data; desktop/mobile, light appearance     |

@@ -2,9 +2,14 @@
 
 import { useState } from 'react'
 
-import { LockKeyhole } from 'lucide-react'
-
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -38,56 +43,48 @@ export function PasswordPrompt({ onSubmit, onSuccess }: PasswordPromptProps) {
   }
 
   return (
-    <section
-      className="mx-auto w-full max-w-md space-y-5 p-6 sm:p-8"
-      aria-labelledby="protected-file-title"
-    >
-      <span className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-muted/30">
-        <LockKeyhole
-          className="h-5 w-5 text-muted-foreground"
-          aria-hidden="true"
-        />
-      </span>
-      <div className="space-y-2">
-        <h2
-          id="protected-file-title"
-          className="text-xl font-semibold tracking-tight"
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Password Protected File</DialogTitle>
+          <DialogDescription>
+            Enter the password from the sender to open this file.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4"
+          aria-busy={isLoading}
         >
-          Password protected file
-        </h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Enter the password from the sender to open this file.
-        </p>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4" aria-busy={isLoading}>
-        <div className="space-y-2">
-          <Label htmlFor="protected-file-password">File password</Label>
-          <Input
-            id="protected-file-password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            disabled={isLoading}
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? 'protected-file-error' : undefined}
-            required
-            autoFocus
-          />
-          {error && (
-            <p
-              id="protected-file-error"
-              className="text-sm text-foreground"
-              role="alert"
-            >
-              {error}
-            </p>
-          )}
-        </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? 'Checking password…' : 'Open file'}
-        </Button>
-      </form>
-    </section>
+          <div className="space-y-2">
+            <Label htmlFor="protected-file-password">File password</Label>
+            <Input
+              id="protected-file-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              disabled={isLoading}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'protected-file-error' : undefined}
+              required
+              autoFocus
+            />
+            {error && (
+              <p
+                id="protected-file-error"
+                className="text-sm text-foreground"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+          </div>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? 'Checking password…' : 'Open file'}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

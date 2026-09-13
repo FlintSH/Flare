@@ -39,13 +39,13 @@ export function ProtectedFile({
         const currentVerifiedPassword =
           authGuardVerifiedPassword || initialVerifiedPassword
         return (
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-4">
             <FileViewer
               file={file}
               verifiedPassword={currentVerifiedPassword}
             />
 
-            <div className="border-t border-border/60 bg-muted/20 p-4 sm:px-6 sm:py-5">
+            <div className="flex items-center justify-center px-4 pb-4 sm:px-6">
               <FileActions
                 urlPath={sanitizeUrl(file.urlPath)}
                 name={file.name}

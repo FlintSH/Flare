@@ -151,19 +151,16 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           : 'pointer-events-none invisible opacity-0'
       )}
     >
-      <div className="w-full max-w-xl rounded-3xl border-2 border-dashed border-primary/50 bg-card p-8 text-center shadow-xl sm:p-14">
-        <span className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted/50">
-          <UploadIcon className="h-7 w-7" aria-hidden="true" />
-        </span>
-        <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
-          Ready when you are
-        </p>
+      <div className="w-full max-w-2xl rounded-2xl border-2 border-dashed border-primary/50 bg-background/80 p-8 text-center shadow-xl backdrop-blur-xl sm:p-12">
+        <UploadIcon
+          className="mx-auto mb-6 h-16 w-16 text-primary"
+          aria-hidden="true"
+        />
         <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Drop files to upload
         </h2>
-        <p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-          Release to upload using your account’s default upload profile. Your
-          files will appear in your library.
+        <p className="mt-3 text-muted-foreground">
+          Release to upload with your default upload profile.
         </p>
       </div>
     </div>

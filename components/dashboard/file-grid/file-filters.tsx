@@ -115,14 +115,15 @@ export const FileFilters = memo(function FileFilters({
       },
       {} as Record<string, string[]>
     )
-  const filterClass = 'h-10 justify-between gap-2 rounded-xl bg-background px-3'
+  const filterClass =
+    'relative h-10 w-10 shrink-0 justify-center rounded-lg bg-background/70 p-0 sm:w-auto sm:justify-between sm:gap-2 sm:px-3'
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+    <div className="flex flex-wrap gap-2">
       <Select value={sortBy} onValueChange={onSortChange}>
         <SelectTrigger
           aria-label="Sort files"
-          className="h-10 rounded-xl bg-background sm:w-[172px]"
+          className="h-10 min-w-0 flex-1 rounded-lg bg-background/70 sm:w-[172px] sm:flex-none"
         >
           <SelectValue />
         </SelectTrigger>
@@ -138,15 +139,18 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
+            aria-label="Visibility"
             className={cn(
               filterClass,
               visibility.length > 0 && 'border-primary/40 bg-primary/5'
             )}
           >
             <Eye className="h-4 w-4 text-muted-foreground" />
-            Visibility
+            <span className="hidden sm:inline">Visibility</span>
             {visibility.length > 0 && (
-              <span className="text-xs text-primary">{visibility.length}</span>
+              <span className="absolute -right-1 -top-1 rounded-full bg-background px-1 text-xs text-primary sm:static sm:bg-transparent sm:p-0">
+                {visibility.length}
+              </span>
             )}
           </Button>
         </DropdownMenuTrigger>
@@ -176,15 +180,16 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
+            aria-label="File type"
             className={cn(
               filterClass,
               selectedTypes.length > 0 && 'border-primary/40 bg-primary/5'
             )}
           >
             <Filter className="h-4 w-4 text-muted-foreground" />
-            File type
+            <span className="hidden sm:inline">File type</span>
             {selectedTypes.length > 0 && (
-              <span className="text-xs text-primary">
+              <span className="absolute -right-1 -top-1 rounded-full bg-background px-1 text-xs text-primary sm:static sm:bg-transparent sm:p-0">
                 {selectedTypes.length}
               </span>
             )}
@@ -231,13 +236,14 @@ export const FileFilters = memo(function FileFilters({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
+            aria-label="Upload date"
             className={cn(
               filterClass,
               date?.from && 'border-primary/40 bg-primary/5'
             )}
           >
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="truncate">
+            <span className="hidden truncate sm:inline">
               {date?.from
                 ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
                 : 'Upload date'}

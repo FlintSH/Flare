@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 
-import { RefreshCcw, Unplug } from 'lucide-react'
+import { RefreshCcw } from 'lucide-react'
 
 import { PublicState } from '@/components/auth/public-state'
 import { Button } from '@/components/ui/button'
@@ -15,10 +15,9 @@ export default function Error({
 }) {
   return (
     <PublicState
-      icon={Unplug}
-      eyebrow="Something went wrong"
-      title="Let’s try that again"
-      description="We couldn’t load this page. Try again in a moment, or return to your files to continue."
+      statusCode="500"
+      title="Something went wrong"
+      description="We couldn’t load this page. Try again or return to your files."
     >
       <div className="flex flex-col gap-3">
         <Button onClick={() => reset()}>

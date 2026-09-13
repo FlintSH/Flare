@@ -21,24 +21,14 @@ export function TextContent({ language }: { language: string }) {
     return <LoadingState message="Loading file content…" />
   }
 
-  const lineCount = state.content ? state.content.split('\n').length : 0
-
   return (
     <section className="w-full min-w-0" aria-label={`${file.name} preview`}>
-      <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-        <span className="font-medium">
-          {language === 'text' ? 'Plain text' : language}
-        </span>
-        <span>
-          {lineCount.toLocaleString()} {lineCount === 1 ? 'line' : 'lines'}
-        </span>
-      </div>
       {state.content ? (
         <div className="min-w-0 overflow-auto text-sm [&_.cm-editor]:!bg-transparent [&_.cm-gutters]:!border-border [&_.cm-gutters]:!bg-muted/30 [&_.cm-scroller]:!font-mono">
           <CodeMirror
             value={state.content}
             width="100%"
-            maxHeight="65vh"
+            maxHeight="60vh"
             extensions={[getLanguageExtension(language)]}
             editable={false}
             readOnly
@@ -52,7 +42,7 @@ export function TextContent({ language }: { language: string }) {
           />
         </div>
       ) : (
-        <p className="px-6 py-16 text-center text-sm text-muted-foreground">
+        <p className="p-8 text-center text-sm text-muted-foreground">
           This file is empty.
         </p>
       )}

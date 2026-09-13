@@ -26,10 +26,10 @@ export function DashboardWrapper({
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] max-w-7xl items-center gap-3 px-4 sm:px-6">
+      <header className="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 rounded-2xl border border-border/60 bg-background/80 px-4 shadow-sm backdrop-blur-xl sm:px-6">
           <DashboardNav />
-          <div className="shrink-0 border-l border-border/60 pl-3 sm:pl-5">
+          <div className="ml-auto shrink-0">
             <UserNav />
           </div>
         </div>
@@ -37,11 +37,9 @@ export function DashboardWrapper({
       <main
         id="main-content"
         tabIndex={-1}
-        className="relative z-10 w-full min-w-0 flex-1 outline-none"
+        className="relative z-10 w-full min-w-0 flex-1 pt-24 outline-none"
       >
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-          {children}
-        </div>
+        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
       </main>
       {showFooter && <Footer />}
     </div>

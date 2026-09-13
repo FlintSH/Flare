@@ -168,19 +168,25 @@ export function FileActions({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 sm:justify-center"
+      className="flex flex-wrap items-center justify-center gap-2"
       role="group"
       aria-label="File actions"
     >
-      <Button onClick={download} disabled={!urls} className="grow sm:grow-0">
+      <Button
+        size="sm"
+        onClick={download}
+        disabled={!urls}
+        className="rounded-lg"
+      >
         <Download className="mr-2 h-4 w-4" aria-hidden="true" />
         Download
       </Button>
       <Button
         variant="outline"
+        size="sm"
         onClick={handleCopyLink}
         disabled={!urls}
-        className="grow sm:grow-0"
+        className="rounded-lg"
         aria-live="polite"
       >
         {copied ? (
@@ -193,9 +199,10 @@ export function FileActions({
       {isTextBased && (
         <Button
           variant="outline"
+          size="sm"
           onClick={handleCopyText}
           disabled={!urls || isCopyingText}
-          className="grow sm:grow-0"
+          className="rounded-lg"
         >
           <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
           {isCopyingText ? 'Copying…' : 'Copy text'}
@@ -204,9 +211,10 @@ export function FileActions({
       {showOcr && (
         <Button
           variant="outline"
+          size="sm"
           onClick={handleOcr}
           disabled={!urls || isLoadingOcr}
-          className="grow sm:grow-0"
+          className="rounded-lg"
         >
           {isLoadingOcr ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -218,9 +226,10 @@ export function FileActions({
       )}
       <Button
         variant="ghost"
+        size="sm"
         onClick={openRaw}
         disabled={!urls}
-        className="grow text-muted-foreground sm:grow-0"
+        className="rounded-lg text-muted-foreground"
       >
         <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />
         Open original<span className="sr-only"> in a new tab</span>

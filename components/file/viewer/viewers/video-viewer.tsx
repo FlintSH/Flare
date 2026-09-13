@@ -29,14 +29,14 @@ export function VideoViewer() {
   }
 
   return (
-    <div className="flex w-full items-center justify-center bg-muted/20">
-      <div className="w-full">
+    <div className="flex w-full items-center justify-center">
+      <div className="w-full max-w-4xl">
         <video
           src={state.urls.directUrl}
           controls
           aria-label={`${file.name} video player`}
           onError={() => setFailedUrl(state.urls?.directUrl)}
-          className="w-full max-h-[65vh] object-contain"
+          className="w-full max-h-[60vh] object-contain"
           controlsList="nodownload"
           preload="metadata"
           muted={false}

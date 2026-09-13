@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 
-import { WorkspacePage } from '@/components/dashboard/page-shell'
 import { URLsClient } from '@/components/dashboard/urls-client'
 
 import { getPageSession } from '@/lib/auth/page-session'
@@ -13,11 +12,16 @@ export default async function URLsPage() {
   }
 
   return (
-    <WorkspacePage
-      title="Short links"
-      description="Turn long addresses into simple links. Keep every destination and its activity in one place."
-    >
-      <URLsClient />
-    </WorkspacePage>
+    <div className="container space-y-6">
+      <header className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <h1 className="text-3xl font-semibold tracking-tight">URL Shortener</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Shorten long URLs and monitor their traffic
+        </p>
+      </header>
+      <div className="rounded-2xl border border-border bg-card/80 p-5 shadow-sm backdrop-blur-xl sm:p-6">
+        <URLsClient />
+      </div>
+    </div>
   )
 }

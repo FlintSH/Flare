@@ -10,7 +10,7 @@ export function EmailAuthCard({
   children: React.ReactNode
 }) {
   return (
-    <AuthShell eyebrow="Your account" title={title} description={description}>
+    <AuthShell title={title} description={description}>
       {children}
     </AuthShell>
   )
