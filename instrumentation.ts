@@ -18,6 +18,8 @@ export async function register() {
         meticulousProjectName: 'fl1nt.dev/Flare',
         recordingToken: process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN,
       })
+      const { meticulousState } = await import('./lib/meticulous')
+      meticulousState.meticulousRecorder = recorder
       // Flush outstanding backend spans during normal Next.js shutdown.
       const flush = () => {
         void recorder?.stopRecording().catch((error: unknown) => {
