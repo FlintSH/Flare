@@ -70,7 +70,6 @@ export const configSchema = z.object({
           clientSecret: z.string().default(''),
           buttonText: z.string().default('Sign in with SSO'),
           autoProvision: z.boolean().default(true),
-          allowLinking: z.boolean().default(true),
           requireEmailVerified: z.boolean().default(true),
           enforceSso: z.boolean().default(false),
         })
@@ -137,7 +136,6 @@ export const DEFAULT_CONFIG: FlareConfig = {
         clientSecret: '',
         buttonText: 'Sign in with SSO',
         autoProvision: true,
-        allowLinking: true,
         requireEmailVerified: true,
         enforceSso: false,
       },
