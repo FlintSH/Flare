@@ -159,9 +159,9 @@ export function UploadForm({
           {uploadError && (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
+              className="mt-4 flex items-start gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-foreground"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <p>{uploadError}</p>
             </div>
           )}
@@ -328,7 +328,11 @@ export function UploadForm({
             </ul>
           </WorkspacePanel>
         ) : (
-          <WorkspaceNote icon={ShieldCheck} title="Share on your terms">
+          <WorkspaceNote
+            icon={ShieldCheck}
+            title="Share on your terms"
+            className="hidden xl:block"
+          >
             Use a saved upload profile for consistent defaults, or adjust access
             and expiration for this batch. You can manage your files in the
             library after uploading.
@@ -465,6 +469,18 @@ export function UploadForm({
           </div>
         </div>
       </WorkspacePanel>
+
+      {completed.length === 0 && (
+        <WorkspaceNote
+          icon={ShieldCheck}
+          title="Share on your terms"
+          className="xl:hidden"
+        >
+          Use a saved upload profile for consistent defaults, or adjust access
+          and expiration for this batch. You can manage your files in the
+          library after uploading.
+        </WorkspaceNote>
+      )}
 
       <ExpiryModal
         isOpen={isExpiryModalOpen}

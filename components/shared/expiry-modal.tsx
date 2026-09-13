@@ -420,7 +420,7 @@ export function ExpiryModal({
                         expiresAt.toDateString() ===
                           new Date().toDateString() &&
                         expiresAt <= new Date() && (
-                          <div className="rounded-lg bg-destructive/5 p-2 text-xs text-destructive">
+                          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground">
                             Time must be at least 5 minutes from now
                           </div>
                         )}

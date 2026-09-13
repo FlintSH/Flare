@@ -31,24 +31,27 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
     onUploadError: () => setShouldUpload(false),
   })
 
-  const handleDragEnter = useCallback((e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDragEnter = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    if (window.location.pathname.includes('/upload')) {
-      return
-    }
-
-    if (e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
-      const hasFiles = Array.from(e.dataTransfer.items).some(
-        (item) => item.kind === 'file'
-      )
-      if (hasFiles) {
-        setDragCounter((prev) => prev + 1)
-        setIsDragging(true)
+      if (window.location.pathname.includes('/upload') || isUploading) {
+        return
       }
-    }
-  }, [])
+
+      if (e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
+        const hasFiles = Array.from(e.dataTransfer.items).some(
+          (item) => item.kind === 'file'
+        )
+        if (hasFiles) {
+          setDragCounter((prev) => prev + 1)
+          setIsDragging(true)
+        }
+      }
+    },
+    [isUploading]
+  )
 
   const handleDragLeave = useCallback((e: DragEvent) => {
     e.preventDefault()
@@ -83,6 +86,13 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
 
       const droppedFiles = Array.from(e.dataTransfer?.files || [])
       if (droppedFiles.length === 0) return
+      if (isUploading) {
+        toast({
+          title: 'An upload is already in progress',
+          description: 'Wait for it to finish, then drop these files again.',
+        })
+        return
+      }
 
       const validFiles: File[] = []
       const oversizedFiles: File[] = []
@@ -108,7 +118,7 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
         setShouldUpload(true)
       }
     },
-    [maxSize, onDrop, toast]
+    [isUploading, maxSize, onDrop, toast]
   )
 
   useEffect(() => {

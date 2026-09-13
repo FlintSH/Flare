@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   AlertCircle,
@@ -46,6 +46,7 @@ interface URLListProps {
 
 export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
   const [urls, setUrls] = useState<ShortenedUrl[]>([])
+  const requestVersion = useRef(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -56,24 +57,26 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
   const { toast } = useToast()
 
   const fetchUrls = useCallback(async (signal?: AbortSignal) => {
+    const requestId = ++requestVersion.current
     try {
       const response = await fetch('/api/urls', { signal })
       if (!response.ok)
         throw new Error('Could not load your links. Please try again.')
       const data = await response.json()
-      if (!signal?.aborted) {
+      if (!signal?.aborted && requestId === requestVersion.current) {
         setUrls(data.data?.urls || [])
         setError('')
       }
     } catch (failure) {
-      if (!signal?.aborted)
+      if (!signal?.aborted && requestId === requestVersion.current)
         setError(
           failure instanceof Error
             ? failure.message
             : 'Could not load your links. Please try again.'
         )
     } finally {
-      if (!signal?.aborted) setIsLoading(false)
+      if (!signal?.aborted && requestId === requestVersion.current)
+        setIsLoading(false)
     }
   }, [])
 
@@ -112,6 +115,7 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
       onUrlDeleted?.(deleting.shortCode)
       setDeleting(null)
       toast({ title: 'Short link deleted' })
+      void fetchUrls()
     } catch {
       toast({
         title: 'Could not delete link',

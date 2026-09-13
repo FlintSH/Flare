@@ -249,14 +249,18 @@ export function PasteForm() {
               <p
                 id="paste-error"
                 role="alert"
-                className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
+                className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-foreground"
               >
                 {error}
               </p>
             )}
           </div>
         </WorkspacePanel>
-        <WorkspaceNote icon={FileCode2} title="A paste is a file, too">
+        <WorkspaceNote
+          icon={FileCode2}
+          title="A paste is a file, too"
+          className="hidden xl:block"
+        >
           Find pastes alongside your uploads in the file library. The filename
           determines how your code is highlighted when someone opens it.
         </WorkspaceNote>
@@ -340,6 +344,14 @@ export function PasteForm() {
           </div>
         </div>
       </WorkspacePanel>
+      <WorkspaceNote
+        icon={FileCode2}
+        title="A paste is a file, too"
+        className="xl:hidden"
+      >
+        Find pastes alongside your uploads in the file library. The filename
+        determines how your code is highlighted when someone opens it.
+      </WorkspaceNote>
     </form>
   )
 }

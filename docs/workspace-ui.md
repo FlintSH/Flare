@@ -12,7 +12,8 @@ apply throughout the app.
   no results, an empty library, and a failed request have distinct states.
 - **Upload:** choose files in the main workspace and review sharing defaults beside
   the queue. Completed files retain their open/copy actions. Saved upload profiles,
-  explicit overrides, progress, removal, cancellation, and retry remain available.
+  explicit overrides, progress, queue removal, and retry remain available. Partial
+  failures keep completed links and retry only the files that still need uploading.
 - **Paste:** start with content and an optional filename; review sharing options in
   the adjoining panel. The result stays visible with open/copy/create-another actions.
 - **Links:** create an address, copy its result, and find it in a searchable list.
@@ -32,7 +33,8 @@ Login, registration, account recovery, verification, and exceptional states shar
 branded shell with clear next actions. Public files keep all three share layouts
 (minimal, framed, and delivery), disclosure choices, and access checks. Their actions
 and image, text, code, CSV, audio, video, PDF, loading, error, and unsupported states
-use the same surface and typography conventions.
+use the same surface and typography conventions. Protected video playback preserves
+the exact password when resolving a local streaming URL.
 
 ## Review coverage
 

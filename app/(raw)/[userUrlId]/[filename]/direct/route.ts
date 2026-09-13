@@ -47,7 +47,7 @@ export async function GET(
       return NextResponse.json({ url: directUrl })
     }
 
-    const rawUrl = `${file.urlPath}/raw${providedPassword ? `?password=${providedPassword}` : ''}`
+    const rawUrl = `${file.urlPath}/raw${providedPassword ? `?${new URLSearchParams({ password: providedPassword })}` : ''}`
     return NextResponse.json({ url: rawUrl })
   } catch (error) {
     console.error('Direct URL error:', error)

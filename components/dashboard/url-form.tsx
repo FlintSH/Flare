@@ -114,7 +114,11 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
           </Button>
         </div>
         {error ? (
-          <p id="url-error" role="alert" className="text-sm text-destructive">
+          <p
+            id="url-error"
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground"
+          >
             {error}
           </p>
         ) : (
