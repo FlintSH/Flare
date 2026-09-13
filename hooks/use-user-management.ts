@@ -51,6 +51,7 @@ export interface UseUserManagementOptions {
 export function useUserManagement(options: UseUserManagementOptions = {}) {
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [pendingMutations, setPendingMutations] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -107,7 +108,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const createUser = useCallback(
     async (formData: UserFormData) => {
       try {
-        setIsLoading(true)
+        setPendingMutations((count) => count + 1)
         const response = await fetch('/api/users', {
           method: 'POST',
           headers: {
@@ -146,7 +147,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         })
         throw error
       } finally {
-        setIsLoading(false)
+        setPendingMutations((count) => count - 1)
       }
     },
     [fetchUsers, toast, options]
@@ -155,7 +156,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const updateUser = useCallback(
     async (userId: string, formData: UserFormData) => {
       try {
-        setIsLoading(true)
+        setPendingMutations((count) => count + 1)
         const response = await fetch('/api/users', {
           method: 'PUT',
           headers: {
@@ -199,7 +200,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         })
         throw error
       } finally {
-        setIsLoading(false)
+        setPendingMutations((count) => count - 1)
       }
     },
     [currentPage, fetchUsers, toast, options]
@@ -208,7 +209,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const deleteUser = useCallback(
     async (userId: string) => {
       try {
-        setIsLoading(true)
+        setPendingMutations((count) => count + 1)
         const response = await fetch(`/api/users/${userId}`, {
           method: 'DELETE',
         })
@@ -237,7 +238,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           variant: 'destructive',
         })
       } finally {
-        setIsLoading(false)
+        setPendingMutations((count) => count - 1)
       }
     },
     [currentPage, fetchUsers, toast, router, options]
@@ -246,7 +247,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const removeUserAvatar = useCallback(
     async (userId: string) => {
       try {
-        setIsLoading(true)
+        setPendingMutations((count) => count + 1)
         const response = await fetch(`/api/users/${userId}/avatar`, {
           method: 'DELETE',
         })
@@ -273,7 +274,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           variant: 'destructive',
         })
       } finally {
-        setIsLoading(false)
+        setPendingMutations((count) => count - 1)
       }
     },
     [toast]
@@ -281,7 +282,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
 
   return {
     users,
-    isLoading,
+    isLoading: isLoading || pendingMutations > 0,
     loadError,
     currentPage,
     pagination,

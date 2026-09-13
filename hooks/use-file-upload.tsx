@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Progress } from '@/components/ui/progress'
 import { ToastAction } from '@/components/ui/toast'
 
+import {
+  type UploadResponse,
+  parseUploadResponse,
+} from '@/lib/uploads/response'
+
 import { useToast } from './use-toast'
 
 export type FileWithPreview = File & {
@@ -13,14 +18,7 @@ export type FileWithPreview = File & {
   uploaded: number
 }
 
-export type UploadResponse = {
-  url: string
-  name: string
-  size: number
-  type: string
-  pageUrl?: string
-  copyText?: string
-}
+export type { UploadResponse } from '@/lib/uploads/response'
 
 export type FileUploadOptions = {
   maxSize?: number
@@ -272,8 +270,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         throw new Error('Failed to complete upload')
       }
 
-      const result = await completeResponse.json()
-      return result.data || result
+      return parseUploadResponse(await completeResponse.json())
     } catch (error) {
       console.error('Error in chunk upload:', error)
       throw error
@@ -299,10 +296,10 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          updateFileProgress(index, file.size)
           try {
-            const response = JSON.parse(xhr.responseText)
-            resolve(response.data || response)
+            const response = parseUploadResponse(JSON.parse(xhr.responseText))
+            updateFileProgress(index, file.size)
+            resolve(response)
           } catch {
             reject(new Error('Could not read the upload response.'))
           }
