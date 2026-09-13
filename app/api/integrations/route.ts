@@ -13,6 +13,7 @@ import {
   WEBHOOK_MAX_PENDING_PER_USER,
   WEBHOOK_SECRET_PURPOSE,
 } from '@/lib/integrations/webhooks'
+import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 export const runtime = 'nodejs'
 const name = z.string().trim().min(1).max(80)
@@ -126,10 +127,7 @@ export async function POST(request: Request) {
       { error: 'Sign in to manage integrations.' },
       { status: 401 }
     )
-  if (
-    request.headers.get('origin') &&
-    request.headers.get('origin') !== new URL(request.url).origin
-  )
+  if (!isSameOriginRequest(request))
     return NextResponse.json(
       { error: 'Cross-origin changes are not allowed.' },
       { status: 403 }

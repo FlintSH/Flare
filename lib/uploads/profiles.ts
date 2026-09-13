@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { UploadError } from './options'
 import { uploadProfileOptionsSchema } from './schema'
@@ -13,8 +14,7 @@ export async function profileSession() {
 }
 
 export function profileMutationGuard(request: Request, requireJson = true) {
-  const origin = request.headers.get('origin')
-  if (origin && origin !== new URL(request.url).origin)
+  if (!isSameOriginRequest(request))
     return Response.json(
       { error: 'Cross-origin changes are not allowed.' },
       { status: 403 }

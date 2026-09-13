@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { isSameOriginRequest } from '@/lib/security/request-origin'
+
 /** Browser-session writes must originate on this app, including uploads. */
 export function appearanceMutationGuard(
   request: Request,
   kind: 'json' | 'image' = 'json'
 ) {
-  const origin = request.headers.get('origin')
-  if (
-    (origin && origin !== new URL(request.url).origin) ||
-    request.headers.get('sec-fetch-site') === 'cross-site'
-  ) {
+  if (!isSameOriginRequest(request)) {
     return NextResponse.json(
       { error: 'Cross-origin changes are not allowed.' },
       { status: 403 }
