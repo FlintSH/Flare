@@ -30,6 +30,16 @@ jobs:
         with:
           ref: '${{ env.METICULOUS_COMMIT_SHA }}'
 
+      - name: Detect whether baseline setup is merged
+        id: replay-mode
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if git cat-file -e FETCH_HEAD:Dockerfile.meticulous 2>/dev/null; then
+            echo "compare=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compare=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -58,7 +68,7 @@ jobs:
           exit 1
 
       - name: Ensure base tests exist
-        if: vars.METICULOUS_REPLAY_READY == 'true'
+        if: steps.replay-mode.outputs.compare == 'true'
         uses: alwaysmeticulous/report-diffs-action/ensure-base@v1
         with:
           api-token: '${{ secrets.METICULOUS_API_TOKEN }}'
@@ -66,7 +76,7 @@ jobs:
 
       # Allows the first cloud replay to be verified before enabling PR comparisons.
       - name: Upload bootstrap deployment
-        if: vars.METICULOUS_REPLAY_READY != 'true'
+        if: steps.replay-mode.outputs.compare != 'true'
         env:
           METICULOUS_API_TOKEN: '${{ secrets.METICULOUS_API_TOKEN }}'
         run: |
@@ -77,14 +87,14 @@ jobs:
           cat meticulous-deployment.json
 
       - name: Save bootstrap deployment reference
-        if: vars.METICULOUS_REPLAY_READY != 'true'
+        if: steps.replay-mode.outputs.compare != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: meticulous-deployment
           path: meticulous-deployment.json
 
       - name: Run Meticulous tests
-        if: vars.METICULOUS_REPLAY_READY == 'true'
+        if: steps.replay-mode.outputs.compare == 'true'
         uses: alwaysmeticulous/report-diffs-action/upload-container@v1
         with:
           api-token: '${{ secrets.METICULOUS_API_TOKEN }}'

@@ -12,12 +12,20 @@ export async function register() {
       const { initBackendRecorder } = await import(
         '@alwaysmeticulous/backend-recorder-launcher'
       )
-      await initBackendRecorder({
+      const recorder = await initBackendRecorder({
         enabled: true,
         exportMode: 's3',
         meticulousProjectName: 'fl1nt.dev/Flare',
         recordingToken: process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN,
       })
+      // Flush outstanding backend spans during normal Next.js shutdown.
+      const flush = () => {
+        void recorder?.stopRecording().catch((error: unknown) => {
+          console.error('Could not flush Meticulous backend recording', error)
+        })
+      }
+      process.once('SIGTERM', flush)
+      process.once('SIGINT', flush)
     }
 
     const { runStartupTasks } = await import('./lib/startup/index')

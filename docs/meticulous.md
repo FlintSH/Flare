@@ -51,10 +51,10 @@ The workflow builds the image and checks that the fresh database and app start.
 `METICULOUS_API_TOKEN` is the only required GitHub secret. No database or NextAuth
 secret needs to be provisioned externally.
 
-During initial verification, with `METICULOUS_REPLAY_READY` unset, CI uploads a reusable
-deployment and saves its ID as the `meticulous-deployment` artifact. This allows a
-cloud replay before enabling comparisons. Once verified, setting the repository
-variable `METICULOUS_REPLAY_READY=true` enables the standard base/head comparison
-workflow. The workflow must also be merged into `main` so future PRs can build their
-baseline. Record new sessions with the backend recorder installed; older browser-only
-sessions do not contain backend recordings.
+Before the setup is merged into `main`, CI uploads a reusable deployment and saves
+its ID as the `meticulous-deployment` artifact. This allows a cloud replay before
+comparisons have a baseline. Once `main` contains `Dockerfile.meticulous`, the
+workflow automatically switches to standard base/head comparisons. No repository
+activation variable or support approval is required. Record new sessions with the
+backend recorder installed; older browser-only sessions do not contain backend
+recordings.

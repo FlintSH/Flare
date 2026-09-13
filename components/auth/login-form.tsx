@@ -71,7 +71,8 @@ export function LoginForm({
         return
       }
 
-      router.push((result?.url as string) || '/dashboard')
+      // Keep this fixed callback on the current origin (including preview/replay hosts).
+      router.push('/dashboard')
     } catch {
       setError('An error occurred. Please try again.')
     } finally {
