@@ -469,7 +469,7 @@ export function InstanceSettings({
     <PreferencesShell
       eyebrow="Your instance"
       title="Settings"
-      description="Make Flare feel at home. Everything you manage for your instance lives here."
+      description="Make Flare feel at home. Everything you manage for your instance lives here. Baseline selection check."
       sections={sections}
       activeSection={activeSection}
       onSectionChange={setSection}
