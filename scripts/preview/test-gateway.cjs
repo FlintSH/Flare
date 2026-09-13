@@ -89,12 +89,27 @@ test('notice and acknowledgment precede access without calling the app', async (
   const notice = await request(url, '/_preview')
   assert.equal(notice.status, 200)
   assert.match(notice.body, /unreviewed pull request code/)
-  assert.match(notice.body, /demo@example.test/)
+  assert.match(notice.body, /Flare’s normal setup/)
+  assert.doesNotMatch(
+    notice.body,
+    /Demo login|demo@example\.test|Flare-preview-only|settings and integrations are disabled/
+  )
+  assert.match(notice.body, /<form method="post" action="\/_preview\/enter">/)
   assert.equal(notice.headers['x-robots-tag'], 'noindex, nofollow, noarchive')
+  // Navigation form POSTs from no-referrer documents send Origin:null.
+  assert.equal(notice.headers['referrer-policy'], 'same-origin')
   assert.equal(
     (await request(url, '/_preview/enter', { method: 'POST' })).status,
     403
   )
+  for (const origin of ['null', 'https://unrelated.example.test']) {
+    const rejected = await request(url, '/_preview/enter', {
+      method: 'POST',
+      headers: { origin },
+    })
+    assert.equal(rejected.status, 403)
+    assert.equal(rejected.headers['set-cookie'], undefined)
+  }
   const enter = await request(url, '/_preview/enter', {
     method: 'POST',
     headers: { origin: ORIGIN },
@@ -102,6 +117,12 @@ test('notice and acknowledgment precede access without calling the app', async (
   assert.equal(enter.status, 303)
   assert.match(enter.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Lax/)
   assert.equal(calls.length, 0)
+  const opened = await request(url, enter.headers.location, {
+    headers: { cookie: enter.headers['set-cookie'][0].split(';')[0] },
+  })
+  assert.equal(opened.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(opened.headers['referrer-policy'], undefined)
 })
 
 test('proxy preserves application traffic and replaces spoofed internal headers', async (t) => {
@@ -135,41 +156,42 @@ test('proxy preserves application traffic and replaces spoofed internal headers'
     'x-matched-path',
   ])
     assert.equal(calls[0].headers[name], undefined)
-  assert.match(
-    response.headers['content-security-policy'],
-    /connect-src 'self'/
+  assert.equal(response.headers['content-security-policy'], undefined)
+})
+
+test('normal setup, registration, settings and integrations reach Flare unchanged', async (t) => {
+  const { url, calls } = await fixture(t)
+  const routes = [
+    ['GET', '/setup'],
+    ['GET', '/register'],
+    ['GET', '/api/setup/check'],
+    ['POST', '/api/setup'],
+    ['POST', '/api/auth/register'],
+    ['POST', '/api/auth/email/reset'],
+    ['POST', '/api/integrations'],
+    ['POST', '/api/urls'],
+    ['GET', '/u/abc'],
+    ['DELETE', '/api/%75sers/id'],
+    ['PUT', '/api/profile'],
+    ['POST', '/api/profile/upload-token'],
+    ['PATCH', '/api/settings/email'],
+    ['DELETE', '/api/users/id'],
+  ]
+  for (const [method, path] of routes) {
+    assert.equal(
+      (await request(url, path, { method, headers: ACK })).status,
+      200,
+      path
+    )
+  }
+  assert.deepEqual(
+    calls.map(({ method, path }) => [method, path]),
+    routes
   )
 })
 
-test('sensitive routes and encoded bypasses never reach the app', async (t) => {
+test('ambiguous encoded paths are rejected before calling the private app', async (t) => {
   const { url, calls } = await fixture(t)
-  for (const path of [
-    '/api/setup',
-    '/api/auth/register',
-    '/api/auth/email/reset',
-    '/api/integrations',
-    '/api/urls',
-    '/u/abc',
-    '/api/%75sers/id',
-  ]) {
-    assert.equal(
-      (await request(url, path, { method: 'POST', headers: ACK })).status,
-      403,
-      path
-    )
-  }
-  for (const path of [
-    '/api/profile',
-    '/api/profile/upload-token',
-    '/api/settings/email',
-    '/api/users/id',
-  ]) {
-    assert.equal(
-      (await request(url, path, { method: 'DELETE', headers: ACK })).status,
-      403,
-      path
-    )
-  }
   for (const path of [
     '//api/setup',
     '/api/../api/setup',
@@ -234,18 +256,30 @@ test('request targets cannot redirect the connection to another host', async (t)
   assert.equal(foreignCalls, 0)
 })
 
-test('read-only setup status remains available to the root page checker', async (t) => {
-  const { url, calls } = await fixture(t)
-  assert.equal(
-    (await request(url, '/api/setup/check', { headers: ACK })).status,
-    200
-  )
-  assert.equal(
-    (await request(url, '/api/setup/check', { method: 'POST', headers: ACK }))
-      .status,
-    403
-  )
-  assert.equal(calls.length, 1)
+test('Flare controls authorization and content policies for its pages', async (t) => {
+  const policy = "script-src 'self' https://assets.example.test; img-src *"
+  const body = '<h1>Flare authorization response</h1>'
+  const { url } = await fixture(t, (_req, res) => {
+    res.writeHead(403, {
+      'content-type': 'text/html; charset=utf-8',
+      'content-security-policy': policy,
+      'referrer-policy': 'strict-origin',
+      'permissions-policy': 'camera=(self)',
+      'x-frame-options': 'SAMEORIGIN',
+      'cache-control': 'private, max-age=30',
+      'x-robots-tag': 'index, follow',
+    })
+    res.end(body)
+  })
+  const response = await request(url, '/settings', { headers: ACK })
+  assert.equal(response.status, 403)
+  assert.equal(response.body, body)
+  assert.equal(response.headers['content-security-policy'], policy)
+  assert.equal(response.headers['referrer-policy'], 'strict-origin')
+  assert.equal(response.headers['permissions-policy'], 'camera=(self)')
+  assert.equal(response.headers['x-frame-options'], 'SAMEORIGIN')
+  assert.equal(response.headers['cache-control'], 'private, max-age=30')
+  assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive')
 })
 
 test('declared oversized bodies are rejected before proxying', async (t) => {
@@ -278,19 +312,20 @@ test('gateway expiry applies even when the app ignores its lifetime', async (t) 
   assert.equal(calls.length, 0)
 })
 
-test('health verifies both database setup and app health without redirect following', async (t) => {
+test('health accepts raw setup and completed setup while still checking database health', async (t) => {
   let initialized = false
+  let healthy = true
   const { url, calls } = await fixture(t, (req, res) => {
     res.setHeader('content-type', 'application/json')
     res.end(
       JSON.stringify(
         req.url === '/api/setup/check'
           ? { completed: initialized }
-          : { success: true, data: { status: 'ok' } }
+          : { success: healthy, data: { status: healthy ? 'ok' : 'error' } }
       )
     )
   })
-  assert.equal((await request(url, '/_preview/health')).status, 503)
+  assert.equal((await request(url, '/_preview/health')).status, 200)
   initialized = true
   assert.equal((await request(url, '/_preview/health')).status, 200)
   assert.deepEqual(calls.map((call) => call.path).sort(), [
@@ -299,19 +334,36 @@ test('health verifies both database setup and app health without redirect follow
     '/api/setup/check',
     '/api/setup/check',
   ])
+  for (const invalid of [null, undefined, 'false', 0]) {
+    initialized = invalid
+    assert.equal((await request(url, '/_preview/health')).status, 503)
+  }
+  initialized = false
+  healthy = false
+  assert.equal((await request(url, '/_preview/health')).status, 503)
 })
 
-test('external redirects and oversized responses are refused', async (t) => {
+test('application redirects pass through and oversized responses remain bounded', async (t) => {
+  let foreignCalls = 0
+  const foreign = http.createServer((_req, res) => {
+    foreignCalls += 1
+    res.end('The gateway must not follow this redirect')
+  })
+  const destination = `${await listen(foreign)}/authorize`
+  t.after(() => new Promise((resolve) => foreign.close(resolve)))
   const { url } = await fixture(t, (req, res) => {
     if (req.url === '/redirect') {
-      res.writeHead(302, { location: 'http://169.254.169.254/' })
+      res.writeHead(302, { location: destination })
       res.end()
     } else {
       res.writeHead(200, { 'content-length': 17 * 1024 * 1024 })
       res.end()
     }
   })
-  assert.equal((await request(url, '/redirect', { headers: ACK })).status, 502)
+  const response = await request(url, '/redirect', { headers: ACK })
+  assert.equal(response.status, 302)
+  assert.equal(response.headers.location, destination)
+  assert.equal(foreignCalls, 0)
   assert.equal((await request(url, '/large', { headers: ACK })).status, 502)
 })
 

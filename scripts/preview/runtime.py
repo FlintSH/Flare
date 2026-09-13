@@ -360,42 +360,54 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def smoke(url):
-    """Exercise the real database-backed login without following PR redirects."""
+    """Verify acknowledgment and an untouched first-run setup without creating an account."""
     origin = urllib.parse.urlsplit(url)
     if (origin.scheme != "https" or not DOMAIN.fullmatch(origin.netloc)
             or origin.path or origin.query or origin.fragment):
         raise ValueError("Unexpected health check origin")
     jar = http.cookiejar.CookieJar()
-    jar.set_cookie(http.cookiejar.Cookie(
-        version=0, name="flare_preview_ack", value="1", port=None, port_specified=False,
-        domain=urllib.parse.urlsplit(url).hostname, domain_specified=False,
-        domain_initial_dot=False, path="/", path_specified=True, secure=True,
-        expires=None, discard=True, comment=None, comment_url=None, rest={}, rfc2109=False,
-    ))
     opener = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPCookieProcessor(jar))
 
-    def request(path, form=None):
+    def fetch(path, form=None, expected_status=200, max_bytes=65536):
         headers = {}
         body = urllib.parse.urlencode(form).encode() if form is not None else None
         if body is not None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
-        with opener.open(urllib.request.Request(url + path, data=body, headers=headers), timeout=15) as response:
-            data = response.read(65537)
-            if len(data) > 65536:
+            headers["Origin"] = url
+        try:
+            response = opener.open(urllib.request.Request(url + path, data=body, headers=headers), timeout=15)
+        except urllib.error.HTTPError as error:
+            # Accept the acknowledgment's expected redirect without following
+            # it. CookieJar has already processed its Set-Cookie response.
+            if error.code != expected_status:
+                raise
+            response = error
+        with response:
+            if response.getcode() != expected_status:
+                raise RuntimeError("Unexpected preview smoke response status")
+            data = response.read(max_bytes + 1)
+            if len(data) > max_bytes:
                 raise RuntimeError("Preview health response exceeds limit")
-            return json.loads(data)
+            return response.headers, data
 
-    request("/_preview/health")
-    csrf = request("/api/auth/csrf")["csrfToken"]
-    if not isinstance(csrf, str) or len(csrf) > 256:
-        raise RuntimeError("Invalid CSRF response")
-    # CookieJar stores Secure NextAuth cookies. Add acknowledgment without
-    # overriding those cookies on subsequent requests.
-    request("/api/auth/callback/credentials", {"csrfToken": csrf, "email": "demo@example.test",
-            "password": "Flare-preview-only!2026", "json": "true", "callbackUrl": url + "/dashboard"})
-    session = request("/api/auth/session")
-    if session.get("user", {}).get("email") != "demo@example.test" or session["user"].get("role") != "USER":
-        raise RuntimeError("Preview login smoke check failed")
+    def request(path, form=None):
+        return json.loads(fetch(path, form)[1])
+
+    notice, _ = fetch("/_preview")
+    if notice.get("Referrer-Policy", "").lower() != "same-origin":
+        raise RuntimeError("Preview notice does not preserve same-origin form submissions")
+    entered, _ = fetch("/_preview/enter", {}, expected_status=303)
+    if entered.get("Location") != "/" or not any(
+            cookie.name == "flare_preview_ack" and cookie.value == "1" and cookie.secure for cookie in jar):
+        raise RuntimeError("Preview notice acknowledgment failed")
+    if request("/_preview/health").get("status") != "ready":
+        raise RuntimeError("Preview health check failed")
+    if request("/api/setup/check").get("completed") is not False:
+        raise RuntimeError("Preview must start at Flare's untouched first-run setup")
+    # Read the normal setup page without submitting its form or modifying data.
+    setup, body = fetch("/setup", max_bytes=512 * 1024)
+    if not setup.get("Content-Type", "").lower().startswith("text/html") or b"<html" not in body.lower():
+        raise RuntimeError("Preview setup page is unavailable")
 
 
 def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
@@ -435,9 +447,7 @@ def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
         patch(environment_id, {
             app: {"source": {"image": image, "autoUpdates": {"type": "disabled"}},
                   "variables": variable_config({"PORT": 3000, "HOSTNAME": "::", "NEXTAUTH_URL": url,
-                     "PREVIEW_EXPIRES_AT": expires_at, "FLARE_PR_PREVIEW": "true",
-                     "FLARE_EMAIL_ENABLED": "false", "FLARE_EMAIL_RECOVERY_ENABLED": "false",
-                     "FLARE_EMAIL_VERIFICATION_MODE": "off", "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN": ""})},
+                     "PREVIEW_EXPIRES_AT": expires_at, "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN": ""})},
             gateway: {"source": {"image": os.environ["PREVIEW_GATEWAY_IMAGE"], "autoUpdates": {"type": "disabled"}},
                       "variables": variable_config({"PORT": 8080, "PREVIEW_PUBLIC_URL": url,
                          "PREVIEW_UPSTREAM": "http://preview-app.railway.internal:3000",
@@ -452,7 +462,7 @@ def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
                     return result
                 except (urllib.error.URLError, ValueError, KeyError, RuntimeError):
                     # Edge routing/TLS can lag deployment success. Give the real
-                    # login check the same bounded readiness window.
+                    # first-run setup check the same bounded readiness window.
                     pass
             if result["failed"]:
                 raise RuntimeError("Preview deployment failed")

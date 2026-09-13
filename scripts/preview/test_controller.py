@@ -248,6 +248,8 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(len(runtime.deployed), 1)
         self.assertIn("Do not enter", gh.comments[1]["body"])
         self.assertIn("artifacts/555", gh.comments[1]["body"])
+        self.assertIn("first-run setup with no pre-created account", gh.comments[1]["body"])
+        self.assertNotIn("demo@example.test", gh.comments[1]["body"])
 
     def test_disabled_setup_does_not_deploy(self):
         gh, runtime = FakeGitHub(), FakeRuntime()

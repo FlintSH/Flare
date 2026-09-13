@@ -1,4 +1,5 @@
-# Preview defaults use a clean runtime instead of inheriting application ENV or
+# The disposable runtime starts Flare with its ordinary first-run setup and no
+# seeded users or preview settings. It does not inherit application ENV or
 # ENTRYPOINT. A PR can change this image; the separate trusted gateway and
 # deployment controller enforce the public boundary, limits and expiry.
 FROM flare-preview-app AS application
