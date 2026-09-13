@@ -2,6 +2,7 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  productionBrowserSourceMaps: process.env.METICULOUS_BUILD === 'true',
   experimental: {
     reactCompiler: true,
   },

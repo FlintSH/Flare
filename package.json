@@ -106,6 +106,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@alwaysmeticulous/sdk-bundles-api": "^2.339.0",
     "@eslint/eslintrc": "^3.3.1",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/busboy": "^1.5.4",

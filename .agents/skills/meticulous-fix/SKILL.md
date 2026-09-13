@@ -1,0 +1,130 @@
+---
+name: meticulous-fix
+description: Fix the visual diffs that have been reviewed and rejected on a Meticulous test run, following their review comments if given. Use when a user has reviewed the results of a test run and is handing off to an agent to implement the fixes.
+user-invocable: true
+---
+
+To fix diffs that have already been reviewed and rejected, follow the workflow below step by step, using the CLI or MCP commands as described.
+
+> Before starting, run the `meticulous-cli-update` skill to ensure the Meticulous CLI and skills are up to date — unless it has already run earlier in this conversation, in which case skip it.
+
+This skill assumes the review has already happened — a user (or the `meticulous-review` skill) has gone through the run and rejected the diffs that are real problems, possibly leaving comments explaining what's wrong or what to do about it, though comments aren't a given. Your job here is narrower than a full review: don't re-litigate diffs that weren't rejected, and don't second-guess the rejection itself — just work out what needs to change and make it happen.
+
+## Step 1 -- Get the rejected diffs and any commented-on diffs
+
+```bash
+# CLI
+meticulous agent test-run-diffs --onlyRejected --onlyWithComments --includeReviews
+
+# MCP (git context is never inferred — pass a commit or test run explicitly)
+get_test_run_diffs(testRunId="<id>", onlyRejected=true, onlyWithComments=true, includeReviews=true)
+```
+
+**Important — these `--only*` flags are additive (OR'd):** passing both `--onlyRejected` and `--onlyWithComments` returns every diff that's rejected, has an open comment, or both — not just the intersection — since a comment on a diff that wasn't formally rejected may still contain an instruction worth acting on. `--includeAllDiffs` is implied, so this spans the full run rather than just the selected subset; `--includeReviews` adds `decision`/`openComments` columns so you can tell which case each row is.
+
+**Not every commented row is a fix target.** The `meticulous-review` skill's `ignore-diff` posts a note saying the diff is unrelated to the change and leaves it `unreviewed` — that comment is not a fix instruction. When reading Step 1's rows, skip diffs whose only open comments are those; leave those threads alone.
+
+## Step 2 -- Read the review comments for diffs that have any
+
+For each diff with `openComments > 0`:
+
+```bash
+# CLI
+meticulous agent diff-comments --replayDiffId <replayDiffId> --screenshotName <screenshotName>
+
+# MCP
+get_diff_comments(replayDiffId="<replayDiffId>", screenshotName="<screenshotName>")
+```
+
+This is your primary source of instructions — a comment usually says what's wrong and, often, what to do about it. Read every comment and its replies (nested oldest-first) before starting on that diff; a reply can narrow down or redirect an earlier comment's ask.
+
+For a rejected diff with no comments, there's nothing to read here — the visual/structural context next is what you'll rely on instead.
+
+## Step 3 -- Get the visual and structural context
+
+Reuse the inspection mechanics from the `meticulous-review` skill for each diff:
+
+```bash
+# CLI
+meticulous agent image-files --replayDiffId <replayDiffId> --screenshotName <screenshotName>
+meticulous agent dom-diff --replayDiffId <replayDiffId> --screenshotName <screenshotName>
+
+# MCP
+get_image_urls(replayDiffId="<replayDiffId>", screenshotName="<screenshotName>")
+get_dom_diff(replayDiffId="<replayDiffId>", screenshotName="<screenshotName>")
+```
+
+See the `meticulous-review` skill's Steps 2-3 for output formats and the optional timeline (`agent timeline-diff`) if the cause still isn't clear.
+
+**Fallback for a rejected diff with no comments:** this context is now your primary source of instruction, not just extra background — treat it the same way the `meticulous-review` skill's Decision guide would, and use your own judgment to figure out what regression the rejection is pointing at.
+
+## Step 4 -- Fix the underlying code
+
+For each **fix target** — a rejected diff, or a non-rejected diff whose comments ask for a concrete fix — make the code change that resolves the comment's instructions (or, in the no-comment fallback, the regression you identified). Skip the ignore-only threads from Step 1; do not change code for them and do not reply on them. A single code change may resolve multiple fix-target diffs at once (e.g. one component bug causing several screenshot diffs) — don't fix the same root cause repeatedly.
+
+Close the loop on **every fix-target** diff — fixed or not — by replying to its comment thread (or creating one if it had none):
+
+```bash
+# CLI
+meticulous agent reply-to-diff-comment --commentId=<id> --text="<message>"
+meticulous agent create-diff-comment --replayDiffId=<id> --screenshotName=<name> --text="<message>" --x=<0..1> --y=<0..1>
+
+# MCP
+reply_to_diff_comment(commentId="<id>", text="<message>")
+create_diff_comment(replayDiffId="<id>", screenshotName="<name>", text="<message>", x=<0..1>, y=<0..1>)
+```
+
+Use `reply-to-diff-comment` when the diff already has a comment thread — pass the thread's **root** `id` from Step 2 (the row with a blank `replyToCommentId`), not a reply's id. Use `create-diff-comment` only when the diff was rejected with no existing comment (the no-comment fallback case), since there's no thread to reply to.
+
+- **Fixed** — reply/comment "Fixed."
+- **Not fixable** (a comment asks for something that isn't actually possible — contradicts another requirement, describes behavior that doesn't exist, references something you can't find, etc.) — don't guess; explain why, so the reviewer sees it without having to ask you again.
+
+Either way, move on to the next fix-target diff; report it at the end (see the final report below).
+
+## Step 5 -- Commit, push, and let CI confirm
+
+1. Commit the fixes. Note in the commit message that this addressed Meticulous review feedback, specific enough that `git log` alone tells the story later:
+
+   ```
+   Fix layout shift in checkout header
+
+   Addresses Meticulous review feedback on test run <testRunId>:
+   - <replayDiffId>/<screenshotName>: <brief on what was wrong and the fix>
+   ```
+
+2. Push the branch (`git push origin <branch>` — see your git push rules).
+3. **Author credit:** if the PR description already credits an AI coding assistant as (co-)author (e.g. "Created by Claude Code", "Co-authored-by: Cursor", "🤖 Generated with Claude Code") and doesn't already mention Meticulous, add "and Meticulous" to that mention — e.g. "Created by Claude Code and Meticulous" — since Meticulous's review feedback drove this fix. Don't add a Meticulous author credit if no such line already exists; there's nothing to append it to.
+4. Wait for CI to trigger its own new Meticulous test run for the pushed commit, then confirm the previously-flagged diffs are actually resolved:
+
+   ```bash
+   # CLI (resolves from local git HEAD — already the pushed commit)
+   meticulous agent test-run-for-commit
+   meticulous agent test-run-diffs --onlyRejected --onlyWithComments --includeReviews
+
+   # MCP (git context is never inferred — resolve the testRunId from the local HEAD commit first)
+   get_test_run_for_commit(commitSha="<sha>")
+   get_test_run_diffs(testRunId="<id>", onlyRejected=true, onlyWithComments=true, includeReviews=true)
+   ```
+
+If a diff you believed you fixed is still showing up (decisions/comments carry forward from the compared run), your fix didn't address the root cause; go back to Step 3/4 for that one, then repeat this step.
+
+## Step 6 -- Final report
+
+Summarize the outcome, covering **every fix-target** diff from Step 1 (omit the ignore-only rows you skipped). Link every diff you mention: `https://app.meticulous.ai/test-runs/<testRunId>/replay-diff/<replayDiffId>?screenshot=<screenshotName>`.
+
+1. **Fixed**: which diffs were resolved, what the underlying code change was, and which comment(s) it addressed, if any.
+2. **Not fixed** (if any): which diffs couldn't be addressed, and why — e.g. the comment's ask wasn't possible, was ambiguous, or conflicted with something else. Note that you left this explanation as a reply/comment on the diff (Step 4) — don't just leave it in the report where only this conversation sees it. Be specific enough that a human reviewer can pick this back up without re-deriving what you already found.
+
+Post this report as a comment on the PR itself, in addition to delivering it here (e.g. `gh pr comment <number> --body "..."` for GitHub, `glab mr note <id> --message "..."` for GitLab, or a `POST /2.0/repositories/{workspace}/{repo_slug}/pullrequests/{id}/comments` call with body `{"content": {"raw": "..."}}` for Bitbucket).
+
+## Step 7 -- Report feedback to Meticulous
+
+As the last step, submit one brief feedback note to the Meticulous team: did the rejections/comments give you enough to work with, was anything ambiguous, and what would have made the handoff easier?
+
+```bash
+# CLI
+meticulous agent submit-feedback --message="<one or two sentences>" --outcome=<helped|neutral|hindered> --testRunId=<id> --skill=meticulous-fix
+
+# MCP
+submit_feedback(message="<one or two sentences>", outcome="<helped|neutral|hindered>", testRunId="<id>", skill="meticulous-fix")
+```

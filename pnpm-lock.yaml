@@ -234,6 +234,9 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@alwaysmeticulous/sdk-bundles-api':
+        specifier: ^2.339.0
+        version: 2.339.0
       '@eslint/eslintrc':
         specifier: ^3.3.1
         version: 3.3.1(supports-color@7.2.0)
@@ -300,6 +303,14 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@alwaysmeticulous/api@2.339.0':
+    resolution: {integrity: sha512-iDHSd7F4zv8JQ3RvN7uPQKDQZMyxACHul91hdnuBL9ZS1alkmewp77ncIqimLye+2utNWACRb6JnQvYw3hf9VQ==}
+    engines: {node: '>= 18'}
+
+  '@alwaysmeticulous/sdk-bundles-api@2.339.0':
+    resolution: {integrity: sha512-+dKRnyZB8ZlV3x7dDBiBHMUlWGp7/+NOzUrRuZaNJue1lU39Lu6Aid8ZsA9AkVEWpcqpWlCgdhY1QeV3Gj3uMQ==}
+    engines: {node: '>= 18'}
 
   '@aws-crypto/crc32@5.2.0':
     resolution: {integrity: sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg==}
@@ -4444,6 +4455,12 @@ packages:
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@alwaysmeticulous/api@2.339.0': {}
+
+  '@alwaysmeticulous/sdk-bundles-api@2.339.0':
+    dependencies:
+      '@alwaysmeticulous/api': 2.339.0
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:

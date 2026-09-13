@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 
 import { CustomHead } from '@/components/layout/custom-head'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { MeticulousContext } from '@/components/providers/meticulous-context'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { SetupChecker } from '@/components/setup-checker'
 import { ThemeInitializer } from '@/components/theme/theme-initializer'
@@ -40,12 +41,36 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic'
 
+// Project only boolean controls; configuration also contains private credentials.
+function collectBooleanFlags(
+  values: Record<string, unknown>,
+  prefix = ''
+): Record<string, boolean> {
+  const flags: Record<string, boolean> = {}
+  for (const [key, value] of Object.entries(values)) {
+    const name = prefix ? `${prefix}.${key}` : key
+    if (typeof value === 'boolean') {
+      flags[name] = value
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.assign(
+        flags,
+        collectBooleanFlags(value as Record<string, unknown>, name)
+      )
+    }
+  }
+  return flags
+}
+
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const config = await getConfig()
+  const recordMeticulous =
+    (process.env.NODE_ENV === 'development' ||
+      process.env.VERCEL_ENV === 'preview') &&
+    Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
   const hasCustomFont =
     config.settings.advanced.customCSS.includes('font-family')
 
@@ -61,6 +86,17 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Record only in development or preview environments, never production. */}
+        {recordMeticulous && (
+          // eslint-disable-next-line @next/next/no-sync-scripts
+          <script
+            data-recording-token={
+              process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN
+            }
+            data-is-production-environment="false"
+            src="https://snippet.meticulous.ai/v1/meticulous.js"
+          />
+        )}
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <ThemeInitializer />
@@ -77,6 +113,11 @@ export default async function RootLayout({
         >
           <QueryProvider>
             <AuthProvider>
+              {recordMeticulous && (
+                <MeticulousContext
+                  flags={collectBooleanFlags(config.settings.general)}
+                />
+              )}
               <SetupChecker>
                 <div className="flex-1">{children}</div>
               </SetupChecker>
