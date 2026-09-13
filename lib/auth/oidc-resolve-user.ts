@@ -1,6 +1,7 @@
 import { UserRole } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { lockEmailAddress } from '@/lib/email/account'
 import { createUser } from '@/lib/users/create-user'
 
 export interface OidcProfile {
@@ -14,6 +15,8 @@ export interface OidcProfile {
 export interface OidcConfig {
   autoProvision: boolean
   requireEmailVerified: boolean
+  trustEmail?: boolean
+  emailEnabled?: boolean
 }
 
 export interface ResolvedOidcUser {
@@ -55,6 +58,20 @@ export async function resolveOidcUser(
   })
 
   if (existingBySubject) {
+    if (
+      config.trustEmail &&
+      profile.email_verified === true &&
+      profile.email === existingBySubject.email
+    ) {
+      await prisma.user.update({
+        where: { id: existingBySubject.id },
+        data: {
+          emailVerified: new Date(),
+          emailVerifiedFor: existingBySubject.email,
+          emailVerificationSource: 'oidc',
+        },
+      })
+    }
     return { ok: true, user: toResolvedUser(existingBySubject) }
   }
 
@@ -82,15 +99,34 @@ export async function resolveOidcUser(
     return { ok: false, reason: 'not_provisioned' }
   }
 
-  const created = await prisma.$transaction((tx) =>
-    createUser(tx, {
+  const created = await prisma.$transaction(async (tx) => {
+    if (config.emailEnabled) {
+      await lockEmailAddress(tx, profile.email as string)
+      if (
+        await tx.user.findFirst({
+          where: {
+            email: { equals: profile.email as string, mode: 'insensitive' },
+          },
+        })
+      )
+        return null
+    }
+    return createUser(tx, {
       email: profile.email as string,
       name: profile.name || profile.email!.split('@')[0],
       image: profile.picture,
       oidcSubject: profile.sub,
       emailVerified: profile.email_verified === true ? new Date() : undefined,
+      ...(config.trustEmail && profile.email_verified === true
+        ? {
+            emailVerifiedFor: profile.email as string,
+            emailVerificationSource: 'oidc',
+          }
+        : {}),
     })
-  )
+  })
+
+  if (!created) return { ok: false, reason: 'account_exists' }
 
   return { ok: true, user: toResolvedUser(created) }
 }

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { signIn } from 'next-auth/react'
 
+import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,18 @@ export function RegisterForm() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [verificationRequired, setVerificationRequired] = useState(false)
+
+  useEffect(() => {
+    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
+      .then((email) =>
+        setVerificationRequired(
+          email.enabled &&
+            ['new_users', 'all_users'].includes(email.verificationMode)
+        )
+      )
+      .catch(() => {})
+  }, [])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -58,6 +71,9 @@ export function RegisterForm() {
         throw new Error(data.error || 'Failed to register')
       }
 
+      const registered = await res.json()
+      const nextAction = (registered.data ?? registered).nextAction
+
       const result = await signIn('credentials', {
         email,
         password,
@@ -68,7 +84,9 @@ export function RegisterForm() {
         throw new Error('Failed to sign in after registration')
       }
 
-      router.push('/dashboard')
+      router.push(
+        nextAction === 'verify_email' ? '/auth/verify-email' : '/dashboard'
+      )
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Something went wrong')
     } finally {
@@ -85,6 +103,11 @@ export function RegisterForm() {
         <p className="text-base text-muted-foreground">
           Enter your details to get started
         </p>
+        {verificationRequired && (
+          <p className="text-sm text-muted-foreground">
+            You will confirm your email address before using your account.
+          </p>
+        )}
       </div>
       <div className="space-y-4">
         <div className="space-y-2">

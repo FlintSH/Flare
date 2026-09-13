@@ -149,7 +149,7 @@ export default function SetupPage() {
           description:
             'Your instance is configured. Please sign in to continue.',
         })
-        router.push('/auth/login')
+        router.push('/auth/login?local=1&setupEmail=1')
         return
       }
 
@@ -158,7 +158,7 @@ export default function SetupPage() {
         description: 'Your Flare instance has been configured successfully',
       })
 
-      router.push('/dashboard')
+      router.push('/setup/email')
       router.refresh()
     } catch (error) {
       console.error('Setup error:', error)

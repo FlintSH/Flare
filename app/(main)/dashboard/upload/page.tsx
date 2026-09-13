@@ -1,16 +1,14 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth'
-
 import { UploadForm } from '@/components/file/upload-form'
 
-import { authOptions } from '@/lib/auth'
+import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { formatBytes } from '@/lib/utils'
 
 export default async function UploadPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getPageSession()
 
   if (!session?.user) {
     redirect('/auth/login')

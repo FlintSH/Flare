@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
-
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 import { LoggingContext } from '@/lib/logger/middleware'
 
@@ -64,7 +62,7 @@ export function withApiHandler<T = unknown>(
       })
 
       if (options.requireAuth || options.requireAdmin) {
-        const session = await getServerSession(authOptions)
+        const session = await getAccessSession()
 
         if (!session?.user) {
           apiLogger.warn('Unauthorized request', {

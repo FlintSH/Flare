@@ -12,6 +12,13 @@ model User {
   name                        String?
   email                       String?        @unique
   emailVerified               DateTime?
+  emailVerifiedFor            String?
+  emailVerificationSource     String?
+  emailExempt                 Boolean        @default(false)
+  pendingEmail                String?
+  pendingEmailOldConfirmed    Boolean        @default(false)
+  emailTokens                 EmailToken[]
+  mailOutbox                  MailOutbox[]
   image                       String?
   password                    String?
   role                        UserRole       @default(USER)
@@ -28,6 +35,56 @@ model User {
   shortenedUrls               ShortenedUrl[]
   defaultFileExpiration       FileExpiration @default(DISABLED)
   defaultFileExpirationAction ExpiryAction   @default(DELETE)
+}
+
+model EmailToken {
+  id         String       @id @default(cuid())
+  userId     String
+  email      String
+  purpose    String
+  tokenHash  String       @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mail       MailOutbox[]
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model MailOutbox {
+  id          String      @id @default(cuid())
+  userId      String?
+  tokenId     String?
+  purpose     String
+  recipient   String
+  payload     String
+  status      String      @default("pending")
+  attempts    Int         @default(0)
+  maxAttempts Int         @default(3)
+  availableAt DateTime    @default(now())
+  expiresAt   DateTime?
+  leaseUntil  DateTime?
+  leaseId     String?
+  sentAt      DateTime?
+  lastError   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       EmailToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([status, availableAt])
+  @@index([leaseUntil])
+  @@index([createdAt])
+}
+
+model EmailRateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
 }
 
 model File {

@@ -1,10 +1,8 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth/next'
-
 import { ProfileClient } from '@/components/profile'
 
-import { authOptions } from '@/lib/auth'
+import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { formatFileSize } from '@/lib/utils'
@@ -12,7 +10,7 @@ import { formatFileSize } from '@/lib/utils'
 import { LogoutButton } from './logout-button'
 
 export default async function ProfilePage() {
-  const session = await getServerSession(authOptions)
+  const session = await getPageSession()
 
   if (!session?.user) {
     redirect('/auth/login')

@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 
 import { loggers } from '@/lib/logger'
 
+import { sanitizeLogUrl } from './url'
+
 const logger = loggers.middleware
 
 export interface LoggingContext {
@@ -65,7 +67,7 @@ export async function withLogging<T>(
       userId,
       duration,
       method: req.method,
-      url: req.url,
+      url: sanitizeLogUrl(req.url),
     })
 
     const statusCode = (error as { statusCode?: number })?.statusCode || 500

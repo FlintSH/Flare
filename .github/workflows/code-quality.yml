@@ -12,6 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: flare_test
+          POSTGRES_PASSWORD: public-ci-test-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +51,17 @@ jobs:
         run: pnpm tsc --noEmit
 
       - name: Test
-        run: pnpm test
+        env:
+          PGPASSWORD: public-ci-test-password
+          FLARE_EMAIL_AUTH_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_email_test
+          FLARE_EMAIL_DELIVERY_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_email_delivery
+          FLARE_EMAIL_CONFIG_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_email_config_test
+        run: |
+          for database in flare_email_test flare_email_delivery flare_email_config_test; do
+            createdb -h 127.0.0.1 -U flare_test "$database"
+            DATABASE_URL="postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/$database" pnpm prisma migrate deploy
+          done
+          pnpm test
 
       - name: Lint
         run: pnpm lint

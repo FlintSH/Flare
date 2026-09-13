@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 
-import { getServerSession } from 'next-auth'
 import { Readable } from 'stream'
 
-import { authOptions } from '@/lib/auth'
+import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
@@ -75,7 +74,7 @@ export async function GET(
   { params }: { params: Promise<{ userUrlId: string; filename: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     const { userUrlId, filename } = await params
     const url = new URL(req.url)
     const providedPassword = url.searchParams.get('password')

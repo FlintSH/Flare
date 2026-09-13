@@ -17,6 +17,11 @@ import {
 import { getAuthOptions } from '@/lib/auth'
 import type { FlareConfig } from '@/lib/config'
 
+vi.mock('@/lib/email/config', async () => {
+  const { DEFAULT_EMAIL_CONFIG } = await import('@/lib/email/schema')
+  return { getEmailConfig: async () => DEFAULT_EMAIL_CONFIG }
+})
+
 type StoredUser = Pick<
   User,
   | 'id'

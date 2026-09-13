@@ -1,13 +1,11 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth'
-
 import { URLsClient } from '@/components/dashboard/urls-client'
 
-import { authOptions } from '@/lib/auth'
+import { getPageSession } from '@/lib/auth/page-session'
 
 export default async function URLsPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getPageSession()
 
   if (!session?.user) {
     redirect('/auth/login')

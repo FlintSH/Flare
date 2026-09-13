@@ -21,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react'
 
+import { EmailSettings } from '@/components/email/email-settings'
 import { Icons } from '@/components/shared/icons'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -543,7 +544,12 @@ export default function SettingsPage() {
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="email">Email</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="email">
+              <EmailSettings />
+            </TabsContent>
 
             <TabsContent value="general" className="space-y-4">
               <Card>

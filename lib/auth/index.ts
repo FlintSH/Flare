@@ -1,12 +1,14 @@
 import { Prisma, UserRole } from '@prisma/client'
 import { compare } from 'bcryptjs'
-import { NextAuthOptions, Session } from 'next-auth'
+import { NextAuthOptions, Session, getServerSession } from 'next-auth'
 import { JWT } from 'next-auth/jwt'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { OAuthConfig } from 'next-auth/providers/oauth'
 
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { getEmailConfig } from '@/lib/email/config'
+import { requiresEmailVerification } from '@/lib/email/policy'
 
 import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
 
@@ -18,6 +20,11 @@ const userSelect = {
   role: true,
   image: true,
   sessionVersion: true,
+  emailVerified: true,
+  emailVerifiedFor: true,
+  emailVerificationSource: true,
+  emailExempt: true,
+  createdAt: true,
 } as const
 
 type UserWithSession = Prisma.UserGetPayload<{ select: typeof userSelect }>
@@ -37,6 +44,9 @@ declare module 'next-auth' {
       email: string
       image: string | null
       role: UserRole
+      emailAccessRequired?: boolean
+      authTime?: number
+      authMethod?: string
     }
   }
 
@@ -54,6 +64,9 @@ declare module 'next-auth/jwt' {
     name?: string | null
     email?: string | null
     image?: string | null
+    emailAccessRequired?: boolean
+    authTime?: number
+    authMethod?: string
   }
 }
 
@@ -109,6 +122,7 @@ export const authOptions: NextAuthOptions = {
 
       const config = await getConfig()
       const oidcConfig = config.settings.general.oidc
+      const emailConfig = await getEmailConfig()
       const rawProfile = profile as OidcProfile
       const scopedProfile: OidcProfile = {
         ...rawProfile,
@@ -118,6 +132,8 @@ export const authOptions: NextAuthOptions = {
       const result = await resolveOidcUser(scopedProfile, {
         autoProvision: oidcConfig.autoProvision,
         requireEmailVerified: oidcConfig.requireEmailVerified,
+        trustEmail: emailConfig.enabled && emailConfig.verification.trustOidc,
+        emailEnabled: emailConfig.enabled,
       })
 
       if (!result.ok) {
@@ -127,7 +143,7 @@ export const authOptions: NextAuthOptions = {
       Object.assign(user, result.user)
       return true
     },
-    async jwt({ token, user }): Promise<JWT> {
+    async jwt({ token, user, account }): Promise<JWT> {
       if (user) {
         const sessionUser = user as UserWithSession
         token.id = sessionUser.id
@@ -136,6 +152,8 @@ export const authOptions: NextAuthOptions = {
         token.sessionVersion = sessionUser.sessionVersion
         token.name = sessionUser.name
         token.email = sessionUser.email
+        token.authTime = Date.now()
+        token.authMethod = account?.provider || 'credentials'
       }
 
       const freshUser = await prisma.user.findUnique({
@@ -159,6 +177,10 @@ export const authOptions: NextAuthOptions = {
       token.name = freshUser.name
       token.email = freshUser.email
       token.sessionVersion = freshUser.sessionVersion
+      token.emailAccessRequired = requiresEmailVerification(
+        freshUser,
+        await getEmailConfig()
+      )
 
       return token
     },
@@ -169,6 +191,9 @@ export const authOptions: NextAuthOptions = {
         session.user.image = token.image || null
         session.user.name = token.name || ''
         session.user.email = token.email || ''
+        session.user.emailAccessRequired = token.emailAccessRequired
+        session.user.authTime = token.authTime
+        session.user.authMethod = token.authMethod
       }
       return session
     },
@@ -181,6 +206,12 @@ export const authOptions: NextAuthOptions = {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60,
   },
+}
+
+/** Normal application access; email management uses the restricted session directly. */
+export async function getAccessSession() {
+  const session = await getServerSession(authOptions)
+  return session?.user?.emailAccessRequired ? null : session
 }
 
 function trimTrailingSlashes(value: string) {

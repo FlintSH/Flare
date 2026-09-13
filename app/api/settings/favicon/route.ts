@@ -1,21 +1,17 @@
 import { NextResponse } from 'next/server'
 
-import { PrismaClient } from '@prisma/client'
-import { getServerSession } from 'next-auth'
 import { join } from 'path'
 
-import { authOptions } from '@/lib/auth'
-import { getConfig } from '@/lib/config'
+import { getAccessSession } from '@/lib/auth'
+import { getConfig, updateConfigSection } from '@/lib/config'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-const prisma = new PrismaClient()
-
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getAccessSession()
     if (session?.user?.role !== 'ADMIN') {
       return new NextResponse('Unauthorized', { status: 401 })
     }
@@ -52,12 +48,7 @@ export async function POST(req: Request) {
       publicPath = publicUrl
     }
 
-    config.settings.appearance.favicon = publicPath
-
-    await prisma.config.update({
-      where: { key: 'flare_config' },
-      data: { value: config },
-    })
+    await updateConfigSection('appearance', { favicon: publicPath })
 
     return new NextResponse('Favicon updated successfully', { status: 200 })
   } catch (error) {

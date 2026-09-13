@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 
 import pino, { Logger as PinoLogger } from 'pino'
 
+import { sanitizeLogUrl } from './url'
+
 export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace'
 
 interface LoggerOptions {
@@ -87,7 +89,7 @@ const baseLogger = pino(
         headers?: Record<string, string>
       }) => ({
         method: req.method,
-        url: req.url,
+        url: req.url ? sanitizeLogUrl(req.url) : undefined,
         headers: {
           'user-agent': req.headers?.['user-agent'],
           'content-type': req.headers?.['content-type'],
@@ -187,7 +189,7 @@ export class Logger {
   logRequest(req: NextRequest, context?: Partial<RequestLogContext>) {
     const requestContext: RequestLogContext = {
       method: req.method,
-      url: req.url,
+      url: sanitizeLogUrl(req.url),
       userAgent: req.headers.get('user-agent') || undefined,
       ip:
         req.headers.get('x-forwarded-for') ||
@@ -210,14 +212,14 @@ export class Logger {
     const level =
       statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info'
 
-    const message = `${req.method} ${req.url} - ${statusCode} (${duration}ms)`
+    const message = `${req.method} ${sanitizeLogUrl(req.url)} - ${statusCode} (${duration}ms)`
 
     this[level](message, {
       response: {
         statusCode,
         duration,
         method: req.method,
-        url: req.url,
+        url: sanitizeLogUrl(req.url),
       },
       ...context,
     })

@@ -5,6 +5,10 @@ import { z } from 'zod'
 
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { lockEmailAddress, sendAccountToken } from '@/lib/email/account'
+import { getEmailConfig } from '@/lib/email/config'
+import { requiresEmailVerification } from '@/lib/email/policy'
+import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
 import { createUser } from '@/lib/users/create-user'
 
@@ -32,22 +36,41 @@ export async function POST(req: Request) {
 
     const json = await req.json()
     const body = registerSchema.parse(json)
+    const emailConfig = await getEmailConfig()
+    if (emailConfig.enabled && Buffer.byteLength(body.password, 'utf8') > 72)
+      return NextResponse.json(
+        { error: 'Password must use at most 72 bytes.' },
+        { status: 400 }
+      )
+    const sendVerification =
+      emailConfig.enabled &&
+      (emailConfig.verification.mode !== 'off' || emailConfig.recovery.enabled)
+    if (sendVerification) await limitEmailRequest(req, emailConfig, body.email)
 
     const hashedPassword = await hash(body.password, 10)
 
     const user = await prisma.$transaction(async (tx) => {
-      const exists = await tx.user.findUnique({
-        where: { email: body.email },
-      })
+      if (emailConfig.enabled) await lockEmailAddress(tx, body.email)
+      const exists = emailConfig.enabled
+        ? await tx.user.findFirst({
+            where: { email: { equals: body.email, mode: 'insensitive' } },
+          })
+        : await tx.user.findUnique({ where: { email: body.email } })
       if (exists) {
         throw new RegistrationConflictError()
       }
 
-      return createUser(tx, {
+      const created = await createUser(tx, {
         email: body.email,
         name: body.name,
         password: hashedPassword,
+        ...(sendVerification
+          ? { emailVerificationSource: 'pending_local' }
+          : {}),
       })
+      if (sendVerification)
+        await sendAccountToken(tx, created, 'verify', emailConfig)
+      return created
     })
 
     return NextResponse.json({
@@ -56,6 +79,9 @@ export async function POST(req: Request) {
         name: user.name,
         email: user.email,
       },
+      nextAction: requiresEmailVerification(user, emailConfig)
+        ? 'verify_email'
+        : 'sign_in',
     })
   } catch (error) {
     if (error instanceof RegistrationConflictError) {

@@ -107,6 +107,14 @@ Flare is built to be as configurable as possible. Head to `/dashboard/settings` 
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 
+### Account email
+
+Optional SMTP email supports password recovery, address verification, and confirmed
+email changes. Configure it during first-time setup or in **Settings → Email**.
+Delivery, recovery, and verification requirements are independent; upgrades leave
+email disabled and preserve existing account access. See [account email setup,
+environment overrides, and recovery](docs/email.md).
+
 ### Single Sign-On (OIDC)
 
 Configure your identity provider in `/dashboard/settings`, with

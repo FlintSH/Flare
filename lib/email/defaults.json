@@ -1,0 +1,57 @@
+{
+  "enabled": false,
+  "smtp": {
+    "host": "",
+    "port": 465,
+    "security": "tls",
+    "authentication": true,
+    "username": "",
+    "password": "",
+    "ca": "",
+    "timeoutSeconds": 15
+  },
+  "fromName": "Flare",
+  "fromAddress": "",
+  "replyTo": "",
+  "publicUrl": "",
+  "recovery": {
+    "enabled": false,
+    "tokenMinutes": 30,
+    "rotateUploadToken": false
+  },
+  "verification": {
+    "mode": "off",
+    "appliedMode": "off",
+    "requiredSince": null,
+    "graceDays": 7,
+    "graceEndsAt": null,
+    "adminCreated": "inherit",
+    "trustOidc": false,
+    "tokenHours": 24
+  },
+  "changes": { "enabled": true, "requireOldEmail": false },
+  "limits": {
+    "resendSeconds": 60,
+    "addressPerHour": 5,
+    "ipPerHour": 20,
+    "dailyLimit": 500
+  },
+  "delivery": {
+    "maxAttempts": 3,
+    "retrySeconds": 60,
+    "concurrency": 2,
+    "retentionDays": 14
+  },
+  "branding": {
+    "instanceName": "Flare",
+    "logoUrl": "",
+    "accentColor": "#6366f1",
+    "footer": "",
+    "supportAddress": "",
+    "subjectPrefix": "",
+    "verificationSubject": "Verify your email address",
+    "resetSubject": "Reset your password",
+    "changeSubject": "Confirm your new email address",
+    "introText": ""
+  }
+}

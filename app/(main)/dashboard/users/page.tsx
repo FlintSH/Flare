@@ -1,13 +1,11 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth'
-
 import { UserList } from '@/components/dashboard/user-list'
 
-import { authOptions } from '@/lib/auth'
+import { getPageSession } from '@/lib/auth/page-session'
 
 export default async function UsersPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getPageSession()
 
   if (!session?.user || session.user.role !== 'ADMIN') {
     redirect('/dashboard')
