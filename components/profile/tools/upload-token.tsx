@@ -20,17 +20,19 @@ export function UploadToken() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Upload Token</Label>
+        <Label htmlFor="legacy-upload-token">Legacy upload token</Label>
         <p className="text-sm text-muted-foreground">
-          This token is used to authenticate your uploads. Keep it secret and
-          refresh it if it gets compromised.
+          Your existing screenshot tools can keep using this token. For new
+          connections, create a token with its own permissions in Integrations.
         </p>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
             <Input
+              id="legacy-upload-token"
               value={uploadToken || ''}
               readOnly
               type={showToken ? 'text' : 'password'}
+              className="pr-12"
             />
             <Button
               type="button"
@@ -38,6 +40,8 @@ export function UploadToken() {
               size="sm"
               className="absolute right-2 top-1/2 -translate-y-1/2 h-6 px-2"
               onClick={() => setShowToken(!showToken)}
+              aria-label={showToken ? 'Hide upload token' : 'Show upload token'}
+              aria-pressed={showToken}
             >
               {showToken ? (
                 <EyeOff className="h-4 w-4" />

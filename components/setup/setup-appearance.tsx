@@ -209,7 +209,7 @@ export function SetupAppearance({
               <div className="mt-3 flex flex-wrap gap-3">
                 <Button asChild variant="outline" size="sm">
                   <Link
-                    href="/dashboard/customize"
+                    href="/dashboard/settings?section=appearance"
                     target="_blank"
                     rel="noreferrer"
                   >

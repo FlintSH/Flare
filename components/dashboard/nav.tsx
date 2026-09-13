@@ -6,28 +6,19 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import {
-  ChevronDown,
   FileText,
   FolderOpen,
   LinkIcon,
   Menu,
-  Paintbrush,
-  Plug,
   Settings,
-  SlidersHorizontal,
   Upload,
+  UserRound,
   Users,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { InstanceBrand } from '@/components/customization/instance-brand'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Sheet,
   SheetContent,
@@ -56,6 +47,11 @@ const baseRoutes = [
     label: 'Links',
     icon: LinkIcon,
   },
+  {
+    href: '/dashboard/profile',
+    label: 'Profile',
+    icon: UserRound,
+  },
 ]
 
 const adminRoutes = [
@@ -71,16 +67,6 @@ const adminRoutes = [
   },
 ]
 
-const workspaceRoutes = [
-  { href: '/dashboard/customize', label: 'Appearance', icon: Paintbrush },
-  {
-    href: '/dashboard/upload-profiles',
-    label: 'Upload profiles',
-    icon: SlidersHorizontal,
-  },
-  { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
-]
-
 export function DashboardNav() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -90,9 +76,6 @@ export function DashboardNav() {
     session?.user?.role === 'ADMIN'
       ? [...baseRoutes, ...adminRoutes]
       : baseRoutes
-  const workspaceActive = workspaceRoutes.some(
-    (route) => route.href === pathname
-  )
 
   return (
     <nav className="flex items-center w-full">
@@ -105,7 +88,7 @@ export function DashboardNav() {
       <div className="flex xl:hidden ml-auto mr-3">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label="Open navigation">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
@@ -114,7 +97,6 @@ export function DashboardNav() {
             <div className="flex flex-col space-y-3 mt-4">
               {[
                 ...baseRoutes,
-                ...workspaceRoutes,
                 ...(session?.user?.role === 'ADMIN' ? adminRoutes : []),
               ].map((route) => (
                 <Link
@@ -160,31 +142,6 @@ export function DashboardNav() {
               </Button>
             )
           })}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className={`h-9 px-3 rounded-lg ${workspaceActive ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
-              >
-                <Paintbrush className="mr-2 h-4 w-4" />
-                Workspace
-                <ChevronDown className="ml-2 h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {workspaceRoutes.map((route) => (
-                <DropdownMenuItem key={route.href} asChild>
-                  <Link
-                    href={route.href}
-                    aria-current={pathname === route.href ? 'page' : undefined}
-                  >
-                    <route.icon className="mr-2 h-4 w-4" />
-                    {route.label}
-                  </Link>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
     </nav>

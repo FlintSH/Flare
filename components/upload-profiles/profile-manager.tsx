@@ -132,7 +132,7 @@ const starters: {
   },
 ]
 
-export function ProfileManager() {
+export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const { data, error } = useUploadProfiles()
   const { toast } = useToast()
   const [editing, setEditing] = useState<UploadProfileView | null>(null)
@@ -234,14 +234,24 @@ export function ProfileManager() {
     <div className="space-y-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-primary mb-2">Your workflow</p>
-          <h1 className="text-3xl font-bold tracking-tight">Upload profiles</h1>
+          {!embedded && (
+            <p className="text-sm font-medium text-primary mb-2">
+              Your workflow
+            </p>
+          )}
+          {embedded ? (
+            <h3 className="text-lg font-semibold">Reusable upload profiles</h3>
+          ) : (
+            <h1 className="text-3xl font-bold tracking-tight">
+              Upload profiles
+            </h1>
+          )}
           <p className="text-muted-foreground mt-2 max-w-2xl">
             Save how you share. Use the same settings from your browser,
             screenshot tools and API.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             disabled={busy}
@@ -293,8 +303,8 @@ export function ProfileManager() {
           Loading upload profiles…
         </p>
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(230px,0.8fr)_minmax(0,1.5fr)]">
-        <div className="space-y-4">
+      <div className="grid gap-6 xl:grid-cols-[minmax(200px,0.8fr)_minmax(0,1.5fr)]">
+        <div className="min-w-0 space-y-4">
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Your profiles</h2>
@@ -309,7 +319,7 @@ export function ProfileManager() {
                 onClick={() => choose(profile)}
                 className={`w-full rounded-lg border p-3 text-left transition-colors ${editing?.id === profile.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/60'}`}
               >
-                <span className="flex items-center gap-2 font-medium">
+                <span className="flex items-center gap-2 break-words font-medium">
                   {profile.name}
                   {data.defaultProfileId === profile.id && (
                     <Star
@@ -376,7 +386,7 @@ export function ProfileManager() {
             ))}
           </div>
         </div>
-        <Card className="p-5 sm:p-6 space-y-6">
+        <Card className="min-w-0 p-5 sm:p-6 space-y-6">
           <div>
             <h2 className="text-xl font-semibold">
               {editing ? 'Edit profile' : 'Create a profile'}

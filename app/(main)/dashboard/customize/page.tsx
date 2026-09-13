@@ -1,30 +1,24 @@
 import { redirect } from 'next/navigation'
 
-import { CustomizationStudio } from '@/components/customization/customization-studio'
-
 import { getPageSession } from '@/lib/auth/page-session'
-import { getConfig } from '@/lib/config'
-import { isAppearanceRecovery } from '@/lib/customization/recovery'
-import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
 
-export default async function CustomizePage() {
+export default async function CustomizePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ recovery?: string }>
+}) {
   const session = await getPageSession()
   if (!session?.user) redirect('/auth/login')
-  const [config, user] = await Promise.all([
-    getConfig(),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { preferences: true },
-    }),
-  ])
-  const isAdmin = session.user.role === 'ADMIN'
-  return (
-    <CustomizationStudio
-      isAdmin={isAdmin}
-      recovery={await isAppearanceRecovery()}
-      initialState={isAdmin ? config.settings.customization : null}
-      initialPreference={readPersonalAppearance(user?.preferences)}
-    />
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  })
+  if (!user) redirect('/auth/login')
+  if (user.role !== 'ADMIN') redirect('/dashboard/profile?section=appearance')
+
+  const { recovery } = await searchParams
+  redirect(
+    `/dashboard/settings?section=appearance${recovery === '1' ? '&recovery=1' : ''}`
   )
 }

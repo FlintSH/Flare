@@ -52,11 +52,15 @@ const scopes = [
   ['urls:write', 'Manage short links', 'Create and delete your short links'],
 ] as const
 const panel =
-  'rounded-2xl border border-border/70 bg-card/75 p-5 shadow-sm backdrop-blur-xl sm:p-6'
+  'min-w-0 rounded-xl border bg-card text-card-foreground p-5 shadow-sm sm:p-6'
 const selectStyle =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
-export function IntegrationsPanel() {
+export function IntegrationsPanel({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const [data, setData] = useState<Snapshot | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -147,17 +151,35 @@ export function IntegrationsPanel() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl space-y-6 pb-10">
+    <div
+      className={
+        embedded
+          ? 'min-w-0 space-y-6'
+          : 'container mx-auto max-w-6xl space-y-6 pb-10'
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
-            Your workflow, connected
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight">Integrations</h1>
-          <p className="mt-2 max-w-2xl text-muted-foreground">
-            Connect your favorite tools to Flare. Give each connection the
-            access it needs and keep uploads moving your way.
-          </p>
+          {!embedded && (
+            <>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
+                Your workflow, connected
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Integrations
+              </h1>
+              <p className="mt-2 max-w-2xl text-muted-foreground">
+                Connect your favorite tools to Flare. Give each connection the
+                access it needs and keep uploads moving your way.
+              </p>
+            </>
+          )}
+          {embedded && (
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              A separate connection for each tool, with access and delivery
+              history you control.
+            </p>
+          )}
         </div>
         <Button
           variant="outline"
@@ -215,7 +237,7 @@ export function IntegrationsPanel() {
           </Button>
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-2">
         <section className={panel}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -617,7 +639,7 @@ export function IntegrationsPanel() {
           automatic.
         </p>
         <Link
-          href="/dashboard/upload-profiles"
+          href="/dashboard/profile?section=uploads"
           className="inline-flex items-center gap-1 font-medium text-primary"
         >
           Explore workflows

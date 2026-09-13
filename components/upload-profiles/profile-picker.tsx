@@ -81,7 +81,7 @@ export function ProfilePicker({
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor="upload-profile">Upload profile</Label>
         <Link
-          href="/dashboard/upload-profiles"
+          href="/dashboard/profile?section=uploads"
           className="text-sm underline underline-offset-4 text-muted-foreground"
         >
           Manage profiles

@@ -17,15 +17,6 @@ export function ProfileStorage({
 }: ProfileStorageProps) {
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold">Storage Usage</h3>
-        <p className="text-sm text-muted-foreground">
-          {quotasEnabled
-            ? 'Monitor your storage usage and available space.'
-            : 'Track how much storage space you are using.'}
-        </p>
-      </div>
-
       <div className="space-y-4">
         {quotasEnabled ? (
           <>
@@ -47,7 +38,8 @@ export function ProfileStorage({
 
               <div>
                 <Progress
-                  value={usagePercentage}
+                  value={Math.min(100, Math.max(0, usagePercentage))}
+                  aria-label="Storage used"
                   className={cn(
                     'h-3',
                     usagePercentage > 90
@@ -92,7 +84,7 @@ export function ProfileStorage({
             </div>
           </>
         ) : (
-          <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-muted/50 rounded-lg p-4">
             <div className="flex flex-col">
               <span className="text-lg font-medium">{formattedUsed}</span>
               <span className="text-sm text-muted-foreground">

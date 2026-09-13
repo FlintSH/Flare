@@ -103,7 +103,9 @@ Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) f
 
 ## 📝 Configuration
 
-Flare is built to be as configurable as possible. Head to `/dashboard/settings` to tweak different settings like:
+Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
+
+In Settings, administrators can configure:
 
 - Setting storage quotas and file size limits for users
 - Defining upload rules and restrictions
@@ -121,7 +123,7 @@ environment overrides, and recovery](docs/email.md).
 
 ### Single Sign-On (OIDC)
 
-Configure your identity provider in `/dashboard/settings`, with
+Configure your identity provider in **Settings → Access** (`/dashboard/settings?section=access`), with
 `https://your-flare-host/api/auth/callback/oidc` as its redirect URI. Keep a local
 administrator login available; `/auth/login?local=1` bypasses OIDC auto-login.
 

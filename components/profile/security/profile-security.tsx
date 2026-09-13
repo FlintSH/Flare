@@ -2,22 +2,9 @@
 
 import { useRef, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
-
 import { ProfileSecurityProps } from '@/types/components/profile'
 import { useSession } from 'next-auth/react'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +15,6 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
-  const router = useRouter()
 
   const currentPasswordRef = useRef<HTMLInputElement>(null)
   const newPasswordRef = useRef<HTMLInputElement>(null)
@@ -88,44 +74,8 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
     }
   }
 
-  const handleAccountDeletion = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/profile', {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete account')
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Account deleted successfully',
-      })
-
-      router.push('/auth/login')
-    } catch (error) {
-      console.error('Account deletion error:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to delete account',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold">Password Management</h3>
-        <p className="text-sm text-muted-foreground">
-          Update your password to keep your account secure.
-        </p>
-      </div>
-
       <form onSubmit={handlePasswordChange} className="space-y-4">
         <div className="space-y-4">
           <div className="space-y-2">
@@ -135,6 +85,9 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               type="password"
               ref={currentPasswordRef}
               placeholder="Enter your current password"
+              autoComplete="current-password"
+              required
+              disabled={isLoading}
             />
           </div>
 
@@ -145,6 +98,10 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               type="password"
               ref={newPasswordRef}
               placeholder="Enter your new password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={isLoading}
             />
           </div>
 
@@ -155,6 +112,10 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               type="password"
               ref={confirmPasswordRef}
               placeholder="Confirm your new password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={isLoading}
             />
           </div>
         </div>
@@ -165,42 +126,6 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
           </Button>
         </div>
       </form>
-
-      <div className="border-t pt-6 mt-6">
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-destructive">
-            Delete Account
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Permanently delete your account and remove all associated data.
-          </p>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="w-full sm:w-auto">
-                Delete Account
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete
-                  your account and remove all your data from our servers.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleAccountDeletion}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete Account
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
     </div>
   )
 }

@@ -19,4 +19,6 @@ Creating an instance preserves Flare's default palette. Installations created by
 
 Choosing a preset during onboarding changes only the preview until saved. Returning to onboarding starts from the published appearance and preserves settings that the simple editor does not expose. An existing studio draft is kept intact; review it in the studio or continue with the published appearance. Concurrent appearance changes require reloading and reviewing the latest version before saving.
 
+After setup, instance-wide controls live in **Settings**, including the full appearance studio. Your own appearance preference, upload defaults, recipes, integrations, and account controls live in **Profile**. Both pages use the same navigation and visual style as setup.
+
 For more control after setup, see [Appearance](appearance.md), [Upload profiles](upload-profiles.md), and [Integrations](integrations.md).

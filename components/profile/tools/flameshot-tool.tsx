@@ -96,8 +96,8 @@ export function FlameshotTool() {
   }
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="space-y-1">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Flameshot</h3>
         <p className="text-sm text-muted-foreground">
           Powerful cross-platform screenshot software for Linux, MacOS, and

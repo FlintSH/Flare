@@ -2,8 +2,6 @@
 
 import { useRef, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
-
 import { ProfileAccountProps } from '@/types/components/profile'
 import { useSession } from 'next-auth/react'
 
@@ -15,24 +13,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 
 import { useToast } from '@/hooks/use-toast'
 
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
-  const [vanityId, setVanityId] = useState(user.vanityId || '')
-  const [vanityError, setVanityError] = useState<string | null>(null)
   const { toast } = useToast()
-  const router = useRouter()
   const { status: emailStatus, refresh: refreshEmail } = useAccountEmailStatus()
 
   const nameRef = useRef<HTMLInputElement>(null)
@@ -68,8 +55,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           image: url,
         },
       })
-
-      router.refresh()
 
       onUpdate()
 
@@ -113,7 +98,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         throw new Error(data.error || 'Failed to update profile')
       }
 
-      const data = await response.json()
+      const { data } = await response.json()
 
       await updateSession({
         user: {
@@ -122,8 +107,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           email: data.email,
         },
       })
-
-      router.refresh()
 
       onUpdate()
 
@@ -136,48 +119,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         title: 'Error',
         description:
           error instanceof Error ? error.message : 'Failed to update profile',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleValueChange = async (
-    value: boolean | string,
-    key: string,
-    description: string
-  ) => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          [key]: value,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update settings')
-      }
-
-      router.refresh()
-
-      onUpdate()
-
-      toast({
-        title: 'Success',
-        description: description,
-      })
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to update settings',
         variant: 'destructive',
       })
     } finally {
@@ -218,7 +159,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           />
         </div>
 
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <form
             onSubmit={handleProfileUpdate}
             className="flex flex-col justify-center h-full space-y-4"
@@ -231,6 +172,10 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                   ref={nameRef}
                   defaultValue={user.name || ''}
                   placeholder="Your username"
+                  minLength={2}
+                  autoComplete="username"
+                  required
+                  disabled={isLoading}
                 />
               </div>
 
@@ -243,6 +188,9 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                     ref={emailRef}
                     defaultValue={user.email || ''}
                     placeholder="Your email"
+                    autoComplete="email"
+                    required
+                    disabled={isLoading}
                   />
                 </div>
               )}
@@ -266,207 +214,6 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           />
         </div>
       )}
-
-      <div className="rounded-lg border p-4 mt-6">
-        <div className="space-y-4">
-          <div className="space-y-0.5">
-            <Label htmlFor="vanity-url">Vanity URL</Label>
-            <p className="text-sm text-muted-foreground">
-              Set a custom URL path for your uploads instead of the default ID.
-              Your files will be accessible at{' '}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                /{vanityId || user.urlId}/filename
-              </code>
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input
-                id="vanity-url"
-                value={vanityId}
-                onChange={(e) => {
-                  const value = e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '')
-                  setVanityId(value)
-                  setVanityError(null)
-                }}
-                placeholder={`e.g. ${user.name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'my-name'}`}
-                maxLength={32}
-                disabled={isLoading}
-              />
-              {vanityError && (
-                <p className="text-sm text-destructive mt-1">{vanityError}</p>
-              )}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isLoading || vanityId === (user.vanityId || '')}
-              onClick={async () => {
-                setIsLoading(true)
-                setVanityError(null)
-                try {
-                  const newVanityId = vanityId.trim() || null
-                  const response = await fetch('/api/profile', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ vanityId: newVanityId }),
-                  })
-                  if (!response.ok) {
-                    const data = await response.json()
-                    setVanityError(data.error || 'Failed to update vanity URL')
-                    return
-                  }
-                  router.refresh()
-                  onUpdate()
-                  toast({
-                    title: 'Success',
-                    description: newVanityId
-                      ? 'Vanity URL updated successfully'
-                      : 'Vanity URL removed',
-                  })
-                } catch (error) {
-                  setVanityError(
-                    error instanceof Error
-                      ? error.message
-                      : 'Failed to update vanity URL'
-                  )
-                } finally {
-                  setIsLoading(false)
-                }
-              }}
-            >
-              {isLoading ? 'Saving...' : 'Save'}
-            </Button>
-            {user.vanityId && (
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={isLoading}
-                onClick={async () => {
-                  setIsLoading(true)
-                  setVanityError(null)
-                  try {
-                    const response = await fetch('/api/profile', {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ vanityId: null }),
-                    })
-                    if (!response.ok) {
-                      const data = await response.json()
-                      setVanityError(
-                        data.error || 'Failed to remove vanity URL'
-                      )
-                      return
-                    }
-                    setVanityId('')
-                    router.refresh()
-                    onUpdate()
-                    toast({
-                      title: 'Success',
-                      description: 'Vanity URL removed',
-                    })
-                  } catch (error) {
-                    setVanityError(
-                      error instanceof Error
-                        ? error.message
-                        : 'Failed to remove vanity URL'
-                    )
-                  } finally {
-                    setIsLoading(false)
-                  }
-                }}
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
-        <div className="space-y-0.5">
-          <Label htmlFor="randomize-urls">Randomize File URLs</Label>
-          <p className="text-sm text-muted-foreground">
-            When enabled, all new uploads will have randomized URLs instead of
-            using the original filename.
-          </p>
-        </div>
-        <Switch
-          id="randomize-urls"
-          checked={user.randomizeFileUrls}
-          onCheckedChange={(c) =>
-            handleValueChange(
-              c,
-              'randomizeFileUrls',
-              'File URL settings updated successfully'
-            )
-          }
-          disabled={isLoading}
-        />
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
-        <div className="space-y-0.5">
-          <Label>Default file expiry action</Label>
-          <p className="text-sm text-muted-foreground">
-            Set the default file expiry action when creating a new upload
-          </p>
-        </div>
-        <div className="w-1/4 ml-auto">
-          <Select
-            value={user.defaultFileExpirationAction ?? undefined}
-            onValueChange={(v) =>
-              handleValueChange(
-                v,
-                'defaultFileExpirationAction',
-                'Default file expiration action updated successfully'
-              )
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DELETE">Delete file</SelectItem>
-              <SelectItem value="SET_PRIVATE">Set to private</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
-        <div className="space-y-0.5">
-          <Label>Default file expiry time</Label>
-          <p className="text-sm text-muted-foreground">
-            Set the default relative time before an upload expires
-          </p>
-        </div>
-        <div className="w-1/4 ml-auto">
-          <Select
-            value={user.defaultFileExpiration ?? undefined}
-            onValueChange={(v) =>
-              handleValueChange(
-                v,
-                'defaultFileExpiration',
-                'Default file expiration time updated successfully'
-              )
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DISABLED">Disabled</SelectItem>
-              <SelectItem value="HOUR">One hour</SelectItem>
-              <SelectItem value="DAY">One day</SelectItem>
-              <SelectItem value="WEEK">One week</SelectItem>
-              <SelectItem value="MONTH">One month</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
     </>
   )
 }

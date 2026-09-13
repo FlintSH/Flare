@@ -9,6 +9,9 @@ export function RecoveryLink({
     | '/dashboard/customize'
     | '/dashboard/customize?recovery=1'
     | '/dashboard/settings?recovery=1'
+    | '/dashboard/settings?section=appearance'
+    | '/dashboard/settings?section=appearance&recovery=1'
+    | '/dashboard/settings?section=advanced&recovery=1'
   className?: string
   children: ReactNode
 }) {

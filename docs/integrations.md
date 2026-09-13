@@ -1,5 +1,7 @@
 # Integrations
 
+Open **Profile → Integrations** (`/dashboard/profile?section=integrations`) to manage your API tokens, webhooks, and delivery history. These connections belong to your account.
+
 Open **Dashboard → Integrations** to connect uploaders and receive file events.
 Integration management requires an interactive signed-in session. Named API
 tokens cannot create other tokens, read a legacy upload token, change account

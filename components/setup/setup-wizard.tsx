@@ -599,7 +599,7 @@ export function SetupWizard({
                     </p>
                   </Link>
                   <Link
-                    href="/dashboard/customize"
+                    href="/dashboard/settings?section=appearance"
                     className="group rounded-xl border bg-card p-5 transition-colors hover:bg-muted/30"
                   >
                     <Sparkles className="mb-4 h-5 w-5 text-muted-foreground" />
