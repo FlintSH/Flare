@@ -102,17 +102,36 @@ export function InstanceVersion({ buildInfo }: { buildInfo: BuildInfo }) {
         ) : error ? (
           error
         ) : updateInfo?.hasUpdate && updateInfo.releaseUrl ? (
-          <a
-            href={updateInfo.releaseUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
-          >
-            {isRolling
-              ? 'New rolling release available'
-              : `Update available: ${updateInfo.latestVersion}`}
-            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <a
+              href={updateInfo.releaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+            >
+              {isRolling
+                ? 'Update available'
+                : `Update available: ${updateInfo.latestVersion}`}
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+            {isRolling &&
+              updateInfo.latestCommitSha &&
+              updateInfo.latestCommitUrl && (
+                <span className="inline-flex items-baseline gap-2">
+                  <span aria-hidden="true">·</span>
+                  <a
+                    href={updateInfo.latestCommitUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Update to commit ${updateInfo.latestCommitSha}`}
+                    aria-label={`View available update commit ${updateInfo.latestCommitSha}`}
+                    className="font-mono underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
+                  >
+                    {updateInfo.latestCommitSha.slice(0, 7)}
+                  </a>
+                </span>
+              )}
+          </div>
         ) : (
           updateInfo?.message
         )}
