@@ -5,6 +5,12 @@ on:
     branches: [ main ]
     paths-ignore: [ 'package.json' ]
 
+# Publish each rolling image and its release metadata together before starting
+# another run, so overlapping builds cannot advertise different commits.
+concurrency:
+  group: rolling-release
+  cancel-in-progress: false
+
 jobs:
   get-commit-info:
     name: Get Commit Info
@@ -66,6 +72,9 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          build-args: |
+            FLARE_RELEASE_CHANNEL=rolling
+            FLARE_COMMIT_SHA=${{ github.sha }}
           tags: |
             ghcr.io/flintsh/flare:rolling-amd64
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64
@@ -107,6 +116,9 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
+          build-args: |
+            FLARE_RELEASE_CHANNEL=rolling
+            FLARE_COMMIT_SHA=${{ github.sha }}
           tags: |
             ghcr.io/flintsh/flare:rolling-arm64
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64
@@ -141,8 +153,8 @@ jobs:
         run: |
           # GitHub Container Registry manifests
           docker buildx imagetools create -t ghcr.io/flintsh/flare:rolling \
-            ghcr.io/flintsh/flare:rolling-amd64 \
-            ghcr.io/flintsh/flare:rolling-arm64
+            ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
+            ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64
           
           docker buildx imagetools create -t ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }} \
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
@@ -150,8 +162,8 @@ jobs:
           
           # Docker Hub manifests
           docker buildx imagetools create -t flintsh/flare:rolling \
-            flintsh/flare:rolling-amd64 \
-            flintsh/flare:rolling-arm64
+            flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
+            flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64
           
           docker buildx imagetools create -t flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }} \
             flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
@@ -173,34 +185,54 @@ jobs:
       - name: Create or update Rolling Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHORT_SHA: ${{ needs.get-commit-info.outputs.sha }}
+          RELEASE_DATE: ${{ needs.get-commit-info.outputs.date }}
+          RELEASE_MESSAGE: ${{ needs.get-commit-info.outputs.message }}
         run: |
-          # Release notes
-          cat << 'EOF' > release_notes.md
-          **Rolling Release** - Latest commit: `${{ needs.get-commit-info.outputs.sha }}` (${{ needs.get-commit-info.outputs.date }})
-          
+          # The full SHA marker is consumed by Flare's rolling update check.
+          # Pass commit messages as data so their contents cannot become shell code.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          sha = os.environ["GITHUB_SHA"]
+          short_sha = os.environ["RELEASE_SHORT_SHA"]
+          repository = os.environ["GITHUB_REPOSITORY"]
+          notes = f"""<!-- flare-commit-sha: {sha} -->
+
+          **Rolling Release** - Latest commit: [`{short_sha}`](https://github.com/{repository}/commit/{sha}) ({os.environ["RELEASE_DATE"]})
+
           ## Changes
-          ${{ needs.get-commit-info.outputs.message }}
-          
+          {os.environ["RELEASE_MESSAGE"]}
+
           ## Docker Images
           - `ghcr.io/flintsh/flare:rolling`
           - `flintsh/flare:rolling`
-          - `ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}`
-          - `flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}`
-          
-          > ⚠️ **Warning:** This is a bleeding edge release. These will not receive any support nor will they be considered stable.
-          EOF
-          
-          # Create or update release
+          - `ghcr.io/flintsh/flare:rolling-{short_sha}`
+          - `flintsh/flare:rolling-{short_sha}`
+
+          > ⚠️ **Warning:** This is a pre-release and may be unstable or break. Rolling releases are unsupported.
+          """
+          Path("release_notes.md").write_text(notes)
+          PY
+
+          # Publish the commit marker before moving the public tag, so a failed
+          # metadata update leaves the existing release and tag together.
           if gh release view rolling &>/dev/null; then
             gh release edit rolling \
-              --title "Rolling Release (${{ needs.get-commit-info.outputs.sha }})" \
+              --title "Rolling Release ($RELEASE_SHORT_SHA)" \
               --notes-file release_notes.md \
               --prerelease \
-              --target ${{ github.sha }}
+              --target "$GITHUB_SHA"
           else
             gh release create rolling \
-              --title "Rolling Release (${{ needs.get-commit-info.outputs.sha }})" \
+              --title "Rolling Release ($RELEASE_SHORT_SHA)" \
               --notes-file release_notes.md \
               --prerelease \
-              --target ${{ github.sha }}
-          fi 
+              --target "$GITHUB_SHA"
+          fi
+
+          # --target does not move an existing tag. Advance it only after the
+          # images and the release metadata have both been published.
+          git tag --force rolling "$GITHUB_SHA"
+          git push --force origin refs/tags/rolling

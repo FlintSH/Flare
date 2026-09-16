@@ -12,6 +12,7 @@ import {
   SETTINGS_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
+import { getBuildInfo } from '@/lib/releases'
 
 export default async function SettingsPage({
   searchParams,
@@ -45,6 +46,7 @@ export default async function SettingsPage({
         'general',
         SETTINGS_SECTION_ALIASES
       )}
+      buildInfo={getBuildInfo()}
       recovery={recovery}
     />
   )

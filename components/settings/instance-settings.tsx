@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
-import pkg from '@/package.json'
+import type { BuildInfo } from '@/types/dto/updates'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
 import CodeMirror from '@uiw/react-codemirror'
@@ -13,7 +13,6 @@ import { deepEqual } from 'fast-equals'
 import {
   Circle,
   Code,
-  ExternalLink,
   FileCode,
   Github,
   HardDrive,
@@ -36,6 +35,7 @@ import {
   PreferencesPanel,
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
+import { InstanceVersion } from '@/components/settings/instance-version'
 import { Icons } from '@/components/shared/icons'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -102,10 +102,12 @@ const isSafeUrl = (url: string | null): url is string => {
 export function InstanceSettings({
   initialConfig,
   initialSection,
+  buildInfo,
   recovery = false,
 }: {
   initialConfig: FlareConfig
   initialSection: (typeof SETTINGS_SECTIONS)[number]
+  buildInfo: BuildInfo
   recovery?: boolean
 }) {
   const [activeSection, setSection] = usePreferenceSection(
@@ -142,12 +144,6 @@ export function InstanceSettings({
 
   const [cssEditorOpen, setCssEditorOpen] = useState(false)
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false)
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<{
-    hasUpdate: boolean
-    latestVersion?: string
-    releaseUrl?: string
-  } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
   const hasChanges =
@@ -327,30 +323,6 @@ export function InstanceSettings({
         ...colors,
       },
     })
-  }
-
-  const checkForUpdates = async () => {
-    try {
-      setIsCheckingUpdate(true)
-      const response = await fetch('/api/updates/check')
-      if (!response.ok) throw new Error()
-      const data = await response.json()
-      setUpdateInfo(data)
-
-      toast({
-        title: data.hasUpdate ? 'Update Available' : 'No Updates Available',
-        description: data.message,
-        variant: 'default',
-      })
-    } catch {
-      toast({
-        title: 'Failed to check for updates',
-        description: 'Please try again later',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsCheckingUpdate(false)
-    }
   }
 
   const hasFaviconChanged = useCallback(() => {
@@ -577,46 +549,7 @@ export function InstanceSettings({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <Label>Version</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Current version: {pkg.version}
-                    {updateInfo && (
-                      <span className="ml-2 text-primary">
-                        {updateInfo.hasUpdate
-                          ? `(Update available: ${updateInfo.latestVersion})`
-                          : '(Up to date)'}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div className="flex min-w-0 items-center gap-2">
-                  {updateInfo?.hasUpdate && (
-                    <Button variant="outline" asChild>
-                      <a
-                        href={updateInfo.releaseUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex min-w-0 items-center gap-2"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        View Release
-                      </a>
-                    </Button>
-                  )}
-                  <Button onClick={checkForUpdates} disabled={isCheckingUpdate}>
-                    {isCheckingUpdate ? (
-                      <>
-                        <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                        Checking...
-                      </>
-                    ) : (
-                      'Check for Updates'
-                    )}
-                  </Button>
-                </div>
-              </div>
+              <InstanceVersion buildInfo={buildInfo} />
 
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" asChild>
