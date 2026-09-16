@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import * as Dialog from '@radix-ui/react-dialog'
 import {
@@ -29,6 +29,7 @@ interface ImageLightboxProps {
   index: number
   onIndexChange: (index: number) => void
   onClose: () => void
+  fallbackFocusRef?: RefObject<HTMLElement>
   hasPrevious?: boolean
   hasNext?: boolean
   onPrevious?: () => void
@@ -46,6 +47,7 @@ export function ImageLightbox({
   index,
   onIndexChange,
   onClose,
+  fallbackFocusRef,
   hasPrevious = index > 0,
   hasNext = index < images.length - 1,
   onPrevious,
@@ -103,7 +105,10 @@ export function ImageLightbox({
           className="fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col bg-zinc-950 text-white outline-none"
           onCloseAutoFocus={(event) => {
             event.preventDefault()
-            if (opener?.isConnected) opener.focus({ preventScroll: true })
+            const target = opener?.isConnected
+              ? opener
+              : fallbackFocusRef?.current
+            target?.focus({ preventScroll: true })
           }}
           onKeyDown={(event) => {
             if (

@@ -162,11 +162,11 @@ export function useFileFilters(
     (groupBy: FileGrouping) =>
       updateFilters({
         groupBy,
+        page: 1,
         ...(groupBy !== 'none' &&
           currentFilters.current.sortBy !== 'newest' &&
           currentFilters.current.sortBy !== 'oldest' && {
             sortBy: 'newest',
-            page: 1,
           }),
       }),
     [updateFilters]

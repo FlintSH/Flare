@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -28,6 +28,7 @@ import { useFileFilters } from '@/hooks/use-file-filters'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 
 export function FileGrid() {
+  const libraryHeading = useRef<HTMLHeadingElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -51,7 +52,7 @@ export function FileGrid() {
     resetFilters,
   } = useFileFilters()
   const { gallery, open, close, move, setIndex, navigationPending } =
-    useImageGallery(filters, files, paginationInfo, refreshKey)
+    useImageGallery(filters, files, paginationInfo)
   const imagesOnly =
     filters.types.length > 0 &&
     filters.types.every((type) => type.startsWith('image/'))
@@ -156,7 +157,13 @@ export function FileGrid() {
       >
         <div className="mb-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-3xl font-bold">Your Files</h1>
+            <h1
+              ref={libraryHeading}
+              tabIndex={-1}
+              className="text-3xl font-bold"
+            >
+              Your Files
+            </h1>
             <div className="flex shrink-0 items-center gap-2">
               <span
                 role="status"
@@ -253,7 +260,7 @@ export function FileGrid() {
         )}
       </section>
 
-      {isLoading ? (
+      {isLoading && !gallery ? (
         <div
           aria-busy="true"
           aria-label="Loading files"
@@ -263,7 +270,7 @@ export function FileGrid() {
             <FileCardSkeleton key={index} />
           ))}
         </div>
-      ) : error ? (
+      ) : error && !gallery ? (
         <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-background/70 p-6 text-center">
           <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-destructive">
             <AlertCircle className="h-7 w-7" />
@@ -352,6 +359,7 @@ export function FileGrid() {
           index={gallery.index}
           onIndexChange={setIndex}
           onClose={close}
+          fallbackFocusRef={libraryHeading}
           onPrevious={() => void move(-1)}
           onNext={() => void move(1)}
           hasPrevious={gallery.index > 0 || !gallery.atStart}

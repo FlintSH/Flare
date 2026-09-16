@@ -21,8 +21,7 @@ interface GalleryState {
 export function useImageGallery(
   filters: FileFilterOptions,
   files: FileType[],
-  pagination: PaginationInfo,
-  refreshKey: number
+  pagination: PaginationInfo
 ) {
   const [gallery, setGallery] = useState<GalleryState | null>(null)
   const [navigationPending, setNavigationPending] = useState(false)
@@ -38,7 +37,7 @@ export function useImageGallery(
   useEffect(() => {
     close()
     return () => request.current?.abort()
-  }, [filters, refreshKey, close])
+  }, [filters, close])
 
   const open = useCallback(
     (file: FileType) => {
@@ -50,6 +49,8 @@ export function useImageGallery(
       request.current?.abort()
       request.current = null
       setNavigationPending(false)
+      // Keep this session's page stable when background uploads refresh the
+      // grid, which may show a different page from the one being viewed.
       setGallery({
         files: images,
         index,

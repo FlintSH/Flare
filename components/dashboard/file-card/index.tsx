@@ -288,6 +288,7 @@ export function FileCard({
         <Link
           href={safeUrl}
           aria-label={`Open ${file.name}`}
+          aria-haspopup={isImage && onPreview ? 'dialog' : undefined}
           onClick={(event) => {
             if (
               isImage &&
