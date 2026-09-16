@@ -12,6 +12,7 @@ import {
 import {
   expirationDate,
   mergeUploadOptions,
+  uploadProfileOptionsSchema,
   uploadRecipeSchema,
   uploadRequestOptionsSchema,
 } from '@/lib/uploads/schema'
@@ -223,6 +224,47 @@ describe('portable profile and upload policy contracts', () => {
     ).toThrow('Conflicting')
   })
 
+  it.each(['page', 'raw', 'download', 'markdown', 'html'])(
+    'discards legacy %s copy formatting from saved profiles, recipes and uploads',
+    async (copyFormat) => {
+      const options = {
+        visibility: 'PRIVATE' as const,
+        expiration: 'DAY' as const,
+      }
+      database.uploadProfile.findFirst.mockResolvedValue({
+        id: 'profile-one',
+        options: { ...options, copyFormat },
+        updatedAt: now,
+      })
+      const resolved = await resolveUploadOptions(user)
+      expect(resolved).toMatchObject(options)
+      expect(resolved).not.toHaveProperty('copyFormat')
+      expect(
+        uploadProfileOptionsSchema.parse({ ...options, copyFormat })
+      ).toEqual(options)
+      const recipe = uploadRecipeSchema.parse({
+        format: 'flare-upload-profile',
+        version: 1,
+        profile: {
+          name: 'Old screenshots',
+          options: { ...options, copyFormat },
+        },
+      })
+      expect(recipe.profile.options).toEqual(options)
+      expect(uploadRequestOptionsSchema.parse({ copyFormat })).toEqual({})
+      expect(parseUploadFields({ copyFormat })).toEqual({})
+
+      // A chunk upload started on an older release can still contain this key.
+      const legacySnapshot = { ...resolved, copyFormat }
+      const completed = applyUploadOverrides(user, legacySnapshot, {})
+      expect(completed).not.toHaveProperty('copyFormat')
+      expect(completed).toMatchObject({
+        ...options,
+        expiresAt: resolved.expiresAt,
+      })
+    }
+  )
+
   it('rejects recipes carrying secrets, unknown code/settings, or unsupported versions', () => {
     const recipe = {
       format: 'flare-upload-profile',
@@ -244,39 +286,37 @@ describe('portable profile and upload policy contracts', () => {
 })
 
 describe('upload link outputs', () => {
-  it('preserves a real legacy URL while supplying markup as explicit copy text', () => {
+  const file = {
+    id: 'file-id',
+    urlPath: '/alice/example.txt',
+    name: 'hello [world]',
+    mimeType: 'text/plain',
+    size: 1,
+  }
+
+  it('returns the vanity share page for all copied links, including legacy clients', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://files.example/')
-    const file = {
-      id: 'file-id',
-      urlPath: '/alice/example.txt',
-      name: 'hello [world]',
-      mimeType: 'text/plain',
-      size: 1,
-    }
+    const output = uploadLinks(file, { ...user, vanityId: 'orbit' })
+    expect(output).toMatchObject({
+      url: 'https://files.example/orbit/example.txt',
+      pageUrl: 'https://files.example/orbit/example.txt',
+      copyText: 'https://files.example/orbit/example.txt',
+      rawUrl: 'https://files.example/api/files/alice/example.txt',
+      downloadUrl: 'https://files.example/api/files/file-id/download',
+      size: 1024 * 1024,
+    })
+  })
+
+  it('encodes the share URL without adding display-name markup', () => {
+    vi.stubEnv('NEXTAUTH_URL', 'https://files.example/')
     const output = uploadLinks(
-      file,
-      { ...user, vanityId: 'orbit' },
-      { copyFormat: 'markdown' }
+      { ...file, urlPath: '/alice/a file.txt)(injected)', name: '<img src=x>' },
+      user
     )
-    expect(output.url).toBe('https://files.example/orbit/example.txt')
-    expect(output.copyText).toBe(
-      '[hello \\[world\\]](https://files.example/orbit/example.txt)'
+    expect(output.url).toBe(
+      'https://files.example/alice/a%20file.txt%29%28injected%29'
     )
-    expect(output.size).toBe(1024 * 1024)
-    const html = uploadLinks(
-      { ...file, name: '<img onerror="alert(1)">' },
-      user,
-      { copyFormat: 'html' }
-    )
-    expect(html.copyText).toContain('&lt;img onerror=&quot;alert(1)&quot;&gt;')
-    expect(html.copyText).not.toContain('<img')
-    const unusual = uploadLinks(
-      { ...file, urlPath: '/alice/file.txt)(injected)', name: '<img src=x>' },
-      user,
-      { copyFormat: 'markdown' }
-    )
-    expect(unusual.copyText).toBe(
-      '[\\<img src=x\\>](https://files.example/alice/file.txt%29%28injected%29)'
-    )
+    expect(output.copyText).toBe(output.url)
+    expect(output.pageUrl).toBe(output.url)
   })
 })

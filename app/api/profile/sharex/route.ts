@@ -63,7 +63,7 @@ export async function GET(req: Request) {
       },
       Body: 'MultipartFormData',
       FileFormName: 'file',
-      URL: '{json:data.copyText}',
+      URL: '{json:data.url}',
       ThumbnailURL: '{json:data.url}',
       DeletionURL: '',
       ErrorMessage: '{json:error}',

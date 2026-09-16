@@ -7,18 +7,30 @@ export const expirationSchema = z.enum([
   'WEEK',
   'MONTH',
 ])
-export const uploadProfileOptionsSchema = z
-  .object({
-    visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-    expiration: expirationSchema.optional(),
-    expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
-    randomizeFileUrls: z.boolean().optional(),
-    shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
-    copyFormat: z
-      .enum(['page', 'raw', 'download', 'markdown', 'html'])
-      .optional(),
-  })
-  .strict()
+
+/** Ignore the retired option in saved profiles, recipes and older clients. */
+export function discardLegacyCopyFormat(value: unknown) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return value
+  const { copyFormat: _copyFormat, ...options } = value as Record<
+    string,
+    unknown
+  >
+  return options
+}
+
+export const uploadProfileOptionsSchema = z.preprocess(
+  discardLegacyCopyFormat,
+  z
+    .object({
+      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+      expiration: expirationSchema.optional(),
+      expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
+      randomizeFileUrls: z.boolean().optional(),
+      shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
+    })
+    .strict()
+)
 
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
 export const uploadProfileInputSchema = z
@@ -43,21 +55,25 @@ export type UploadProfileView = {
   updatedAt: string
 }
 
-export const uploadRequestOptionsSchema = uploadProfileOptionsSchema
-  .extend({
-    profileId: z.string().min(1).max(100).nullable().optional(),
-    password: z
-      .string()
-      .max(72)
-      .refine(
-        (value) => new TextEncoder().encode(value).length <= 72,
-        'Passwords must use at most 72 bytes.'
-      )
-      .nullable()
-      .optional(),
-    expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
-  })
-  .strict()
+export const uploadRequestOptionsSchema = z.preprocess(
+  discardLegacyCopyFormat,
+  uploadProfileOptionsSchema
+    .innerType()
+    .extend({
+      profileId: z.string().min(1).max(100).nullable().optional(),
+      password: z
+        .string()
+        .max(72)
+        .refine(
+          (value) => new TextEncoder().encode(value).length <= 72,
+          'Passwords must use at most 72 bytes.'
+        )
+        .nullable()
+        .optional(),
+      expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+    })
+    .strict()
+)
 
 export type UploadRequestOptions = z.infer<typeof uploadRequestOptionsSchema>
 export type ResolvedUploadOptions = Required<UploadProfileOptions> & {
@@ -73,7 +89,6 @@ export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
   expiryAction: 'DELETE',
   randomizeFileUrls: false,
   shareStyle: 'framed',
-  copyFormat: 'page',
 }
 
 /** Omission inherits; DISABLED explicitly turns expiration off. Durations use UTC. */
@@ -98,7 +113,14 @@ export function mergeUploadOptions(
   request: UploadRequestOptions,
   now = new Date()
 ): ResolvedUploadOptions {
-  const merged = { ...UPLOAD_DEFAULTS, ...account, ...profile, ...request }
+  // In-flight chunk uploads may still carry the retired field in their snapshot.
+  const { copyFormat: _copyFormat, ...merged } = {
+    copyFormat: undefined,
+    ...UPLOAD_DEFAULTS,
+    ...account,
+    ...profile,
+    ...request,
+  }
   const expiresAt =
     request.expiresAt !== undefined
       ? request.expiresAt

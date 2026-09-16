@@ -1,6 +1,6 @@
 # Upload profiles
 
-Open **Profile → Uploads** (`/dashboard/profile?section=uploads`) to save how you share. Start from Public screenshots, Private work or Temporary clips, or create your own profile. Choose visibility, expiration and its action, randomized URLs, share-page style, and copied-link format. Any field set to **Inherit** follows your account or the instance default.
+Open **Profile → Uploads** (`/dashboard/profile?section=uploads`) to save how you share. Start from Public screenshots, Private work or Temporary clips, or create your own profile. Choose visibility, expiration and its action, randomized URLs, and share-page style. Any field set to **Inherit** follows your account or the instance default.
 
 **Make default** applies a profile to future uploads, including dashboard drag-and-drop and existing upload clients. The upload and paste forms also let you select a profile for one upload or use account settings directly. The effective choices are resolved when an upload starts; editing a profile during a chunked upload does not change its snapshot. Changes do not alter existing files.
 
@@ -14,7 +14,9 @@ For a tool to use a particular profile, download its configuration or script fro
 
 For multipart uploads, select the profile before sending file bytes using `X-Upload-Profile: PROFILE_ID` or `?profileId=PROFILE_ID`. Use the literal `none` to bypass the saved default. A profile-bound named token automatically selects its profile and rejects attempts to change it or override its upload choices. Deleting a bound profile makes subsequent uploads fail until the tool is reconfigured.
 
-The upload response preserves `data.url` and adds `pageUrl`, `rawUrl`, `downloadUrl` and `copyText`. Copy formats include the share page, raw link, download link, Markdown and HTML. Copy format changes link formatting; it does not grant access to a private or password-protected file.
+The web upload and paste forms' **Copy link** and **Copy all links** buttons, generated screenshot tools, and scripts always copy the plain share-page URL. Saved profiles do not change this behavior. A share link does not grant access to a private or password-protected file.
+
+The upload response exposes the share-page URL as `data.url` and `pageUrl`. The `copyText` field remains an alias for the same URL so previously downloaded clients continue to work.
 
 ## Share recipes
 
@@ -31,8 +33,7 @@ The upload response preserves `data.url` and adds `pageUrl`, `rawUrl`, `download
       "expiration": "DAY",
       "expiryAction": "DELETE",
       "randomizeFileUrls": true,
-      "shareStyle": "minimal",
-      "copyFormat": "markdown"
+      "shareStyle": "minimal"
     }
   }
 }

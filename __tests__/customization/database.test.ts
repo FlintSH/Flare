@@ -223,6 +223,43 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect((await (await profiles.GET()).json()).data.profiles).toHaveLength(0)
   })
 
+  it('lists, exports and imports old profiles without the retired copy-format option', async () => {
+    const profile = await routeFixture('download')
+    const listed = await profiles.GET()
+    expect(listed.status).toBe(200)
+    const listedBody = (await listed.json()).data
+    expect(listedBody.profiles[0].options).not.toHaveProperty('copyFormat')
+    expect(listedBody.effective).not.toHaveProperty('copyFormat')
+    const exporter = await import('@/app/api/upload-profiles/[id]/export/route')
+    const exported = await exporter.GET(
+      new Request(`http://localhost/api/upload-profiles/${profile.id}/export`),
+      { params: Promise.resolve({ id: profile.id }) }
+    )
+    expect(exported.status).toBe(200)
+    const recipe = await exported.json()
+    expect(recipe.profile.options).not.toHaveProperty('copyFormat')
+    const imported = await profiles.POST(
+      jsonRequest('/api/upload-profiles', {
+        ...recipe,
+        profile: {
+          ...recipe.profile,
+          name: 'Imported old recipe',
+          options: { ...recipe.profile.options, copyFormat: 'raw' },
+        },
+      })
+    )
+    expect(imported.status).toBe(201)
+    const saved = (await imported.json()).data
+    expect(saved.options).toEqual(recipe.profile.options)
+    expect(
+      (
+        await prisma.uploadProfile.findUniqueOrThrow({
+          where: { id: saved.id },
+        })
+      ).options
+    ).not.toHaveProperty('copyFormat')
+  })
+
   it('commits the file, expiry action, quota and webhook once when finalization is retried', async () => {
     const created = await integrations.POST(
       jsonRequest('/api/integrations', {
@@ -383,7 +420,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(recovered[0].attempts).toBe(2)
   })
 
-  async function routeFixture() {
+  async function routeFixture(copyFormat = 'markdown') {
     const urlId = `customization-routes-${randomUUID()}`
     routeRoots.add(`uploads/${urlId}`)
     const profile = await prisma.uploadProfile.create({
@@ -396,7 +433,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
           expiryAction: 'SET_PRIVATE',
           randomizeFileUrls: true,
           shareStyle: 'minimal',
-          copyFormat: 'markdown',
+          copyFormat,
         },
       },
     })
@@ -428,118 +465,137 @@ suite('customization contracts against disposable PostgreSQL', () => {
     return { data, metadata: metadata! }
   }
 
-  it('applies identical profile/access/expiry/copy settings through multipart and both chunk completion APIs', async () => {
-    const profile = await routeFixture()
-    await integrations.POST(
-      jsonRequest('/api/integrations', {
-        action: 'create-webhook',
-        name: 'Upload parity fixture',
-        url: 'http://127.0.0.1:39999/events',
-      })
-    )
-    const fileRoutes = await import('@/app/api/files/route')
-    const chunkRoutes = await import('@/app/api/files/chunks/route')
-    const partRoutes = await import(
-      '@/app/api/files/chunks/[uploadId]/part/[partNumber]/route'
-    )
-    const completion = await import(
-      '@/app/api/files/chunks/[uploadId]/complete/route'
-    )
-    const text = 'An actual multipart and chunked file payload.'
-    const form = new FormData()
-    form.append('file', new Blob([text], { type: 'text/plain' }), 'capture.txt')
-    form.append('password', 'upload-password')
-    const direct = await fileRoutes.POST(
-      new Request('http://localhost/api/files', { method: 'POST', body: form })
-    )
-    expect(direct.status).toBe(200)
-    expect((await direct.json()).data.copyText).toMatch(
-      /^\[capture\.txt\]\(http/
-    )
-
-    const buffered = await startChunk(text)
-    const partResponse = await partRoutes.PUT(
-      new Request(
-        `http://localhost/api/files/chunks/${buffered.data.uploadId}/part/1`,
-        { method: 'PUT', body: text }
-      ),
-      {
-        params: Promise.resolve({
-          uploadId: buffered.data.uploadId,
-          partNumber: '1',
-        }),
-      }
-    )
-    expect(partResponse.status).toBe(200)
-    const parts = [
-      { ETag: (await partResponse.json()).data.etag, PartNumber: 1 },
-    ]
-    const finish = () =>
-      completion.POST(
-        jsonRequest(`/api/files/chunks/${buffered.data.uploadId}/complete`, {
-          parts,
-        }),
-        { params: Promise.resolve({ uploadId: buffered.data.uploadId }) }
+  it.each(['markdown', 'html', 'raw', 'download'])(
+    'uses share-page links for legacy %s profiles through multipart and both chunk completion APIs',
+    async (copyFormat) => {
+      const profile = await routeFixture(copyFormat)
+      await integrations.POST(
+        jsonRequest('/api/integrations', {
+          action: 'create-webhook',
+          name: 'Upload parity fixture',
+          url: 'http://127.0.0.1:39999/events',
+        })
       )
-    const first = await finish()
-    expect(first.status).toBe(200)
-    const firstBody = await first.json()
-    expect(firstBody.copyText).toMatch(/^\[capture\.txt\]\(http/)
-    const retry = await finish()
-    expect(retry.status).toBe(200)
-    expect((await retry.json()).url).toBe(firstBody.url)
+      const fileRoutes = await import('@/app/api/files/route')
+      const chunkRoutes = await import('@/app/api/files/chunks/route')
+      const partRoutes = await import(
+        '@/app/api/files/chunks/[uploadId]/part/[partNumber]/route'
+      )
+      const completion = await import(
+        '@/app/api/files/chunks/[uploadId]/complete/route'
+      )
+      const text = 'An actual multipart and chunked file payload.'
+      const form = new FormData()
+      form.append(
+        'file',
+        new Blob([text], { type: 'text/plain' }),
+        'capture.txt'
+      )
+      form.append('password', 'upload-password')
+      form.append('copyFormat', copyFormat)
+      const direct = await fileRoutes.POST(
+        new Request('http://localhost/api/files', {
+          method: 'POST',
+          body: form,
+        })
+      )
+      expect(direct.status).toBe(200)
+      const directBody = (await direct.json()).data
+      expect(directBody.url).toBe(directBody.pageUrl)
+      expect(directBody.copyText).toBe(directBody.pageUrl)
+      expect(directBody.url).not.toContain('/api/files/')
 
-    const providerDirect = await startChunk(text)
-    const providerPart = await storage.uploadPart(
-      providerDirect.metadata.fileKey,
-      providerDirect.metadata.s3UploadId,
-      1,
-      Buffer.from(text)
-    )
-    const providerResponse = await chunkRoutes.PUT(
-      jsonRequest(
-        '/api/files/chunks',
+      const buffered = await startChunk(text, { copyFormat })
+      const partResponse = await partRoutes.PUT(
+        new Request(
+          `http://localhost/api/files/chunks/${buffered.data.uploadId}/part/1`,
+          { method: 'PUT', body: text }
+        ),
         {
-          uploadId: providerDirect.data.uploadId,
-          parts: [{ ETag: providerPart.ETag, PartNumber: 1 }],
-        },
-        'PUT'
+          params: Promise.resolve({
+            uploadId: buffered.data.uploadId,
+            partNumber: '1',
+          }),
+        }
       )
-    )
-    expect(providerResponse.status).toBe(200)
-    expect((await providerResponse.json()).data.copyText).toMatch(
-      /^\[capture\.txt\]\(http/
-    )
-    const files = await prisma.file.findMany()
-    expect(files).toHaveLength(3)
-    const { compare } = await import('bcryptjs')
-    for (const file of files) {
-      expect(file.visibility).toBe('PRIVATE')
-      expect(await compare('upload-password', file.password!)).toBe(true)
-      expect(file.uploadOptions).toMatchObject({
-        profileId: profile.id,
-        expiration: 'DAY',
-        expiryAction: 'SET_PRIVATE',
-        shareStyle: 'minimal',
-        copyFormat: 'markdown',
-        randomizeFileUrls: true,
-      })
-      expect(file.urlPath).not.toMatch(/\/capture\.txt$/)
-      const event = await prisma.event.findFirstOrThrow({
-        where: { payload: { path: ['fileId'], equals: file.id } },
-      })
-      expect(event.payload).toMatchObject({ action: 'SET_PRIVATE' })
-      expect(
-        event.scheduledAt!.getTime() - file.uploadedAt.getTime()
-      ).toBeGreaterThan(86_390_000)
-      expect(await storage.getFileSize(file.path)).toBe(Buffer.byteLength(text))
+      expect(partResponse.status).toBe(200)
+      const parts = [
+        { ETag: (await partResponse.json()).data.etag, PartNumber: 1 },
+      ]
+      const finish = () =>
+        completion.POST(
+          jsonRequest(`/api/files/chunks/${buffered.data.uploadId}/complete`, {
+            parts,
+            copyFormat,
+          }),
+          { params: Promise.resolve({ uploadId: buffered.data.uploadId }) }
+        )
+      const first = await finish()
+      expect(first.status).toBe(200)
+      const firstBody = await first.json()
+      expect(firstBody.url).toBe(firstBody.pageUrl)
+      expect(firstBody.copyText).toBe(firstBody.pageUrl)
+      expect(firstBody.url).not.toContain('/api/files/')
+      const retry = await finish()
+      expect(retry.status).toBe(200)
+      expect((await retry.json()).url).toBe(firstBody.url)
+
+      const providerDirect = await startChunk(text, { copyFormat })
+      const providerPart = await storage.uploadPart(
+        providerDirect.metadata.fileKey,
+        providerDirect.metadata.s3UploadId,
+        1,
+        Buffer.from(text)
+      )
+      const providerResponse = await chunkRoutes.PUT(
+        jsonRequest(
+          '/api/files/chunks',
+          {
+            uploadId: providerDirect.data.uploadId,
+            copyFormat,
+            parts: [{ ETag: providerPart.ETag, PartNumber: 1 }],
+          },
+          'PUT'
+        )
+      )
+      expect(providerResponse.status).toBe(200)
+      const providerBody = (await providerResponse.json()).data
+      expect(providerBody.url).toBe(providerBody.pageUrl)
+      expect(providerBody.copyText).toBe(providerBody.pageUrl)
+      expect(providerBody.url).not.toContain('/api/files/')
+      const files = await prisma.file.findMany()
+      expect(files).toHaveLength(3)
+      const { compare } = await import('bcryptjs')
+      for (const file of files) {
+        expect(file.visibility).toBe('PRIVATE')
+        expect(await compare('upload-password', file.password!)).toBe(true)
+        expect(file.uploadOptions).toMatchObject({
+          profileId: profile.id,
+          expiration: 'DAY',
+          expiryAction: 'SET_PRIVATE',
+          shareStyle: 'minimal',
+          randomizeFileUrls: true,
+        })
+        expect(file.uploadOptions).not.toHaveProperty('copyFormat')
+        expect(file.urlPath).not.toMatch(/\/capture\.txt$/)
+        const event = await prisma.event.findFirstOrThrow({
+          where: { payload: { path: ['fileId'], equals: file.id } },
+        })
+        expect(event.payload).toMatchObject({ action: 'SET_PRIVATE' })
+        expect(
+          event.scheduledAt!.getTime() - file.uploadedAt.getTime()
+        ).toBeGreaterThan(86_390_000)
+        expect(await storage.getFileSize(file.path)).toBe(
+          Buffer.byteLength(text)
+        )
+      }
+      expect(await prisma.webhookDelivery.count()).toBe(3)
+      expect((await principal()).storageUsed).toBeCloseTo(
+        (3 * Buffer.byteLength(text)) / 1024 ** 2,
+        12
+      )
     }
-    expect(await prisma.webhookDelivery.count()).toBe(3)
-    expect((await principal()).storageUsed).toBeCloseTo(
-      (3 * Buffer.byteLength(text)) / 1024 ** 2,
-      12
-    )
-  })
+  )
 
   it('pins in-progress chunk profiles and makes simultaneous completion idempotent', async () => {
     const profile = await routeFixture()
@@ -581,7 +637,6 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect((await prisma.file.findFirstOrThrow()).uploadOptions).toMatchObject({
       visibility: 'PRIVATE',
       expiration: 'DAY',
-      copyFormat: 'markdown',
     })
     expect((await principal()).storageUsed).toBe(
       Buffer.byteLength(text) / 1024 ** 2

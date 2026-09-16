@@ -397,7 +397,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
               </ToastAction>
               <ToastAction
                 altText="Copy link"
-                onClick={() => copyLinks(file.copyText || file.url)}
+                onClick={() => copyLinks(file.pageUrl || file.url)}
               >
                 Copy Link
               </ToastAction>
@@ -413,7 +413,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
               altText="Copy all links"
               onClick={() => {
                 const links = responses
-                  .map((r) => r.copyText || r.url)
+                  .map((r) => r.pageUrl || r.url)
                   .join('\n')
                 void copyLinks(links)
               }}

@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       throw new UploadError('Select a naming strategy in your upload profile.')
     const options = applyUploadOverrides(user, initialOptions, overrides)
     const file = await finalizeUpload({ user, storage, ...upload, options })
-    return apiResponse(uploadLinks(file, user, options))
+    return apiResponse(uploadLinks(file, user))
   } catch (error) {
     if (storage && filePath) await cleanupUncommittedUpload(storage, filePath)
     logger.error('Upload failed', error as Error)
