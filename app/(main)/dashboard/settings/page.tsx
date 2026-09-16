@@ -9,13 +9,14 @@ import { prisma } from '@/lib/database/prisma'
 import { redactEmailConfig } from '@/lib/email/config'
 import {
   SETTINGS_SECTIONS,
+  SETTINGS_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string }>
+  searchParams: Promise<{ section?: string | string[] }>
 }) {
   const session = await getPageSession()
   if (!session?.user?.id) redirect('/auth/login')
@@ -41,7 +42,8 @@ export default async function SettingsPage({
       initialSection={readPreferenceSection(
         params.section,
         SETTINGS_SECTIONS,
-        'general'
+        'general',
+        SETTINGS_SECTION_ALIASES
       )}
       recovery={recovery}
     />

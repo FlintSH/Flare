@@ -15,7 +15,8 @@ export default async function CustomizePage({
     select: { role: true },
   })
   if (!user) redirect('/auth/login')
-  if (user.role !== 'ADMIN') redirect('/dashboard/profile?section=appearance')
+  if (user.role !== 'ADMIN')
+    redirect('/dashboard/profile?section=account#workspace-appearance')
 
   const { recovery } = await searchParams
   redirect(

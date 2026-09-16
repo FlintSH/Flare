@@ -1,4 +1,5 @@
 import type { PersonalAppearance } from '@/lib/customization/schema'
+import type { PROFILE_SECTIONS } from '@/lib/preferences/navigation'
 
 import { User } from './user'
 
@@ -9,7 +10,7 @@ export interface ProfileClientProps {
   formattedUsed: string
   usagePercentage: number
   isAdmin: boolean
-  initialSection: string
+  initialSection: (typeof PROFILE_SECTIONS)[number]
   initialPreference: PersonalAppearance
 }
 

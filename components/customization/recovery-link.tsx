@@ -11,7 +11,7 @@ export function RecoveryLink({
     | '/dashboard/settings?recovery=1'
     | '/dashboard/settings?section=appearance'
     | '/dashboard/settings?section=appearance&recovery=1'
-    | '/dashboard/settings?section=advanced&recovery=1'
+    | '/dashboard/settings?section=appearance&recovery=1#advanced-styles'
   className?: string
   children: ReactNode
 }) {
