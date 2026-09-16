@@ -1,5 +1,6 @@
 import CustomizePage from '@/app/(main)/dashboard/customize/page'
 import IntegrationsPage from '@/app/(main)/dashboard/integrations/page'
+import ProfilePage from '@/app/(main)/dashboard/profile/page'
 import SettingsPage from '@/app/(main)/dashboard/settings/page'
 import UploadProfilesPage from '@/app/(main)/dashboard/upload-profiles/page'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,6 +31,7 @@ vi.mock('@/lib/email/config', () => ({
 vi.mock('@/components/settings/instance-settings', () => ({
   InstanceSettings: () => null,
 }))
+vi.mock('@/components/profile', () => ({ ProfileClient: () => null }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -66,14 +68,20 @@ describe('settings permission and legacy navigation', () => {
     mocks.user.mockResolvedValue({ role: 'USER' })
     await expect(
       CustomizePage({ searchParams: Promise.resolve({ recovery: '1' }) })
-    ).rejects.toThrow('redirect:/dashboard/profile?section=appearance')
+    ).rejects.toThrow(
+      'redirect:/dashboard/profile?section=account#workspace-appearance'
+    )
     expect(mocks.config).not.toHaveBeenCalled()
   })
 
   it.each([
     ['appearance', 'appearance'],
+    ['advanced', 'appearance'],
+    ['about', 'general'],
+    ['access', 'access'],
     ['https://untrusted.example', 'general'],
     ['appearance&recovery=1', 'general'],
+    [['appearance', 'advanced'], 'general'],
   ])(
     'loads an authorized section without exposing email credentials: %s',
     async (section, expected) => {
@@ -121,5 +129,48 @@ describe('settings permission and legacy navigation', () => {
     mocks.session.mockResolvedValue(null)
     await expect(UploadProfilesPage()).rejects.toThrow('redirect:/auth/login')
     await expect(IntegrationsPage()).rejects.toThrow('redirect:/auth/login')
+  })
+})
+
+describe('profile section compatibility', () => {
+  it.each([
+    ['account', 'account'],
+    ['appearance', 'account'],
+    ['security', 'account'],
+    ['uploads', 'uploads'],
+    ['integrations', 'integrations'],
+    ['data', 'data'],
+    ['advanced', 'account'],
+    [['appearance', 'uploads'], 'account'],
+  ])('loads the canonical section for %s', async (section, expected) => {
+    mocks.user.mockResolvedValue({
+      id: 'operator',
+      role: 'ADMIN',
+      storageUsed: 0,
+      preferences: {},
+      _count: { files: 0, shortenedUrls: 0 },
+    })
+    mocks.config.mockResolvedValue({
+      settings: {
+        general: {
+          storage: {
+            quotas: { enabled: false, default: { value: 1, unit: 'GB' } },
+          },
+        },
+      },
+    })
+    const page = await ProfilePage({
+      searchParams: Promise.resolve({ section }),
+    })
+    expect(page.props.initialSection).toBe(expected)
+  })
+
+  it('still requires sign-in before loading an aliased section', async () => {
+    mocks.session.mockResolvedValue(null)
+    await expect(
+      ProfilePage({ searchParams: Promise.resolve({ section: 'security' }) })
+    ).rejects.toThrow('redirect:/auth/login')
+    expect(mocks.user).not.toHaveBeenCalled()
+    expect(mocks.config).not.toHaveBeenCalled()
   })
 })

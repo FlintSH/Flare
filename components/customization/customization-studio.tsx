@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import {
@@ -318,10 +317,10 @@ export function CustomizationStudio({
             HTML disabled. Your saved settings are unchanged. Restore a previous
             appearance below, or{' '}
             <RecoveryLink
-              href="/dashboard/settings?section=advanced&recovery=1"
+              href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
               className="underline underline-offset-4"
             >
-              repair advanced styles in Settings
+              repair custom CSS and HTML below
             </RecoveryLink>
             .
           </p>
@@ -504,13 +503,20 @@ export function CustomizationStudio({
                         />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Your favicon is below. Custom CSS and head HTML are in{' '}
-                        <Link
-                          href="/dashboard/settings?section=advanced"
+                        Your favicon is below. Custom CSS and head HTML are
+                        under{' '}
+                        <a
+                          href="#advanced-styles"
+                          onClick={() => {
+                            const styles =
+                              window.document.getElementById('advanced-styles')
+                            if (styles instanceof HTMLDetailsElement)
+                              styles.open = true
+                          }}
                           className="underline underline-offset-4"
                         >
-                          Advanced settings
-                        </Link>
+                          Custom CSS and HTML
+                        </a>
                         .
                       </p>
                     </CardContent>

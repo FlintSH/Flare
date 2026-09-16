@@ -18,7 +18,6 @@ import {
   Github,
   HardDrive,
   Heart,
-  Info,
   InfoIcon,
   Mail,
   Palette,
@@ -28,6 +27,7 @@ import {
   Upload,
   XCircle,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 
 import { CustomizationStudio } from '@/components/customization/customization-studio'
 import { RecoveryLink } from '@/components/customization/recovery-link'
@@ -60,7 +60,10 @@ import { Switch } from '@/components/ui/switch'
 
 import type { FlareConfig } from '@/lib/config'
 import type { CustomizationState } from '@/lib/customization/schema'
-import { SETTINGS_SECTIONS } from '@/lib/preferences/navigation'
+import {
+  SETTINGS_SECTIONS,
+  SETTINGS_SECTION_ALIASES,
+} from '@/lib/preferences/navigation'
 
 import { usePreferenceSection } from '@/hooks/use-preference-section'
 import { useToast } from '@/hooks/use-toast'
@@ -107,7 +110,8 @@ export function InstanceSettings({
 }) {
   const [activeSection, setSection] = usePreferenceSection(
     SETTINGS_SECTIONS,
-    initialSection
+    initialSection,
+    SETTINGS_SECTION_ALIASES
   )
   const [studioDirty, setStudioDirty] = useState(false)
   const handleStudioStateChange = useCallback(
@@ -371,8 +375,9 @@ export function InstanceSettings({
     {
       id: 'general',
       title: 'General',
-      hint: 'Everyday instance details',
-      description: 'The everyday details that make your instance work for you.',
+      hint: 'Features, credits, and version',
+      description:
+        'Manage everyday features and keep your instance up to date.',
       icon: Settings2,
       dirty:
         !deepEqual(
@@ -414,8 +419,9 @@ export function InstanceSettings({
     {
       id: 'appearance',
       title: 'Appearance',
-      hint: 'Branding, themes, and sharing',
-      description: 'Your identity, your atmosphere, your way of sharing.',
+      hint: 'Branding, themes, and custom styles',
+      description:
+        'Shape your instance with branding, themes, sharing, and custom styles.',
       icon: Palette,
       dirty:
         studioDirty ||
@@ -423,7 +429,11 @@ export function InstanceSettings({
           savedConfig.settings.appearance,
           workingConfig.settings.appearance
         ) ||
-        hasFaviconChanged(),
+        hasFaviconChanged() ||
+        !deepEqual(
+          savedConfig.settings.advanced,
+          workingConfig.settings.advanced
+        ),
     },
     {
       id: 'email',
@@ -433,24 +443,6 @@ export function InstanceSettings({
         'Account recovery and verification, delivered by your mail provider.',
       icon: Mail,
     },
-    {
-      id: 'advanced',
-      title: 'Advanced',
-      hint: 'Custom CSS and head HTML',
-      description: 'The finishing touches, down to your own CSS and HTML.',
-      icon: Code,
-      dirty: !deepEqual(
-        savedConfig.settings.advanced,
-        workingConfig.settings.advanced
-      ),
-    },
-    {
-      id: 'about',
-      title: 'About',
-      hint: 'Version and credits',
-      description: 'Your Flare version and the people building it.',
-      icon: Info,
-    },
   ] as const
   const changedSettingsGroups = sections
     .filter(
@@ -459,6 +451,10 @@ export function InstanceSettings({
         section.dirty &&
         (section.id !== 'appearance' ||
           pendingFaviconFile ||
+          !deepEqual(
+            savedConfig.settings.advanced,
+            workingConfig.settings.advanced
+          ) ||
           !deepEqual(
             savedConfig.settings.appearance,
             workingConfig.settings.appearance
@@ -571,6 +567,79 @@ export function InstanceSettings({
                   </AlertDescription>
                 </div>
               </Alert>
+            </CardContent>
+          </Card>
+          <Card id="instance-information" className="scroll-mt-28">
+            <CardHeader>
+              <CardTitle>Instance Information</CardTitle>
+              <CardDescription>
+                View and manage your Flare instance details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <Label>Version</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Current version: {pkg.version}
+                    {updateInfo && (
+                      <span className="ml-2 text-primary">
+                        {updateInfo.hasUpdate
+                          ? `(Update available: ${updateInfo.latestVersion})`
+                          : '(Up to date)'}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  {updateInfo?.hasUpdate && (
+                    <Button variant="outline" asChild>
+                      <a
+                        href={updateInfo.releaseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex min-w-0 items-center gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        View Release
+                      </a>
+                    </Button>
+                  )}
+                  <Button onClick={checkForUpdates} disabled={isCheckingUpdate}>
+                    {isCheckingUpdate ? (
+                      <>
+                        <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                        Checking...
+                      </>
+                    ) : (
+                      'Check for Updates'
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href="https://github.com/FlintSH/flare"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Github className="mr-2 h-4 w-4" />
+                    View on GitHub
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href="https://ko-fi.com/FlintSH"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Heart className="mr-2 h-4 w-4" />
+                    Sponsor
+                  </a>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1492,245 +1561,185 @@ export function InstanceSettings({
               packs are published separately above.
             </p>
           </details>
+          <details
+            id="advanced-styles"
+            className="scroll-mt-28 rounded-xl border bg-card p-5"
+          >
+            <summary className="cursor-pointer text-sm font-medium">
+              Custom CSS and HTML
+            </summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Add your own styles and head content. These changes apply when you
+              save settings.
+            </p>
+            <div className="mt-5 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Custom Styling</CardTitle>
+                  <CardDescription>
+                    Add custom CSS to your instance
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Label>Custom CSS</Label>
+                        {isFieldChanged('advanced', ['customCSS']) && (
+                          <ChangeIndicator />
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCssEditorOpen(!cssEditorOpen)}
+                      >
+                        <Code className="mr-2 h-4 w-4" />
+                        {cssEditorOpen ? 'Close Editor' : 'Open Editor'}
+                      </Button>
+                    </div>
+                    {cssEditorOpen && (
+                      <Card
+                        className={`mt-4 ${isFieldChanged('advanced', ['customCSS']) ? 'border-primary' : ''}`}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between">
+                          <div>
+                            <CardTitle>Custom CSS Editor</CardTitle>
+                            <CardDescription>
+                              Add custom CSS to customize your instance
+                            </CardDescription>
+                          </div>
+                          {isFieldChanged('advanced', ['customCSS']) && (
+                            <ChangeIndicator />
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          <CodeMirror
+                            value={workingConfig.settings.advanced.customCSS}
+                            height="200px"
+                            extensions={[css()]}
+                            onChange={(value) => {
+                              handleSettingChange('advanced', {
+                                customCSS: value,
+                              })
+                            }}
+                            theme="dark"
+                            className="border rounded-md"
+                          />
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>HTML Head Content</CardTitle>
+                  <CardDescription>
+                    Add custom HTML to the head section
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Label>Custom HTML</Label>
+                        {isFieldChanged('advanced', ['customHead']) && (
+                          <ChangeIndicator />
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setHtmlEditorOpen(!htmlEditorOpen)}
+                      >
+                        <FileCode className="mr-2 h-4 w-4" />
+                        {htmlEditorOpen ? 'Close Editor' : 'Open Editor'}
+                      </Button>
+                    </div>
+                    {htmlEditorOpen && (
+                      <Card
+                        className={`mt-4 ${isFieldChanged('advanced', ['customHead']) ? 'border-primary' : ''}`}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between">
+                          <div>
+                            <CardTitle>Custom HTML Editor</CardTitle>
+                            <CardDescription>
+                              Add custom HTML to the head of your instance
+                            </CardDescription>
+                          </div>
+                          {isFieldChanged('advanced', ['customHead']) && (
+                            <ChangeIndicator />
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          <CodeMirror
+                            value={workingConfig.settings.advanced.customHead}
+                            height="200px"
+                            extensions={[html()]}
+                            onChange={(value) => {
+                              handleSettingChange('advanced', {
+                                customHead: value,
+                              })
+                            }}
+                            theme="dark"
+                            className="border rounded-md"
+                          />
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </details>
         </div>
       </PreferencesPanel>
       <PreferencesPanel active={activeSection === 'email'}>
         <EmailSettings />
       </PreferencesPanel>
-      <PreferencesPanel active={activeSection === 'advanced'}>
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Custom Styling</CardTitle>
-              <CardDescription>Add custom CSS to your instance</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Label>Custom CSS</Label>
-                    {isFieldChanged('advanced', ['customCSS']) && (
-                      <ChangeIndicator />
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCssEditorOpen(!cssEditorOpen)}
-                  >
-                    <Code className="mr-2 h-4 w-4" />
-                    {cssEditorOpen ? 'Close Editor' : 'Open Editor'}
-                  </Button>
-                </div>
-                {cssEditorOpen && (
-                  <Card
-                    className={`mt-4 ${isFieldChanged('advanced', ['customCSS']) ? 'border-primary' : ''}`}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle>Custom CSS Editor</CardTitle>
-                        <CardDescription>
-                          Add custom CSS to customize your instance
-                        </CardDescription>
-                      </div>
-                      {isFieldChanged('advanced', ['customCSS']) && (
-                        <ChangeIndicator />
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <CodeMirror
-                        value={workingConfig.settings.advanced.customCSS}
-                        height="200px"
-                        extensions={[css()]}
-                        onChange={(value) => {
-                          handleSettingChange('advanced', {
-                            customCSS: value,
-                          })
-                        }}
-                        theme="dark"
-                        className="border rounded-md"
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>HTML Head Content</CardTitle>
-              <CardDescription>
-                Add custom HTML to the head section
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Label>Custom HTML</Label>
-                    {isFieldChanged('advanced', ['customHead']) && (
-                      <ChangeIndicator />
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setHtmlEditorOpen(!htmlEditorOpen)}
-                  >
-                    <FileCode className="mr-2 h-4 w-4" />
-                    {htmlEditorOpen ? 'Close Editor' : 'Open Editor'}
-                  </Button>
-                </div>
-                {htmlEditorOpen && (
-                  <Card
-                    className={`mt-4 ${isFieldChanged('advanced', ['customHead']) ? 'border-primary' : ''}`}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle>Custom HTML Editor</CardTitle>
-                        <CardDescription>
-                          Add custom HTML to the head of your instance
-                        </CardDescription>
-                      </div>
-                      {isFieldChanged('advanced', ['customHead']) && (
-                        <ChangeIndicator />
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <CodeMirror
-                        value={workingConfig.settings.advanced.customHead}
-                        height="200px"
-                        extensions={[html()]}
-                        onChange={(value) => {
-                          handleSettingChange('advanced', {
-                            customHead: value,
-                          })
-                        }}
-                        theme="dark"
-                        className="border rounded-md"
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </PreferencesPanel>
-      <PreferencesPanel active={activeSection === 'about'}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Instance Information</CardTitle>
-            <CardDescription>
-              View and manage your Flare instance details
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <Label>Version</Label>
-                <p className="text-sm text-muted-foreground">
-                  Current version: {pkg.version}
-                  {updateInfo && (
-                    <span className="ml-2 text-primary">
-                      {updateInfo.hasUpdate
-                        ? `(Update available: ${updateInfo.latestVersion})`
-                        : '(Up to date)'}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="flex min-w-0 items-center gap-2">
-                {updateInfo?.hasUpdate && (
-                  <Button variant="outline" asChild>
-                    <a
-                      href={updateInfo.releaseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex min-w-0 items-center gap-2"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      View Release
-                    </a>
-                  </Button>
-                )}
-                <Button onClick={checkForUpdates} disabled={isCheckingUpdate}>
-                  {isCheckingUpdate ? (
-                    <>
-                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                      Checking...
-                    </>
-                  ) : (
-                    'Check for Updates'
-                  )}
-                </Button>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href="https://github.com/FlintSH/flare"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Github className="mr-2 h-4 w-4" />
-                  View on GitHub
-                </a>
+      {hasChanges &&
+        createPortal(
+          <div
+            role="status"
+            className="fixed bottom-4 inset-x-4 z-40 mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border bg-background/95 p-4 shadow-xl backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                You have unsaved instance settings
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {changedSettingsGroups.join(', ')}
+                {pendingFaviconFile ? ' · Favicon' : ''}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={discardChanges}
+                disabled={isSaving}
+                className="flex-1 sm:flex-none"
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Discard
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href="https://ko-fi.com/FlintSH"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Heart className="mr-2 h-4 w-4" />
-                  Sponsor
-                </a>
+              <Button
+                onClick={saveChanges}
+                disabled={isSaving}
+                className="flex-1 sm:flex-none"
+              >
+                {isSaving ? (
+                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {isSaving ? 'Saving…' : 'Save settings'}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </PreferencesPanel>
-      {hasChanges && (
-        <div
-          role="status"
-          className="fixed bottom-4 inset-x-4 z-40 mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border bg-background/95 p-4 shadow-xl backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium">
-              You have unsaved instance settings
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {changedSettingsGroups.join(', ')}
-              {pendingFaviconFile ? ' · Favicon' : ''}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={discardChanges}
-              disabled={isSaving}
-              className="flex-1 sm:flex-none"
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Discard
-            </Button>
-            <Button
-              onClick={saveChanges}
-              disabled={isSaving}
-              className="flex-1 sm:flex-none"
-            >
-              {isSaving ? (
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              {isSaving ? 'Saving…' : 'Save settings'}
-            </Button>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </PreferencesShell>
   )
 }

@@ -8,6 +8,7 @@ import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
 import {
   PROFILE_SECTIONS,
+  PROFILE_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
 import { formatFileSize } from '@/lib/utils'
@@ -21,7 +22,8 @@ export default async function ProfilePage({
   const initialSection = readPreferenceSection(
     params.section,
     PROFILE_SECTIONS,
-    'account'
+    'account',
+    PROFILE_SECTION_ALIASES
   )
   const session = await getPageSession()
 
