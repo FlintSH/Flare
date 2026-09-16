@@ -26,10 +26,13 @@ export function usePreferenceSection<T extends string>(
   }, [initialSection, sections])
 
   const selectSection = useCallback(
-    (section: T) => {
+    (
+      section: T,
+      { updateHistory = true }: { updateHistory?: boolean } = {}
+    ) => {
       if (!sections.includes(section)) return
       const url = new URL(window.location.href)
-      if (url.searchParams.get('section') !== section) {
+      if (updateHistory && url.searchParams.get('section') !== section) {
         url.searchParams.set('section', section)
         // Keep the page mounted so changing sections preserves unfinished edits.
         window.history.pushState(null, '', url.pathname + url.search + url.hash)

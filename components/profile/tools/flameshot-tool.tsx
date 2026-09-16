@@ -79,8 +79,9 @@ export function FlameshotTool() {
       document.body.removeChild(a)
 
       toast({
-        title: 'Success',
-        description: 'Flameshot script downloaded successfully',
+        title: 'Flameshot script ready',
+        description:
+          'Run the downloaded script with Bash to capture and upload. Setup instructions are included in the script.',
       })
       setIsDialogOpen(false)
     } catch (error) {
@@ -100,8 +101,8 @@ export function FlameshotTool() {
       <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Flameshot</h3>
         <p className="text-sm text-muted-foreground">
-          Powerful cross-platform screenshot software for Linux, MacOS, and
-          Windows
+          Capture and upload on Linux. Choose your environment options, then run
+          the downloaded script with Bash.
         </p>
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -112,7 +113,8 @@ export function FlameshotTool() {
           <DialogHeader>
             <DialogTitle>Flameshot Upload Script</DialogTitle>
             <DialogDescription>
-              Generate a custom upload script for Flameshot on Linux.
+              Choose your Linux options. Your upload token is already included
+              in the script.
             </DialogDescription>
           </DialogHeader>
 

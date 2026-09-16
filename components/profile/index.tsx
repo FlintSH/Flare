@@ -63,7 +63,7 @@ const sections = [
   },
   {
     id: 'uploads',
-    hint: 'Defaults, profiles, and tools',
+    hint: 'Screenshot tools and defaults',
     title: 'Uploads',
     description:
       'Your upload defaults, reusable profiles, and screenshot tools.',
@@ -144,6 +144,23 @@ export function ProfileClient({
 
       <PreferencesPanel active={activeSection === 'uploads'}>
         <div className="space-y-8">
+          <Card id="upload-tools" className="scroll-mt-6">
+            <CardHeader>
+              <CardTitle>Screenshot tools and scripts</CardTitle>
+              <CardDescription>
+                Choose your tool and download a ready-to-use configuration. Your
+                upload token is included automatically — no API key to create or
+                paste.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ProfileTools
+                onOpenIntegrations={() =>
+                  setSection('integrations', { updateHistory: false })
+                }
+              />
+            </CardContent>
+          </Card>
           <ProfileManager embedded />
           <Card id="upload-defaults" className="scroll-mt-6">
             <CardHeader>
@@ -157,23 +174,14 @@ export function ProfileClient({
               <ProfileUploadDefaults user={user} onUpdate={handleRefresh} />
             </CardContent>
           </Card>
-          <Card id="upload-tools" className="scroll-mt-6">
-            <CardHeader>
-              <CardTitle>Screenshot tools and scripts</CardTitle>
-              <CardDescription>
-                Connect your favorite capture tool, then upload without opening
-                a browser. Downloads here follow your default upload profile.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ProfileTools />
-            </CardContent>
-          </Card>
         </div>
       </PreferencesPanel>
 
       <PreferencesPanel active={activeSection === 'integrations'}>
-        <IntegrationsPanel embedded />
+        <IntegrationsPanel
+          embedded
+          onSetupTool={() => setSection('uploads', { updateHistory: false })}
+        />
       </PreferencesPanel>
 
       <PreferencesPanel active={activeSection === 'security'}>

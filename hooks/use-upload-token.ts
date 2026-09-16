@@ -6,7 +6,7 @@ import { useToast } from './use-toast'
 
 export function useUploadToken(): UploadToken {
   const [uploadToken, setUploadToken] = useState<string | null>(null)
-  const [isLoadingToken, setIsLoadingToken] = useState(false)
+  const [isLoadingToken, setIsLoadingToken] = useState(true)
   const [showToken, setShowToken] = useState(false)
   const { toast } = useToast()
 
@@ -24,6 +24,8 @@ export function useUploadToken(): UploadToken {
           description: 'Failed to fetch upload token',
           variant: 'destructive',
         })
+      } finally {
+        setIsLoadingToken(false)
       }
     }
     fetchToken()
@@ -40,7 +42,8 @@ export function useUploadToken(): UploadToken {
       setUploadToken(data.uploadToken)
       toast({
         title: 'Success',
-        description: 'Upload token refreshed successfully',
+        description:
+          'Upload token replaced. Download fresh configurations to reconnect your tools.',
       })
     } catch (error) {
       console.error('Error refreshing upload token:', error)

@@ -8,7 +8,9 @@ The order is instance/account defaults, selected or default profile, then allowe
 
 ## Screenshot tools and API
 
-Select a saved profile to download a ShareX configuration or Bash, Flameshot or Spectacle script that selects it. These generated clients include your existing upload credential, so keep them private. For a credential dedicated to a single tool, create a [named token](integrations.md) under **Profile → Integrations** and optionally bind it to a profile.
+Open **Profile → Uploads → Screenshot tools and scripts** (`/dashboard/profile?section=uploads#upload-tools`) to download a ShareX configuration or Bash, Flameshot or Spectacle script. The downloads already include your account's upload token; no API token creation or copying is required. Keep these files private.
+
+For a tool to use a particular profile, download its configuration or script from that saved profile. [Named API tokens](integrations.md#named-api-tokens) under **Profile → Integrations** are optional for custom integrations or tools that need separate permissions, expiration, or revocation; they can also be bound to a profile.
 
 For multipart uploads, select the profile before sending file bytes using `X-Upload-Profile: PROFILE_ID` or `?profileId=PROFILE_ID`. Use the literal `none` to bypass the saved default. A profile-bound named token automatically selects its profile and rejects attempts to change it or override its upload choices. Deleting a bound profile makes subsequent uploads fail until the tool is reconfigured.
 

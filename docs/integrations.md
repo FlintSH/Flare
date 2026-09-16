@@ -1,19 +1,35 @@
 # Integrations
 
-Open **Profile → Integrations** (`/dashboard/profile?section=integrations`) to manage your API tokens, webhooks, and delivery history. These connections belong to your account.
+## Screenshot tools and scripts
 
-Open **Dashboard → Integrations** to connect uploaders and receive file events.
-Integration management requires an interactive signed-in session. Named API
-tokens cannot create other tokens, read a legacy upload token, change account
-settings, or manage webhooks.
+Open **Profile → Uploads → Screenshot tools and scripts**
+(`/dashboard/profile?section=uploads#upload-tools`) to set up ShareX, Flameshot,
+Spectacle, or Bash. Download the configuration or script for your tool; it already
+includes your account's upload token. You do not need to create or copy an API
+token first.
+
+Open the downloaded `.sxcu` file to import it into ShareX. For Flameshot,
+Spectacle, and Bash, follow the installation and usage instructions at the top of
+the downloaded script. Keep these files private because they contain your upload
+credential. To use particular sharing settings, download a client from a saved
+[upload profile](upload-profiles.md).
 
 ## Named API tokens
 
-Create a separate named token for each tool. Copy the value when it is first
+Open **Profile → Integrations** (`/dashboard/profile?section=integrations`) for
+optional named API tokens, webhooks, and delivery history. These connections
+belong to your account. Use a named token for a custom integration or when you
+want separate permissions, expiration, or revocation for a tool.
+
+Create a separate named token for each such connection. Copy the value when it is first
 shown; Flare stores only its SHA-256 hash. Tokens can expire, can be revoked
 individually, and optionally bind uploads to one of your upload profiles. A bound
 token cannot choose a different profile or change the profile's upload options.
 Deleting its bound profile does not silently remove this restriction.
+
+Integration management requires an interactive signed-in session. Named API
+tokens cannot create other tokens, read your account upload token, change account
+settings, or manage webhooks.
 
 Send `Authorization: Bearer flr_…` with requests. Available scopes are:
 
