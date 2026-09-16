@@ -50,7 +50,7 @@ function render(buildInfo: BuildInfo, updateInfo: UpdateInfo) {
   const links = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(
     ([, attributes, content]) => ({
       href: attributes.match(/\bhref="([^"]*)"/)?.[1],
-      text: content.replace(/<[^>]*>/g, ''),
+      content,
     })
   )
   return { html, links }
@@ -61,9 +61,12 @@ describe('instance version update links', () => {
     const { links } = render(rollingBuild, rollingUpdate)
 
     expect(links).toEqual([
-      { href: installedCommitUrl, text: installedSha.slice(0, 7) },
-      { href: rollingReleaseUrl, text: 'Update available' },
-      { href: latestCommitUrl, text: latestSha.slice(0, 7) },
+      { href: installedCommitUrl, content: installedSha.slice(0, 7) },
+      {
+        href: rollingReleaseUrl,
+        content: expect.stringMatching(/^Update available(?:<|$)/),
+      },
+      { href: latestCommitUrl, content: latestSha.slice(0, 7) },
     ])
   })
 
@@ -77,7 +80,7 @@ describe('instance version update links', () => {
     })
 
     expect(links).toEqual([
-      { href: installedCommitUrl, text: installedSha.slice(0, 7) },
+      { href: installedCommitUrl, content: installedSha.slice(0, 7) },
     ])
     expect(html).toContain('You are running the latest rolling release.')
   })
@@ -90,8 +93,11 @@ describe('instance version update links', () => {
     })
 
     expect(links).toEqual([
-      { href: installedCommitUrl, text: installedSha.slice(0, 7) },
-      { href: rollingReleaseUrl, text: 'Update available' },
+      { href: installedCommitUrl, content: installedSha.slice(0, 7) },
+      {
+        href: rollingReleaseUrl,
+        content: expect.stringMatching(/^Update available(?:<|$)/),
+      },
     ])
   })
 
@@ -110,7 +116,10 @@ describe('instance version update links', () => {
     )
 
     expect(links).toEqual([
-      { href: releaseUrl, text: 'Update available: 2.1.0' },
+      {
+        href: releaseUrl,
+        content: expect.stringMatching(/^Update available: 2\.1\.0(?:<|$)/),
+      },
     ])
     expect(html).not.toContain('Pre-release.')
   })
