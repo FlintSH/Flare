@@ -1,5 +1,3 @@
-import type { ResolvedUploadOptions } from './schema'
-
 export function uploadLinks(
   file: {
     id: string
@@ -8,8 +6,7 @@ export function uploadLinks(
     mimeType: string
     size: number
   },
-  user: { urlId: string; vanityId: string | null },
-  options: Pick<ResolvedUploadOptions, 'copyFormat'>
+  user: { urlId: string; vanityId: string | null }
 ) {
   const base = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(
     /\/+$/,
@@ -32,32 +29,13 @@ export function uploadLinks(
   const page = `${base}${encodePath(path)}`
   const raw = `${base}/api/files${encodePath(file.urlPath)}`
   const download = `${base}/api/files/${file.id}/download`
-  const escapedName = file.name
-    .replace(/[\\\[\]<>`*_]/g, '\\$&')
-    .replace(/[\r\n]/g, ' ')
-  const htmlName = file.name.replace(
-    /[&<>"']/g,
-    (char) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        char
-      ]!
-  )
-  const formats = {
-    page,
-    raw,
-    download,
-    markdown: `[${escapedName}](${page})`,
-    html: `<a href="${page.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">${htmlName}</a>`,
-  }
-  // Preserve data.url as a URL for old clients; copyText explicitly carries markup.
   return {
-    url: ['raw', 'download'].includes(options.copyFormat)
-      ? formats[options.copyFormat]
-      : page,
+    url: page,
     pageUrl: page,
     rawUrl: raw,
     downloadUrl: download,
-    copyText: formats[options.copyFormat],
+    // Keep previously downloaded uploader configurations working.
+    copyText: page,
     name: file.name,
     size: Math.round(file.size * 1024 * 1024),
     type: file.mimeType,

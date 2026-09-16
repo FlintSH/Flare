@@ -57,10 +57,6 @@ export async function POST(req: Request) {
         '/api/files"',
         `/api/files?profileId=${encodeURIComponent(profileId)}"`
       )
-    script = script.replaceAll(
-      '.url // .data.url // empty',
-      '.copyText // .data.copyText // .url // .data.url // empty'
-    )
 
     const sanitizedName = (user.name || 'user')
       .toLowerCase()
@@ -271,7 +267,7 @@ if [ ! -z "$ERROR" ]; then
 fi
 
 # Try to extract URL using different possible response formats
-URL=$(echo "$RESPONSE" | jq -r '.url // .data.url // empty')
+URL=$(echo "$RESPONSE" | jq -r '.pageUrl // .data.pageUrl // .url // .data.url // empty')
 
 if [ -z "$URL" ]; then
   # If URL is still empty, the response might be directly the upload response object
@@ -442,7 +438,7 @@ upload_recording() {
   fi
   
   # Try to extract URL using different possible response formats
-  URL=$(echo "$RESPONSE" | jq -r '.url // .data.url // empty')
+  URL=$(echo "$RESPONSE" | jq -r '.pageUrl // .data.pageUrl // .url // .data.url // empty')
   
   if [ -z "$URL" ]; then
     # If URL is still empty, the response might be directly the upload response object

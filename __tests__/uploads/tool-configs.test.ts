@@ -123,7 +123,7 @@ describe.each(clients)('$name setup download', (client) => {
         RequestMethod: 'POST',
         Body: 'MultipartFormData',
         FileFormName: 'file',
-        URL: '{json:data.copyText}',
+        URL: '{json:data.url}',
       })
       return new Request(config.RequestURL, {
         method: config.RequestMethod,
@@ -133,7 +133,10 @@ describe.each(clients)('$name setup download', (client) => {
     const script = await response.text()
     expect(script).toContain('-H "Authorization: Bearer $UPLOAD_TOKEN"')
     expect(script).toContain('-F "file=@')
-    expect(script).toContain('.copyText // .data.copyText')
+    expect(script).toContain(
+      '.pageUrl // .data.pageUrl // .url // .data.url // empty'
+    )
+    expect(script).not.toContain('copyText')
     const url = /^API_URL="([^"]+)"$/m.exec(script)?.[1]
     const token = /^UPLOAD_TOKEN="([^"]+)"$/m.exec(script)?.[1]
     expect(url).toBeDefined()

@@ -82,7 +82,7 @@ export function PasteForm() {
         pagePath: pagePath
           ? new URL(pagePath, window.location.origin).pathname
           : '/dashboard',
-        url: data?.url || '',
+        url: data?.pageUrl || data?.url || '',
       })
       toast({
         title: 'Paste created',

@@ -83,17 +83,6 @@ const controls: {
       ['delivery', 'Delivery'],
     ],
   },
-  {
-    key: 'copyFormat',
-    label: 'Copy format',
-    choices: [
-      ['page', 'Share page link'],
-      ['raw', 'Raw file link'],
-      ['download', 'Download link'],
-      ['markdown', 'Markdown link'],
-      ['html', 'HTML link'],
-    ],
-  },
 ]
 const starters: {
   name: string
@@ -102,12 +91,11 @@ const starters: {
 }[] = [
   {
     name: 'Public screenshots',
-    description: 'A minimal page, random filenames and Markdown links.',
+    description: 'A minimal share page and random filenames.',
     options: {
       visibility: 'PUBLIC',
       randomizeFileUrls: true,
       shareStyle: 'minimal',
-      copyFormat: 'markdown',
     },
   },
   {

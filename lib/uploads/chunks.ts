@@ -33,6 +33,7 @@ import {
 } from './options'
 import {
   type ResolvedUploadOptions,
+  discardLegacyCopyFormat,
   uploadRequestOptionsSchema,
 } from './schema'
 
@@ -140,6 +141,7 @@ export async function requireUploadMetadata(
 }
 
 const initSchema = uploadRequestOptionsSchema
+  .innerType()
   .extend({
     filename: z.string().min(1).max(255),
     mimeType: z.string().min(1).max(255),
@@ -152,7 +154,7 @@ export async function initializeChunkUpload(
   user: AuthenticatedUser
 ) {
   const { filename, mimeType, size, ...bodyOptions } = initSchema.parse(
-    await req.json()
+    discardLegacyCopyFormat(await req.json())
   )
   const selection = requestUploadOptions(req)
   if (
@@ -210,6 +212,7 @@ export async function initializeChunkUpload(
 }
 
 const completeSchema = uploadRequestOptionsSchema
+  .innerType()
   .extend({
     uploadId: z.string().optional(),
     parts: z
@@ -249,7 +252,7 @@ export async function completeChunkUpload(
     parts,
     uploadId: _uploadId,
     ...overrides
-  } = completeSchema.parse(body)
+  } = completeSchema.parse(discardLegacyCopyFormat(body))
   if (new Set(parts.map((part) => part.PartNumber)).size !== parts.length)
     throw new UploadError('Duplicate upload part.')
   const metadata = await requireUploadMetadata(user, id)
@@ -297,12 +300,12 @@ export async function completeChunkUpload(
     })
     if (result.created) enqueueUploadProcessing(result.file)
     // Retain the bounded session briefly so a lost completion response can retry.
-    return uploadLinks(result.file, user, options)
+    return uploadLinks(result.file, user)
   } catch (error) {
     const committed = await prisma.file.findFirst({
       where: { userId: user.id, path: metadata.fileKey },
     })
-    if (committed) return uploadLinks(committed, user, options)
+    if (committed) return uploadLinks(committed, user)
     await cleanupUncommittedUpload(storage, metadata.fileKey)
     throw error
   }
