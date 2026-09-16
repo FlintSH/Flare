@@ -97,6 +97,8 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
 
+The `rolling` image tag tracks pre-releases, which may be unstable or break. Settings shows the installed rolling commit and checks whether a newer rolling release has been published. Official rolling images include this metadata automatically. For custom rolling Docker builds, pass `--build-arg FLARE_RELEASE_CHANNEL=rolling --build-arg FLARE_COMMIT_SHA="$(git rev-parse HEAD)"`; builds without these arguments use the stable release channel.
+
 ## 💬 Support
 
 Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) for support, discussions, and updates!

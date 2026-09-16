@@ -210,8 +210,8 @@ jobs:
       - name: Get commit messages
         id: get_commits
         run: |
-          # Get the latest tag (if any)
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Start stable release notes at the previous version, not the rolling tag.
+          PREV_TAG=$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
             # If no previous tag exists, get all commits
