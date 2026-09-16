@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { UploadToken } from '@/types/components/profile'
 
@@ -10,26 +10,28 @@ export function useUploadToken(): UploadToken {
   const [showToken, setShowToken] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const response = await fetch('/api/profile/upload-token')
-        if (!response.ok) throw new Error('Failed to fetch upload token')
-        const data = await response.json()
-        setUploadToken(data.uploadToken)
-      } catch (error) {
-        console.error('Error fetching upload token:', error)
-        toast({
-          title: 'Error',
-          description: 'Failed to fetch upload token',
-          variant: 'destructive',
-        })
-      } finally {
-        setIsLoadingToken(false)
-      }
+  const handleLoadToken = useCallback(async () => {
+    setIsLoadingToken(true)
+    try {
+      const response = await fetch('/api/profile/upload-token')
+      if (!response.ok) throw new Error('Failed to fetch upload token')
+      const data = await response.json()
+      setUploadToken(data.uploadToken)
+    } catch (error) {
+      console.error('Error fetching upload token:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch upload token',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoadingToken(false)
     }
-    fetchToken()
   }, [toast])
+
+  useEffect(() => {
+    void handleLoadToken()
+  }, [handleLoadToken])
 
   const handleRefreshToken = async () => {
     setIsLoadingToken(true)
@@ -62,6 +64,7 @@ export function useUploadToken(): UploadToken {
     isLoadingToken,
     showToken,
     setShowToken,
+    handleLoadToken,
     handleRefreshToken,
   }
 }

@@ -26,6 +26,7 @@ export function UploadToken() {
     isLoadingToken,
     showToken,
     setShowToken,
+    handleLoadToken,
     handleRefreshToken,
   } = useUploadToken()
   const { toast } = useToast()
@@ -89,6 +90,16 @@ export function UploadToken() {
             Copy token
           </Button>
         </div>
+        {!isLoadingToken && !uploadToken && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p role="alert" className="text-sm text-destructive">
+              Could not load your upload token.
+            </p>
+            <Button variant="outline" size="sm" onClick={handleLoadToken}>
+              Retry
+            </Button>
+          </div>
+        )}
       </div>
       <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
