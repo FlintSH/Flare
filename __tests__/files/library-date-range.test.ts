@@ -71,3 +71,56 @@ describe('file library date boundaries', () => {
     }
   )
 })
+
+describe('photo library filtering', () => {
+  it('intersects the image category with search, MIME type, dates, and visibility', async () => {
+    const query = new URLSearchParams({
+      view: 'photos',
+      search: 'holiday',
+      types: 'image/jpeg',
+      dateFrom: '2026-01-01T00:00:00.000Z',
+      visibility: 'private,hasPassword',
+      sortBy: 'oldest',
+      page: '2',
+      limit: '24',
+    })
+    const response = await GET(
+      new Request(`https://flare.example/api/files?${query}`)
+    )
+    expect(response.status).toBe(200)
+    const where = {
+      userId: 'library-owner',
+      AND: [
+        { mimeType: { startsWith: 'image/' } },
+        {
+          OR: [
+            { name: { contains: 'holiday', mode: 'insensitive' } },
+            { ocrText: { contains: 'holiday', mode: 'insensitive' } },
+          ],
+        },
+        { mimeType: { in: ['image/jpeg'] } },
+        { uploadedAt: { gte: new Date('2026-01-01T00:00:00.000Z') } },
+        { OR: [{ visibility: 'PRIVATE' }, { password: { not: null } }] },
+      ],
+    }
+    expect(mocks.file.count).toHaveBeenCalledWith({ where })
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where,
+        orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
+        skip: 24,
+        take: 24,
+      })
+    )
+  })
+
+  it('does not restrict the normal file library to images', async () => {
+    await GET(new Request('https://flare.example/api/files?sortBy=largest'))
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'library-owner' },
+        orderBy: [{ size: 'desc' }, { id: 'asc' }],
+      })
+    )
+  })
+})

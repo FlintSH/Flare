@@ -31,7 +31,12 @@ export type SortOption =
   | 'most-downloaded'
   | 'least-downloaded'
 
+export type FileView = 'files' | 'photos'
+export type PhotoGrouping = 'none' | 'week' | 'month' | 'year'
+
 export interface FileFilterOptions {
+  view: FileView
+  groupBy: PhotoGrouping
   page: number
   limit: number
   search: string

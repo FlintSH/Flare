@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   FileFilter,
   FileFilterOptions,
+  FileView,
+  PhotoGrouping,
   SortOption,
 } from '@/types/components/file'
 
@@ -19,6 +21,7 @@ const sortOptions: SortOption[] = [
   'least-downloaded',
 ]
 const visibilityOptions = ['public', 'private', 'hasPassword']
+const groupOptions: PhotoGrouping[] = ['none', 'week', 'month', 'year']
 
 function positiveInteger(value: string | null, fallback: number) {
   const parsed = Number(value)
@@ -36,7 +39,15 @@ function readFilters(
   defaultLimit: number
 ): FileFilterOptions {
   const sortBy = params.get('sortBy') as SortOption
+  const groupBy = params.get('groupBy') as PhotoGrouping
+  const selectedSort = sortOptions.includes(sortBy) ? sortBy : 'newest'
   return {
+    view: params.get('view') === 'photos' ? 'photos' : 'files',
+    groupBy:
+      groupOptions.includes(groupBy) &&
+      (selectedSort === 'newest' || selectedSort === 'oldest')
+        ? groupBy
+        : 'none',
     search: params.get('search') || '',
     types: [...new Set(params.get('types')?.split(',').filter(Boolean) || [])],
     dateFrom: validDate(params.get('dateFrom')),
@@ -49,7 +60,7 @@ function readFilters(
           .filter((value) => visibilityOptions.includes(value)) || []
       ),
     ],
-    sortBy: sortOptions.includes(sortBy) ? sortBy : 'newest',
+    sortBy: selectedSort,
     page: positiveInteger(params.get('page'), 1),
     limit: Math.min(positiveInteger(params.get('limit'), defaultLimit), 100),
   }
@@ -57,6 +68,8 @@ function readFilters(
 
 function writeFilters(filters: FileFilterOptions, defaultLimit: number) {
   const params = new URLSearchParams()
+  if (filters.view === 'photos') params.set('view', filters.view)
+  if (filters.groupBy !== 'none') params.set('groupBy', filters.groupBy)
   if (filters.search) params.set('search', filters.search)
   if (filters.types.length) params.set('types', filters.types.join(','))
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
@@ -140,7 +153,29 @@ export function useFileFilters(
     [updateFilters]
   )
   const setSortBy = useCallback(
-    (sortBy: SortOption) => updateFilters({ sortBy, page: 1 }),
+    (sortBy: SortOption) =>
+      updateFilters({
+        sortBy,
+        page: 1,
+        ...(sortBy !== 'newest' && sortBy !== 'oldest' && { groupBy: 'none' }),
+      }),
+    [updateFilters]
+  )
+  const setView = useCallback(
+    (view: FileView) => updateFilters({ view, page: 1 }),
+    [updateFilters]
+  )
+  const setGroupBy = useCallback(
+    (groupBy: PhotoGrouping) =>
+      updateFilters({
+        groupBy,
+        ...(groupBy !== 'none' &&
+          currentFilters.current.sortBy !== 'newest' &&
+          currentFilters.current.sortBy !== 'oldest' && {
+            sortBy: 'newest',
+            page: 1,
+          }),
+      }),
     [updateFilters]
   )
   const setPage = useCallback(
@@ -177,6 +212,8 @@ export function useFileFilters(
     setDateRange,
     setVisibility,
     setSortBy,
+    setView,
+    setGroupBy,
     setPage,
     setLimit,
     resetFilters,
