@@ -216,12 +216,8 @@ jobs:
           Path("release_notes.md").write_text(notes)
           PY
 
-          # --target does not move an existing tag. Update it only after both
-          # registries have successfully published the multi-architecture images.
-          git tag --force rolling "$GITHUB_SHA"
-          git push --force origin refs/tags/rolling
-          
-          # Create or update release
+          # Publish the commit marker before moving the public tag, so a failed
+          # metadata update leaves the existing release and tag together.
           if gh release view rolling &>/dev/null; then
             gh release edit rolling \
               --title "Rolling Release ($RELEASE_SHORT_SHA)" \
@@ -235,3 +231,8 @@ jobs:
               --prerelease \
               --target "$GITHUB_SHA"
           fi
+
+          # --target does not move an existing tag. Advance it only after the
+          # images and the release metadata have both been published.
+          git tag --force rolling "$GITHUB_SHA"
+          git push --force origin refs/tags/rolling

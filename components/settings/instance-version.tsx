@@ -3,180 +3,120 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { BuildInfo, UpdateInfo } from '@/types/dto/updates'
-import { ExternalLink, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, RefreshCw } from 'lucide-react'
 
-import { Icons } from '@/components/shared/icons'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-
-import { useToast } from '@/hooks/use-toast'
 
 export function InstanceVersion({ buildInfo }: { buildInfo: BuildInfo }) {
   const isRolling = buildInfo.channel === 'rolling'
-  const { toast } = useToast()
   const [isChecking, setIsChecking] = useState(isRolling)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const checkForUpdates = useCallback(
-    async (notify = false, signal?: AbortSignal) => {
-      setIsChecking(true)
-      setError(null)
-      try {
-        const response = await fetch('/api/updates/check', {
-          cache: 'no-store',
-          signal,
-        })
-        if (!response.ok) throw new Error('Update check failed')
-        const data: UpdateInfo = await response.json()
-        if (signal?.aborted) return
-        setUpdateInfo(data)
-        if (notify) {
-          toast({
-            title:
-              data.hasUpdate === null
-                ? 'Update status unavailable'
-                : data.hasUpdate
-                  ? 'Update Available'
-                  : 'No Updates Available',
-            description: data.message,
-          })
-        }
-      } catch {
-        if (signal?.aborted) return
-        setUpdateInfo(null)
-        setError('Unable to check for updates. Please try again later.')
-        if (notify) {
-          toast({
-            title: 'Failed to check for updates',
-            description: 'Please try again later',
-            variant: 'destructive',
-          })
-        }
-      } finally {
-        if (!signal?.aborted) setIsChecking(false)
-      }
-    },
-    [toast]
-  )
+  const checkForUpdates = useCallback(async (signal?: AbortSignal) => {
+    setIsChecking(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/updates/check', {
+        cache: 'no-store',
+        signal,
+      })
+      if (!response.ok) throw new Error('Update check failed')
+      const data: UpdateInfo = await response.json()
+      if (!signal?.aborted) setUpdateInfo(data)
+    } catch {
+      if (signal?.aborted) return
+      setUpdateInfo(null)
+      setError('Update check failed. Try again.')
+    } finally {
+      if (!signal?.aborted) setIsChecking(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!isRolling) return
     const controller = new AbortController()
-    void checkForUpdates(false, controller.signal)
+    void checkForUpdates(controller.signal)
     return () => controller.abort()
   }, [isRolling, checkForUpdates])
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Label>Version</Label>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+            <span className="font-medium">Flare {buildInfo.version}</span>
             {isRolling && (
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                Rolling release
+              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                Rolling
+                <span className="flex items-baseline gap-2">
+                  <span aria-hidden="true">·</span>
+                  {buildInfo.commitSha && buildInfo.commitUrl ? (
+                    <a
+                      href={buildInfo.commitUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Based on commit ${buildInfo.commitSha}`}
+                      aria-label={`View source commit ${buildInfo.commitSha}`}
+                      className="font-mono underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
+                    >
+                      {buildInfo.commitSha.slice(0, 7)}
+                    </a>
+                  ) : (
+                    'Commit unavailable'
+                  )}
+                </span>
               </span>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">
-            Current version: {buildInfo.version}
-          </p>
           {isRolling && (
-            <p className="text-sm text-muted-foreground">
-              {buildInfo.commitSha && buildInfo.commitUrl ? (
-                <>
-                  Based on commit{' '}
-                  <a
-                    href={buildInfo.commitUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={buildInfo.commitSha}
-                    className="inline-flex items-center gap-1 font-mono text-primary underline underline-offset-4"
-                  >
-                    {buildInfo.commitSha.slice(0, 7)}
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                  </a>
-                </>
-              ) : (
-                'Build commit unavailable'
-              )}
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Pre-release. May be unstable or break.
             </p>
           )}
-          <div role="status" className="text-sm text-muted-foreground">
-            {isChecking ? (
-              'Checking for updates…'
-            ) : error ? (
-              error
-            ) : updateInfo ? (
-              <>
-                <p
-                  className={updateInfo.hasUpdate ? 'text-primary' : undefined}
-                >
-                  {updateInfo.message}
-                </p>
-                {isRolling &&
-                  updateInfo.hasUpdate &&
-                  updateInfo.latestCommitSha &&
-                  updateInfo.latestCommitUrl && (
-                    <p>
-                      Latest rolling commit:{' '}
-                      <a
-                        href={updateInfo.latestCommitUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={updateInfo.latestCommitSha}
-                        className="inline-flex items-center gap-1 font-mono text-primary underline underline-offset-4"
-                      >
-                        {updateInfo.latestCommitSha.slice(0, 7)}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </a>
-                    </p>
-                  )}
-              </>
-            ) : null}
-          </div>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {updateInfo?.hasUpdate && updateInfo.releaseUrl && (
-            <Button variant="outline" asChild>
-              <a
-                href={updateInfo.releaseUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 items-center gap-2"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                {isRolling ? 'View Rolling Release' : 'View Release'}
-              </a>
-            </Button>
-          )}
-          <Button
-            onClick={() => void checkForUpdates(true)}
-            disabled={isChecking}
-          >
-            {isChecking ? (
-              <>
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                Checking...
-              </>
-            ) : (
-              'Check for Updates'
-            )}
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-mr-2 h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground"
+          onClick={() => void checkForUpdates()}
+          disabled={isChecking}
+          aria-label="Check for updates"
+          title="Check for updates"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5${isChecking ? ' animate-spin' : ''}`}
+            aria-hidden="true"
+          />
+          <span className="hidden sm:inline">
+            {isChecking ? 'Checking…' : 'Check for updates'}
+          </span>
+        </Button>
       </div>
-      {isRolling && (
-        <Alert className="border-amber-500/30 bg-amber-500/5">
-          <TriangleAlert className="h-4 w-4" />
-          <AlertTitle>Pre-release software</AlertTitle>
-          <AlertDescription>
-            Rolling releases can be unstable, contain bugs, or break your
-            instance.
-          </AlertDescription>
-        </Alert>
-      )}
+      <div
+        role="status"
+        className="text-xs leading-relaxed text-muted-foreground"
+      >
+        {isChecking ? (
+          'Checking for updates…'
+        ) : error ? (
+          error
+        ) : updateInfo?.hasUpdate && updateInfo.releaseUrl ? (
+          <a
+            href={updateInfo.releaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+          >
+            {isRolling
+              ? 'New rolling release available'
+              : `Update available: ${updateInfo.latestVersion}`}
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        ) : (
+          updateInfo?.message
+        )}
+      </div>
     </div>
   )
 }
