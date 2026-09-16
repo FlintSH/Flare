@@ -356,11 +356,7 @@ export function UploadForm({
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  copyLinks(
-                    completed
-                      .map((file) => file.copyText || file.url)
-                      .join('\n')
-                  )
+                  copyLinks(completed.map((file) => file.url).join('\n'))
                 }
               >
                 <Copy className="mr-2 h-4 w-4" />
@@ -392,16 +388,14 @@ export function UploadForm({
                   variant="outline"
                   size="sm"
                   aria-label={`Copy link for ${file.name}`}
-                  onClick={() => copyLinks(file.copyText || file.url)}
+                  onClick={() => copyLinks(file.url)}
                 >
-                  {copiedLink === (file.copyText || file.url) ? (
+                  {copiedLink === file.url ? (
                     <Check className="mr-2 h-4 w-4" />
                   ) : (
                     <Copy className="mr-2 h-4 w-4" />
                   )}
-                  {copiedLink === (file.copyText || file.url)
-                    ? 'Copied'
-                    : 'Copy link'}
+                  {copiedLink === file.url ? 'Copied' : 'Copy link'}
                 </Button>
               </li>
             ))}

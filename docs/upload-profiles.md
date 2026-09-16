@@ -16,6 +16,8 @@ For multipart uploads, select the profile before sending file bytes using `X-Upl
 
 The upload response preserves `data.url` and adds `pageUrl`, `rawUrl`, `downloadUrl` and `copyText`. Copy formats include the share page, raw link, download link, Markdown and HTML. Copy format changes link formatting; it does not grant access to a private or password-protected file.
 
+The web upload and paste forms' **Copy link** and **Copy all links** buttons copy plain URLs. Raw and download profiles keep their selected URL; Markdown and HTML profiles use the share-page URL. Generated screenshot tools and scripts use `copyText` to honor the profile's copied-link format.
+
 ## Share recipes
 
 **Export** downloads a versioned JSON recipe containing the profile name and preferences. **Import recipe** creates a separate saved profile for review and does not change your default. Recipes exclude identifiers, credentials and passwords; unknown fields and unsupported versions are rejected.

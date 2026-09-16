@@ -34,7 +34,7 @@ export function PasteForm() {
   const [created, setCreated] = useState<{
     name: string
     pagePath: string
-    copyText: string
+    url: string
   } | null>(null)
   const [copied, setCopied] = useState(false)
   const { toast } = useToast()
@@ -82,7 +82,7 @@ export function PasteForm() {
         pagePath: pagePath
           ? new URL(pagePath, window.location.origin).pathname
           : '/dashboard',
-        copyText: data?.copyText || data?.url || '',
+        url: data?.url || '',
       })
       toast({
         title: 'Paste created',
@@ -100,9 +100,9 @@ export function PasteForm() {
   }
 
   const copyLink = async () => {
-    if (!created?.copyText) return
+    if (!created?.url) return
     try {
-      await navigator.clipboard.writeText(created.copyText)
+      await navigator.clipboard.writeText(created.url)
       setCopied(true)
       toast({ title: 'Link copied' })
     } catch {
@@ -124,20 +124,20 @@ export function PasteForm() {
           <Check className="h-4 w-4 text-primary" />
           Paste created: <span className="truncate">{created.name}</span>
         </p>
-        {created.copyText && (
+        {created.url && (
           <div className="space-y-2">
             <Label htmlFor="paste-created-link">Share link</Label>
             <Input
               id="paste-created-link"
               readOnly
-              value={created.copyText}
+              value={created.url}
               onFocus={(event) => event.target.select()}
               className="font-mono text-sm"
             />
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {created.copyText && (
+          {created.url && (
             <Button onClick={copyLink}>
               {copied ? (
                 <Check className="mr-2 h-4 w-4" />
