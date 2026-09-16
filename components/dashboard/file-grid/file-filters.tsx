@@ -1,6 +1,6 @@
 import { Fragment, memo } from 'react'
 
-import { SortOption } from '@/types/components/file'
+import { FileGrouping, SortOption } from '@/types/components/file'
 import { format } from 'date-fns'
 import {
   Calendar as CalendarIcon,
@@ -45,6 +45,8 @@ interface FileFiltersProps {
   fileTypes: string[]
   date: DateRange | undefined
   onDateChange: (range: DateRange | undefined) => void
+  groupBy: FileGrouping
+  onGroupChange: (groupBy: FileGrouping) => void
   visibility: string[]
   onVisibilityChange: (visibility: string[]) => void
 }
@@ -102,6 +104,8 @@ export const FileFilters = memo(function FileFilters({
   fileTypes,
   date,
   onDateChange,
+  groupBy,
+  onGroupChange,
   visibility,
   onVisibilityChange,
 }: FileFiltersProps) {
@@ -239,7 +243,8 @@ export const FileFilters = memo(function FileFilters({
             aria-label="Upload date"
             className={cn(
               filterClass,
-              date?.from && 'border-primary/40 bg-primary/5'
+              (date?.from || groupBy !== 'none') &&
+                'border-primary/40 bg-primary/5'
             )}
           >
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -259,6 +264,23 @@ export const FileFilters = memo(function FileFilters({
             onSelect={onDateChange}
             numberOfMonths={1}
           />
+          <div className="flex items-center justify-between gap-3 border-t px-3 py-3">
+            <span className="text-sm text-muted-foreground">Group files</span>
+            <Select value={groupBy} onValueChange={onGroupChange}>
+              <SelectTrigger
+                aria-label="Group files by upload date"
+                className="h-9 w-36 text-sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No grouping</SelectItem>
+                <SelectItem value="week">By week</SelectItem>
+                <SelectItem value="month">By month</SelectItem>
+                <SelectItem value="year">By year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {date?.from && (
             <div className="border-t p-2">
               <Button

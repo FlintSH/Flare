@@ -2,17 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
-import type {
-  FileType,
-  PaginationInfo,
-  PhotoGrouping,
-} from '@/types/components/file'
+import type { FileType, PaginationInfo } from '@/types/components/file'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
-  Files,
   FolderOpen,
-  Images,
   RefreshCw,
   SearchX,
   Upload,
@@ -27,16 +21,8 @@ import { FileGridPagination } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ImageLightbox } from '@/components/file/image-lightbox'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
-import { fileQuery, groupPhotos } from '@/lib/files/gallery'
-import { cn } from '@/lib/utils'
+import { fileQuery, groupFiles } from '@/lib/files/gallery'
 
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useImageGallery } from '@/hooks/use-image-gallery'
@@ -60,14 +46,15 @@ export function FileGrid() {
     setDateRange,
     setVisibility,
     setSortBy,
-    setView,
     setGroupBy,
     setPage,
     resetFilters,
   } = useFileFilters()
   const { gallery, open, close, move, setIndex, navigationPending } =
     useImageGallery(filters, files, paginationInfo, refreshKey)
-  const isPhotos = filters.view === 'photos'
+  const imagesOnly =
+    filters.types.length > 0 &&
+    filters.types.every((type) => type.startsWith('image/'))
   const refreshFiles = useCallback(
     () => setRefreshKey((value) => value + 1),
     []
@@ -169,9 +156,7 @@ export function FileGrid() {
       >
         <div className="mb-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-3xl font-bold">
-              {isPhotos ? 'Your Photos' : 'Your Files'}
-            </h1>
+            <h1 className="text-3xl font-bold">Your Files</h1>
             <div className="flex shrink-0 items-center gap-2">
               <span
                 role="status"
@@ -182,7 +167,7 @@ export function FileGrid() {
                   ? 'Loading…'
                   : error
                     ? 'Unavailable'
-                    : `${paginationInfo.total.toLocaleString()} ${isPhotos ? (paginationInfo.total === 1 ? 'photo' : 'photos') : paginationInfo.total === 1 ? 'file' : 'files'}`}
+                    : `${paginationInfo.total.toLocaleString()} ${paginationInfo.total === 1 ? 'file' : 'files'}`}
               </span>
               <Button
                 variant="ghost"
@@ -199,56 +184,8 @@ export function FileGrid() {
             </div>
           </div>
           <p className="mt-1 text-muted-foreground">
-            {isPhotos
-              ? 'Browse your images. Open a photo to explore the gallery.'
-              : 'View and manage your uploaded files'}
+            View and manage your uploaded files
           </p>
-        </div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div
-            role="group"
-            aria-label="Library view"
-            className="inline-flex rounded-lg bg-muted p-1"
-          >
-            {[
-              { value: 'files' as const, label: 'Files', icon: Files },
-              { value: 'photos' as const, label: 'Photos', icon: Images },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={filters.view === value}
-                onClick={() => setView(value)}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  filters.view === value &&
-                    'bg-background text-foreground shadow-sm'
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-          {isPhotos && (
-            <Select
-              value={filters.groupBy}
-              onValueChange={(value: PhotoGrouping) => setGroupBy(value)}
-            >
-              <SelectTrigger
-                aria-label="Group photos by upload date"
-                className="h-9 w-[174px] rounded-lg bg-background/70 text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No date grouping</SelectItem>
-                <SelectItem value="week">Group by week</SelectItem>
-                <SelectItem value="month">Group by month</SelectItem>
-                <SelectItem value="year">Group by year</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
         </div>
         <div className="flex flex-col gap-3 lg:flex-row">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
@@ -257,18 +194,18 @@ export function FileGrid() {
             onSortChange={setSortBy}
             selectedTypes={filters.types}
             onTypesChange={setTypes}
-            fileTypes={
-              isPhotos
-                ? fileTypes.filter((type) => type.startsWith('image/'))
-                : fileTypes
-            }
+            fileTypes={fileTypes}
             date={dateRangeValue}
             onDateChange={handleDateChange}
+            groupBy={filters.groupBy}
+            onGroupChange={setGroupBy}
             visibility={filters.visibility}
             onVisibilityChange={setVisibility}
           />
         </div>
-        {(hasActiveFilters || filters.sortBy !== 'newest') && (
+        {(hasActiveFilters ||
+          filters.sortBy !== 'newest' ||
+          filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {filters.search && (
               <span className="max-w-full truncate rounded-lg bg-muted px-2.5 py-1 text-xs">
@@ -296,6 +233,11 @@ export function FileGrid() {
             {(filters.dateFrom || filters.dateTo) && (
               <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
                 Upload date selected
+              </span>
+            )}
+            {filters.groupBy !== 'none' && (
+              <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
+                Grouped by {filters.groupBy}
               </span>
             )}
             <Button
@@ -347,13 +289,13 @@ export function FileGrid() {
           </div>
           <h2 className="text-xl font-semibold">
             {hasActiveFilters
-              ? `No ${isPhotos ? 'photos' : 'files'} match your search`
-              : `No ${isPhotos ? 'photos' : 'files'} uploaded`}
+              ? 'No files match your search'
+              : 'No files uploaded'}
           </h2>
           <p className="mb-6 mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
             {hasActiveFilters
               ? 'Try another file name or reset your filters to see everything in your library.'
-              : `Upload your first ${isPhotos ? 'photo' : 'file'} to get started.`}
+              : 'Upload your first file to get started.'}
           </p>
           {hasActiveFilters ? (
             <Button variant="outline" onClick={resetFilters}>
@@ -363,7 +305,7 @@ export function FileGrid() {
             <Button asChild>
               <Link href="/dashboard/upload">
                 <Upload className="mr-2 h-4 w-4" />
-                Upload your first {isPhotos ? 'photo' : 'file'}
+                Upload your first file
               </Link>
             </Button>
           )}
@@ -371,31 +313,26 @@ export function FileGrid() {
       ) : (
         <>
           <div className="space-y-7">
-            {groupPhotos(files, isPhotos ? filters.groupBy : 'none').map(
-              (group) => (
-                <section
-                  key={group.label}
-                  aria-label={group.label || undefined}
-                >
-                  {group.label && (
-                    <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-                      {group.label}
-                    </h2>
-                  )}
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {group.files.map((file) => (
-                      <FileCard
-                        key={file.id}
-                        file={file}
-                        onDelete={refreshFiles}
-                        onUpdate={refreshFiles}
-                        onPreview={open}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )
-            )}
+            {groupFiles(files, filters.groupBy).map((group) => (
+              <section key={group.label} aria-label={group.label || undefined}>
+                {group.label && (
+                  <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+                    {group.label}
+                  </h2>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {group.files.map((file) => (
+                    <FileCard
+                      key={file.id}
+                      file={file}
+                      onDelete={refreshFiles}
+                      onUpdate={refreshFiles}
+                      onPreview={open}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
           <FileGridPagination
             paginationInfo={paginationInfo}
@@ -421,7 +358,7 @@ export function FileGrid() {
           hasNext={gallery.index < gallery.files.length - 1 || !gallery.atEnd}
           navigationPending={navigationPending}
           positionLabel={
-            isPhotos
+            imagesOnly
               ? `${(gallery.pagination.page - 1) * gallery.pagination.limit + gallery.index + 1} of ${gallery.pagination.total}`
               : `Image ${gallery.index + 1} · Page ${gallery.pagination.page}`
           }

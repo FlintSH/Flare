@@ -1,8 +1,8 @@
 import type {
   FileFilterOptions,
+  FileGrouping,
   FileType,
   PaginationInfo,
-  PhotoGrouping,
 } from '@/types/components/file'
 import { format, startOfWeek } from 'date-fns'
 
@@ -12,7 +12,6 @@ export function fileQuery(filters: FileFilterOptions, page = filters.page) {
     limit: filters.limit.toString(),
     search: filters.search,
     sortBy: filters.sortBy,
-    ...(filters.view === 'photos' && { view: 'photos' }),
     ...(filters.types.length > 0 && { types: filters.types.join(',') }),
     ...(filters.dateFrom && { dateFrom: filters.dateFrom }),
     ...(filters.dateTo && { dateTo: filters.dateTo }),
@@ -22,7 +21,7 @@ export function fileQuery(filters: FileFilterOptions, page = filters.page) {
   })
 }
 
-export function groupPhotos(files: FileType[], grouping: PhotoGrouping) {
+export function groupFiles(files: FileType[], grouping: FileGrouping) {
   if (grouping === 'none') return [{ label: '', files }]
   const groups = new Map<string, FileType[]>()
   for (const file of files) {

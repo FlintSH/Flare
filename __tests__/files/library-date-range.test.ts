@@ -72,10 +72,9 @@ describe('file library date boundaries', () => {
   )
 })
 
-describe('photo library filtering', () => {
-  it('intersects the image category with search, MIME type, dates, and visibility', async () => {
+describe('file library filtering and gallery order', () => {
+  it('combines MIME type with search, dates, and visibility in a stable page order', async () => {
     const query = new URLSearchParams({
-      view: 'photos',
       search: 'holiday',
       types: 'image/jpeg',
       dateFrom: '2026-01-01T00:00:00.000Z',
@@ -91,7 +90,6 @@ describe('photo library filtering', () => {
     const where = {
       userId: 'library-owner',
       AND: [
-        { mimeType: { startsWith: 'image/' } },
         {
           OR: [
             { name: { contains: 'holiday', mode: 'insensitive' } },
@@ -114,7 +112,7 @@ describe('photo library filtering', () => {
     )
   })
 
-  it('does not restrict the normal file library to images', async () => {
+  it('uses a stable tie-breaker when sorting by size', async () => {
     await GET(new Request('https://flare.example/api/files?sortBy=largest'))
     expect(mocks.file.findMany).toHaveBeenCalledWith(
       expect.objectContaining({

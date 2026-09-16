@@ -5,8 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   FileFilter,
   FileFilterOptions,
-  FileView,
-  PhotoGrouping,
+  FileGrouping,
   SortOption,
 } from '@/types/components/file'
 
@@ -21,7 +20,7 @@ const sortOptions: SortOption[] = [
   'least-downloaded',
 ]
 const visibilityOptions = ['public', 'private', 'hasPassword']
-const groupOptions: PhotoGrouping[] = ['none', 'week', 'month', 'year']
+const groupOptions: FileGrouping[] = ['none', 'week', 'month', 'year']
 
 function positiveInteger(value: string | null, fallback: number) {
   const parsed = Number(value)
@@ -39,10 +38,9 @@ function readFilters(
   defaultLimit: number
 ): FileFilterOptions {
   const sortBy = params.get('sortBy') as SortOption
-  const groupBy = params.get('groupBy') as PhotoGrouping
+  const groupBy = params.get('groupBy') as FileGrouping
   const selectedSort = sortOptions.includes(sortBy) ? sortBy : 'newest'
   return {
-    view: params.get('view') === 'photos' ? 'photos' : 'files',
     groupBy:
       groupOptions.includes(groupBy) &&
       (selectedSort === 'newest' || selectedSort === 'oldest')
@@ -68,7 +66,6 @@ function readFilters(
 
 function writeFilters(filters: FileFilterOptions, defaultLimit: number) {
   const params = new URLSearchParams()
-  if (filters.view === 'photos') params.set('view', filters.view)
   if (filters.groupBy !== 'none') params.set('groupBy', filters.groupBy)
   if (filters.search) params.set('search', filters.search)
   if (filters.types.length) params.set('types', filters.types.join(','))
@@ -161,12 +158,8 @@ export function useFileFilters(
       }),
     [updateFilters]
   )
-  const setView = useCallback(
-    (view: FileView) => updateFilters({ view, page: 1 }),
-    [updateFilters]
-  )
   const setGroupBy = useCallback(
-    (groupBy: PhotoGrouping) =>
+    (groupBy: FileGrouping) =>
       updateFilters({
         groupBy,
         ...(groupBy !== 'none' &&
@@ -194,6 +187,7 @@ export function useFileFilters(
     () =>
       updateFilters({
         search: '',
+        groupBy: 'none',
         types: [],
         dateFrom: null,
         dateTo: null,
@@ -212,7 +206,6 @@ export function useFileFilters(
     setDateRange,
     setVisibility,
     setSortBy,
-    setView,
     setGroupBy,
     setPage,
     setLimit,

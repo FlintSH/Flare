@@ -1,10 +1,9 @@
 import type { FileFilterOptions, FileType } from '@/types/components/file'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { adjacentImagePage, fileQuery, groupPhotos } from '@/lib/files/gallery'
+import { adjacentImagePage, fileQuery, groupFiles } from '@/lib/files/gallery'
 
 const filters: FileFilterOptions = {
-  view: 'files',
   groupBy: 'none',
   page: 1,
   limit: 24,
@@ -46,14 +45,14 @@ function pageResponse(page: number, data: FileType[], pageCount = 4) {
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('photo grouping', () => {
+describe('file grouping', () => {
   it('groups uploads by local month while preserving chronological navigation order', () => {
     const files = [
       file('sept-2'),
-      file('sept-1', '2026-09-01T12:00:00'),
+      file('sept-1', '2026-09-01T12:00:00', 'application/pdf'),
       file('aug', '2026-08-31T12:00:00'),
     ]
-    const groups = groupPhotos(files, 'month')
+    const groups = groupFiles(files, 'month')
     expect(groups.map((group) => group.label)).toEqual([
       'September 2026',
       'August 2026',
@@ -62,7 +61,7 @@ describe('photo grouping', () => {
   })
 
   it('uses Monday-based weeks that include the year across year boundaries', () => {
-    const groups = groupPhotos(
+    const groups = groupFiles(
       [file('jan', '2026-01-01T12:00:00'), file('dec', '2025-12-29T12:00:00')],
       'week'
     )
@@ -82,22 +81,19 @@ describe('photo grouping', () => {
       file('2025', '2025-12-31T12:00:00'),
       file('2026', '2026-01-01T12:00:00'),
     ]
-    expect(groupPhotos(files, 'year').map((group) => group.label)).toEqual([
+    expect(groupFiles(files, 'year').map((group) => group.label)).toEqual([
       '2025',
       '2026',
     ])
-    expect(groupPhotos(files, 'none')).toEqual([{ label: '', files }])
+    expect(groupFiles(files, 'none')).toEqual([{ label: '', files }])
   })
 })
 
 describe('gallery page navigation', () => {
-  it('preserves the whole filter when generating a photo-page request', () => {
+  it('preserves the whole filter when generating an adjacent page request', () => {
     expect(
-      Object.fromEntries(
-        fileQuery({ ...filters, view: 'photos', groupBy: 'month' }, 3)
-      )
+      Object.fromEntries(fileQuery({ ...filters, groupBy: 'month' }, 3))
     ).toEqual({
-      view: 'photos',
       page: '3',
       limit: '24',
       search: 'trip',

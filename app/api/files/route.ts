@@ -119,7 +119,6 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || ''
     const sortBy = searchParams.get('sortBy') || 'newest'
     const types = searchParams.get('types')?.split(',') || []
-    const imagesOnly = searchParams.get('view') === 'photos'
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
     const visibilityFilters = searchParams.get('visibility')?.split(',') || []
@@ -130,10 +129,6 @@ export async function GET(request: Request) {
     }
 
     const conditions: Prisma.FileWhereInput[] = []
-
-    if (imagesOnly) {
-      conditions.push({ mimeType: { startsWith: 'image/' } })
-    }
 
     if (search) {
       conditions.push({
