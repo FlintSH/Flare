@@ -11,9 +11,7 @@ import {
   Fingerprint,
   HardDrive,
   KeyRound,
-  Palette,
   Plug,
-  Shield,
   Trash2,
   Upload,
   UserRound,
@@ -34,7 +32,10 @@ import {
 } from '@/components/ui/card'
 import { ProfileManager } from '@/components/upload-profiles/profile-manager'
 
-import { PROFILE_SECTIONS } from '@/lib/preferences/navigation'
+import {
+  PROFILE_SECTIONS,
+  PROFILE_SECTION_ALIASES,
+} from '@/lib/preferences/navigation'
 
 import { usePreferenceSection } from '@/hooks/use-preference-section'
 
@@ -49,17 +50,11 @@ import { ProfileTools } from './tools'
 const sections = [
   {
     id: 'account',
-    hint: 'Your identity and email',
+    hint: 'Identity, password, and theme',
     title: 'Account',
-    description: 'Your identity, avatar, and email address.',
+    description:
+      'Manage your identity, sign-in details, and workspace preference.',
     icon: UserRound,
-  },
-  {
-    id: 'appearance',
-    hint: 'Your workspace theme',
-    title: 'Appearance',
-    description: 'Choose how Flare looks in your own workspace.',
-    icon: Palette,
   },
   {
     id: 'uploads',
@@ -75,13 +70,6 @@ const sections = [
     title: 'Integrations',
     description: 'Connect your apps with personal API tokens and webhooks.',
     icon: Plug,
-  },
-  {
-    id: 'security',
-    hint: 'Password and sign-in',
-    title: 'Security',
-    description: 'Keep your account and sign-in details secure.',
-    icon: Shield,
   },
   {
     id: 'data',
@@ -104,7 +92,8 @@ export function ProfileClient({
   const router = useRouter()
   const [activeSection, setSection] = usePreferenceSection(
     PROFILE_SECTIONS,
-    initialSection
+    initialSection,
+    PROFILE_SECTION_ALIASES
   )
   const handleRefresh = useCallback(() => router.refresh(), [router])
 
@@ -136,10 +125,25 @@ export function ProfileClient({
             <ProfileAccount user={user} onUpdate={handleRefresh} />
           </CardContent>
         </Card>
-      </PreferencesPanel>
-
-      <PreferencesPanel active={activeSection === 'appearance'}>
-        <PersonalAppearanceSettings initialPreference={initialPreference} />
+        <Card id="password" className="scroll-mt-28">
+          <CardHeader className="space-y-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
+              <KeyRound className="h-5 w-5" />
+            </span>
+            <div className="space-y-1.5">
+              <CardTitle>Change your password</CardTitle>
+              <CardDescription>
+                Use a strong password that you do not use elsewhere.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ProfileSecurity onUpdate={handleRefresh} />
+          </CardContent>
+        </Card>
+        <div id="workspace-appearance" className="scroll-mt-28">
+          <PersonalAppearanceSettings initialPreference={initialPreference} />
+        </div>
       </PreferencesPanel>
 
       <PreferencesPanel active={activeSection === 'uploads'}>
@@ -182,25 +186,6 @@ export function ProfileClient({
           embedded
           onSetupTool={() => setSection('uploads', { updateHistory: false })}
         />
-      </PreferencesPanel>
-
-      <PreferencesPanel active={activeSection === 'security'}>
-        <Card>
-          <CardHeader className="space-y-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-              <KeyRound className="h-5 w-5" />
-            </span>
-            <div className="space-y-1.5">
-              <CardTitle>Change your password</CardTitle>
-              <CardDescription>
-                Use a strong password that you do not use elsewhere.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ProfileSecurity onUpdate={handleRefresh} />
-          </CardContent>
-        </Card>
       </PreferencesPanel>
 
       <PreferencesPanel active={activeSection === 'data'}>

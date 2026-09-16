@@ -31,6 +31,23 @@ A keyboard skip link leads to page content. Dialogs keep Flare’s translucent s
 with reliable margins and scrolling on smaller screens. The existing file-drop
 overlay refreshes an open library when an upload completes.
 
+## Profile and Settings
+
+Profile groups identity, password, and the personal workspace theme under **Account**.
+**Uploads** contains upload profiles, defaults, and capture tools; **Integrations**
+contains API tokens and webhooks; **Your data** contains storage usage, export, and
+account deletion.
+
+Instance Settings groups version information with everyday features in **General**.
+**Appearance** contains branding, themes, sharing, favicon, and a **Custom CSS and HTML**
+disclosure for advanced styling. **Access**, **Storage**, and **Email** keep their own
+sections for their larger configuration forms.
+
+Existing links to Profile’s Appearance and Security sections, and Settings’ About
+and Advanced sections, still open the corresponding controls in their new groups.
+Section changes retain unfinished edits, and browser Back/Forward follows section
+and anchored links.
+
 ## Public pages
 
 Login, registration, account recovery, verification, and exceptional states share a
@@ -56,8 +73,8 @@ The review covers every rendered route family:
 | `/dashboard/paste`             | Content, filename, real creation, result copy/open, mobile                                            |
 | `/dashboard/urls`              | Create, copy/open, delete/cancel, empty/error, mobile                                                 |
 | `/dashboard/users`             | Create, edit, search/roles, content, delete/pagination, administrator gating, mobile                  |
-| `/dashboard/settings`          | General, Access, Storage, Appearance, Email, Advanced, About; desktop/mobile                          |
-| `/dashboard/profile`           | Account, Appearance, Uploads, Integrations, Security, Your data; desktop/mobile, light appearance     |
+| `/dashboard/settings`          | General, Access, Storage, Appearance, Email; desktop/mobile                                           |
+| `/dashboard/profile`           | Account, Uploads, Integrations, Your data; desktop/mobile, light appearance                           |
 | `/auth/*`                      | Login, registration, recovery, reset, verification; status/error and mobile states                    |
 | `/setup`                       | Fresh Account → Storage → Access → Appearance → Email → Ready; validation/back/reload and mobile      |
 | `/[userUrlId]/[filename]`      | Public viewer types, layouts, protected and private access, long content, mobile                      |
