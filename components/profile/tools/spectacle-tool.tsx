@@ -92,8 +92,9 @@ export function SpectacleTool() {
       document.body.removeChild(a)
 
       toast({
-        title: 'Success',
-        description: `Spectacle ${values.scriptType} script downloaded successfully`,
+        title: 'Spectacle script ready',
+        description:
+          'Run the downloaded script with Bash to capture and upload. Setup instructions are included in the script.',
       })
       setIsDialogOpen(false)
     } catch (error) {
@@ -113,8 +114,8 @@ export function SpectacleTool() {
       <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Spectacle</h3>
         <p className="text-sm text-muted-foreground">
-          KDE&apos;s screenshot and screen recording utility with extensive
-          capture options
+          Screenshots and screen recordings on KDE. Choose your capture options,
+          then run the downloaded script with Bash.
         </p>
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -125,7 +126,8 @@ export function SpectacleTool() {
           <DialogHeader>
             <DialogTitle>Spectacle Upload Script</DialogTitle>
             <DialogDescription>
-              Generate a custom upload script for KDE&apos;s Spectacle on Linux.
+              Choose your KDE capture options. Your upload token is already
+              included in the script.
             </DialogDescription>
           </DialogHeader>
 

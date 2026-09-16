@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 import {
   ArrowUpRight,
+  Camera,
   Check,
   Copy,
   KeyRound,
@@ -58,8 +59,10 @@ const selectStyle =
 
 export function IntegrationsPanel({
   embedded = false,
+  onSetupTool,
 }: {
   embedded?: boolean
+  onSetupTool?: () => void
 }) {
   const [data, setData] = useState<Snapshot | null>(null)
   const [error, setError] = useState('')
@@ -176,8 +179,7 @@ export function IntegrationsPanel({
           )}
           {embedded && (
             <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              A separate connection for each tool, with access and delivery
-              history you control.
+              Manage custom app access and webhook delivery history.
             </p>
           )}
         </div>
@@ -190,6 +192,27 @@ export function IntegrationsPanel({
           Refresh
         </Button>
       </div>
+      <section className="flex flex-col gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-start gap-3">
+          <Camera className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <div className="space-y-1.5">
+            <h2 className="font-semibold">Setting up a screenshot tool?</h2>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              ShareX, Flameshot, Spectacle, and Bash have ready-to-use downloads
+              with your upload token included. No API key setup needed.
+            </p>
+          </div>
+        </div>
+        <Button asChild className="shrink-0">
+          <Link
+            href="/dashboard/profile?section=uploads#upload-tools"
+            onNavigate={onSetupTool}
+          >
+            Set up a tool
+            <ArrowUpRight />
+          </Link>
+        </Button>
+      </section>
       {error && (
         <div
           role="alert"
@@ -255,8 +278,8 @@ export function IntegrationsPanel({
             </Button>
           </div>
           <p className="mt-3 text-sm text-muted-foreground">
-            A separate key for every uploader, script, or app. Revoke a
-            connection whenever you need to.
+            Optional keys for custom apps and scripts that need specific
+            permissions, an expiration date, or separate revocation.
           </p>
           {form === 'token' && (
             <form
@@ -268,7 +291,7 @@ export function IntegrationsPanel({
                 <Input
                   id="token-name"
                   name="name"
-                  placeholder="My ShareX uploader"
+                  placeholder="My automation script"
                   required
                   maxLength={80}
                 />
@@ -354,7 +377,7 @@ export function IntegrationsPanel({
           <div className="mt-5 divide-y">
             {data?.tokens.length === 0 && (
               <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Add your first connection with a named API token.
+                No API tokens yet. Built-in tool downloads work without one.
               </p>
             )}
             {data?.tokens.map((token) => (

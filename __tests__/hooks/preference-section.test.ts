@@ -182,6 +182,20 @@ describe('preference browser navigation', () => {
     expect(render()[0]).toBe('email')
   })
 
+  it('updates the visible section while letting a Next link manage history', () => {
+    const [, select] = render()
+    const originalUrl = href
+    history.replaceState.mockClear()
+
+    select('storage', { updateHistory: false })
+
+    expect(render()[0]).toBe('storage')
+    expect(href).toBe(originalUrl)
+    expect(history.pushState).not.toHaveBeenCalled()
+    expect(history.replaceState).not.toHaveBeenCalled()
+    expect(frames.size).toBe(0)
+  })
+
   it('opens a canonical fragment target when a native link changes the hash', () => {
     href =
       'https://flare.example/dashboard/settings?section=appearance&recovery=1'

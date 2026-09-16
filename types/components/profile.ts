@@ -60,5 +60,6 @@ export interface UploadToken {
   isLoadingToken: boolean
   showToken: boolean
   setShowToken: (show: boolean) => void
+  handleLoadToken: () => Promise<void>
   handleRefreshToken: () => Promise<void>
 }

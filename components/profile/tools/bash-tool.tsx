@@ -34,8 +34,9 @@ export function BashTool() {
       document.body.removeChild(a)
 
       toast({
-        title: 'Success',
-        description: 'Bash upload script downloaded successfully',
+        title: 'Upload script ready',
+        description:
+          'Run the downloaded script with Bash and a file path. No token editing needed.',
       })
     } catch (error) {
       console.error('Bash script download error:', error)
@@ -54,7 +55,11 @@ export function BashTool() {
       <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Bash Script</h3>
         <p className="text-sm text-muted-foreground">
-          Simple upload script for command line usage
+          Upload from your terminal. Run{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            bash &lt;script.sh&gt; &lt;file&gt;
+          </code>{' '}
+          with your downloaded script and the file to upload.
         </p>
       </div>
       <Button

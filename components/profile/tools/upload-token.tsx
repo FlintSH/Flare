@@ -1,11 +1,23 @@
 'use client'
 
-import { Eye, EyeOff } from 'lucide-react'
+import { Copy, Eye, EyeOff } from 'lucide-react'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { useToast } from '@/hooks/use-toast'
 import { useUploadToken } from '@/hooks/use-upload-token'
 
 export function UploadToken() {
@@ -14,25 +26,43 @@ export function UploadToken() {
     isLoadingToken,
     showToken,
     setShowToken,
+    handleLoadToken,
     handleRefreshToken,
   } = useUploadToken()
+  const { toast } = useToast()
+
+  const copyToken = async () => {
+    if (!uploadToken) return
+    try {
+      await navigator.clipboard.writeText(uploadToken)
+      toast({ title: 'Upload token copied' })
+    } catch {
+      toast({
+        title: 'Could not copy token',
+        description: 'Show the token and copy it manually.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="legacy-upload-token">Legacy upload token</Label>
+        <Label htmlFor="upload-token">Account upload token</Label>
         <p className="text-sm text-muted-foreground">
-          Your existing screenshot tools can keep using this token. For new
-          connections, create a token with its own permissions in Integrations.
+          Created automatically for your account and included in the downloads
+          above. You only need to copy it when configuring another uploader
+          manually.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
             <Input
-              id="legacy-upload-token"
+              id="upload-token"
               value={uploadToken || ''}
               readOnly
               type={showToken ? 'text' : 'password'}
               className="pr-12"
+              placeholder={isLoadingToken ? 'Loading token…' : undefined}
             />
             <Button
               type="button"
@@ -42,6 +72,7 @@ export function UploadToken() {
               onClick={() => setShowToken(!showToken)}
               aria-label={showToken ? 'Hide upload token' : 'Show upload token'}
               aria-pressed={showToken}
+              disabled={isLoadingToken || !uploadToken}
             >
               {showToken ? (
                 <EyeOff className="h-4 w-4" />
@@ -52,12 +83,56 @@ export function UploadToken() {
           </div>
           <Button
             variant="outline"
-            onClick={handleRefreshToken}
-            disabled={isLoadingToken}
+            onClick={copyToken}
+            disabled={isLoadingToken || !uploadToken}
           >
-            {isLoadingToken ? 'Refreshing...' : 'Refresh Token'}
+            <Copy />
+            Copy token
           </Button>
         </div>
+        {!isLoadingToken && !uploadToken && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p role="alert" className="text-sm text-destructive">
+              Could not load your upload token.
+            </p>
+            <Button variant="outline" size="sm" onClick={handleLoadToken}>
+              Retry
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Replacing this token disconnects tools using it. Download their
+          configurations again afterward. Named API tokens are unaffected.
+        </p>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              className="shrink-0"
+              disabled={isLoadingToken || !uploadToken}
+            >
+              Replace token
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace your upload token?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tools using your current account upload token will stop
+                uploading. Download and import their configurations again, or
+                update the token manually, to reconnect them.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRefreshToken}>
+                Replace token
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

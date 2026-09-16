@@ -68,13 +68,16 @@ export function usePreferenceSection<T extends string>(
   }, [navigation])
 
   const selectSection = useCallback(
-    (section: T) => {
+    (
+      section: T,
+      { updateHistory = true }: { updateHistory?: boolean } = {}
+    ) => {
       if (!sections.includes(section)) return
       const url = new URL(window.location.href)
       url.searchParams.set('section', section)
       // A card anchor belongs to its section, not to the next sidebar choice.
       url.hash = ''
-      if (url.href !== window.location.href) {
+      if (updateHistory && url.href !== window.location.href) {
         // Keep the page mounted so changing sections preserves unfinished edits.
         window.history.pushState(null, '', url.pathname + url.search)
       }

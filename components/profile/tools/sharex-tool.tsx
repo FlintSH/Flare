@@ -34,8 +34,9 @@ export function ShareXTool() {
       document.body.removeChild(a)
 
       toast({
-        title: 'Success',
-        description: 'ShareX configuration downloaded successfully',
+        title: 'ShareX configuration ready',
+        description:
+          'Open the downloaded .sxcu file in ShareX and confirm the import.',
       })
     } catch (error) {
       console.error('ShareX download error:', error)
@@ -54,7 +55,8 @@ export function ShareXTool() {
       <div className="min-w-0 space-y-1">
         <h3 className="font-medium">ShareX</h3>
         <p className="text-sm text-muted-foreground">
-          Popular screenshot and file sharing tool for Windows
+          Screenshots and file sharing on Windows. Open the downloaded .sxcu
+          file in ShareX and confirm the import.
         </p>
       </div>
       <Button
