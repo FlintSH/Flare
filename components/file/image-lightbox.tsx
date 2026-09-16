@@ -64,11 +64,13 @@ export function ImageLightbox({
     const root = document.documentElement
     const overflow = root.style.overflow
     const gutter = root.style.scrollbarGutter
+    const { scrollX, scrollY } = window
     root.style.overflow = 'hidden'
     root.style.scrollbarGutter = 'auto'
     return () => {
       root.style.overflow = overflow
       root.style.scrollbarGutter = gutter
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' })
     }
   }, [])
   const current = images[index]
