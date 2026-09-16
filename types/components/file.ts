@@ -19,6 +19,8 @@ export interface PaginationInfo {
   pageCount: number
   page: number
   limit: number
+  /** Exact image offset for a gallery window anchored to the current file. */
+  offset?: number
 }
 
 export type SortOption =

@@ -34,15 +34,6 @@ function file(
   }
 }
 
-function pageResponse(page: number, data: FileType[], pageCount = 4) {
-  return new Response(
-    JSON.stringify({
-      data,
-      pagination: { page, pageCount, total: 96, limit: 24 },
-    })
-  )
-}
-
 afterEach(() => vi.unstubAllGlobals())
 
 describe('file grouping', () => {
@@ -105,63 +96,69 @@ describe('gallery page navigation', () => {
   })
 
   it.each([1, -1] as const)(
-    'skips document-only pages in direction %s without changing filters',
+    'requests image neighbors in direction %s using the active ID and all filters',
     async (direction) => {
-      const start = direction === 1 ? 1 : 4
-      const imagePage = start + direction * 2
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(
-          pageResponse(start + direction, [
-            file('pdf', undefined, 'application/pdf'),
-          ])
+      const pagination = {
+        offset: 25,
+        page: 2,
+        pageCount: 4,
+        total: 96,
+        limit: 24,
+      }
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [file('photo')],
+            pagination,
+          })
         )
-        .mockResolvedValueOnce(
-          pageResponse(imagePage, [
-            file('photo'),
-            file('text', undefined, 'text/plain'),
-          ])
-        )
+      )
       vi.stubGlobal('fetch', fetchMock)
       const signal = new AbortController().signal
       const result = await adjacentImagePage({
         filters,
-        page: start,
-        pageCount: 4,
+        anchorId: 'current',
         direction,
         signal,
       })
-      expect(result?.files.map((image) => image.id)).toEqual(['photo'])
-      expect(result?.pagination.page).toBe(imagePage)
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        1,
-        `/api/files?${fileQuery(filters, start + direction)}`,
-        { signal }
-      )
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
-        `/api/files?${fileQuery(filters, imagePage)}`,
-        { signal }
-      )
+      expect(result).toEqual({ files: [file('photo')], pagination })
+      const [url, options] = fetchMock.mock.calls[0]
+      expect(
+        Object.fromEntries(new URL(url, 'http://localhost').searchParams)
+      ).toEqual({
+        limit: '24',
+        search: 'trip',
+        sortBy: 'oldest',
+        types: 'image/jpeg,application/pdf',
+        visibility: 'private',
+        dateFrom: filters.dateFrom,
+        galleryAnchor: 'current',
+        galleryDirection: direction === 1 ? 'next' : 'previous',
+      })
+      expect(options).toEqual({ signal })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
     }
   )
 
-  it('returns the boundary instead of wrapping when no further images exist', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        pageResponse(4, [file('pdf', undefined, 'application/pdf')])
-      )
-    vi.stubGlobal('fetch', fetchMock)
-    const result = await adjacentImagePage({
+  it('distinguishes an image removed from the results from an empty neighbor window', async () => {
+    const pagination = { offset: 0, page: 1, pageCount: 1, total: 1, limit: 24 }
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 404 }))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ data: [], pagination }))
+        )
+    )
+    const request = {
       filters,
-      page: 3,
-      pageCount: 4,
-      direction: 1,
+      anchorId: 'current',
+      direction: 1 as const,
       signal: new AbortController().signal,
-    })
-    expect(result).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    }
+    expect(await adjacentImagePage(request)).toBeNull()
+    expect(await adjacentImagePage(request)).toEqual({ files: [], pagination })
   })
 
   it('propagates request errors so the viewer can keep the current image and retry', async () => {
@@ -172,26 +169,26 @@ describe('gallery page navigation', () => {
     await expect(
       adjacentImagePage({
         filters,
-        page: 1,
-        pageCount: 4,
+        anchorId: 'current',
         direction: 1,
         signal: new AbortController().signal,
       })
     ).rejects.toThrow('Could not load the next image')
   })
 
-  it('does not continue scanning after the viewer is closed', async () => {
+  it('ignores a response after the viewer is closed', async () => {
     const controller = new AbortController()
     const fetchMock = vi.fn().mockImplementation(async () => {
       controller.abort()
-      return pageResponse(2, [file('pdf', undefined, 'application/pdf')])
+      return new Response(
+        JSON.stringify({ data: [], pagination: { offset: 0 } })
+      )
     })
     vi.stubGlobal('fetch', fetchMock)
     await expect(
       adjacentImagePage({
         filters,
-        page: 1,
-        pageCount: 4,
+        anchorId: 'current',
         direction: 1,
         signal: controller.signal,
       })

@@ -51,8 +51,15 @@ export function FileGrid() {
     setPage,
     resetFilters,
   } = useFileFilters()
-  const { gallery, open, close, move, setIndex, navigationPending } =
-    useImageGallery(filters, files, paginationInfo)
+  const {
+    gallery,
+    open,
+    close,
+    move,
+    setIndex,
+    navigationPending,
+    navigationStale,
+  } = useImageGallery(filters, files, paginationInfo, refreshKey)
   const imagesOnly =
     filters.types.length > 0 &&
     filters.types.every((type) => type.startsWith('image/'))
@@ -362,12 +369,16 @@ export function FileGrid() {
           fallbackFocusRef={libraryHeading}
           onPrevious={() => void move(-1)}
           onNext={() => void move(1)}
-          hasPrevious={gallery.index > 0 || !gallery.atStart}
-          hasNext={gallery.index < gallery.files.length - 1 || !gallery.atEnd}
+          hasPrevious={navigationStale || gallery.index > 0 || !gallery.atStart}
+          hasNext={
+            navigationStale ||
+            gallery.index < gallery.files.length - 1 ||
+            !gallery.atEnd
+          }
           navigationPending={navigationPending}
           positionLabel={
-            imagesOnly
-              ? `${(gallery.pagination.page - 1) * gallery.pagination.limit + gallery.index + 1} of ${gallery.pagination.total}`
+            imagesOnly || gallery.pagination.offset !== undefined
+              ? `${(gallery.pagination.offset ?? (gallery.pagination.page - 1) * gallery.pagination.limit) + gallery.index + 1} of ${gallery.pagination.total}`
               : `Image ${gallery.index + 1} · Page ${gallery.pagination.page}`
           }
         />

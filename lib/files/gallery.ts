@@ -42,40 +42,30 @@ export function groupFiles(files: FileType[], grouping: FileGrouping) {
 
 export interface GalleryPage {
   files: FileType[]
-  pagination: PaginationInfo
+  pagination: PaginationInfo & { offset: number }
 }
 
-/** Keep the current sort and filters, skipping pages without images. */
+/** Find image neighbors by ID so changes to earlier pages cannot shift navigation. */
 export async function adjacentImagePage({
   filters,
-  page,
-  pageCount,
+  anchorId,
   direction,
   signal,
 }: {
   filters: FileFilterOptions
-  page: number
-  pageCount: number
+  anchorId: string
   direction: -1 | 1
   signal: AbortSignal
 }): Promise<GalleryPage | null> {
-  for (
-    let nextPage = page + direction;
-    nextPage >= 1 && nextPage <= pageCount;
-    nextPage += direction
-  ) {
-    signal.throwIfAborted()
-    const response = await fetch(`/api/files?${fileQuery(filters, nextPage)}`, {
-      signal,
-    })
-    if (!response.ok) throw new Error('Could not load the next image')
-    const result = await response.json()
-    signal.throwIfAborted()
-    pageCount = result.pagination.pageCount
-    const files: FileType[] = result.data.filter((file: FileType) =>
-      file.mimeType.startsWith('image/')
-    )
-    if (files.length) return { files, pagination: result.pagination }
-  }
-  return null
+  signal.throwIfAborted()
+  const query = fileQuery(filters)
+  query.delete('page')
+  query.set('galleryAnchor', anchorId)
+  query.set('galleryDirection', direction === 1 ? 'next' : 'previous')
+  const response = await fetch(`/api/files?${query}`, { signal })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error('Could not load the next image')
+  const result = await response.json()
+  signal.throwIfAborted()
+  return { files: result.data, pagination: result.pagination }
 }

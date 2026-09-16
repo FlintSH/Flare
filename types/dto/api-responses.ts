@@ -5,6 +5,8 @@ export interface ApiResponse<T> {
 }
 
 export interface PaginationMeta {
+  /** First image's zero-based position; the anchor's position for empty results. */
+  offset?: number
   total: number
   pageCount: number
   page: number

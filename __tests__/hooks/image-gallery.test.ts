@@ -112,8 +112,9 @@ type HookProps = {
   filters: FileFilterOptions
   files: FileType[]
   pagination: PaginationInfo
+  refreshKey: number
 }
-const initialProps: HookProps = { filters, files, pagination }
+const initialProps: HookProps = { filters, files, pagination, refreshKey: 0 }
 
 function render(props: HookProps = initialProps) {
   let result!: ReturnType<typeof useImageGallery>
@@ -123,7 +124,12 @@ function render(props: HookProps = initialProps) {
     harness.effects = []
     // Each iteration models one explicit render; React is mocked above.
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    result = useImageGallery(props.filters, props.files, props.pagination)
+    result = useImageGallery(
+      props.filters,
+      props.files,
+      props.pagination,
+      props.refreshKey
+    )
     harness.effects.forEach((effect) => effect())
   } while (harness.dirty)
   return result
@@ -156,13 +162,105 @@ describe('image gallery refresh lifecycle', () => {
     expect(refreshed.gallery).toBe(before)
     expect(refreshed.gallery?.files[refreshed.gallery.index]).toBe(files[1])
     expect(refreshed.navigationPending).toBe(false)
+    expect(refreshed.navigationStale).toBe(true)
+  })
+
+  it('anchors a shifted page boundary to the current image instead of its old page number', async () => {
+    render().open(files[1])
+    const props = { ...initialProps, refreshKey: 1 }
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('third'), file('fourth')],
+      pagination: { ...pagination, total: 7, pageCount: 4, page: 2, offset: 3 },
+    })
+
+    await render(props).move(1)
+    expect(harness.adjacentImagePage.mock.calls[0][0]).toMatchObject({
+      anchorId: 'second',
+      direction: 1,
+      filters,
+    })
+    expect(render(props).gallery?.files[0].id).toBe('third')
+    expect(render(props).gallery?.pagination.offset).toBe(3)
+    expect(render(props).navigationStale).toBe(false)
+  })
+
+  it('re-anchors even within a cached window when refresh removes the next image', async () => {
+    render().open(files[0])
+    const props = {
+      ...initialProps,
+      files: [files[0], file('third')],
+      refreshKey: 1,
+    }
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('third')],
+      pagination: { ...pagination, offset: 1 },
+    })
+    await render(props).move(1)
+    expect(harness.adjacentImagePage.mock.calls[0][0].anchorId).toBe('first')
+    expect(render(props).gallery?.files[0].id).toBe('third')
+  })
+
+  it('allows a refreshed start boundary to discover newly uploaded predecessors', async () => {
+    render().open(files[0])
+    const props = { ...initialProps, refreshKey: 1 }
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('newer'), file('new')],
+      pagination: { ...pagination, offset: 0 },
+    })
+    await render(props).move(-1)
+    const gallery = render(props).gallery!
+    expect(gallery.files[gallery.index].id).toBe('new')
+    expect(gallery.atStart).toBe(true)
+    expect(gallery.atEnd).toBe(false)
+  })
+
+  it('keeps local navigation immediate while the library is unchanged', async () => {
+    render().open(files[0])
+    await render().move(1)
+    expect(render().gallery?.index).toBe(1)
+    expect(harness.adjacentImagePage).not.toHaveBeenCalled()
+  })
+
+  it.each([-1, 1] as const)(
+    'keeps the active image at a refreshed empty boundary (%s)',
+    async (direction) => {
+      render().open(files[1])
+      const props = { ...initialProps, refreshKey: 1 }
+      harness.adjacentImagePage.mockResolvedValueOnce({
+        files: [],
+        pagination: { ...pagination, total: 1, pageCount: 1, offset: 0 },
+      })
+      await render(props).move(direction)
+      const gallery = render(props).gallery!
+      expect(gallery.files).toEqual([files[1]])
+      expect(gallery.index).toBe(0)
+      expect(gallery.atStart).toBe(true)
+      expect(gallery.atEnd).toBe(true)
+      expect(render(props).navigationStale).toBe(false)
+      await render(props).move(direction)
+      expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('closes if a refreshed active image is no longer in the filtered results', async () => {
+    render().open(files[0])
+    const props = { ...initialProps, refreshKey: 1 }
+    harness.adjacentImagePage.mockResolvedValueOnce(null)
+    await render(props).move(1)
+    expect(render(props).gallery).toBeNull()
+    expect(render(props).navigationPending).toBe(false)
+    expect(harness.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'This image is no longer in these results',
+      })
+    )
   })
 
   it('does not replace a later gallery page with a refreshed first grid page', async () => {
     const third = file('third')
     harness.adjacentImagePage.mockResolvedValueOnce({
       files: [third, file('fourth')],
-      pagination: { ...pagination, page: 2 },
+      pagination: { ...pagination, page: 2, offset: 2 },
     })
     render().open(files[1])
     await render().move(1)
@@ -187,6 +285,7 @@ describe('image gallery refresh lifecycle', () => {
     const refreshedProps = {
       ...initialProps,
       files: [file('new-upload'), file('first')],
+      refreshKey: 1,
     }
     const refreshed = render(refreshedProps)
 
@@ -194,12 +293,21 @@ describe('image gallery refresh lifecycle', () => {
     expect(refreshed.navigationPending).toBe(true)
     expect(refreshed.gallery?.files[refreshed.gallery.index]).toBe(files[1])
     next.resolve({
-      files: [file('third')],
-      pagination: { ...pagination, page: 2 },
+      files: [file('third'), file('fourth')],
+      pagination: { ...pagination, page: 2, offset: 2 },
     })
     await navigation
     expect(render(refreshedProps).gallery?.files[0].id).toBe('third')
     expect(render(refreshedProps).navigationPending).toBe(false)
+    expect(render(refreshedProps).navigationStale).toBe(true)
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('inserted-between')],
+      pagination: { ...pagination, page: 2, offset: 3 },
+    })
+    await render(refreshedProps).move(1)
+    expect(harness.adjacentImagePage.mock.calls[1][0].anchorId).toBe('third')
+    expect(render(refreshedProps).gallery?.files[0].id).toBe('inserted-between')
+    expect(render(refreshedProps).navigationStale).toBe(false)
   })
 
   it('closes and aborts navigation when the selected filters change', async () => {
@@ -217,7 +325,7 @@ describe('image gallery refresh lifecycle', () => {
     expect(signal.aborted).toBe(true)
     next.resolve({
       files: [file('stale')],
-      pagination: { ...pagination, page: 2 },
+      pagination: { ...pagination, page: 2, offset: 2 },
     })
     await navigation
     expect(render(filteredProps).gallery).toBeNull()
@@ -237,14 +345,14 @@ describe('image gallery refresh lifecycle', () => {
     const replacementNavigation = render().move(1)
     old.resolve({
       files: [file('stale')],
-      pagination: { ...pagination, page: 2 },
+      pagination: { ...pagination, page: 2, offset: 2 },
     })
     await oldNavigation
     expect(render().navigationPending).toBe(true)
     expect(render().gallery?.files[1].id).toBe('second')
     replacement.resolve({
       files: [file('current')],
-      pagination: { ...pagination, page: 2 },
+      pagination: { ...pagination, page: 2, offset: 2 },
     })
     await replacementNavigation
     expect(render().gallery?.files[0].id).toBe('current')

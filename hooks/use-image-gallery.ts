@@ -16,16 +16,22 @@ interface GalleryState {
   index: number
   atStart: boolean
   atEnd: boolean
+  refreshKey: number
+  libraryFiles: FileType[]
 }
 
 export function useImageGallery(
   filters: FileFilterOptions,
   files: FileType[],
-  pagination: PaginationInfo
+  pagination: PaginationInfo,
+  refreshKey: number
 ) {
   const [gallery, setGallery] = useState<GalleryState | null>(null)
   const [navigationPending, setNavigationPending] = useState(false)
   const request = useRef<AbortController | null>(null)
+  const navigationStale =
+    !!gallery &&
+    (gallery.refreshKey !== refreshKey || gallery.libraryFiles !== files)
 
   const close = useCallback(() => {
     request.current?.abort()
@@ -57,20 +63,26 @@ export function useImageGallery(
         pagination,
         atStart: pagination.page <= 1,
         atEnd: pagination.page >= pagination.pageCount,
+        refreshKey,
+        libraryFiles: files,
       })
     },
-    [files, pagination]
+    [files, pagination, refreshKey]
   )
 
   const move = useCallback(
     async (direction: -1 | 1) => {
       if (!gallery || request.current) return
       const index = gallery.index + direction
-      if (index >= 0 && index < gallery.files.length) {
+      if (!navigationStale && index >= 0 && index < gallery.files.length) {
         setGallery({ ...gallery, index })
         return
       }
-      if (direction === -1 ? gallery.atStart : gallery.atEnd) return
+      if (
+        !navigationStale &&
+        (direction === -1 ? gallery.atStart : gallery.atEnd)
+      )
+        return
 
       const controller = new AbortController()
       request.current = controller
@@ -78,25 +90,36 @@ export function useImageGallery(
       try {
         const next = await adjacentImagePage({
           filters,
-          page: gallery.pagination.page,
-          pageCount: gallery.pagination.pageCount,
+          anchorId: gallery.files[gallery.index].id,
           direction,
           signal: controller.signal,
         })
         if (controller.signal.aborted) return
-        if (next) {
-          setGallery({
-            ...next,
-            index: direction === 1 ? 0 : next.files.length - 1,
-            atStart: next.pagination.page <= 1,
-            atEnd: next.pagination.page >= next.pagination.pageCount,
+        if (!next) {
+          close()
+          toast({
+            title: 'This image is no longer in these results',
+            description: 'Choose another image from your files.',
           })
-        } else {
-          setGallery({
-            ...gallery,
-            ...(direction === 1 ? { atEnd: true } : { atStart: true }),
-          })
+          return
         }
+        // An empty window means we reached an end. Keep the active image,
+        // but discard its outdated neighbors and use its fresh image offset.
+        const images = next.files.length
+          ? next.files
+          : [gallery.files[gallery.index]]
+        setGallery({
+          files: images,
+          pagination: next.pagination,
+          index: direction === 1 ? 0 : images.length - 1,
+          atStart: next.pagination.offset === 0,
+          atEnd:
+            next.pagination.offset + images.length >= next.pagination.total,
+          // Capture the request's starting revision: a refresh that overlaps
+          // this request must still re-anchor the next navigation.
+          refreshKey,
+          libraryFiles: files,
+        })
       } catch {
         if (!controller.signal.aborted)
           toast({
@@ -111,11 +134,19 @@ export function useImageGallery(
         }
       }
     },
-    [filters, gallery]
+    [filters, gallery, navigationStale, refreshKey, files, close]
   )
 
   const setIndex = (index: number) =>
     setGallery((previous) => (previous ? { ...previous, index } : previous))
 
-  return { gallery, open, close, move, setIndex, navigationPending }
+  return {
+    gallery,
+    open,
+    close,
+    move,
+    setIndex,
+    navigationPending,
+    navigationStale,
+  }
 }
