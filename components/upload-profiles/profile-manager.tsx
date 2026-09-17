@@ -12,6 +12,7 @@ import {
   Upload,
 } from 'lucide-react'
 
+import { ITakeSetupButton } from '@/components/profile/tools/itake-tool'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -499,7 +500,8 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 <h3 className="font-medium">Use this profile in your tools</h3>
                 <p className="text-xs text-muted-foreground mt-1">
                   Download an uploader with this profile selected. Generated
-                  scripts contain your upload credential; keep them private.
+                  configs and scripts contain your upload credential; keep them
+                  private.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -521,6 +523,12 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                     }
                   </Button>
                 ))}
+                <ITakeSetupButton
+                  profileId={editing.id}
+                  profileName={editing.name}
+                  disabled={busy}
+                  compact
+                />
               </div>
             </div>
           )}

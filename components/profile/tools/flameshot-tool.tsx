@@ -101,8 +101,8 @@ export function FlameshotTool() {
       <div className="min-w-0 space-y-1">
         <h3 className="font-medium">Flameshot</h3>
         <p className="text-sm text-muted-foreground">
-          Capture and upload on Linux. Choose your environment options, then run
-          the downloaded script with Bash.
+          Capture and upload on Linux only. Choose your environment options,
+          then run the downloaded script with Bash.
         </p>
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

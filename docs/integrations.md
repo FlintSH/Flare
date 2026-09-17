@@ -3,7 +3,7 @@
 ## Screenshot tools and scripts
 
 Open **Profile → Uploads → Screenshot tools and scripts**
-(`/dashboard/profile?section=uploads#upload-tools`) to set up ShareX, Flameshot,
+(`/dashboard/profile?section=uploads#upload-tools`) to set up ShareX, iTake, Flameshot,
 Spectacle, or Bash. Download the configuration or script for your tool; it already
 includes your account's upload token. You do not need to create or copy an API
 token first.
@@ -13,6 +13,35 @@ Spectacle, and Bash, follow the installation and usage instructions at the top o
 the downloaded script. Keep these files private because they contain your upload
 credential. To use particular sharing settings, download a client from a saved
 [upload profile](upload-profiles.md).
+
+### macOS screenshots and screen recordings with iTake
+
+[iTake](https://github.com/SerStars/iTake) is a free, open-source macOS capture
+app for screenshots and screen recordings. It requires **macOS 15 (Sequoia) or
+newer**, on Apple Silicon or Intel.
+
+1. [Install iTake](https://github.com/SerStars/iTake/releases/latest) and open it.
+   Follow its [installation instructions](https://github.com/SerStars/iTake#installing)
+   if macOS blocks the first launch. Allow screen recording access when prompted.
+2. In Flare, open **Profile → Uploads → Screenshot tools and scripts → Set Up iTake**
+   and click **Download Config**. To use a specific saved upload profile, click
+   **iTake** under that profile's **Use this profile in your tools** section instead.
+3. Open the downloaded `.itup` file and confirm **Import** in iTake. The server URL
+   and upload token are already included; no manual fields or API key setup are needed.
+4. In iTake's **Preferences → Uploader**, select **Flare — Account defaults** (or
+   **Flare — your profile name**), enable **Upload Automatically**,
+   and leave **Auto Copy Link** enabled. If prompted on the first upload, allow
+   iTake to access its uploader credential in Keychain.
+
+Capture a screenshot or finish a recording to upload it and copy its Flare share
+link. The config follows your default upload profile unless downloaded for a
+specific profile. Flare's upload size, visibility, and expiration settings still
+apply to both images and videos.
+
+Keep the downloaded config private: it contains your upload token. If you
+regenerate that token or change your Flare server URL, remove the old uploader in
+iTake, then download, import, and select a new config. Flameshot's generated script
+is **Linux only**; use iTake on macOS.
 
 ## Named API tokens
 

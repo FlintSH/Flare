@@ -8,7 +8,7 @@ The order is instance/account defaults, selected or default profile, then allowe
 
 ## Screenshot tools and API
 
-Open **Profile → Uploads → Screenshot tools and scripts** (`/dashboard/profile?section=uploads#upload-tools`) to download a ShareX configuration or Bash, Flameshot or Spectacle script. The downloads already include your account's upload token; no API token creation or copying is required. Keep these files private.
+Open **Profile → Uploads → Screenshot tools and scripts** (`/dashboard/profile?section=uploads#upload-tools`) to download a ShareX configuration for Windows, an [iTake configuration for macOS](integrations.md#macos-screenshots-and-screen-recordings-with-itake), or a Bash, Flameshot or Spectacle script. The Flameshot script supports Linux only. The downloads already include your account's upload token; no API token creation or copying is required. Keep these files private.
 
 For a tool to use a particular profile, download its configuration or script from that saved profile. [Named API tokens](integrations.md#named-api-tokens) under **Profile → Integrations** are optional for custom integrations or tools that need separate permissions, expiration, or revocation; they can also be bound to a profile.
 
