@@ -19,7 +19,6 @@ import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { hasDurableEmailAccess } from '@/lib/email/policy'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
-import { getStorageProvider } from '@/lib/storage'
 import { createUser } from '@/lib/users/create-user'
 
 const logger = loggers.users
@@ -206,6 +205,8 @@ export async function PUT(req: Request) {
     const requestedEmailChange =
       body.email !== undefined && body.email !== existingUser.email
     const requestedRoleChange = body.role !== existingUser.role
+    const requestedUrlIdChange =
+      body.urlId !== undefined && body.urlId !== existingUser.urlId
 
     if (body.urlId) {
       const existingUrlId = await prisma.user.findUnique({
@@ -246,43 +247,10 @@ export async function PUT(req: Request) {
       ...(requestedEmailChange && { email: body.email }),
       ...(requestedRoleChange && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
-      ...(body.urlId && { urlId: body.urlId }),
+      ...(requestedUrlIdChange && { urlId: body.urlId }),
       ...(body.vanityId !== undefined && {
         vanityId: body.vanityId || null,
       }),
-    }
-
-    if (body.urlId && body.urlId !== existingUser.urlId) {
-      try {
-        const storageProvider = await getStorageProvider()
-        const oldPath = `uploads/${existingUser.urlId}`
-        const newPath = `uploads/${body.urlId}`
-        await storageProvider.renameFolder(oldPath, newPath)
-
-        const files = await prisma.file.findMany({
-          where: { userId: body.id },
-          select: { id: true, path: true, urlPath: true },
-        })
-
-        for (const file of files) {
-          await prisma.file.update({
-            where: { id: file.id },
-            data: {
-              path: file.path.replace(`${oldPath}/`, `${newPath}/`),
-              urlPath: file.urlPath.replace(
-                `/${existingUser.urlId}/`,
-                `/${body.urlId}/`
-              ),
-            },
-          })
-        }
-      } catch (error) {
-        logger.error('Error renaming user folder', error as Error)
-        return apiError(
-          'Failed to rename user folder',
-          HTTP_STATUS.INTERNAL_SERVER_ERROR
-        )
-      }
     }
 
     const user = await prisma.$transaction(async (tx) => {
@@ -292,6 +260,7 @@ export async function PUT(req: Request) {
       if (
         (requestedEmailChange && currentUser.email !== existingUser.email) ||
         (requestedRoleChange && currentUser.role !== existingUser.role) ||
+        (requestedUrlIdChange && currentUser.urlId !== existingUser.urlId) ||
         (body.password &&
           (currentUser.password !== existingUser.password ||
             currentUser.sessionVersion !== existingUser.sessionVersion))
@@ -352,6 +321,25 @@ export async function PUT(req: Request) {
             throw new UserEmailPolicyError('Email already exists')
         }
         await invalidateEmailTokens(tx, existingUser.id)
+      }
+      if (requestedUrlIdChange) {
+        // Public URLs and the user ID must change together. Storage paths are
+        // independent: moving objects can strand files if storage or DB writes fail.
+        const files = await tx.file.findMany({
+          where: { userId: existingUser.id },
+          select: { id: true, urlPath: true },
+        })
+        for (const file of files) {
+          await tx.file.update({
+            where: { id: file.id },
+            data: {
+              urlPath: file.urlPath.replace(
+                `/${currentUser.urlId}/`,
+                `/${body.urlId}/`
+              ),
+            },
+          })
+        }
       }
       return tx.user.update({
         where: { id: body.id },

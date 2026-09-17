@@ -319,6 +319,105 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect((await principal()).storageUsed).toBe(700_000 / 1024 ** 2)
   })
 
+  it('changes public URLs without moving stored files and publishes in-flight uploads under the new ID', async () => {
+    const input = await prepared('Existing file')
+    const first = await uploads.finalizeUpload(input)
+    const inFlight = await prepared('Upload started before the ID change')
+    // Reuse the filename to exercise collision handling after the ID changes.
+    inFlight.urlPath = first.urlPath
+    await prisma.user.update({
+      where: { id: 'owner-one' },
+      data: {
+        role: 'ADMIN',
+        email: 'owner@example.test',
+        vanityId: 'owner-alias',
+      },
+    })
+    authentication.user = { id: 'owner-one', role: 'ADMIN' }
+    const users = await import('@/app/api/users/route')
+    const response = await users.PUT(
+      jsonRequest(
+        '/api/users',
+        {
+          id: 'owner-one',
+          name: 'Owner',
+          email: 'owner@example.test',
+          role: 'ADMIN',
+          urlId: 'SPECC',
+        },
+        'PUT'
+      )
+    )
+    expect(response.status).toBe(200)
+    const saved = await prisma.file.findUniqueOrThrow({
+      where: { id: first.id },
+    })
+    expect(saved.path).toBe(input.filePath)
+    expect(saved.urlPath).toBe(first.urlPath.replace('/owner-one/', '/SPECC/'))
+    expect((await principal()).urlId).toBe('SPECC')
+    const { resolveFileUrlPath } = await import('@/lib/files/resolve')
+    expect(
+      await resolveFileUrlPath('SPECC', saved.urlPath.split('/').pop()!)
+    ).toBe(saved.urlPath)
+    expect(
+      await resolveFileUrlPath('owner-alias', saved.urlPath.split('/').pop()!)
+    ).toBe(saved.urlPath)
+    const stream = await storage.getFileStream(saved.path)
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks).toString()).toBe('Existing file')
+
+    const late = await uploads.finalizeUpload(inFlight)
+    expect(late.path).toBe(inFlight.filePath)
+    expect(late.urlPath).toMatch(/^\/SPECC\/.*-[a-z0-9-]{12}\.txt$/)
+    expect(late.urlPath).not.toBe(saved.urlPath)
+    expect(await storage.getFileSize(late.path)).toBe(inFlight.size)
+    // Chunk completion can reauthenticate after the change while retaining old metadata.
+    const lateWithFreshUser = await uploads.finalizeUpload({
+      ...(await prepared('Upload completed with refreshed credentials')),
+      urlPath: '/owner-one/fresh-credentials.txt',
+    })
+    expect(lateWithFreshUser.urlPath).toBe('/SPECC/fresh-credentials.txt')
+  })
+
+  it('rolls back all public URL changes if the account update fails', async () => {
+    const first = await uploads.finalizeUpload(await prepared('First file'))
+    const second = await uploads.finalizeUpload(await prepared('Second file'))
+    await prisma.user.update({
+      where: { id: 'owner-one' },
+      data: { role: 'ADMIN', email: 'owner@example.test' },
+    })
+    await prisma.user.update({
+      where: { id: 'owner-two' },
+      data: { email: 'taken@example.test' },
+    })
+    authentication.user = { id: 'owner-one', role: 'ADMIN' }
+    const users = await import('@/app/api/users/route')
+    const response = await users.PUT(
+      jsonRequest(
+        '/api/users',
+        {
+          id: 'owner-one',
+          name: 'Owner',
+          email: 'taken@example.test',
+          role: 'ADMIN',
+          urlId: 'SPECC',
+        },
+        'PUT'
+      )
+    )
+    expect(response.status).toBe(500)
+    expect((await principal()).urlId).toBe('owner-one')
+    for (const file of [first, second]) {
+      const saved = await prisma.file.findUniqueOrThrow({
+        where: { id: file.id },
+      })
+      expect(saved.urlPath).toBe(file.urlPath)
+      expect(saved.path).toBe(file.path)
+      expect(await storage.getFileSize(saved.path)).toBeGreaterThan(0)
+    }
+  })
+
   it('rolls back file and accounting if transactional webhook enqueue fails', async () => {
     const input = await prepared()
     vi.spyOn(webhooks, 'enqueueFileReady').mockRejectedValueOnce(
