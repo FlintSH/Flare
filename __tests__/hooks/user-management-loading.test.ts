@@ -65,6 +65,35 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('optional user fields', () => {
+  it.each(['', '   '])(
+    'submits a blank vanity URL as null when saving an administrator edit (%j)',
+    async (vanityId) => {
+      harness.fetch
+        .mockResolvedValueOnce(Response.json({ data: { id: 'existing' } }))
+        .mockResolvedValueOnce(listResponse('Edited user'))
+
+      await render().updateUser('existing', {
+        name: 'Edited user',
+        email: 'edited@example.test',
+        role: 'USER',
+        vanityId,
+      })
+
+      expect(harness.fetch).toHaveBeenNthCalledWith(
+        1,
+        '/api/users',
+        expect.objectContaining({ method: 'PUT' })
+      )
+      expect(JSON.parse(harness.fetch.mock.calls[0][1].body)).toMatchObject({
+        id: 'existing',
+        name: 'Edited user',
+        vanityId: null,
+      })
+    }
+  )
+})
+
 describe('user-list loading ownership', () => {
   it('refreshes the latest filter when it changes before a mutation returns', async () => {
     harness.fetch.mockResolvedValueOnce(listResponse('Existing user'))

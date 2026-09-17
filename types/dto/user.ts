@@ -54,7 +54,10 @@ export const UserSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
     .optional(),
-  vanityId: VanityIdSchema.nullable().optional(),
+  // Empty form fields clear the vanity URL; omitted fields leave it unchanged.
+  vanityId: VanityIdSchema.or(z.literal('').transform(() => null))
+    .nullable()
+    .optional(),
 })
 
 export type CreateUserRequest = Omit<z.infer<typeof UserSchema>, 'id'>
