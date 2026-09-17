@@ -71,3 +71,54 @@ describe('file library date boundaries', () => {
     }
   )
 })
+
+describe('file library filtering and gallery order', () => {
+  it('combines MIME type with search, dates, and visibility in a stable page order', async () => {
+    const query = new URLSearchParams({
+      search: 'holiday',
+      types: 'image/jpeg',
+      dateFrom: '2026-01-01T00:00:00.000Z',
+      visibility: 'private,hasPassword',
+      sortBy: 'oldest',
+      page: '2',
+      limit: '24',
+    })
+    const response = await GET(
+      new Request(`https://flare.example/api/files?${query}`)
+    )
+    expect(response.status).toBe(200)
+    const where = {
+      userId: 'library-owner',
+      AND: [
+        {
+          OR: [
+            { name: { contains: 'holiday', mode: 'insensitive' } },
+            { ocrText: { contains: 'holiday', mode: 'insensitive' } },
+          ],
+        },
+        { mimeType: { in: ['image/jpeg'] } },
+        { uploadedAt: { gte: new Date('2026-01-01T00:00:00.000Z') } },
+        { OR: [{ visibility: 'PRIVATE' }, { password: { not: null } }] },
+      ],
+    }
+    expect(mocks.file.count).toHaveBeenCalledWith({ where })
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where,
+        orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
+        skip: 24,
+        take: 24,
+      })
+    )
+  })
+
+  it('uses a stable tie-breaker when sorting by size', async () => {
+    await GET(new Request('https://flare.example/api/files?sortBy=largest'))
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'library-owner' },
+        orderBy: [{ size: 'desc' }, { id: 'asc' }],
+      })
+    )
+  })
+})

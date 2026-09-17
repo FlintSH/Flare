@@ -58,12 +58,14 @@ interface FileCardProps {
   file: FileType
   onDelete?: (id: string) => void
   onUpdate?: () => void
+  onPreview?: (file: FileType) => void
 }
 
 export function FileCard({
   file: initialFile,
   onDelete,
   onUpdate,
+  onPreview,
 }: FileCardProps) {
   const { toast } = useToast()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
@@ -286,6 +288,20 @@ export function FileCard({
         <Link
           href={safeUrl}
           aria-label={`Open ${file.name}`}
+          aria-haspopup={isImage && onPreview ? 'dialog' : undefined}
+          onClick={(event) => {
+            if (
+              isImage &&
+              onPreview &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              event.preventDefault()
+              onPreview(file)
+            }
+          }}
           className="relative block aspect-square overflow-hidden bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           {isImage && !previewFailed ? (
@@ -309,10 +325,20 @@ export function FileCard({
             </div>
           )}
         </Link>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
-          <Button variant="secondary" size="sm" asChild>
-            <Link href={safeUrl}>View</Link>
-          </Button>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 opacity-0 transition-opacity group-focus-within:[&>*]:pointer-events-auto group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
+          {isImage && onPreview ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => onPreview(file)}
+            >
+              View image
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" asChild>
+              <Link href={safeUrl}>View</Link>
+            </Button>
+          )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
             <Button
               variant="secondary"

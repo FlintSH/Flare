@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Link from 'next/link'
 
 import type { FileType, PaginationInfo } from '@/types/components/file'
-import { endOfDay } from 'date-fns'
+import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
   FolderOpen,
@@ -19,11 +19,16 @@ import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-ske
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
 import { FileGridPagination } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
+import { ImageLightbox } from '@/components/file/image-lightbox'
 import { Button } from '@/components/ui/button'
 
+import { fileQuery, groupFiles } from '@/lib/files/gallery'
+
 import { useFileFilters } from '@/hooks/use-file-filters'
+import { useImageGallery } from '@/hooks/use-image-gallery'
 
 export function FileGrid() {
+  const libraryHeading = useRef<HTMLHeadingElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -42,9 +47,22 @@ export function FileGrid() {
     setDateRange,
     setVisibility,
     setSortBy,
+    setGroupBy,
     setPage,
     resetFilters,
   } = useFileFilters()
+  const {
+    gallery,
+    open,
+    close,
+    move,
+    setIndex,
+    navigationPending,
+    navigationStale,
+  } = useImageGallery(filters, files, paginationInfo, refreshKey)
+  const imagesOnly =
+    filters.types.length > 0 &&
+    filters.types.every((type) => type.startsWith('image/'))
   const refreshFiles = useCallback(
     () => setRefreshKey((value) => value + 1),
     []
@@ -98,18 +116,7 @@ export function FileGrid() {
       setIsLoading(true)
       setError(false)
       try {
-        const params = new URLSearchParams({
-          page: filters.page.toString(),
-          limit: filters.limit.toString(),
-          search: filters.search,
-          sortBy: filters.sortBy,
-          ...(filters.types.length > 0 && { types: filters.types.join(',') }),
-          ...(filters.dateFrom && { dateFrom: filters.dateFrom }),
-          ...(filters.dateTo && { dateTo: filters.dateTo }),
-          ...(filters.visibility.length > 0 && {
-            visibility: filters.visibility.join(','),
-          }),
-        })
+        const params = fileQuery(filters)
         const response = await fetch(`/api/files?${params}`, {
           signal: controller.signal,
         })
@@ -157,7 +164,13 @@ export function FileGrid() {
       >
         <div className="mb-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-3xl font-bold">Your Files</h1>
+            <h1
+              ref={libraryHeading}
+              tabIndex={-1}
+              className="text-3xl font-bold"
+            >
+              Your Files
+            </h1>
             <div className="flex shrink-0 items-center gap-2">
               <span
                 role="status"
@@ -198,11 +211,15 @@ export function FileGrid() {
             fileTypes={fileTypes}
             date={dateRangeValue}
             onDateChange={handleDateChange}
+            groupBy={filters.groupBy}
+            onGroupChange={setGroupBy}
             visibility={filters.visibility}
             onVisibilityChange={setVisibility}
           />
         </div>
-        {(hasActiveFilters || filters.sortBy !== 'newest') && (
+        {(hasActiveFilters ||
+          filters.sortBy !== 'newest' ||
+          filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {filters.search && (
               <span className="max-w-full truncate rounded-lg bg-muted px-2.5 py-1 text-xs">
@@ -232,6 +249,11 @@ export function FileGrid() {
                 Upload date selected
               </span>
             )}
+            {filters.groupBy !== 'none' && (
+              <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
+                Grouped by {filters.groupBy}
+              </span>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -245,7 +267,7 @@ export function FileGrid() {
         )}
       </section>
 
-      {isLoading ? (
+      {isLoading && !gallery ? (
         <div
           aria-busy="true"
           aria-label="Loading files"
@@ -255,7 +277,7 @@ export function FileGrid() {
             <FileCardSkeleton key={index} />
           ))}
         </div>
-      ) : error ? (
+      ) : error && !gallery ? (
         <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-background/70 p-6 text-center">
           <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-destructive">
             <AlertCircle className="h-7 w-7" />
@@ -304,14 +326,26 @@ export function FileGrid() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {files.map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                onDelete={refreshFiles}
-                onUpdate={refreshFiles}
-              />
+          <div className="space-y-7">
+            {groupFiles(files, filters.groupBy).map((group) => (
+              <section key={group.label} aria-label={group.label || undefined}>
+                {group.label && (
+                  <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+                    {group.label}
+                  </h2>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {group.files.map((file) => (
+                    <FileCard
+                      key={file.id}
+                      file={file}
+                      onDelete={refreshFiles}
+                      onUpdate={refreshFiles}
+                      onPreview={open}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
           <FileGridPagination
@@ -319,6 +353,35 @@ export function FileGrid() {
             setPage={setPage}
           />
         </>
+      )}
+      {gallery && (
+        <ImageLightbox
+          images={gallery.files.map((file) => ({
+            id: file.id,
+            name: file.name,
+            src: `/api/files/${file.id}/thumbnail`,
+            downloadUrl: `/api/files/${file.id}/download`,
+            subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
+          }))}
+          index={gallery.index}
+          onIndexChange={setIndex}
+          onClose={close}
+          fallbackFocusRef={libraryHeading}
+          onPrevious={() => void move(-1)}
+          onNext={() => void move(1)}
+          hasPrevious={navigationStale || gallery.index > 0 || !gallery.atStart}
+          hasNext={
+            navigationStale ||
+            gallery.index < gallery.files.length - 1 ||
+            !gallery.atEnd
+          }
+          navigationPending={navigationPending}
+          positionLabel={
+            imagesOnly || gallery.pagination.offset !== undefined
+              ? `${(gallery.pagination.offset ?? (gallery.pagination.page - 1) * gallery.pagination.limit) + gallery.index + 1} of ${gallery.pagination.total}`
+              : `Image ${gallery.index + 1} · Page ${gallery.pagination.page}`
+          }
+        />
       )}
     </div>
   )

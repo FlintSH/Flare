@@ -11,6 +11,11 @@ import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getFileExpirationInfo } from '@/lib/events/handlers/file-expiry'
+import {
+  anchoredGalleryPage,
+  fileListSelect,
+  fileOrderBy,
+} from '@/lib/files/gallery-navigation'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
@@ -114,8 +119,30 @@ export async function GET(request: Request) {
     if (response) return response
 
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '24')
+    const page = Number(searchParams.get('page') || '1')
+    const requestedLimit = Number(searchParams.get('limit') || '24')
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      !Number.isSafeInteger(requestedLimit) ||
+      requestedLimit < 1
+    )
+      return apiError(
+        'Page and limit must be positive integers',
+        HTTP_STATUS.BAD_REQUEST
+      )
+    const limit = Math.min(requestedLimit, 100)
+    const galleryAnchor = searchParams.get('galleryAnchor')
+    const galleryDirection = searchParams.get('galleryDirection')
+    if (
+      (galleryAnchor !== null || galleryDirection !== null) &&
+      (!galleryAnchor ||
+        (galleryDirection !== 'next' && galleryDirection !== 'previous'))
+    )
+      return apiError(
+        'An image anchor and a next or previous direction are required',
+        HTTP_STATUS.BAD_REQUEST
+      )
     const search = searchParams.get('search') || ''
     const sortBy = searchParams.get('sortBy') || 'newest'
     const types = searchParams.get('types')?.split(',') || []
@@ -182,64 +209,34 @@ export async function GET(request: Request) {
       where.AND = conditions
     }
 
-    const orderBy: Prisma.FileOrderByWithRelationInput = {}
-    switch (sortBy) {
-      case 'oldest':
-        orderBy.uploadedAt = 'asc'
-        break
-      case 'largest':
-        orderBy.size = 'desc'
-        break
-      case 'smallest':
-        orderBy.size = 'asc'
-        break
-      case 'most-viewed':
-        orderBy.views = 'desc'
-        break
-      case 'least-viewed':
-        orderBy.views = 'asc'
-        break
-      case 'most-downloaded':
-        orderBy.downloads = 'desc'
-        break
-      case 'least-downloaded':
-        orderBy.downloads = 'asc'
-        break
-      case 'name':
-        orderBy.name = 'asc'
-        break
-      default:
-        orderBy.uploadedAt = 'desc'
+    let resultPage
+    if (galleryAnchor && galleryDirection) {
+      resultPage = await anchoredGalleryPage({
+        where,
+        sortBy,
+        anchorId: galleryAnchor,
+        direction: galleryDirection,
+        limit,
+      })
+      if (!resultPage) return apiError('Image not found', HTTP_STATUS.NOT_FOUND)
+    } else {
+      const total = await prisma.file.count({ where })
+      const files = await prisma.file.findMany({
+        where,
+        // The grid and anchored navigation share the same deterministic order.
+        orderBy: fileOrderBy(sortBy),
+        take: limit,
+        skip: offset,
+        select: fileListSelect,
+      })
+      resultPage = {
+        files,
+        pagination: { total, pageCount: Math.ceil(total / limit), page, limit },
+      }
     }
 
-    const total = await prisma.file.count({ where })
-
-    const files = await prisma.file.findMany({
-      where,
-      orderBy,
-      take: limit,
-      skip: offset,
-      select: {
-        id: true,
-        name: true,
-        urlPath: true,
-        mimeType: true,
-        size: true,
-        uploadedAt: true,
-        visibility: true,
-        password: true,
-        views: true,
-        downloads: true,
-        user: {
-          select: {
-            urlId: true,
-          },
-        },
-      },
-    })
-
     const filesList = (await Promise.all(
-      files.map(async (file) => {
+      resultPage.files.map(async (file) => {
         const expiresAt = await getFileExpirationInfo(file.id)
         const { password, ...publicFile } = file
         return {
@@ -250,14 +247,10 @@ export async function GET(request: Request) {
       })
     )) as (FileMetadata & { expiresAt: Date | null })[]
 
-    const pagination = {
-      total,
-      pageCount: Math.ceil(total / limit),
-      page,
-      limit,
-    }
-
-    const result = paginatedResponse<FileMetadata[]>(filesList, pagination)
+    const result = paginatedResponse<FileMetadata[]>(
+      filesList,
+      resultPage.pagination
+    )
     result.headers.set('Cache-Control', 'private, no-store')
     return result
   } catch (error) {

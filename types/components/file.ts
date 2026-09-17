@@ -19,6 +19,8 @@ export interface PaginationInfo {
   pageCount: number
   page: number
   limit: number
+  /** Exact image offset for a gallery window anchored to the current file. */
+  offset?: number
 }
 
 export type SortOption =
@@ -31,7 +33,10 @@ export type SortOption =
   | 'most-downloaded'
   | 'least-downloaded'
 
+export type FileGrouping = 'none' | 'week' | 'month' | 'year'
+
 export interface FileFilterOptions {
+  groupBy: FileGrouping
   page: number
   limit: number
   search: string
