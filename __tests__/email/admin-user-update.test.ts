@@ -251,6 +251,91 @@ describe('administrator account update serialization', () => {
   })
 })
 
+describe('optional administrator vanity URLs', () => {
+  it.each([
+    { existingVanity: null, submittedVanity: '' },
+    { existingVanity: 'custom-url', submittedVanity: '' },
+    { existingVanity: 'custom-url', submittedVanity: null },
+  ])(
+    'saves an empty vanity URL ($existingVanity → $submittedVanity)',
+    async ({ existingVanity, submittedVanity }) => {
+      const existingUser = { ...initial, vanityId: existingVanity }
+      mocks.db.user.findUnique.mockResolvedValue(existingUser)
+      mocks.lockEmailUser.mockResolvedValue(existingUser)
+
+      const response = await PUT(request({ vanityId: submittedVanity }))
+
+      expect(response.status).toBe(200)
+      expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
+        name: 'Edited name',
+        vanityId: null,
+      })
+      expect(await response.json()).toMatchObject({
+        data: { name: 'Edited name', vanityId: null },
+      })
+      // Empty values should skip both vanity and URL ID collision queries.
+      expect(mocks.db.user.findUnique).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('preserves the vanity URL when the field is omitted', async () => {
+    const existingUser = { ...initial, vanityId: 'custom-url' }
+    mocks.db.user.findUnique.mockResolvedValue(existingUser)
+    mocks.lockEmailUser.mockResolvedValue(existingUser)
+
+    const response = await PUT(request())
+
+    expect(response.status).toBe(200)
+    expect(mocks.tx.user.update.mock.calls[0][0].data).not.toHaveProperty(
+      'vanityId'
+    )
+  })
+
+  it('saves a valid vanity URL after checking for collisions', async () => {
+    mocks.db.user.findUnique.mockImplementation(async ({ where }) =>
+      where.id === initial.id ? initial : null
+    )
+
+    const response = await PUT(request({ vanityId: 'custom-url' }))
+
+    expect(response.status).toBe(200)
+    expect(mocks.tx.user.update.mock.calls[0][0].data.vanityId).toBe(
+      'custom-url'
+    )
+    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
+      where: { vanityId: 'custom-url' },
+    })
+    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
+      where: { urlId: 'custom-url' },
+    })
+  })
+
+  it.each(['ab', 'a'.repeat(33), '-custom', 'custom-', 'custom_url', 'API'])(
+    'rejects an invalid nonempty vanity URL: %s',
+    async (vanityId) => {
+      const response = await PUT(request({ vanityId }))
+
+      expect(response.status).toBe(400)
+      expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['vanityId', 'urlId'])(
+    'rejects a vanity URL that conflicts with another user’s %s',
+    async (field) => {
+      mocks.db.user.findUnique.mockImplementation(async ({ where }) => {
+        if (where.id === initial.id) return initial
+        return where[field] === 'custom-url' ? { id: 'another-user' } : null
+      })
+
+      const response = await PUT(request({ vanityId: 'custom-url' }))
+
+      expect(response.status).toBe(400)
+      expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    }
+  )
+})
+
 describe('user directory', () => {
   it('keeps directory search behind the administrator guard', async () => {
     mocks.requireAdmin.mockResolvedValue({
