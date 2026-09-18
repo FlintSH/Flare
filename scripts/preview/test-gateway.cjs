@@ -125,6 +125,181 @@ test('notice and acknowledgment precede access without calling the app', async (
   assert.equal(opened.headers['referrer-policy'], undefined)
 })
 
+test('native multipart uploads preserve their token, profile and file without a preview cookie', async (t) => {
+  const boundary = 'flare-test-upload-boundary'
+  const body = [
+    `--${boundary}`,
+    'Content-Disposition: form-data; name="file"; filename="screenshot.png"',
+    'Content-Type: image/png',
+    '',
+    'test screenshot contents',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n')
+  let uploaded = ''
+  const result = { data: { url: `${ORIGIN}/f/test-screenshot.png` } }
+  const { url, calls } = await fixture(t, (req, res) => {
+    req.on('data', (chunk) => {
+      uploaded += chunk
+    })
+    req.on('end', () => {
+      res.writeHead(201, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(result))
+    })
+  })
+  const response = await request(url, '/api/files', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-upload-token',
+      'x-upload-profile': 'test-profile',
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+      'content-length': Buffer.byteLength(body),
+    },
+    body,
+  })
+  assert.equal(response.status, 201)
+  assert.deepEqual(JSON.parse(response.body), result)
+  assert.equal(response.headers.location, undefined)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].headers.authorization, 'Bearer test-upload-token')
+  assert.equal(calls[0].headers['x-upload-profile'], 'test-profile')
+  assert.equal(calls[0].headers.cookie, undefined)
+  assert.equal(
+    calls[0].headers['content-type'],
+    `multipart/form-data; boundary=${boundary}`
+  )
+  assert.equal(uploaded, body)
+})
+
+test('Flare receives API requests with missing or invalid credentials and returns its own auth errors', async (t) => {
+  const error = { success: false, error: 'Invalid upload token' }
+  const { url, calls } = await fixture(t, (req, res) => {
+    req.resume()
+    res.writeHead(401, {
+      'content-type': 'application/json',
+      'www-authenticate': 'Bearer',
+    })
+    res.end(JSON.stringify(error))
+  })
+  for (const headers of [{}, { authorization: 'Bearer invalid-test-token' }]) {
+    const response = await request(url, '/api/files', {
+      method: 'POST',
+      headers,
+    })
+    assert.equal(response.status, 401)
+    assert.deepEqual(JSON.parse(response.body), error)
+    assert.equal(response.headers['www-authenticate'], 'Bearer')
+    assert.equal(response.headers.location, undefined)
+  }
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].headers.authorization, undefined)
+  assert.equal(calls[1].headers.authorization, 'Bearer invalid-test-token')
+})
+
+test('API clients, fetch requests and preflights work without acknowledgment', async (t) => {
+  const { url, calls } = await fixture(t)
+  const requests = [
+    { path: '/api' },
+    { path: '/api/' },
+    { path: '/api/files?limit=2', headers: { accept: '*/*' } },
+    { path: '/api/health', headers: { accept: 'application/json' } },
+    {
+      path: '/api/files',
+      headers: {
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        accept: 'application/json, text/plain, */*',
+      },
+    },
+    ...['HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => ({
+      path: '/api/files',
+      method,
+    })),
+    {
+      path: '/api/files',
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://api-client.example.test',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization,content-type',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+      },
+    },
+  ]
+  for (const { path, ...options } of requests) {
+    const response = await request(url, path, options)
+    assert.equal(response.status, 200, JSON.stringify({ path, ...options }))
+    assert.equal(response.headers.location, undefined)
+  }
+  assert.equal(calls.length, requests.length)
+  assert.equal(calls.at(-1).headers['access-control-request-method'], 'POST')
+  assert.equal(
+    calls.at(-1).headers['access-control-request-headers'],
+    'authorization,content-type'
+  )
+})
+
+test('API navigation, HTML requests and browser resources still require the notice', async (t) => {
+  const { url, calls } = await fixture(t)
+  const browserHeaders = [
+    { 'sec-fetch-mode': 'navigate' },
+    { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'empty' },
+    ...[
+      'document',
+      'iframe',
+      'frame',
+      'object',
+      'embed',
+      'script',
+      'image',
+    ].map((destination) => ({ 'sec-fetch-dest': destination })),
+    { accept: 'text/html' },
+    { accept: 'application/xhtml+xml' },
+    { accept: 'application/json, TEXT/HTML; q=0.9, */*;q=0.8' },
+    { accept: 'application/json, application/xhtml+xml; q=0.9' },
+  ]
+  for (const headers of browserHeaders) {
+    const response = await request(url, '/api/files', {
+      headers: { authorization: 'Bearer test-upload-token', ...headers },
+    })
+    assert.equal(response.status, 303, JSON.stringify(headers))
+    assert.equal(response.headers.location, '/_preview')
+  }
+  assert.equal(calls.length, 0)
+  const acknowledged = await request(url, '/api/files', {
+    headers: {
+      ...ACK,
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-dest': 'document',
+      accept: 'text/html',
+    },
+  })
+  assert.equal(acknowledged.status, 200)
+  assert.equal(calls.length, 1)
+})
+
+test('API-like page paths and query strings cannot skip acknowledgment', async (t) => {
+  const { url, calls } = await fixture(t)
+  for (const path of [
+    '/',
+    '/settings',
+    '/apiary',
+    '/api-files',
+    '/api.json',
+    '/apix/files',
+    '/settings?next=/api/files',
+  ]) {
+    const response = await request(url, path, {
+      headers: { authorization: 'Bearer test-upload-token', accept: '*/*' },
+    })
+    assert.equal(response.status, 303, path)
+    assert.equal(response.headers.location, '/_preview')
+  }
+  assert.equal((await request(url, '/_preview/api')).status, 404)
+  assert.equal(calls.length, 0)
+})
+
 test('proxy preserves application traffic and replaces spoofed internal headers', async (t) => {
   const { url, calls } = await fixture(t)
   const response = await request(url, '/api/files?limit=2', {
@@ -202,7 +377,7 @@ test('ambiguous encoded paths are rejected before calling the private app', asyn
     '/api/%00setup',
   ]) {
     assert.equal(
-      (await request(url, path, { method: 'POST', headers: ACK })).status,
+      (await request(url, path, { method: 'POST' })).status,
       400,
       path
     )
@@ -286,7 +461,7 @@ test('declared oversized bodies are rejected before proxying', async (t) => {
   const { url, calls } = await fixture(t)
   const response = await request(url, '/api/files', {
     method: 'POST',
-    headers: { ...ACK, 'content-length': MAX_BODY + 1 },
+    headers: { 'content-length': MAX_BODY + 1 },
   })
   assert.equal(response.status, 413)
   assert.equal(response.headers.connection, 'close')
@@ -297,7 +472,6 @@ test('chunked oversized bodies are capped while streaming', async (t) => {
   const { url } = await fixture(t)
   const response = await request(url, '/api/files', {
     method: 'POST',
-    headers: ACK,
     body: Buffer.alloc(MAX_BODY + 1),
   })
   assert.equal(response.status, 413)
@@ -307,8 +481,10 @@ test('gateway expiry applies even when the app ignores its lifetime', async (t) 
   let timestamp = Date.now()
   const { url, calls } = await fixture(t, null, { now: () => timestamp })
   timestamp += 7200 * 1000
-  for (const path of ['/', '/_preview', '/_preview/health'])
+  for (const path of ['/', '/_preview', '/_preview/health', '/api/files']) {
+    assert.equal((await request(url, path)).status, 410)
     assert.equal((await request(url, path, { headers: ACK })).status, 410)
+  }
   assert.equal(calls.length, 0)
 })
 
@@ -371,14 +547,14 @@ test('global request limits cannot be bypassed with forwarded IP headers', async
   const frozen = Date.now()
   const { url } = await fixture(t, null, { now: () => frozen })
   for (let i = 0; i < 100; i++) {
-    const response = await request(url, '/robots.txt', {
+    const response = await request(url, '/api/files', {
       headers: { 'x-forwarded-for': `192.0.2.${i}` },
     })
     assert.equal(response.status, 200)
   }
   assert.equal(
     (
-      await request(url, '/robots.txt', {
+      await request(url, '/api/files', {
         headers: { 'x-forwarded-for': '192.0.2.254' },
       })
     ).status,

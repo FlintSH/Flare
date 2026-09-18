@@ -96,6 +96,26 @@ function headers(source, incoming = false) {
   )
 }
 
+function isApiCall(req, path) {
+  if (path !== '/api' && !path.startsWith('/api/')) return false
+  // Keep document navigation and resource loads behind the browser notice.
+  // Native clients omit Fetch Metadata; fetch/XHR use an empty destination.
+  const mode = String(req.headers['sec-fetch-mode'] || '')
+    .trim()
+    .toLowerCase()
+  const destination = String(req.headers['sec-fetch-dest'] || '')
+    .trim()
+    .toLowerCase()
+  if (mode === 'navigate' || (destination && destination !== 'empty'))
+    return false
+  return !String(req.headers.accept || '')
+    .split(',')
+    .some((value) => {
+      const type = value.split(';')[0].trim().toLowerCase()
+      return type === 'text/html' || type === 'application/xhtml+xml'
+    })
+}
+
 function probe(upstream, path) {
   return new Promise((resolve, reject) => {
     const req = http.get(new URL(path, upstream), { timeout: 3000 }, (res) => {
@@ -230,6 +250,7 @@ function createGateway(env = process.env, options = {}) {
     }
     if (path.startsWith('/_preview')) return reply(404, 'Not found.')
     if (
+      !isApiCall(req, path) &&
       !String(req.headers.cookie || '')
         .split(';')
         .some((cookie) => cookie.trim() === COOKIE)
