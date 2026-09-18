@@ -132,11 +132,13 @@ export async function finalizeUpload(input: {
       throw new UploadError(
         'The selected expiration passed before upload finished.'
       )
-    let urlPath = input.urlPath
+    // An upload may have started before an administrator changed the URL ID.
+    // Publish it under the locked user's current ID, keeping its object key stable.
+    const name = basename(input.urlPath)
+    let urlPath = `/${fresh.urlId}/${name}`
     if (await tx.file.findUnique({ where: { urlPath } })) {
-      const name = basename(urlPath)
       const extension = extname(name)
-      urlPath = `/${user.urlId}/${name.slice(0, name.length - extension.length)}-${randomUUID().slice(0, 12)}${extension}`
+      urlPath = `/${fresh.urlId}/${name.slice(0, name.length - extension.length)}-${randomUUID().slice(0, 12)}${extension}`
     }
     const { password: _password, ...persistedOptions } = options
     const file = await tx.file.create({
