@@ -271,6 +271,60 @@ test('API clients that explicitly reject HTML preserve their headers without ack
   assert.equal(calls.length, accepts.length)
 })
 
+test('escaped quotes and backslashes keep media parameters separate from HTML weights', async (t) => {
+  const { url, calls } = await fixture(t)
+  const cases = [
+    {
+      accept: String.raw`text/html; profile="escaped \" quote, application/xhtml+xml;q=1";q=0`,
+      status: 200,
+    },
+    {
+      accept: String.raw`text/html; profile="escaped \\ backslash, application/xhtml+xml;q=1";q=0`,
+      status: 200,
+    },
+    {
+      accept: String.raw`application/json; profile="escaped \" quote; text/html;q=1", text/html;q=0`,
+      status: 200,
+    },
+    {
+      accept: String.raw`application/json; profile="ends with \\", text/html`,
+      status: 303,
+    },
+    {
+      accept: String.raw`text/html; profile="contains \";q=0"`,
+      status: 303,
+    },
+  ]
+  for (const { accept, status } of cases) {
+    const response = await request(url, '/api/files', { headers: { accept } })
+    assert.equal(response.status, status, accept)
+    if (status === 200) assert.equal(calls.at(-1).headers.accept, accept)
+    else assert.equal(response.headers.location, '/_preview')
+  }
+  assert.equal(calls.length, 3)
+})
+
+test('long escaped media parameters preserve valid requests and gate unterminated quotes', async (t) => {
+  const { url, calls } = await fixture(t)
+  // Keep headers below Node's limit while exercising many potential quote starts.
+  const valid = `text/html; profile="${String.raw`\"\\`.repeat(1500)}";q=0`
+  const response = await request(url, '/api/files', {
+    headers: { accept: valid },
+  })
+  assert.equal(response.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].headers.accept, valid)
+  for (const accept of [
+    `application/json; profile="${String.raw`\"`.repeat(3500)}`,
+    `text/html;q=0; profile="${'\\'.repeat(7001)}`,
+  ]) {
+    const rejected = await request(url, '/api/files', { headers: { accept } })
+    assert.equal(rejected.status, 303)
+    assert.equal(rejected.headers.location, '/_preview')
+  }
+  assert.equal(calls.length, 1)
+})
+
 test('API navigation, HTML requests and browser resources still require the notice', async (t) => {
   const { url, calls } = await fixture(t)
   const browserHeaders = [

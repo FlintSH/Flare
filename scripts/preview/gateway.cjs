@@ -108,12 +108,25 @@ function isApiCall(req, path) {
     .toLowerCase()
   if (mode === 'navigate' || (destination && destination !== 'empty'))
     return false
-  // Quoted media parameters can contain commas/semicolons, but not weights.
-  const accept = String(req.headers.accept || '').replace(
-    /"(?:\\.|[^"\\])*"/g,
-    '<quoted>'
-  )
-  if (accept.includes('"')) return false
+  // Mask quoted parameters in one pass so delimiters inside them are ignored
+  // without regex backtracking on untrusted headers. Weights cannot be quoted.
+  const acceptParts = []
+  let quoted = false
+  let escaped = false
+  for (const character of String(req.headers.accept || '')) {
+    if (escaped) {
+      escaped = false
+    } else if (quoted && character === '\\') {
+      escaped = true
+    } else if (character === '"') {
+      quoted = !quoted
+      if (quoted) acceptParts.push('<quoted>')
+    } else if (!quoted) {
+      acceptParts.push(character)
+    }
+  }
+  if (quoted) return false
+  const accept = acceptParts.join('')
   return !accept.split(',').some((value) => {
     const [range, ...parameters] = value.split(';')
     const type = range.trim().toLowerCase()
