@@ -68,17 +68,6 @@ export async function GET(
     if (!file.isOcrProcessed || (file.isOcrProcessed && !file.ocrText)) {
       const result = await processImageOCR(file.path, id)
 
-      if (result.success && result.text) {
-        await prisma.file.update({
-          where: { id },
-          data: {
-            isOcrProcessed: true,
-            ocrText: result.text,
-            ocrConfidence: result.confidence,
-          },
-        })
-      }
-
       return NextResponse.json(result)
     }
 

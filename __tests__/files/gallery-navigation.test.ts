@@ -55,6 +55,7 @@ function file(id: string) {
     visibility: 'PRIVATE',
     password: 'stored-password-hash',
     user: { urlId: 'owner-url' },
+    tags: [{ tag: { id: 'tag-work', name: 'Work' } }],
   }
 }
 
@@ -286,9 +287,46 @@ describe('anchored image navigation API', () => {
       id: 'neighbor-a',
       hasPassword: true,
       expiresAt: expiresAt.toISOString(),
+      tags: [{ id: 'tag-work', name: 'Work' }],
     })
     expect(body.data[0]).not.toHaveProperty('password')
   })
+
+  it.each([
+    [
+      'tag-work',
+      {
+        some: { tagId: 'tag-work', excluded: false, tag: { userId: 'owner' } },
+      },
+    ],
+    ['untagged', { none: { excluded: false } }],
+  ])(
+    'keeps gallery navigation within the %s tag filter',
+    async (tag, filter) => {
+      await request({ tag: tag as string })
+      expect(mocks.transactionFile.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [
+              {
+                AND: [
+                  { userId: 'owner', AND: [{ tags: filter }] },
+                  { mimeType: { startsWith: 'image/' } },
+                ],
+              },
+              { id: anchor.id },
+            ],
+          },
+        })
+      )
+      expect(
+        mocks.transactionFile.findMany.mock.calls[0][0].select.tags
+      ).toMatchObject({
+        where: { excluded: false },
+        select: { tag: { select: { id: true, name: true } } },
+      })
+    }
+  )
 
   it.each<Record<string, string>>([
     { galleryDirection: 'invalid' },

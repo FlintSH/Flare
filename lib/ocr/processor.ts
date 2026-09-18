@@ -3,6 +3,7 @@ import { createWorker } from 'tesseract.js'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+import { applyAutomaticTags } from '@/lib/tags/service'
 
 import type { OCRTask } from './queue'
 
@@ -33,6 +34,13 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
         isOcrProcessed: true,
       },
     })
+
+    // A tagging failure must not discard successfully extracted text.
+    try {
+      await applyAutomaticTags(fileId, 'ocr')
+    } catch (error) {
+      logger.error('Could not apply OCR tags', error as Error, { fileId })
+    }
 
     logger.info('OCR processing completed', {
       filePath,

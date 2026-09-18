@@ -32,6 +32,7 @@ model User {
   uploadToken                 String          @unique
   randomizeFileUrls           Boolean         @default(false)
   files                       File[]
+  vaultTags                   VaultTag[]
   shortenedUrls               ShortenedUrl[]
   defaultFileExpiration       FileExpiration  @default(DISABLED)
   defaultFileExpirationAction ExpiryAction    @default(DELETE)
@@ -111,6 +112,35 @@ model File {
   downloads      Int            @default(0)
   uploadOptions  Json           @default("{}")
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags           VaultFileTag[]
+}
+
+// Separate tables from the retired folder feature, whose tables may still
+// exist on upgraded installations. Tags never change file paths or visibility.
+model VaultTag {
+  id             String         @id @default(cuid())
+  userId         String
+  name           String
+  normalizedName String
+  ruleSource     String?
+  ruleText       String?
+  createdAt      DateTime       @default(now())
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files          VaultFileTag[]
+
+  @@unique([userId, normalizedName])
+}
+
+model VaultFileTag {
+  fileId   String
+  tagId    String
+  // A removal is remembered so future OCR processing cannot re-add the tag.
+  excluded Boolean  @default(false)
+  file     File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  tag      VaultTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, tagId])
+  @@index([tagId, excluded])
 }
 
 model UploadProfile {

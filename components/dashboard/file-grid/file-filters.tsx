@@ -1,4 +1,4 @@
-import { Fragment, memo } from 'react'
+import { Fragment, type ReactNode, memo } from 'react'
 
 import { FileGrouping, SortOption } from '@/types/components/file'
 import { format } from 'date-fns'
@@ -38,6 +38,7 @@ import {
 import { cn } from '@/lib/utils'
 
 interface FileFiltersProps {
+  tagFilter?: ReactNode
   sortBy: SortOption
   onSortChange: (value: SortOption) => void
   selectedTypes: string[]
@@ -97,6 +98,7 @@ function getFileTypeLabel(type: string) {
 }
 
 export const FileFilters = memo(function FileFilters({
+  tagFilter,
   sortBy,
   onSortChange,
   selectedTypes,
@@ -124,10 +126,11 @@ export const FileFilters = memo(function FileFilters({
 
   return (
     <div className="flex flex-wrap gap-2">
+      {tagFilter}
       <Select value={sortBy} onValueChange={onSortChange}>
         <SelectTrigger
           aria-label="Sort files"
-          className="h-10 min-w-0 flex-1 rounded-lg bg-background/70 sm:w-[172px] sm:flex-none"
+          className="h-10 min-w-0 flex-1 gap-1 rounded-lg bg-background/70 px-2 sm:w-[172px] sm:flex-none sm:px-3"
         >
           <SelectValue />
         </SelectTrigger>

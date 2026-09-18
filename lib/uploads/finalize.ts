@@ -12,6 +12,7 @@ import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
+import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
 
 import { UploadError } from './options'
 import type { ResolvedUploadOptions } from './schema'
@@ -154,6 +155,8 @@ export async function finalizeUpload(input: {
         uploadOptions: persistedOptions as Prisma.InputJsonValue,
       },
     })
+    await applyProfileTags(tx, file, options.tagIds ?? [])
+    await applyAutomaticTags(file.id, 'filename', tx)
     await tx.user.update({
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },

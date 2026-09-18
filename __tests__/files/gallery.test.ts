@@ -8,6 +8,7 @@ const filters: FileFilterOptions = {
   page: 1,
   limit: 24,
   search: 'trip',
+  tag: 'travel-tag',
   types: ['image/jpeg', 'application/pdf'],
   visibility: ['private'],
   dateFrom: '2025-01-01T00:00:00.000Z',
@@ -88,6 +89,7 @@ describe('gallery page navigation', () => {
       page: '3',
       limit: '24',
       search: 'trip',
+      tag: 'travel-tag',
       sortBy: 'oldest',
       types: 'image/jpeg,application/pdf',
       visibility: 'private',
@@ -128,6 +130,7 @@ describe('gallery page navigation', () => {
       ).toEqual({
         limit: '24',
         search: 'trip',
+        tag: 'travel-tag',
         sortBy: 'oldest',
         types: 'image/jpeg,application/pdf',
         visibility: 'private',

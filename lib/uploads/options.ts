@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { TagError, validateOwnedTagIds } from '@/lib/tags/service'
 
 import {
   type ResolvedUploadOptions,
@@ -44,6 +45,14 @@ export function parseUploadFields(
   const values: Record<string, unknown> = {}
   for (const key of Object.keys(uploadRequestOptionsSchema.innerType().shape)) {
     if (fields[key] === undefined) continue
+    if (key === 'tagIds') {
+      try {
+        values[key] = JSON.parse(fields[key])
+      } catch {
+        throw new UploadError('Tags must be a JSON array of tag IDs.')
+      }
+      continue
+    }
     values[key] =
       key === 'randomizeFileUrls'
         ? fields[key] === 'true'
@@ -57,6 +66,17 @@ export function parseUploadFields(
           : fields[key]
   }
   return uploadRequestOptionsSchema.parse(values)
+}
+
+function sameOption(left: unknown, right: unknown) {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const selected = new Set(left)
+    return (
+      selected.size === new Set(right).size &&
+      right.every((id) => selected.has(id))
+    )
+  }
+  return left === right
 }
 
 export async function resolveUploadOptions(
@@ -112,7 +132,7 @@ export async function resolveUploadOptions(
     for (const key of Object.keys(
       uploadProfileOptionsSchema.innerType().shape
     ) as (keyof typeof profileOptions)[]) {
-      if (request[key] !== undefined && request[key] !== bound[key])
+      if (request[key] !== undefined && !sameOption(request[key], bound[key]))
         throw new UploadError(
           'This token cannot override its upload profile.',
           403
@@ -134,6 +154,7 @@ export async function resolveUploadOptions(
   }
   return {
     ...resolved,
+    tagIds: await validateOwnedTagIds(user.id, resolved.tagIds),
     profileId: profile?.id ?? null,
     profileRevision: profile?.updatedAt.toISOString() ?? null,
   }
@@ -166,7 +187,7 @@ export function applyUploadOverrides(
     ) as (keyof typeof resolved)[]) {
       if (
         key in request &&
-        request[key as keyof UploadRequestOptions] !== resolved[key]
+        !sameOption(request[key as keyof UploadRequestOptions], resolved[key])
       )
         throw new UploadError(
           'This token cannot override its upload profile.',
@@ -205,7 +226,7 @@ export function applyUploadOverrides(
 }
 
 export function uploadErrorResponse(error: unknown): Response {
-  if (error instanceof UploadError)
+  if (error instanceof UploadError || error instanceof TagError)
     return Response.json({ error: error.message }, { status: error.status })
   if (error && typeof error === 'object' && 'issues' in error)
     return Response.json({ error: 'Invalid upload options.' }, { status: 400 })
