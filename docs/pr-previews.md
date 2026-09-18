@@ -27,6 +27,24 @@ production integrations. A preview runs the PR author's unreviewed code, includi
 JavaScript in your browser. The gateway caps each entire request at 6 MiB,
 including multipart upload overhead, independently of settings chosen in Flare.
 
+### Testing API clients
+
+Use the preview's HTTPS URL and credentials from that preview's Flare instance
+with iTake, ShareX, curl, or other API clients. Requests to `/api` and `/api/*`
+do not need a preview cookie or an extra header. Flare handles authentication and
+permissions, so missing or invalid credentials return the application's normal
+response.
+
+The acknowledgment notice still applies to browser navigation, embedded resources,
+and requests that explicitly accept HTML with a nonzero quality. An API request
+such as `Accept: application/json, text/html;q=0` rejects HTML and reaches Flare
+directly. Browser `fetch`/XHR calls that accept JSON or `*/*` can use the API
+directly. Gateway upload limits, rate limits, and
+expiry still apply to API clients, including the 6 MiB total request limit.
+Use only disposable preview credentials and test files.
+
+### Lifetime
+
 Previews expire after 24 hours even when the PR remains open. Closing or merging
 the PR tears down its environment, and pushing a new commit replaces it. At most
 five previews run at once; extra PRs wait for capacity. A new commit or rerun of

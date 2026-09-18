@@ -96,6 +96,52 @@ function headers(source, incoming = false) {
   )
 }
 
+function isApiCall(req, path) {
+  if (path !== '/api' && !path.startsWith('/api/')) return false
+  // Keep document navigation and resource loads behind the browser notice.
+  // Native clients omit Fetch Metadata; fetch/XHR use an empty destination.
+  const mode = String(req.headers['sec-fetch-mode'] || '')
+    .trim()
+    .toLowerCase()
+  const destination = String(req.headers['sec-fetch-dest'] || '')
+    .trim()
+    .toLowerCase()
+  if (mode === 'navigate' || (destination && destination !== 'empty'))
+    return false
+  // Mask quoted parameters in one pass so delimiters inside them are ignored
+  // without regex backtracking on untrusted headers. Weights cannot be quoted.
+  const acceptParts = []
+  let quoted = false
+  let escaped = false
+  for (const character of String(req.headers.accept || '')) {
+    if (escaped) {
+      escaped = false
+    } else if (quoted && character === '\\') {
+      escaped = true
+    } else if (character === '"') {
+      quoted = !quoted
+      if (quoted) acceptParts.push('<quoted>')
+    } else if (!quoted) {
+      acceptParts.push(character)
+    }
+  }
+  if (quoted) return false
+  const accept = acceptParts.join('')
+  return !accept.split(',').some((value) => {
+    const [range, ...parameters] = value.split(';')
+    const type = range.trim().toLowerCase()
+    if (type !== 'text/html' && type !== 'application/xhtml+xml') return false
+    const weights = parameters.filter((parameter) =>
+      /^\s*q\s*=/i.test(parameter)
+    )
+    // Missing weights default to 1. Only an unambiguous, valid zero rejects HTML.
+    return (
+      weights.length !== 1 ||
+      !/^\s*q\s*=\s*0(?:\.0{0,3})?\s*$/i.test(weights[0])
+    )
+  })
+}
+
 function probe(upstream, path) {
   return new Promise((resolve, reject) => {
     const req = http.get(new URL(path, upstream), { timeout: 3000 }, (res) => {
@@ -230,6 +276,7 @@ function createGateway(env = process.env, options = {}) {
     }
     if (path.startsWith('/_preview')) return reply(404, 'Not found.')
     if (
+      !isApiCall(req, path) &&
       !String(req.headers.cookie || '')
         .split(';')
         .some((cookie) => cookie.trim() === COOKIE)
