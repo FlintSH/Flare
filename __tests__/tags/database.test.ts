@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -26,6 +27,8 @@ suite('vault tags against disposable PostgreSQL', () => {
   let tags: typeof import('@/app/api/tags/route')
   let tag: typeof import('@/app/api/tags/[id]/route')
   let bulk: typeof import('@/app/api/files/tags/route')
+  let ocr: typeof import('@/lib/tags/ocr')
+  let worker: typeof import('@/lib/tags/worker')
 
   beforeAll(async () => {
     const url = new URL(databaseUrl!)
@@ -43,6 +46,8 @@ suite('vault tags against disposable PostgreSQL', () => {
     tags = await import('@/app/api/tags/route')
     tag = await import('@/app/api/tags/[id]/route')
     bulk = await import('@/app/api/files/tags/route')
+    ocr = await import('@/lib/tags/ocr')
+    worker = await import('@/lib/tags/worker')
   })
 
   beforeEach(async () => {
@@ -59,6 +64,8 @@ suite('vault tags against disposable PostgreSQL', () => {
     await prisma?.$disconnect()
     vi.unstubAllEnvs()
   })
+
+  afterEach(() => vi.restoreAllMocks())
 
   function request(path = '/api/tags', method = 'GET', data?: unknown) {
     return new Request(`http://localhost${path}`, {
@@ -263,5 +270,97 @@ suite('vault tags against disposable PostgreSQL', () => {
       )
     ).rejects.toMatchObject({ status: 400 })
     expect(await prisma.vaultFileTag.count()).toBe(0)
+  })
+
+  it('rolls back incomplete OCR tagging and retries the saved text when due', async () => {
+    const saved = await newTag({
+      name: 'Invoices',
+      ruleSource: 'ocr',
+      ruleText: 'Invoice',
+    })
+    const ownFile = await file()
+    const pendingAt = new Date(Date.now() - 60_000)
+    await prisma.file.update({
+      where: { id: ownFile.id },
+      data: { isOcrProcessed: true, ocrTagsPendingAt: pendingAt },
+    })
+    const apply = service.applyAutomaticTags
+    const attempts = vi
+      .spyOn(service, 'applyAutomaticTags')
+      .mockImplementationOnce(async (...args) => {
+        await apply(...args)
+        throw new Error('Transient failure after inserting tags')
+      })
+
+    await ocr.applyPendingOcrTags(ownFile.id)
+    const failed = await prisma.file.findUniqueOrThrow({
+      where: { id: ownFile.id },
+    })
+    expect(failed.ocrText).toBe('Invoice from Acme')
+    expect(failed.isOcrProcessed).toBe(true)
+    expect(failed.ocrTagsPendingAt!.getTime()).toBeGreaterThan(Date.now())
+    expect(await prisma.vaultFileTag.count()).toBe(0)
+    await worker.retryPendingOcrTags()
+    expect(attempts).toHaveBeenCalledTimes(1)
+
+    // The durable marker alone is enough for a fresh worker to finish the job.
+    await prisma.file.update({
+      where: { id: ownFile.id },
+      data: { ocrTagsPendingAt: pendingAt },
+    })
+    await worker.retryPendingOcrTags()
+    expect(attempts).toHaveBeenCalledTimes(2)
+    expect(
+      await prisma.file.findUniqueOrThrow({ where: { id: ownFile.id } })
+    ).toMatchObject({
+      ocrText: 'Invoice from Acme',
+      isOcrProcessed: true,
+      ocrTagsPendingAt: null,
+    })
+    expect(await prisma.vaultFileTag.findMany()).toMatchObject([
+      { fileId: ownFile.id, tagId: saved.id, excluded: false },
+    ])
+  })
+
+  it('serializes concurrent OCR retries and preserves manually removed tags', async () => {
+    const saved = await newTag({
+      name: 'Invoices',
+      ruleSource: 'ocr',
+      ruleText: 'Invoice',
+    })
+    const ownFile = await file()
+    await service.changeFileTags('tag-owner', {
+      fileIds: [ownFile.id],
+      tagId: saved.id,
+      action: 'remove',
+    })
+    await prisma.file.update({
+      where: { id: ownFile.id },
+      data: { ocrTagsPendingAt: new Date() },
+    })
+    const attempts = vi.spyOn(service, 'applyAutomaticTags')
+    await Promise.all([
+      ocr.applyPendingOcrTags(ownFile.id),
+      ocr.applyPendingOcrTags(ownFile.id),
+    ])
+    expect(attempts).toHaveBeenCalledTimes(1)
+    expect(await prisma.vaultFileTag.findMany()).toMatchObject([
+      { fileId: ownFile.id, tagId: saved.id, excluded: true },
+    ])
+    expect(
+      (await prisma.file.findUniqueOrThrow({ where: { id: ownFile.id } }))
+        .ocrTagsPendingAt
+    ).toBeNull()
+  })
+
+  it('does not backfill old OCR or retry deleted and completed files', async () => {
+    await newTag({ name: 'Invoices', ruleSource: 'ocr', ruleText: 'Invoice' })
+    const ownFile = await file()
+    const attempts = vi.spyOn(service, 'applyAutomaticTags')
+    await worker.retryPendingOcrTags()
+    await ocr.applyPendingOcrTags(ownFile.id)
+    await prisma.file.delete({ where: { id: ownFile.id } })
+    await ocr.applyPendingOcrTags(ownFile.id)
+    expect(attempts).not.toHaveBeenCalled()
   })
 })

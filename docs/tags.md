@@ -37,6 +37,11 @@ Rules apply to new uploads or newly extracted text. After saving a rule, use
 uses text already extracted; it does not start OCR for the entire vault.
 Changing or disabling a rule leaves existing tags in place.
 
+If tag application is temporarily unavailable, the extracted text stays saved.
+Flare remembers the unfinished work and retries it in the background, including
+after a restart. Opening the extracted text also retries pending tags without
+running OCR again.
+
 You stay in control: removing an automatic tag is remembered for that file.
 Background processing and applying rules to older files will not add it back.
 You can add it again manually at any time.

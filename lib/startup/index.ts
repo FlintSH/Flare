@@ -2,6 +2,7 @@ import { startMailWorker } from '@/lib/email/worker'
 import { initializeEventSystem } from '@/lib/events/init'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
+import { startOcrTagWorker } from '@/lib/tags/worker'
 
 const logger = loggers.startup
 
@@ -20,6 +21,7 @@ export async function runStartupTasks() {
     await initializeEventSystem()
     startMailWorker()
     startWebhookWorker()
+    startOcrTagWorker()
 
     startupComplete = true
     const duration = Date.now() - startTime

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
 import { processImageOCR } from '@/lib/ocr'
+import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
 const logger = loggers.files
 
@@ -26,6 +27,7 @@ export async function GET(
         ocrText: true,
         path: true,
         ocrConfidence: true,
+        ocrTagsPendingAt: true,
         visibility: true,
         password: true,
       },
@@ -65,11 +67,13 @@ export async function GET(
       )
     }
 
-    if (!file.isOcrProcessed || (file.isOcrProcessed && !file.ocrText)) {
+    if (!file.isOcrProcessed || file.ocrText === null) {
       const result = await processImageOCR(file.path, id)
 
       return NextResponse.json(result)
     }
+
+    if (file.ocrTagsPendingAt) await applyPendingOcrTags(id)
 
     return NextResponse.json({
       success: true,

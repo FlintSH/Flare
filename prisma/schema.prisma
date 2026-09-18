@@ -94,25 +94,28 @@ model EmailRateLimit {
 }
 
 model File {
-  id             String         @id @default(cuid())
-  name           String
-  urlPath        String         @unique
-  mimeType       String
-  size           Float
-  visibility     FileVisibility @default(PUBLIC)
-  uploadedAt     DateTime       @default(now())
-  userId         String
-  path           String
-  isOcrProcessed Boolean        @default(false)
-  ocrText        String?
-  password       String?
-  isPaste        Boolean        @default(false)
-  ocrConfidence  Float?
-  views          Int            @default(0)
-  downloads      Int            @default(0)
-  uploadOptions  Json           @default("{}")
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags           VaultFileTag[]
+  id               String         @id @default(cuid())
+  name             String
+  urlPath          String         @unique
+  mimeType         String
+  size             Float
+  visibility       FileVisibility @default(PUBLIC)
+  uploadedAt       DateTime       @default(now())
+  userId           String
+  path             String
+  isOcrProcessed   Boolean        @default(false)
+  ocrText          String?
+  password         String?
+  isPaste          Boolean        @default(false)
+  ocrConfidence    Float?
+  ocrTagsPendingAt DateTime?
+  views            Int            @default(0)
+  downloads        Int            @default(0)
+  uploadOptions    Json           @default("{}")
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags             VaultFileTag[]
+
+  @@index([ocrTagsPendingAt])
 }
 
 // Separate tables from the retired folder feature, whose tables may still
