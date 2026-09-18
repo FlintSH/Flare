@@ -108,12 +108,25 @@ function isApiCall(req, path) {
     .toLowerCase()
   if (mode === 'navigate' || (destination && destination !== 'empty'))
     return false
-  return !String(req.headers.accept || '')
-    .split(',')
-    .some((value) => {
-      const type = value.split(';')[0].trim().toLowerCase()
-      return type === 'text/html' || type === 'application/xhtml+xml'
-    })
+  // Quoted media parameters can contain commas/semicolons, but not weights.
+  const accept = String(req.headers.accept || '').replace(
+    /"(?:\\.|[^"\\])*"/g,
+    '<quoted>'
+  )
+  if (accept.includes('"')) return false
+  return !accept.split(',').some((value) => {
+    const [range, ...parameters] = value.split(';')
+    const type = range.trim().toLowerCase()
+    if (type !== 'text/html' && type !== 'application/xhtml+xml') return false
+    const weights = parameters.filter((parameter) =>
+      /^\s*q\s*=/i.test(parameter)
+    )
+    // Missing weights default to 1. Only an unambiguous, valid zero rejects HTML.
+    return (
+      weights.length !== 1 ||
+      !/^\s*q\s*=\s*0(?:\.0{0,3})?\s*$/i.test(weights[0])
+    )
+  })
 }
 
 function probe(upstream, path) {

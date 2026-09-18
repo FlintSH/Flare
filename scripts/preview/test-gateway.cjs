@@ -240,11 +240,44 @@ test('API clients, fetch requests and preflights work without acknowledgment', a
   )
 })
 
+test('API clients that explicitly reject HTML preserve their headers without acknowledgment', async (t) => {
+  const { url, calls } = await fixture(t)
+  const accepts = [
+    ...['text/html', 'application/xhtml+xml'].flatMap((type) =>
+      ['0', '0.', '0.0', '0.000'].map((quality) => `${type};q=${quality}`)
+    ),
+    'application/json, text/html;q=0, application/xhtml+xml;q=0.000, */*;q=0.8',
+    'application/json, TEXT/HTML; charset=utf-8; Q = 0.0',
+    'APPLICATION/XHTML+XML; charset=utf-8; Q=0.000, application/json',
+    'text/html; profile="a,b;c;q=1";q=0',
+    'application/json; profile="text/html;q=1", application/xhtml+xml;q=0',
+  ]
+  for (const accept of accepts) {
+    const response = await request(url, '/api/files', {
+      method: 'POST',
+      headers: {
+        accept,
+        authorization: 'Bearer test-upload-token',
+        'x-upload-profile': 'test-profile',
+      },
+    })
+    assert.equal(response.status, 200, accept)
+    assert.equal(response.headers.location, undefined)
+    assert.equal(calls.at(-1).headers.accept, accept)
+    assert.equal(calls.at(-1).headers.authorization, 'Bearer test-upload-token')
+    assert.equal(calls.at(-1).headers['x-upload-profile'], 'test-profile')
+    assert.equal(calls.at(-1).headers.cookie, undefined)
+  }
+  assert.equal(calls.length, accepts.length)
+})
+
 test('API navigation, HTML requests and browser resources still require the notice', async (t) => {
   const { url, calls } = await fixture(t)
   const browserHeaders = [
     { 'sec-fetch-mode': 'navigate' },
     { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'empty' },
+    { 'sec-fetch-mode': 'navigate', accept: 'text/html;q=0' },
+    { 'sec-fetch-dest': 'document', accept: 'application/xhtml+xml;q=0' },
     ...[
       'document',
       'iframe',
@@ -258,6 +291,21 @@ test('API navigation, HTML requests and browser resources still require the noti
     { accept: 'application/xhtml+xml' },
     { accept: 'application/json, TEXT/HTML; q=0.9, */*;q=0.8' },
     { accept: 'application/json, application/xhtml+xml; q=0.9' },
+    { accept: 'text/html; charset=utf-8' },
+    { accept: 'application/xhtml+xml; charset=utf-8; Q=0.001' },
+    { accept: 'text/html;q=1.000' },
+    { accept: 'text/html;q=0, application/xhtml+xml' },
+    { accept: 'application/xhtml+xml;q=0, text/html;q=0.001' },
+    { accept: 'text/html;q=0, text/html;q=0.5' },
+    { accept: 'text/html; profile="a;q=0"' },
+    { accept: 'text/html; profile="a,b";q="0"' },
+    { accept: 'text/html;q=0;q=0' },
+    { accept: 'text/html;q=0;Q=0.5' },
+    { accept: 'text/html;q=0; profile="unterminated' },
+    { accept: 'application/json; profile="unterminated' },
+    ...['', 'invalid', '-1', '2', '0oops', '0.0000'].map((quality) => ({
+      accept: `text/html;q=${quality}`,
+    })),
   ]
   for (const headers of browserHeaders) {
     const response = await request(url, '/api/files', {
