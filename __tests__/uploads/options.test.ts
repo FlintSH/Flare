@@ -21,6 +21,11 @@ const database = vi.hoisted(() => ({
   user: { findUnique: vi.fn() },
   uploadProfile: { findFirst: vi.fn() },
 }))
+const validateOwnedTagIds = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/tags/service', () => ({
+  validateOwnedTagIds,
+  TagError: class extends Error {},
+}))
 vi.mock('@/lib/database/prisma', () => ({ prisma: database }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
@@ -44,6 +49,9 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(now)
   vi.clearAllMocks()
+  validateOwnedTagIds.mockImplementation(
+    async (_userId: string, ids: string[]) => [...new Set(ids)]
+  )
   database.user.findUnique.mockResolvedValue({
     randomizeFileUrls: true,
     defaultFileExpiration: 'WEEK',
@@ -62,6 +70,79 @@ afterEach(() => {
 })
 
 describe('portable profile and upload policy contracts', () => {
+  it('keeps unconfigured uploads untagged, inherits profile tags, and allows explicit removal', () => {
+    expect(mergeUploadOptions({}, {}, {}, now).tagIds).toEqual([])
+    expect(
+      mergeUploadOptions({}, { tagIds: ['work'] }, {}, now).tagIds
+    ).toEqual(['work'])
+    expect(
+      mergeUploadOptions({}, { tagIds: ['work'] }, { tagIds: [] }, now).tagIds
+    ).toEqual([])
+  })
+
+  it('validates both profile tags and explicit upload tags against the uploader', async () => {
+    database.uploadProfile.findFirst.mockResolvedValue({
+      id: 'profile-one',
+      options: { tagIds: ['work'] },
+      updatedAt: now,
+    })
+    expect((await resolveUploadOptions(user)).tagIds).toEqual(['work'])
+    expect(validateOwnedTagIds).toHaveBeenLastCalledWith('alice', ['work'])
+    expect(
+      (await resolveUploadOptions(user, { tagIds: ['personal'] })).tagIds
+    ).toEqual(['personal'])
+    expect(validateOwnedTagIds).toHaveBeenLastCalledWith('alice', ['personal'])
+    validateOwnedTagIds.mockRejectedValueOnce(
+      new Error('Tag does not belong to this account.')
+    )
+    await expect(
+      resolveUploadOptions(user, { tagIds: ['another-owner'] })
+    ).rejects.toThrow('this account')
+  })
+
+  it('compares bound-profile tags by value and prevents removal at either upload stage', async () => {
+    database.uploadProfile.findFirst.mockResolvedValue({
+      id: 'profile-one',
+      options: { tagIds: ['work', 'receipts'] },
+      updatedAt: now,
+    })
+    const boundUser = {
+      ...user,
+      apiToken: {
+        id: 'token',
+        scopes: ['files:upload'],
+        profileId: 'profile-one',
+      },
+    }
+    const resolved = await resolveUploadOptions(boundUser, {
+      tagIds: ['receipts', 'work'],
+    })
+    expect(
+      applyUploadOverrides(boundUser, resolved, {
+        tagIds: ['work', 'receipts'],
+      }).tagIds
+    ).toEqual(['work', 'receipts'])
+    await expect(
+      resolveUploadOptions(boundUser, { tagIds: [] })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(() =>
+      applyUploadOverrides(boundUser, resolved, { tagIds: [] })
+    ).toThrow('cannot override')
+  })
+
+  it('parses multipart tags without treating omission as removal', () => {
+    expect(parseUploadFields({ tagIds: '["work"]' })).toEqual({
+      tagIds: ['work'],
+    })
+    expect(parseUploadFields({ tagIds: '[]' })).toEqual({ tagIds: [] })
+    expect(parseUploadFields({})).not.toHaveProperty('tagIds')
+    expect(() => parseUploadFields({ tagIds: 'work' })).toThrow('JSON array')
+    expect(() => parseUploadFields({ tagIds: '"work"' })).toThrow()
+    expect(() =>
+      uploadRequestOptionsSchema.parse({ tagIds: new Array(21).fill('work') })
+    ).toThrow()
+  })
+
   it('combines account, profile and request values while preserving explicit false and disabled', () => {
     const result = mergeUploadOptions(
       {

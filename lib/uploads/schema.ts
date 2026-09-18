@@ -28,6 +28,7 @@ export const uploadProfileOptionsSchema = z.preprocess(
       expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
       randomizeFileUrls: z.boolean().optional(),
       shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
+      tagIds: z.array(z.string().min(1).max(100)).max(20).optional(),
     })
     .strict()
 )
@@ -89,6 +90,7 @@ export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
   expiryAction: 'DELETE',
   randomizeFileUrls: false,
   shareStyle: 'framed',
+  tagIds: [],
 }
 
 /** Omission inherits; DISABLED explicitly turns expiration off. Durations use UTC. */

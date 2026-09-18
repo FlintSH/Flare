@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
+import { validateOwnedTagIds } from '@/lib/tags/service'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
 import {
   profileError,
@@ -22,18 +23,26 @@ export async function PUT(req: Request, { params }: Context) {
   try {
     const { id } = await params
     const { revision, ...input } = updateSchema.parse(await req.json())
-    const result = await prisma.uploadProfile.updateMany({
-      where: { id, userId: user.id, updatedAt: new Date(revision) },
-      data: input,
+    const profile = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      if (input.options.tagIds)
+        input.options.tagIds = await validateOwnedTagIds(
+          user.id,
+          input.options.tagIds,
+          tx
+        )
+      const result = await tx.uploadProfile.updateMany({
+        where: { id, userId: user.id, updatedAt: new Date(revision) },
+        data: input,
+      })
+      if (!result.count) return null
+      return tx.uploadProfile.findUniqueOrThrow({ where: { id } })
     })
-    if (!result.count)
+    if (!profile)
       return Response.json(
         { error: 'Profile changed or was removed. Reload it before saving.' },
         { status: 409 }
       )
-    const profile = await prisma.uploadProfile.findUniqueOrThrow({
-      where: { id },
-    })
     return Response.json({ data: profileView(profile) })
   } catch (error) {
     return profileError(error)

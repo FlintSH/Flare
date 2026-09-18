@@ -3,11 +3,13 @@
 import { useRef, useState } from 'react'
 
 import {
+  ChevronDown,
   Download,
   Plus,
   Save,
   Sparkles,
   Star,
+  Tag,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -17,6 +19,11 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -31,12 +38,13 @@ import {
   uploadRecipeSchema,
 } from '@/lib/uploads/schema'
 
+import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
 import { useUploadProfiles } from './profile-picker'
 
 const controls: {
-  key: keyof UploadProfileOptions
+  key: Exclude<keyof UploadProfileOptions, 'tagIds'>
   label: string
   choices: [string, string][]
 }[] = [
@@ -124,11 +132,18 @@ const starters: {
 export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const { data, error } = useUploadProfiles()
   const { toast } = useToast()
+  const {
+    tags,
+    loading: tagsLoading,
+    error: tagsError,
+    reload: reloadTags,
+  } = useTags()
   const [editing, setEditing] = useState<UploadProfileView | null>(null)
   const [name, setName] = useState('')
   const [options, setOptions] = useState<UploadProfileOptions>({})
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [tagSearch, setTagSearch] = useState('')
   const importInput = useRef<HTMLInputElement>(null)
   const refresh = () =>
     window.dispatchEvent(new Event('flare:upload-profiles-changed'))
@@ -137,6 +152,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     setName(profile?.name || '')
     setOptions(profile?.options || {})
     setMessage('')
+    setTagSearch('')
   }
 
   async function request(url: string, method: string, body?: unknown) {
@@ -436,10 +452,129 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 </Select>
               </div>
             ))}
+            <div className="space-y-2">
+              <Label htmlFor="profile-tags">Tags</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="profile-tags"
+                    variant="outline"
+                    className="w-full justify-start font-normal"
+                  >
+                    <Tag className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">
+                      {options.tagIds?.length
+                        ? tags
+                            .filter((tag) => options.tagIds?.includes(tag.id))
+                            .map((tag) => tag.name)
+                            .join(', ') || `${options.tagIds.length} selected`
+                        : 'No tags'}
+                    </span>
+                    <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-72 p-2">
+                  <Input
+                    aria-label="Find a tag"
+                    placeholder="Find a tag…"
+                    value={tagSearch}
+                    onChange={(event) => setTagSearch(event.target.value)}
+                    className="mb-2"
+                  />
+                  <div className="max-h-52 overflow-y-auto">
+                    {tagsLoading ? (
+                      <p
+                        className="p-2 text-sm text-muted-foreground"
+                        role="status"
+                      >
+                        Loading tags…
+                      </p>
+                    ) : tagsError ? (
+                      <div className="p-2 text-sm">
+                        <p role="alert">Couldn’t load tags.</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void reloadTags()}
+                        >
+                          Try again
+                        </Button>
+                      </div>
+                    ) : tags.length === 0 ? (
+                      <p className="p-2 text-sm text-muted-foreground">
+                        Create a tag in your vault, then choose it here.
+                      </p>
+                    ) : tags.filter((tag) =>
+                        tag.name.toLowerCase().includes(tagSearch.toLowerCase())
+                      ).length === 0 ? (
+                      <p className="p-2 text-sm text-muted-foreground">
+                        No tags found.
+                      </p>
+                    ) : (
+                      tags
+                        .filter((tag) =>
+                          tag.name
+                            .toLowerCase()
+                            .includes(tagSearch.toLowerCase())
+                        )
+                        .map((tag) => {
+                          const selected =
+                            options.tagIds?.includes(tag.id) ?? false
+                          return (
+                            <label
+                              key={tag.id}
+                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                disabled={
+                                  !selected &&
+                                  (options.tagIds?.length ?? 0) >= 20
+                                }
+                                className="h-4 w-4 accent-primary"
+                                onChange={() =>
+                                  setOptions((current) => ({
+                                    ...current,
+                                    tagIds: selected
+                                      ? current.tagIds?.filter(
+                                          (id) => id !== tag.id
+                                        )
+                                      : [...(current.tagIds ?? []), tag.id],
+                                  }))
+                                }
+                              />
+                              <span className="min-w-0 break-words">
+                                {tag.name}
+                              </span>
+                            </label>
+                          )
+                        })
+                    )}
+                  </div>
+                  {(options.tagIds?.length ?? 0) > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2 w-full border-t"
+                      onClick={() =>
+                        setOptions((current) => ({ ...current, tagIds: [] }))
+                      }
+                    >
+                      Clear tags
+                    </Button>
+                  )}
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Add these tags to every file uploaded with this profile.
+              </p>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             Passwords are set on individual uploads. Recipes contain preferences
-            only and never include account credentials.
+            only and never include account credentials. Tags in a recipe belong
+            to this account.
           </p>
           <div className="flex flex-wrap items-center gap-2 border-t pt-5">
             <Button onClick={() => void save()} disabled={busy || !name.trim()}>
