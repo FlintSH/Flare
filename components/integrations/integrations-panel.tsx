@@ -198,8 +198,9 @@ export function IntegrationsPanel({
           <div className="space-y-1.5">
             <h2 className="font-semibold">Setting up a screenshot tool?</h2>
             <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              ShareX, Flameshot, Spectacle, and Bash have ready-to-use downloads
-              with your upload token included. No API key setup needed.
+              ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
+              downloads with your upload token included. No API key setup
+              needed.
             </p>
           </div>
         </div>

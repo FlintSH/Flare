@@ -1,5 +1,6 @@
 import { GET as bash } from '@/app/api/profile/bash/route'
 import { POST as flameshot } from '@/app/api/profile/flameshot/route'
+import { GET as itake } from '@/app/api/profile/itake/route'
 import { GET as sharex } from '@/app/api/profile/sharex/route'
 import { POST as spectacle } from '@/app/api/profile/spectacle/route'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -58,6 +59,7 @@ const owner = {
 }
 const clients = [
   { name: 'ShareX', path: 'sharex', handler: sharex, options: null },
+  { name: 'iTake', path: 'itake', handler: itake, options: null },
   { name: 'Bash', path: 'bash', handler: bash, options: null },
   {
     name: 'Flameshot',
@@ -90,6 +92,7 @@ beforeEach(() => {
     ['default-profile', 'screenshots'].includes(where.id)
       ? {
           id: where.id,
+          name: where.id === 'screenshots' ? 'Screenshots' : 'Default profile',
           options: { visibility: 'PRIVATE' },
           updatedAt: new Date('2026-09-13T12:00:00Z'),
         }
@@ -114,7 +117,10 @@ describe.each(clients)('$name setup download', (client) => {
     )
   }
 
-  async function uploadRequest(response: Response) {
+  async function uploadRequest(
+    response: Response,
+    profileName = 'Account defaults'
+  ) {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-disposition')).toContain('attachment;')
     if (client.path === 'sharex') {
@@ -128,6 +134,24 @@ describe.each(clients)('$name setup download', (client) => {
       return new Request(config.RequestURL, {
         method: config.RequestMethod,
         headers: config.Headers,
+      })
+    }
+    if (client.path === 'itake') {
+      const config = await response.json()
+      expect(config).toMatchObject({
+        name: `Flare — ${profileName}`,
+        request: { method: 'POST' },
+        body: { type: 'multipart', fileField: 'file', fields: {} },
+        response: { linkPath: 'data.url' },
+      })
+      expect(response.headers.get('content-type')).toBe('application/json')
+      expect(response.headers.get('content-disposition')).toBe(
+        'attachment; filename="screenshot-user-itake.itup"'
+      )
+      expect(response.headers.get('cache-control')).toBe('private, no-store')
+      return new Request(config.request.url, {
+        method: config.request.method,
+        headers: config.request.headers,
       })
     }
     const script = await response.text()
@@ -173,11 +197,15 @@ describe.each(clients)('$name setup download', (client) => {
   })
 
   it('keeps an explicitly selected profile in the generated upload request', async () => {
-    const request = await uploadRequest(await download('screenshots'))
+    const request = await uploadRequest(
+      await download('screenshots'),
+      'Screenshots'
+    )
     expect(requestUploadOptions(request)).toEqual({ profileId: 'screenshots' })
     expect(mocks.profile).toHaveBeenCalledWith({
       where: { id: 'screenshots', userId: owner.id },
     })
+    expect(mocks.profile).toHaveBeenCalledTimes(1)
   })
 
   it('rejects missing or other-account profiles without returning credentials', async () => {
@@ -202,4 +230,98 @@ describe.each(clients)('$name setup download', (client) => {
       expect(mocks.profile).not.toHaveBeenCalled()
     }
   )
+})
+
+describe('iTake config compatibility', () => {
+  function download(profileId?: string) {
+    const url = new URL('https://flare.test/api/profile/itake')
+    if (profileId) url.searchParams.set('profileId', profileId)
+    return itake(new Request(url))
+  }
+
+  it('preserves an encoded profile ID as a single query parameter', async () => {
+    const profileId = 'screenshots & recordings/#1'
+    mocks.profile.mockResolvedValue({
+      id: profileId,
+      name: 'Screenshots & recordings',
+    })
+    const response = await download(profileId)
+    const config = await response.json()
+    expect(config.name).toBe('Flare — Screenshots & recordings')
+    const uploadUrl = new URL(config.request.url)
+    expect([...uploadUrl.searchParams.entries()]).toEqual([
+      ['profileId', profileId],
+    ])
+    expect(uploadUrl.hash).toBe('')
+  })
+
+  it.each([
+    ['https://flare.test///', 'https://flare.test/api/files'],
+    ['https://flare.test/flare/', 'https://flare.test/flare/api/files'],
+    ['http://localhost:3210/', 'http://localhost:3210/api/files'],
+  ])(
+    'uses the configured server URL %s in development',
+    async (baseUrl, expected) => {
+      vi.stubEnv('NODE_ENV', 'development')
+      vi.stubEnv('NEXTAUTH_URL', baseUrl)
+      const response = await download()
+      expect(response.status).toBe(200)
+      expect((await response.json()).request.url).toBe(expected)
+    }
+  )
+
+  it('falls back to localhost only in development when no server URL is configured', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
+    vi.stubEnv('NEXTAUTH_URL', '')
+    const response = await download()
+    expect(response.status).toBe(200)
+    expect((await response.json()).request.url).toBe(
+      'http://localhost:3000/api/files'
+    )
+  })
+
+  it('rejects a missing production URL without returning credentials', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('NEXTAUTH_URL', '')
+    const response = await download()
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({
+      error: 'Server configuration error',
+    })
+  })
+
+  it.each([
+    'not-a-url',
+    'ftp://flare.test',
+    'file:///tmp/flare',
+    'https://username:password@flare.test',
+    'https://flare.test?unexpected=query',
+    'https://flare.test#fragment',
+  ])(
+    'rejects an invalid upload server URL %s without returning credentials',
+    async (baseUrl) => {
+      vi.stubEnv('NEXTAUTH_URL', baseUrl)
+      const response = await download()
+      expect(response.status).toBe(500)
+      expect(await response.json()).toEqual({
+        error: 'Invalid server URL configuration',
+      })
+    }
+  )
+
+  it('returns 404 when the signed-in user no longer exists', async () => {
+    mocks.user.mockResolvedValue(null)
+    const response = await download()
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'User not found' })
+  })
+
+  it('keeps filenames safe when the account name contains header characters', async () => {
+    mocks.user.mockResolvedValue({ ...owner, name: 'Jane "Mac"\r\nUser' })
+    const response = await download()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toBe(
+      'attachment; filename="jane--mac---user-itake.itup"'
+    )
+  })
 })
