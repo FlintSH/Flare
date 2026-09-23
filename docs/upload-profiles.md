@@ -20,7 +20,7 @@ The upload response exposes the share-page URL as `data.url` and `pageUrl`. The 
 
 ## Share recipes
 
-**Export** downloads a versioned JSON recipe containing the profile name and preferences. **Import recipe** creates a separate saved profile for review and does not change your default. Recipes exclude identifiers, credentials and passwords; unknown fields and unsupported versions are rejected.
+**Export** downloads a versioned JSON recipe containing the profile name and preferences. **Import recipe** creates a separate saved profile for review and does not change your default. Recipes exclude profile identifiers, credentials and passwords; unknown fields and unsupported versions are rejected. If tags are selected, the recipe includes their account-specific IDs. Those tags must still exist and belong to the importing account, so a recipe with tags can only be imported into the same account.
 
 ```json
 {

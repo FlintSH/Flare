@@ -157,6 +157,18 @@ export async function GET(request: Request) {
 
     const conditions: Prisma.FileWhereInput[] = []
 
+    const tag = searchParams.get('tag')
+    if (tag) {
+      conditions.push({
+        tags:
+          tag === 'untagged'
+            ? { none: { excluded: false } }
+            : {
+                some: { tagId: tag, excluded: false, tag: { userId: user.id } },
+              },
+      })
+    }
+
     if (search) {
       conditions.push({
         OR: [
@@ -238,9 +250,10 @@ export async function GET(request: Request) {
     const filesList = (await Promise.all(
       resultPage.files.map(async (file) => {
         const expiresAt = await getFileExpirationInfo(file.id)
-        const { password, ...publicFile } = file
+        const { password, tags, ...publicFile } = file
         return {
           ...publicFile,
+          tags: tags.map(({ tag }) => tag),
           hasPassword: Boolean(password),
           expiresAt,
         }

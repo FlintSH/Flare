@@ -3,6 +3,7 @@ import { createWorker } from 'tesseract.js'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
 import type { OCRTask } from './queue'
 
@@ -31,8 +32,12 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
         ocrText: text.trim(),
         ocrConfidence: confidence,
         isOcrProcessed: true,
+        ocrTagsPendingAt: new Date(),
       },
     })
+
+    // A failed attempt leaves durable work for the worker or the next OCR request.
+    await applyPendingOcrTags(fileId)
 
     logger.info('OCR processing completed', {
       filePath,

@@ -20,6 +20,7 @@ import {
   Lock,
   MoreHorizontal,
   ScanText,
+  Tag,
   Timer,
   Trash2,
 } from 'lucide-react'
@@ -59,6 +60,10 @@ interface FileCardProps {
   onDelete?: (id: string) => void
   onUpdate?: () => void
   onPreview?: (file: FileType) => void
+  onEditTags?: () => void
+  onTagSelect?: (id: string) => void
+  selected?: boolean
+  onSelect?: () => void
 }
 
 export function FileCard({
@@ -66,6 +71,10 @@ export function FileCard({
   onDelete,
   onUpdate,
   onPreview,
+  onEditTags,
+  onTagSelect,
+  selected,
+  onSelect,
 }: FileCardProps) {
   const { toast } = useToast()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
@@ -283,7 +292,12 @@ export function FileCard({
   const safeUrl = sanitizeUrl(file.urlPath)
 
   return (
-    <Card className="group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-background/70 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/30 hover:bg-background/90">
+    <Card
+      className={cn(
+        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-background/70 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/30 hover:bg-background/90',
+        selected && 'ring-2 ring-primary'
+      )}
+    >
       <div className="relative">
         <Link
           href={safeUrl}
@@ -418,6 +432,17 @@ export function FileCard({
             </Button>
           </div>
         </div>
+        {onSelect && (
+          <label className="absolute left-2 top-2 z-10 flex cursor-pointer items-center rounded-lg border border-border/50 bg-background/95 p-2 shadow-sm">
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={onSelect}
+              aria-label={`Select ${file.name}`}
+              className="h-4 w-4 cursor-pointer accent-primary"
+            />
+          </label>
+        )}
         <div className="absolute right-2 top-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -451,6 +476,12 @@ export function FileCard({
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              {onEditTags && (
+                <DropdownMenuItem onSelect={onEditTags}>
+                  <Tag />
+                  Edit tags
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onSelect={() => {
                   setVisibility(file.visibility)
@@ -507,7 +538,7 @@ export function FileCard({
             {getRelativeTime(new Date(file.uploadedAt))}
           </span>
         </div>
-        {file.expiresAt && (
+        {file.expiresAt && !onSelect && (
           <button
             type="button"
             onClick={() => setIsExpiryModalOpen(true)}
@@ -545,6 +576,34 @@ export function FileCard({
             {formatFileSize(file.size)}
           </span>
         </div>
+        {!!initialFile.tags?.length && (
+          <div className="mt-2 flex items-center gap-1.5">
+            {initialFile.tags.slice(0, 2).map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => onTagSelect?.(tag.id)}
+                disabled={!onTagSelect}
+                title={tag.name}
+                aria-label={`Show files tagged ${tag.name}`}
+                className="inline-flex min-w-0 items-center gap-1 rounded-md bg-muted/70 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+              >
+                <Tag className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{tag.name}</span>
+              </button>
+            ))}
+            {initialFile.tags.length > 2 && (
+              <button
+                type="button"
+                onClick={onEditTags}
+                aria-label={`View all ${initialFile.tags.length} tags`}
+                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                +{initialFile.tags.length - 2}
+              </button>
+            )}
+          </div>
+        )}
         <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
           <span
             className="inline-flex items-center gap-1"

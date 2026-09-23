@@ -6,9 +6,11 @@ import type { FileType, PaginationInfo } from '@/types/components/file'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
+  CheckSquare,
   FolderOpen,
   RefreshCw,
   SearchX,
+  Tag,
   Upload,
   X,
 } from 'lucide-react'
@@ -20,12 +22,16 @@ import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
 import { FileGridPagination } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ImageLightbox } from '@/components/file/image-lightbox'
+import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
+import { TagFilter } from '@/components/tags/tag-filter'
+import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
 import { fileQuery, groupFiles } from '@/lib/files/gallery'
 
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useImageGallery } from '@/hooks/use-image-gallery'
+import { useTags } from '@/hooks/use-tags'
 
 export function FileGrid() {
   const libraryHeading = useRef<HTMLHeadingElement>(null)
@@ -34,6 +40,11 @@ export function FileGrid() {
   const [error, setError] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [fileTypes, setFileTypes] = useState<string[]>([])
+  const [managingTags, setManagingTags] = useState(false)
+  const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const { tags, reload: reloadTags } = useTags()
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
     total: 0,
     pageCount: 0,
@@ -42,6 +53,7 @@ export function FileGrid() {
   })
   const {
     filters,
+    setTag,
     setSearch,
     setTypes,
     setDateRange,
@@ -68,12 +80,32 @@ export function FileGrid() {
     []
   )
   const hasActiveFilters = Boolean(
-    filters.search ||
+    filters.tag ||
+      filters.search ||
       filters.types.length ||
       filters.visibility.length ||
       filters.dateFrom ||
       filters.dateTo
   )
+  const activeTagName =
+    filters.tag === 'untagged'
+      ? 'Untagged'
+      : tags.find((tag) => tag.id === filters.tag)?.name || 'Selected tag'
+  const onlyTagFilter =
+    !!filters.tag &&
+    !filters.search &&
+    !filters.types.length &&
+    !filters.visibility.length &&
+    !filters.dateFrom &&
+    !filters.dateTo
+
+  useEffect(() => {
+    setSelectedIds([])
+  }, [filters])
+
+  useEffect(() => {
+    void reloadTags()
+  }, [refreshKey, reloadTags])
 
   useEffect(() => {
     window.addEventListener('flare:files-changed', refreshFiles)
@@ -131,7 +163,13 @@ export function FileGrid() {
           setPage(Math.max(1, pageCount))
           return
         }
-        setFiles(Array.isArray(result.data) ? result.data : [])
+        const nextFiles: FileType[] = Array.isArray(result.data)
+          ? result.data
+          : []
+        setFiles(nextFiles)
+        setSelectedIds((ids) =>
+          ids.filter((id) => nextFiles.some((file) => file.id === id))
+        )
         setPaginationInfo({
           total,
           pageCount,
@@ -172,6 +210,25 @@ export function FileGrid() {
               Your Files
             </h1>
             <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2"
+                disabled={!selecting && !files.length}
+                onClick={() => {
+                  setSelecting(!selecting)
+                  setSelectedIds([])
+                }}
+                aria-pressed={selecting}
+                aria-label={
+                  selecting ? 'Finish selecting files' : 'Select files'
+                }
+              >
+                <CheckSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {selecting ? 'Done' : 'Select'}
+                </span>
+              </Button>
               <span
                 role="status"
                 aria-live="polite"
@@ -215,12 +272,31 @@ export function FileGrid() {
             onGroupChange={setGroupBy}
             visibility={filters.visibility}
             onVisibilityChange={setVisibility}
+            tagFilter={
+              <TagFilter
+                value={filters.tag || null}
+                onChange={setTag}
+                onManage={() => setManagingTags(true)}
+              />
+            }
           />
         </div>
         {(hasActiveFilters ||
           filters.sortBy !== 'newest' ||
           filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            {filters.tag && (
+              <button
+                type="button"
+                onClick={() => setTag(null)}
+                aria-label={`Remove ${activeTagName} filter`}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-xs text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Tag className="h-3 w-3 shrink-0" />
+                <span className="truncate">{activeTagName}</span>
+                <X className="h-3 w-3 shrink-0" />
+              </button>
+            )}
             {filters.search && (
               <span className="max-w-full truncate rounded-lg bg-muted px-2.5 py-1 text-xs">
                 Search: {filters.search}
@@ -267,6 +343,54 @@ export function FileGrid() {
         )}
       </section>
 
+      {selecting && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-primary"
+              checked={
+                files.length > 0 &&
+                files.every((file) => selectedIds.includes(file.id))
+              }
+              disabled={isLoading || !files.length}
+              onChange={(event) =>
+                setSelectedIds(
+                  event.target.checked ? files.map((file) => file.id) : []
+                )
+              }
+            />
+            Select this page
+          </label>
+          <span className="text-xs text-muted-foreground" role="status">
+            {selectedIds.length} selected
+          </span>
+          <Button
+            size="sm"
+            className="ml-auto"
+            disabled={!selectedIds.length || isLoading}
+            onClick={() =>
+              setTaggingFiles(
+                files.filter((file) => selectedIds.includes(file.id))
+              )
+            }
+          >
+            <Tag className="mr-2 h-4 w-4" />
+            Edit tags
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelecting(false)
+              setSelectedIds([])
+            }}
+          >
+            Done
+          </Button>
+        </div>
+      )}
+
       {isLoading && !gallery ? (
         <div
           aria-busy="true"
@@ -302,18 +426,29 @@ export function FileGrid() {
             )}
           </div>
           <h2 className="text-xl font-semibold">
-            {hasActiveFilters
-              ? 'No files match your search'
-              : 'No files uploaded'}
+            {onlyTagFilter
+              ? filters.tag === 'untagged'
+                ? 'Every file has a tag'
+                : `No files tagged “${activeTagName}” yet`
+              : hasActiveFilters
+                ? 'No files match your search'
+                : 'No files uploaded'}
           </h2>
           <p className="mb-6 mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-            {hasActiveFilters
-              ? 'Try another file name or reset your filters to see everything in your library.'
-              : 'Upload your first file to get started.'}
+            {onlyTagFilter
+              ? filters.tag === 'untagged'
+                ? 'All your files are still together in your vault.'
+                : 'Add this tag from a file’s menu, select several files, or give it an automatic rule in Manage tags.'
+              : hasActiveFilters
+                ? 'Try another file name or reset your filters to see everything in your library.'
+                : 'Upload your first file to get started.'}
           </p>
           {hasActiveFilters ? (
-            <Button variant="outline" onClick={resetFilters}>
-              Reset filters
+            <Button
+              variant="outline"
+              onClick={onlyTagFilter ? () => setTag(null) : resetFilters}
+            >
+              {onlyTagFilter ? 'All files' : 'Reset filters'}
             </Button>
           ) : (
             <Button asChild>
@@ -342,6 +477,19 @@ export function FileGrid() {
                       onDelete={refreshFiles}
                       onUpdate={refreshFiles}
                       onPreview={open}
+                      onEditTags={() => setTaggingFiles([file])}
+                      onTagSelect={setTag}
+                      selected={selectedIds.includes(file.id)}
+                      onSelect={
+                        selecting
+                          ? () =>
+                              setSelectedIds((ids) =>
+                                ids.includes(file.id)
+                                  ? ids.filter((id) => id !== file.id)
+                                  : [...ids, file.id]
+                              )
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -353,6 +501,30 @@ export function FileGrid() {
             setPage={setPage}
           />
         </>
+      )}
+      <TagManager
+        open={managingTags}
+        onOpenChange={setManagingTags}
+        onDeleted={(id) => {
+          if (filters.tag === id) setTag(null)
+        }}
+      />
+      {taggingFiles && (
+        <FileTagsDialog
+          files={taggingFiles}
+          onClose={() => {
+            setTaggingFiles(null)
+            setSelectedIds([])
+          }}
+          onChanged={(updated) => {
+            setTaggingFiles(updated)
+            setFiles((current) =>
+              current.map(
+                (file) => updated.find((entry) => entry.id === file.id) || file
+              )
+            )
+          }}
+        />
       )}
       {gallery && (
         <ImageLightbox

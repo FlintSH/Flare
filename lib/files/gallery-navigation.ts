@@ -14,6 +14,11 @@ export const fileListSelect = {
   views: true,
   downloads: true,
   user: { select: { urlId: true } },
+  tags: {
+    where: { excluded: false },
+    select: { tag: { select: { id: true, name: true } } },
+    orderBy: { tag: { normalizedName: 'asc' } },
+  },
 } satisfies Prisma.FileSelect
 
 type SortField = 'uploadedAt' | 'size' | 'views' | 'downloads' | 'name'

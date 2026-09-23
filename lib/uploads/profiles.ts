@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
+import { TagError } from '@/lib/tags/service'
 
 import { UploadError } from './options'
 import { uploadProfileOptionsSchema } from './schema'
@@ -28,6 +29,8 @@ export function profileMutationGuard(request: Request, requireJson = true) {
 }
 
 export function profileError(error: unknown) {
+  if (error instanceof TagError)
+    return Response.json({ error: error.message }, { status: error.status })
   if (error instanceof z.ZodError)
     return Response.json(
       { error: error.issues[0]?.message || 'Invalid profile.' },
