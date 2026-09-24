@@ -1,0 +1,2442 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Flare named-token API",
+    "version": "1.0.0",
+    "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1.",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://files.example.com",
+      "description": "Replace with your Flare instance origin."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Files",
+      "description": "Own-account uploads and metadata. Named tokens do not authorize private content downloads or file deletion."
+    },
+    {
+      "name": "Short links",
+      "description": "Own-account short links."
+    },
+    {
+      "name": "Webhooks",
+      "description": "Outbound requests from Flare to a receiver you control."
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/files": {
+      "get": {
+        "operationId": "listFiles",
+        "summary": "List and search your files",
+        "tags": ["Files"],
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:read",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileListResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": "cm_example",
+                      "name": "screenshot.png",
+                      "urlPath": "/abc123/screenshot.png",
+                      "mimeType": "image/png",
+                      "size": 0.1953125,
+                      "uploadedAt": "2026-09-20T12:00:00.000Z",
+                      "visibility": "PUBLIC",
+                      "views": 0,
+                      "downloads": 0,
+                      "folderId": null,
+                      "user": {
+                        "urlId": "abc123"
+                      },
+                      "tags": [],
+                      "hasPassword": false,
+                      "expiresAt": null
+                    }
+                  ],
+                  "pagination": {
+                    "total": 1,
+                    "pageCount": 1,
+                    "page": 1,
+                    "limit": 24
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Positive page number.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Positive integer. Values above 100 are capped at 100.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 24
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive filename or OCR-text match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort order; unknown values fall back to newest.",
+            "schema": {
+              "type": "string",
+              "default": "newest",
+              "enum": [
+                "newest",
+                "oldest",
+                "largest",
+                "smallest",
+                "name",
+                "most-viewed",
+                "least-viewed",
+                "most-downloaded",
+                "least-downloaded"
+              ]
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive uploaded-at lower bound; use an ISO 8601 timestamp with timezone.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper bound. A date-only value includes the final day in server-local time; explicit timestamps preserve their instant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "visibility",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "description": "Owned folder ID or unfiled. Direct folder membership, without descendants.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Owned tag ID or untagged. Excluded tags do not count.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "galleryAnchor",
+            "in": "query",
+            "required": false,
+            "description": "Image file ID in the current filter; requires galleryDirection. Returns adjacent images, excluding anchor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "galleryDirection",
+            "in": "query",
+            "required": false,
+            "description": "Requires galleryAnchor. Anchored responses include pagination.offset and only image files.",
+            "schema": {
+              "type": "string",
+              "enum": ["next", "previous"]
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "uploadFile",
+        "summary": "Upload one file",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; administrators are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UploadLinks"
+                    },
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["data", "success"]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "url": "https://files.example.com/abc123/screenshot.png",
+                    "pageUrl": "https://files.example.com/abc123/screenshot.png",
+                    "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
+                    "downloadUrl": "https://files.example.com/api/files/cm_example/download",
+                    "copyText": "https://files.example.com/abc123/screenshot.png",
+                    "name": "screenshot.png",
+                    "size": 204800,
+                    "type": "image/png"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File size, quota, or part-size limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Upload-start rate limit: 30 requests per minute per client IP per application process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait; currently 60.",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "60"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Upload-Profile",
+            "in": "header",
+            "required": false,
+            "description": "Owned profile ID; none bypasses default. Must agree with query/body selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Upload-Folder",
+            "in": "header",
+            "required": false,
+            "description": "Owned destination folder ID; none means unfiled. Must agree with query/body selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profileId",
+            "in": "query",
+            "required": false,
+            "description": "Owned profile ID or none. Must agree with header.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "required": false,
+            "description": "Owned folder ID or none. Must agree with header.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartUploadRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/types": {
+      "get": {
+        "operationId": "listFileTypes",
+        "summary": "List MIME types present in your account",
+        "tags": ["Files"],
+        "description": "Requires the files:read scope. Sorted distinct stored MIME types, not an allowlist of permitted upload types.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:read",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTypesResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "types": ["application/pdf", "image/png"]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/chunks": {
+      "post": {
+        "operationId": "initializeChunkUpload",
+        "summary": "Initialize a chunk upload",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkInitResponse"
+                },
+                "example": {
+                  "data": {
+                    "uploadId": "0123456789abcdef0123456789abcdef",
+                    "fileKey": "uploads/abc123/object/archive.zip"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File size, quota, or part-size limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Upload-start rate limit: 30 requests per minute per client IP per application process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Too many requests"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait; currently 60.",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "60"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Upload-Profile",
+            "in": "header",
+            "required": false,
+            "description": "Owned profile ID; none bypasses default. Must agree with query/body selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Upload-Folder",
+            "in": "header",
+            "required": false,
+            "description": "Owned destination folder ID; none means unfiled. Must agree with query/body selection.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profileId",
+            "in": "query",
+            "required": false,
+            "description": "Owned profile ID or none. Must agree with header.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "required": false,
+            "description": "Owned folder ID or none. Must agree with header.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "JSON request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkInitRequest"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getChunkPartUrlCompatibility",
+        "summary": "Get a part upload URL (query form)",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompatibilityPartUrlResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Storage configuration changed or upload already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "uploadId",
+            "in": "query",
+            "required": true,
+            "description": "Upload session ID.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,100}$"
+            }
+          },
+          {
+            "name": "partNumber",
+            "in": "query",
+            "required": true,
+            "description": "Part number.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "completeChunkUploadCompatibility",
+        "summary": "Complete a chunk upload (wrapped response)",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/UploadLinks"
+                    }
+                  },
+                  "required": ["data"]
+                },
+                "example": {
+                  "data": {
+                    "url": "https://files.example.com/abc123/screenshot.png",
+                    "pageUrl": "https://files.example.com/abc123/screenshot.png",
+                    "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
+                    "downloadUrl": "https://files.example.com/api/files/cm_example/download",
+                    "copyText": "https://files.example.com/abc123/screenshot.png",
+                    "name": "screenshot.png",
+                    "size": 204800,
+                    "type": "image/png"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Storage configuration changed or upload already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File size, quota, or part-size limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkCompleteCompatibilityRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/chunks/{uploadId}/part/{partNumber}": {
+      "parameters": [
+        {
+          "name": "uploadId",
+          "in": "path",
+          "required": true,
+          "description": "Upload session ID. Expires after one hour of inactivity.",
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,100}$"
+          }
+        },
+        {
+          "name": "partNumber",
+          "in": "path",
+          "required": true,
+          "description": "Part number.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getChunkPartUrl",
+        "summary": "Get a part upload URL",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartUrlResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Storage configuration changed or upload already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "uploadChunkPart",
+        "summary": "Upload raw part bytes through Flare",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartUploadResponse"
+                },
+                "example": {
+                  "data": {
+                    "etag": "\"provider-etag\""
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Storage configuration changed or upload already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File size, quota, or part-size limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "description": "Raw part bytes, not multipart form data."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/chunks/{uploadId}/complete": {
+      "parameters": [
+        {
+          "name": "uploadId",
+          "in": "path",
+          "required": true,
+          "description": "Upload session ID. Expires after one hour of inactivity.",
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,100}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "completeChunkUpload",
+        "summary": "Complete a chunk upload (unwrapped response)",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadLinks"
+                },
+                "example": {
+                  "url": "https://files.example.com/abc123/screenshot.png",
+                  "pageUrl": "https://files.example.com/abc123/screenshot.png",
+                  "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
+                  "downloadUrl": "https://files.example.com/api/files/cm_example/download",
+                  "copyText": "https://files.example.com/abc123/screenshot.png",
+                  "name": "screenshot.png",
+                  "size": 204800,
+                  "type": "image/png"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile binding, ownership, or final token validity check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Owned resource or upload session not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Storage configuration changed or upload already completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File size, quota, or part-size limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkCompleteRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/urls": {
+      "get": {
+        "operationId": "listShortLinks",
+        "summary": "List your short links",
+        "tags": ["Short links"],
+        "description": "Requires the urls:read scope. Newest first; no pagination or filtering parameters.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "urls:read",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShortLinkListResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "urls": [
+                      {
+                        "id": "cm_link",
+                        "shortCode": "aB3_dE",
+                        "targetUrl": "https://example.com/a/long/path",
+                        "clicks": 0,
+                        "createdAt": "2026-09-20T12:00:00.000Z",
+                        "userId": "cm_account"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createShortLink",
+        "summary": "Create a short link",
+        "tags": ["Short links"],
+        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON currently reaches the 500 handler.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "urls:write",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ShortLink"
+                    },
+                    "success": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["data", "success"]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "cm_link",
+                    "shortCode": "aB3_dE",
+                    "targetUrl": "https://example.com/a/long/path",
+                    "clicks": 0,
+                    "createdAt": "2026-09-20T12:00:00.000Z",
+                    "userId": "cm_account"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/options, part list, file type, or expiration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "JSON request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShortLinkRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/urls/{id}": {
+      "delete": {
+        "operationId": "deleteShortLink",
+        "summary": "Delete your short link",
+        "tags": ["Short links"],
+        "description": "Requires urls:write. Use the link record ID, not its shortCode.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "urls:write",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Short-link record ID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted. No response body."
+          },
+          "401": {
+            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Link belongs to another account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "success": false,
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Link does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "success": false,
+                  "error": "URL not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "fileReady": {
+      "post": {
+        "operationId": "receiveFileReady",
+        "summary": "Receive a signed file.ready event",
+        "tags": ["Webhooks"],
+        "security": [],
+        "description": "Outbound request to your configured receiver, not an endpoint hosted by Flare. Validate HMAC-SHA256 over timestamp + dot + exact raw body using the full whsec_ secret. Deduplicate stable event IDs. Five total attempts; retry delays 1 minute, 5 minutes, 30 minutes, 2 hours. 2xx acknowledges; 408/429/5xx and connection failures retry. Other 3xx/4xx fail without retry. Queue capacity can skip events; file-access changes can cancel them. file.ready does not imply OCR completion.",
+        "parameters": [
+          {
+            "name": "X-Flare-Event-Id",
+            "in": "header",
+            "required": true,
+            "description": "Stable event ID; must equal body.id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Flare-Timestamp",
+            "in": "header",
+            "required": true,
+            "description": "Unix seconds for this attempt. Reject stale/future requests outside your accepted clock window.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "X-Flare-Signature",
+            "in": "header",
+            "required": true,
+            "description": "v1= plus lowercase hex HMAC-SHA256. Compare in constant time against the original body bytes.",
+            "schema": {
+              "type": "string",
+              "pattern": "^v1=[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "At most 64 KiB. Tests add test: true and use test: event IDs; they do not create a file.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileReadyEvent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Event durably accepted (for example 204). Duplicate accepted events should also return 2xx."
+          },
+          "408": {
+            "description": "Timeout; retry eligible."
+          },
+          "429": {
+            "description": "Throttled; retry on Flare fixed schedule."
+          },
+          "5XX": {
+            "description": "Receiver failure; retry eligible."
+          },
+          "default": {
+            "description": "Other 3xx/4xx permanently fail this automatic cycle. Redirects are not followed."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "flr_…",
+        "description": "Named API token from Profile → Integrations. Select files:read, files:upload, urls:read, urls:write as needed. Required scope is recorded in each operation description and x-flare-scope; HTTP bearer security arrays are empty because this is not OAuth. Missing scopes produce 401."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["error"],
+        "description": "Upload/authentication failures use this shape; no success property is required."
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "required": ["error", "success"]
+      },
+      "UploadLinks": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "pageUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "rawUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "downloadUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "copyText": {
+            "type": "string",
+            "format": "uri"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bytes."
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "pageUrl",
+          "rawUrl",
+          "downloadUrl",
+          "copyText",
+          "name",
+          "size",
+          "type"
+        ],
+        "description": "URLs follow sharing access rules; they are not private-file access grants. url and copyText alias pageUrl. name is the display name; type is the MIME type.",
+        "example": {
+          "url": "https://files.example.com/abc123/screenshot.png",
+          "pageUrl": "https://files.example.com/abc123/screenshot.png",
+          "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
+          "downloadUrl": "https://files.example.com/api/files/cm_example/download",
+          "copyText": "https://files.example.com/abc123/screenshot.png",
+          "name": "screenshot.png",
+          "size": 204800,
+          "type": "image/png"
+        }
+      },
+      "UploadOptions": {
+        "type": "object",
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "randomizeFileUrls": {
+            "type": "boolean",
+            "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "shareStyle": {
+            "type": "string",
+            "enum": ["minimal", "framed", "delivery"]
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 20,
+            "description": "Owned tag IDs. Omission inherits selected profile tags."
+          },
+          "profileId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles."
+          },
+          "folderId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization."
+          },
+          "password": {
+            "type": ["string", "null"],
+            "maxLength": 72,
+            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token."
+          },
+          "copyFormat": {
+            "deprecated": true,
+            "description": "Retired compatibility field. Any supplied value is discarded before validation."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Omission inherits. Restrictions apply to profile-bound tokens and options fixed before bytes are written."
+      },
+      "MultipartUploadRequest": {
+        "type": "object",
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "randomizeFileUrls": {
+            "type": "string",
+            "enum": ["true", "false"],
+            "description": "May only repeat the already selected naming option; set naming in the profile/account before upload."
+          },
+          "shareStyle": {
+            "type": "string",
+            "enum": ["minimal", "framed", "delivery"]
+          },
+          "tagIds": {
+            "type": "string",
+            "description": "JSON-encoded array of at most 20 owned tag IDs, for example [\"TAG_ID\"]."
+          },
+          "profileId": {
+            "type": "string",
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles. Multipart uses an empty string or the literal string null for null. Select with X-Upload-Profile or the profileId query before sending bytes."
+          },
+          "folderId": {
+            "type": "string",
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization. Multipart uses an empty string or the literal string null for null. Select with X-Upload-Folder or the folderId query before sending bytes."
+          },
+          "password": {
+            "type": "string",
+            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option. Multipart uses an empty string or the literal string null for null."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token. Multipart uses an empty string or the literal string null for null."
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "One file. Let the HTTP client create the multipart boundary."
+          }
+        },
+        "required": ["file"],
+        "description": "One multipart file with optional string fields. Profile/folder/naming must be selected before streaming starts."
+      },
+      "ChunkInitRequest": {
+        "type": "object",
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "randomizeFileUrls": {
+            "type": "boolean",
+            "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "shareStyle": {
+            "type": "string",
+            "enum": ["minimal", "framed", "delivery"]
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 20,
+            "description": "Owned tag IDs. Omission inherits selected profile tags."
+          },
+          "profileId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles."
+          },
+          "folderId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization."
+          },
+          "password": {
+            "type": ["string", "null"],
+            "maxLength": 72,
+            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token."
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mimeType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total file bytes; verified after assembly."
+          },
+          "copyFormat": {
+            "deprecated": true,
+            "description": "Retired compatibility field. Any supplied value is discarded before validation."
+          }
+        },
+        "required": ["filename", "mimeType", "size"],
+        "additionalProperties": false
+      },
+      "ChunkInitResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "uploadId": {
+                "type": "string",
+                "pattern": "^[a-z0-9]{1,100}$"
+              },
+              "fileKey": {
+                "type": "string",
+                "description": "Opaque internal storage key, not a public URL."
+              }
+            },
+            "required": ["uploadId", "fileKey"]
+          }
+        },
+        "required": ["data"]
+      },
+      "ChunkCompleteRequest": {
+        "type": "object",
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "randomizeFileUrls": {
+            "type": "boolean",
+            "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "shareStyle": {
+            "type": "string",
+            "enum": ["minimal", "framed", "delivery"]
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 20,
+            "description": "Owned tag IDs. Omission inherits selected profile tags."
+          },
+          "profileId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles."
+          },
+          "folderId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization."
+          },
+          "password": {
+            "type": ["string", "null"],
+            "maxLength": 72,
+            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token."
+          },
+          "uploadId": {
+            "type": "string",
+            "description": "Required for PUT /api/files/chunks; ignored in favor of path ID on the dedicated completion route."
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ETag": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512,
+                  "description": "Exact ETag returned by the provider, including any quote characters."
+                },
+                "PartNumber": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "required": ["ETag", "PartNumber"],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "description": "Unique part numbers. Flare sorts by PartNumber before assembling."
+          },
+          "copyFormat": {
+            "deprecated": true,
+            "description": "Retired compatibility field. Any supplied value is discarded before validation."
+          }
+        },
+        "required": ["parts"],
+        "additionalProperties": false
+      },
+      "ChunkCompleteCompatibilityRequest": {
+        "type": "object",
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "randomizeFileUrls": {
+            "type": "boolean",
+            "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "shareStyle": {
+            "type": "string",
+            "enum": ["minimal", "framed", "delivery"]
+          },
+          "tagIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 20,
+            "description": "Owned tag IDs. Omission inherits selected profile tags."
+          },
+          "profileId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles."
+          },
+          "folderId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization."
+          },
+          "password": {
+            "type": ["string", "null"],
+            "maxLength": 72,
+            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token."
+          },
+          "uploadId": {
+            "type": "string",
+            "description": "Required for PUT /api/files/chunks; ignored in favor of path ID on the dedicated completion route."
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ETag": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512,
+                  "description": "Exact ETag returned by the provider, including any quote characters."
+                },
+                "PartNumber": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "required": ["ETag", "PartNumber"],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 10000,
+            "description": "Unique part numbers. Flare sorts by PartNumber before assembling."
+          },
+          "copyFormat": {
+            "deprecated": true,
+            "description": "Retired compatibility field. Any supplied value is discarded before validation."
+          }
+        },
+        "required": ["uploadId", "parts"],
+        "additionalProperties": false
+      },
+      "PartUrlResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "S3 presigned HTTPS upload URL (one-hour expiry), or local:// marker for local storage."
+              }
+            },
+            "required": ["url"]
+          }
+        },
+        "required": ["data"]
+      },
+      "CompatibilityPartUrlResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "presignedUrl": {
+                "type": "string",
+                "description": "Alias of url."
+              }
+            },
+            "required": ["url", "presignedUrl"]
+          }
+        },
+        "required": ["data"]
+      },
+      "PartUploadResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "etag": {
+                "type": "string",
+                "description": "Supply this exact value as ETag at completion."
+              }
+            },
+            "required": ["etag"]
+          }
+        },
+        "required": ["data"]
+      },
+      "FileMetadata": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "urlPath": {
+            "type": "string",
+            "description": "Relative URL path based on the account URL ID."
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Size in MiB (bytes divided by 1,048,576). UploadLinks.size uses bytes."
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"]
+          },
+          "views": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "downloads": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "folderId": {
+            "type": ["string", "null"]
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "urlId": {
+                "type": "string"
+              }
+            },
+            "required": ["urlId"]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "name"]
+            }
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "urlPath",
+          "mimeType",
+          "size",
+          "uploadedAt",
+          "visibility",
+          "views",
+          "downloads",
+          "folderId",
+          "user",
+          "tags",
+          "hasPassword",
+          "expiresAt"
+        ],
+        "description": "Owner-scoped metadata, including private files. Password hashes, content, and OCR text are not returned.",
+        "example": {
+          "id": "cm_example",
+          "name": "screenshot.png",
+          "urlPath": "/abc123/screenshot.png",
+          "mimeType": "image/png",
+          "size": 0.1953125,
+          "uploadedAt": "2026-09-20T12:00:00.000Z",
+          "visibility": "PUBLIC",
+          "views": 0,
+          "downloads": 0,
+          "folderId": null,
+          "user": {
+            "urlId": "abc123"
+          },
+          "tags": [],
+          "hasPassword": false,
+          "expiresAt": null
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Present for gallery-anchor navigation."
+          }
+        },
+        "required": ["total", "pageCount", "page", "limit"]
+      },
+      "FileListResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "const": true
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileMetadata"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": ["success", "data", "pagination"]
+      },
+      "FileTypesResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "types": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["types"]
+          },
+          "success": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["data", "success"]
+      },
+      "ShortLink": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shortCode": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6,
+            "description": "The public link is instance-origin + /u/ + shortCode."
+          },
+          "targetUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "clicks": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "shortCode",
+          "targetUrl",
+          "clicks",
+          "createdAt",
+          "userId"
+        ],
+        "example": {
+          "id": "cm_link",
+          "shortCode": "aB3_dE",
+          "targetUrl": "https://example.com/a/long/path",
+          "clicks": 0,
+          "createdAt": "2026-09-20T12:00:00.000Z",
+          "userId": "cm_account"
+        }
+      },
+      "CreateShortLinkRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "description": "Absolute HTTP or HTTPS destination."
+          }
+        },
+        "required": ["url"]
+      },
+      "ShortLinkListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "urls": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ShortLink"
+                }
+              }
+            },
+            "required": ["urls"]
+          },
+          "success": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["data", "success"]
+      },
+      "FileReadyEvent": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Flare file.ready event v1",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "id", "type", "occurredAt", "data"],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^(file\\.ready:|test:).+"
+          },
+          "type": {
+            "const": "file.ready"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "test": {
+            "const": true
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name",
+              "mimeType",
+              "sizeBytes",
+              "visibility",
+              "passwordProtected"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string"
+              },
+              "sizeBytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "visibility": {
+                "enum": ["PUBLIC", "PRIVATE"]
+              },
+              "passwordProtected": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

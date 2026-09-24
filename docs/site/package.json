@@ -1,0 +1,26 @@
+{
+  "name": "flare-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format:check": "prettier --check .",
+    "assets": "node scripts/prepare-assets.mjs",
+    "dev": "npm run assets && vitepress dev --host 0.0.0.0",
+    "build": "npm run assets && vitepress build && node scripts/check-build.mjs",
+    "preview": "vitepress preview --host 0.0.0.0",
+    "test": "node --test scripts/checks.test.mjs && playwright test",
+    "check:coverage": "node scripts/check-coverage.mjs",
+    "check:changes": "node scripts/check-changes.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "axe-core": "4.13.0",
+    "prettier": "3.6.2",
+    "sharp": "0.35.4",
+    "vitepress": "1.6.4",
+    "vue": "3.5.43"
+  }
+}

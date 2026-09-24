@@ -1,0 +1,7 @@
+docs/site/.vitepress/dist/
+docs/site/.vitepress/cache/
+docs/site/public/screenshots/
+docs/site/public/evidence/
+docs/site/public/demos/
+docs/site/test-results/
+docs/site/playwright-report/

@@ -62,12 +62,12 @@ settings, or manage webhooks.
 
 Send `Authorization: Bearer flr_…` with requests. Available scopes are:
 
-| Scope          | Allowed operations                                                                             |
-| -------------- | ---------------------------------------------------------------------------------------------- |
-| `files:upload` | Upload a file; start, inspect, cancel and complete chunked uploads; upload/inspect chunk parts |
-| `files:read`   | List your files and available file types                                                       |
-| `urls:read`    | List your short links                                                                          |
-| `urls:write`   | Create and delete your short links                                                             |
+| Scope          | Allowed operations                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| `files:upload` | Upload a file; initialize and complete chunked uploads; obtain part URLs and upload parts |
+| `files:read`   | List your files and available file types                                                  |
+| `urls:read`    | List your short links                                                                     |
+| `urls:write`   | Create and delete your short links                                                        |
 
 Scopes only grant the listed routes and methods. They do not grant administrator
 or account-management access, even for an administrator-owned token. Existing
@@ -81,7 +81,10 @@ modules. Set `FLARE_URL` and `FLARE_TOKEN` in your environment, then run:
 node examples/integrations.mjs upload ./screenshot.png
 ```
 
-The example sends a multipart `file` field to `POST /api/files`; the selected
+The example infers a MIME type for common file extensions. For another format,
+pass its actual MIME type as a final argument, for example
+`node examples/integrations.mjs upload ./report.data application/pdf`. It sends a
+multipart `file` field to `POST /api/files`; the selected
 token's bound profile is applied by Flare. The JSON response is printed to stdout.
 Keep bearer credentials in environment variables or a secret manager, not in
 shared uploader configuration files.

@@ -1,0 +1,12 @@
+node_modules/
+.vitepress/cache/
+.vitepress/dist/
+test-results/
+playwright-report/
+public/screenshots/
+public/evidence/
+public/demos/
+public/icon.svg
+public/integrations.mjs
+public/llms.txt
+public/build-info.json

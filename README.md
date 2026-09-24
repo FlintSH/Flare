@@ -12,6 +12,22 @@
 </div>
 Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX, Flameshot, and KDE Spectacle. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
 
+## 📖 Documentation
+
+The [Flare handbook](docs/site/guide/index.md) covers every user workflow,
+instance administration, deployment, configuration, API, and webhooks. Its
+independent static site includes full-text search, interactive examples, real
+screenshots, and recorded app demos.
+
+- **Get started:** [Docker](docs/site/hosting/docker.md) · [Railway](docs/site/hosting/railway.md) · [First-run setup](docs/site/admin/setup.md)
+- **Use Flare:** [Upload and share](docs/site/guide/uploading.md) · [Folders](docs/site/guide/folders.md) · [Screenshot tools](docs/site/guide/screenshot-tools.md)
+- **Run your instance:** [Configuration](docs/site/hosting/configuration.md) · [Administration](docs/site/admin/index.md) · [Backups and upgrades](docs/site/hosting/maintenance.md)
+- **Build integrations:** [API reference](docs/site/api/index.md) · [Webhooks](docs/site/api/webhooks.md) · [OpenAPI](docs/site/public/openapi.json)
+- **Explore:** [Feature guide](docs/site/features.md) · [Demos](docs/site/demos.md) · [Troubleshooting](docs/site/hosting/troubleshooting.md)
+
+Preview the full site with `npm ci --prefix docs/site` then
+`npm run dev --prefix docs/site`. See [building and publishing the docs](docs/site/contributing.md).
+
 ## ✨ Features
 
 - 🚀 **Universal Screenshot Integration**
@@ -21,19 +37,19 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
 - 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
-- 📁 **[Folders](docs/folders.md)** - Organize files and subfolders, move files in bulk, and share a folder with one link
+- 📁 **[Folders](docs/site/guide/folders.md)** - Organize files and subfolders, move files in bulk, and share a folder with one link
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
-  - [Unified setup](docs/onboarding.md): account, storage, access, optional personalization and email in one guided flow
-  - [Appearance studio](docs/appearance.md): branding, paired palettes, share layouts, previews and portable packs
-  - [Upload profiles](docs/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
-  - [Integrations](docs/integrations.md): scoped tokens and signed file-ready webhooks
+  - [Unified setup](docs/site/admin/setup.md): account, storage, access, optional personalization and email in one guided flow
+  - [Appearance studio](docs/site/admin/appearance.md): branding, paired palettes, share layouts, previews and portable packs
+  - [Upload profiles](docs/site/guide/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
+  - [Integrations](docs/site/api/index.md): scoped tokens and signed file-ready webhooks
   - Personal light/dark/system preferences, CSS variables and custom colors
   - Advanced settings for custom CSS and HTML injection
 - 📊 **Admin Dashboard** - Usage metrics, user management, and system configuration
 - 👥 **User Management** - Role assignment, storage quotas, and content moderation
-- 🔗 **URL Shortener** - Custom short URLs under your domain with click tracking
+- 🔗 **URL Shortener** - Compact generated URLs under your domain with click tracking
 - 📝 **Pastebin** - Code and text sharing with syntax highlighting
 - 🤖 **OCR Processing** - Automatic text extraction from images uploaded
 - 🔌 **Rich Embeds** - Content embeds naturally on all your social media platforms.
@@ -50,55 +66,16 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-1. Install `docker.io` and `docker-compose`
+Follow the [Docker Compose guide](docs/site/hosting/docker.md) for a complete
+configuration with PostgreSQL, persistent storage, generated secrets, health
+checks, and a first-upload check. Then add a
+[domain and HTTPS](docs/site/hosting/reverse-proxy.md) and set up
+[backups](docs/site/hosting/maintenance.md).
 
-2. Create `docker-compose.yml` with the following template:
-
-   ```bash
-   version: '3.8'
-
-   services:
-     db:
-       image: postgres:17-alpine   # lightweight, recent version; 16 or 15 also fine
-       container_name: flare-db
-       restart: unless-stopped
-       environment:
-         POSTGRES_USER: flareuser          # change if you want
-         POSTGRES_PASSWORD: your-secure-password-here   #  ^f^p CHANGE THIS to something strong
-         POSTGRES_DB: flaredb              # database name Flare will use
-       volumes:
-         - ./postgres-data:/var/lib/postgresql/data   # persistent storage
-       healthcheck:
-         test: ["CMD-SHELL", "pg_isready -U flareuser -d flaredb"]
-         interval: 10s
-         timeout: 5s
-         retries: 5
-
-     flare:
-       image: flintsh/flare:latest
-       container_name: flare-app
-       restart: unless-stopped
-       ports:
-         - "3000:3000"                     # change left side if you want different host port
-       environment:
-         DATABASE_URL: postgresql://flareuser:your-secure-password-here@db:5432/flaredb?schema=public
-         NEXTAUTH_SECRET: securestuffhere   # generate with: openssl rand -base64 32
-         NEXTAUTH_URL: http://localhost:3000     # or https:// if using reverse proxy
-       volumes:
-         - ./uploads:/app/uploads          # where files/screenshots/videos are stored
-       depends_on:
-         db:
-           condition: service_healthy
-
-   ```
-
-3. Run `docker-compose up -d`
-
-4. Open http://localhost:3000 to complete the setup and create your admin account.
-
-The official Docker image is available on Docker Hub and GitHub Container Registry as `flintsh/flare`.
-
-The `rolling` image tag tracks pre-releases, which may be unstable or break. Settings shows the installed rolling commit and checks whether a newer rolling release has been published. Official rolling images include this metadata automatically. For custom rolling Docker builds, pass `--build-arg FLARE_RELEASE_CHANNEL=rolling --build-arg FLARE_COMMIT_SHA="$(git rev-parse HEAD)"`; builds without these arguments use the stable release channel.
+The official image is available as `flintsh/flare` on Docker Hub and
+`ghcr.io/flintsh/flare` on GitHub Container Registry. The `rolling` tag tracks
+pre-releases; use a tested release tag or digest for repeatable deployments.
+See [release channels and updates](docs/site/hosting/maintenance.md).
 
 ## 💬 Support
 
@@ -110,8 +87,8 @@ Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal ap
 
 In Settings, administrators can configure:
 
-- Setting storage quotas and file size limits for users
-- Defining upload rules and restrictions
+- Setting a shared ordinary-user storage quota and a maximum file size
+- Choosing storage and optional OCR processing
 - Configuring registration options and user permissions
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
@@ -122,7 +99,7 @@ Optional SMTP email supports password recovery, address verification, and confir
 email changes. Configure it during first-time setup or in **Settings → Email**.
 Delivery, recovery, and verification requirements are independent; upgrades leave
 email disabled and preserve existing account access. See [account email setup,
-environment overrides, and recovery](docs/email.md).
+environment overrides, and recovery](docs/site/admin/email.md).
 
 ### Single Sign-On (OIDC)
 

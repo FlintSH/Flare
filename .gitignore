@@ -59,6 +59,7 @@ next-env.d.ts
 .cursor/
 CLAUDE.md
 AGENTS.md
+!/AGENTS.md
 *.swp
 *.swo
 

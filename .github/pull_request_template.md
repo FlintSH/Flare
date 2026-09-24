@@ -1,21 +1,25 @@
-# Pull Request
+## What changes
 
-Thanks for contributing! Please try to fill out as much as the below info as you can.
+Describe the problem and resulting behavior, including the effect on existing installations.
 
----
+## Documentation coverage
 
-## What does your PR do?
+- [ ] Updated all affected user, admin, hosting, API, and webhook guides in the same change (see `AGENTS.md`).
+- [ ] Updated feature navigation, examples, defaults, limits, permissions, and migration/recovery guidance where affected.
+- [ ] Refreshed relevant real screenshots/demos for visible workflow changes; checked for secrets and stale controls.
+- [ ] Updated endpoint inventory, OpenAPI, event schema, and runnable examples for affected contracts.
+- [ ] Ran docs coverage, production build/link checks, and relevant browser checks.
 
-## Why are you making these changes?
+List the updated guides and evidence. If behavior is unchanged, explain why and record which documentation was reviewed.
 
-## How did you implement it?
+## Validation
 
-## Screenshots / Recordings (if UI)
+List meaningful checks and any remaining limitations.
 
-## Related Issues
+## Screenshots / recordings
 
-## Additional Info
+Include evidence for visible changes, using demonstration data.
 
----
+## Related issues
 
-\*Please make sure your PR follows the [contributing guidelines](../CONTRIBUTING.md). All PRs will be manually reviewed by @FlintSH. If you have any questions, feel free to ask in the PR or reach out to me on [Discord](https://discord.gg/t4rGHBJy). TY for your help :D
+Follow the [contributing guidelines](../CONTRIBUTING.md). Pull requests are reviewed by @FlintSH.
