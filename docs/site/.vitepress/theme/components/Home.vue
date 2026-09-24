@@ -135,8 +135,8 @@ const references = [
         <span class="eyebrow">WALKTHROUGHS & EXAMPLES</span>
         <h2 id="walkthroughs-title">Learn with the real interface.</h2>
         <p>
-          Follow a screenshot tour, watch a recorded workflow, or try the upload
-          settings and API examples in your browser.
+          Follow a screenshot tour, watch a recorded workflow, or explore upload
+          settings and build API request examples in your browser.
         </p>
         <a :href="withBase('/demos.html')" class="text-link"
           >Open the interactive walkthroughs →</a
