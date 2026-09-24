@@ -79,6 +79,27 @@ for complete semantic coverage**, including behavior that a path-based check mis
 
 ## Checks
 
+### Local visual testing with Meticulous
+
+Flare no longer uses Meticulous CI or paid hosted test runs. Keep the Meticulous
+CLI, installed skills, recorder support, and disposable test image available for
+local visual testing. For frontend changes, use the local simulation and diff
+steps automatically when suitable recorded sessions are available; see the
+[visual testing guide](docs/site/contributing.md#local-visual-testing-with-meticulous).
+
+Repository policy takes precedence over the installed skills' cloud-test steps:
+do not upload builds, trigger hosted test runs, ensure cloud baselines, or wait for
+a Meticulous CI check unless the user explicitly asks to re-enable hosted testing.
+Use `meticulous simulate` against the local app for relevant sessions, inspect the
+screenshots/diffs, and fix unintended changes. A simulation without a base replay
+is a visual inspection, not a verified zero-diff result. If authentication, session
+access, or service limits prevent simulation, use available local browser tests
+and report the coverage gap; do not fall back to a paid run. Local simulations
+still require Meticulous authentication and network access and upload replay
+artifacts to the service; do not treat them as offline tests.
+
+### Documentation checks
+
 ```sh
 npm ci --prefix docs/site
 npm run check:coverage --prefix docs/site
