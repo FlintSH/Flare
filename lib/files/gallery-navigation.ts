@@ -13,6 +13,7 @@ export const fileListSelect = {
   password: true,
   views: true,
   downloads: true,
+  folderId: true,
   user: { select: { urlId: true } },
   tags: {
     where: { excluded: false },

@@ -7,6 +7,7 @@ import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
   CheckSquare,
+  FolderInput,
   FolderOpen,
   RefreshCw,
   SearchX,
@@ -22,6 +23,8 @@ import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
 import { FileGridPagination } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ImageLightbox } from '@/components/file/image-lightbox'
+import { FolderBrowser } from '@/components/folders/folder-browser'
+import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
@@ -30,6 +33,7 @@ import { Button } from '@/components/ui/button'
 import { fileQuery, groupFiles } from '@/lib/files/gallery'
 
 import { useFileFilters } from '@/hooks/use-file-filters'
+import { useFolders } from '@/hooks/use-folders'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 import { useTags } from '@/hooks/use-tags'
 
@@ -42,9 +46,16 @@ export function FileGrid() {
   const [fileTypes, setFileTypes] = useState<string[]>([])
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
+  const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const { tags, reload: reloadTags } = useTags()
+  const {
+    folders,
+    loading: foldersLoading,
+    error: foldersError,
+    reload: reloadFolders,
+  } = useFolders()
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
     total: 0,
     pageCount: 0,
@@ -53,6 +64,7 @@ export function FileGrid() {
   })
   const {
     filters,
+    setFolder,
     setTag,
     setSearch,
     setTypes,
@@ -106,6 +118,10 @@ export function FileGrid() {
   useEffect(() => {
     void reloadTags()
   }, [refreshKey, reloadTags])
+
+  useEffect(() => {
+    void reloadFolders()
+  }, [refreshKey, reloadFolders])
 
   useEffect(() => {
     window.addEventListener('flare:files-changed', refreshFiles)
@@ -341,6 +357,14 @@ export function FileGrid() {
             </Button>
           </div>
         )}
+        <FolderBrowser
+          folders={folders}
+          value={filters.folder ?? null}
+          onChange={setFolder}
+          loading={foldersLoading}
+          error={foldersError}
+          onRetry={() => void reloadFolders()}
+        />
       </section>
 
       {selecting && (
@@ -368,6 +392,20 @@ export function FileGrid() {
           <Button
             size="sm"
             className="ml-auto"
+            variant="outline"
+            disabled={!selectedIds.length || isLoading}
+            onClick={() =>
+              setMovingFiles(
+                files.filter((file) => selectedIds.includes(file.id))
+              )
+            }
+          >
+            <FolderInput className="mr-2 h-4 w-4" />
+            Move
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             disabled={!selectedIds.length || isLoading}
             onClick={() =>
               setTaggingFiles(
@@ -432,7 +470,11 @@ export function FileGrid() {
                 : `No files tagged “${activeTagName}” yet`
               : hasActiveFilters
                 ? 'No files match your search'
-                : 'No files uploaded'}
+                : filters.folder === 'unfiled'
+                  ? 'Everything has a home'
+                  : filters.folder
+                    ? 'No files in this folder yet'
+                    : 'No files uploaded'}
           </h2>
           <p className="mb-6 mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
             {onlyTagFilter
@@ -441,7 +483,11 @@ export function FileGrid() {
                 : 'Add this tag from a file’s menu, select several files, or give it an automatic rule in Manage tags.'
               : hasActiveFilters
                 ? 'Try another file name or reset your filters to see everything in your library.'
-                : 'Upload your first file to get started.'}
+                : filters.folder === 'unfiled'
+                  ? 'All your files are organized into folders. You can always find them in All files.'
+                  : filters.folder
+                    ? 'Upload here, or move existing files from their menu or a selection in All files.'
+                    : 'Upload your first file to get started.'}
           </p>
           {hasActiveFilters ? (
             <Button
@@ -450,11 +496,21 @@ export function FileGrid() {
             >
               {onlyTagFilter ? 'All files' : 'Reset filters'}
             </Button>
+          ) : filters.folder === 'unfiled' ? (
+            <Button variant="outline" onClick={() => setFolder(null)}>
+              All files
+            </Button>
           ) : (
             <Button asChild>
-              <Link href="/dashboard/upload">
+              <Link
+                href={
+                  filters.folder
+                    ? `/dashboard/upload?folder=${filters.folder}`
+                    : '/dashboard/upload'
+                }
+              >
                 <Upload className="mr-2 h-4 w-4" />
-                Upload your first file
+                {filters.folder ? 'Upload here' : 'Upload your first file'}
               </Link>
             </Button>
           )}
@@ -478,6 +534,11 @@ export function FileGrid() {
                       onUpdate={refreshFiles}
                       onPreview={open}
                       onEditTags={() => setTaggingFiles([file])}
+                      onMove={() => setMovingFiles([file])}
+                      folder={folders.find(
+                        (folder) => folder.id === file.folderId
+                      )}
+                      onFolderSelect={setFolder}
                       onTagSelect={setTag}
                       selected={selectedIds.includes(file.id)}
                       onSelect={
@@ -509,6 +570,15 @@ export function FileGrid() {
           if (filters.tag === id) setTag(null)
         }}
       />
+      {movingFiles && (
+        <MoveFilesDialog
+          files={movingFiles}
+          onClose={() => {
+            setMovingFiles(null)
+            setSelectedIds([])
+          }}
+        />
+      )}
       {taggingFiles && (
         <FileTagsDialog
           files={taggingFiles}

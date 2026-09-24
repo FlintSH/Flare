@@ -163,6 +163,12 @@ export async function initializeChunkUpload(
     selection.profileId !== bodyOptions.profileId
   )
     throw new UploadError('Conflicting profile selections.')
+  if (
+    selection.folderId !== undefined &&
+    bodyOptions.folderId !== undefined &&
+    selection.folderId !== bodyOptions.folderId
+  )
+    throw new UploadError('Conflicting upload folder selections.')
   const options = await resolveUploadOptions(user, {
     ...bodyOptions,
     ...selection,

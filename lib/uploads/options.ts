@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { FolderError, validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
 import { TagError, validateOwnedTagIds } from '@/lib/tags/service'
 
@@ -26,16 +27,21 @@ export class UploadError extends Error {
 
 /** Read controls before streaming; profile/naming cannot depend on multipart order. */
 export function requestUploadOptions(req: Request): UploadRequestOptions {
+  const searchParams = new URL(req.url).searchParams
   const header = req.headers.get('x-upload-profile')
-  const query = new URL(req.url).searchParams.get('profileId')
+  const query = searchParams.get('profileId')
   if (header && query && header !== query)
     throw new UploadError('Conflicting upload profile selections.')
   const value = header ?? query
-  return value
-    ? uploadRequestOptionsSchema.parse({
-        profileId: value === 'none' ? null : value,
-      })
-    : {}
+  const folderHeader = req.headers.get('x-upload-folder')
+  const folderQuery = searchParams.get('folderId')
+  if (folderHeader && folderQuery && folderHeader !== folderQuery)
+    throw new UploadError('Conflicting upload folder selections.')
+  const folder = folderHeader ?? folderQuery
+  return uploadRequestOptionsSchema.parse({
+    ...(value ? { profileId: value === 'none' ? null : value } : {}),
+    ...(folder ? { folderId: folder === 'none' ? null : folder } : {}),
+  })
 }
 
 /** Multipart values are strings; preserve explicit null/disabled versus inheritance. */
@@ -60,7 +66,7 @@ export function parseUploadFields(
           : fields[key] === 'false'
             ? false
             : fields[key]
-        : ['password', 'expiresAt', 'profileId'].includes(key) &&
+        : ['password', 'expiresAt', 'profileId', 'folderId'].includes(key) &&
             (fields[key] === '' || fields[key] === 'null')
           ? null
           : fields[key]
@@ -154,6 +160,7 @@ export async function resolveUploadOptions(
   }
   return {
     ...resolved,
+    folderId: await validateOwnedFolderId(user.id, request.folderId ?? null),
     tagIds: await validateOwnedTagIds(user.id, resolved.tagIds),
     profileId: profile?.id ?? null,
     profileRevision: profile?.updatedAt.toISOString() ?? null,
@@ -166,6 +173,13 @@ export function applyUploadOverrides(
   input: UploadRequestOptions
 ): ResolvedUploadOptions {
   const request = uploadRequestOptionsSchema.parse(input)
+  if (
+    request.folderId !== undefined &&
+    request.folderId !== (resolved.folderId ?? null)
+  )
+    throw new UploadError(
+      'The upload folder cannot change after upload starts. Select it using X-Upload-Folder before uploading.'
+    )
   if (
     request.profileId !== undefined &&
     request.profileId !== resolved.profileId
@@ -218,6 +232,7 @@ export function applyUploadOverrides(
   }
   return {
     ...merged,
+    folderId: resolved.folderId ?? null,
     profileId: resolved.profileId,
     profileRevision: resolved.profileRevision,
     password:
@@ -226,7 +241,11 @@ export function applyUploadOverrides(
 }
 
 export function uploadErrorResponse(error: unknown): Response {
-  if (error instanceof UploadError || error instanceof TagError)
+  if (
+    error instanceof UploadError ||
+    error instanceof TagError ||
+    error instanceof FolderError
+  )
     return Response.json({ error: error.message }, { status: error.status })
   if (error && typeof error === 'object' && 'issues' in error)
     return Response.json({ error: 'Invalid upload options.' }, { status: 400 })

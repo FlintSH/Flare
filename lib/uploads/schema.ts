@@ -62,6 +62,7 @@ export const uploadRequestOptionsSchema = z.preprocess(
     .innerType()
     .extend({
       profileId: z.string().min(1).max(100).nullable().optional(),
+      folderId: z.string().min(1).max(128).nullable().optional(),
       password: z
         .string()
         .max(72)
@@ -79,6 +80,8 @@ export const uploadRequestOptionsSchema = z.preprocess(
 export type UploadRequestOptions = z.infer<typeof uploadRequestOptionsSchema>
 export type ResolvedUploadOptions = Required<UploadProfileOptions> & {
   profileId: string | null
+  /** Request-only destination; older in-flight uploads may omit it. */
+  folderId?: string | null
   profileRevision: string | null
   expiresAt: string | null
   password: string | null
@@ -132,6 +135,7 @@ export function mergeUploadOptions(
   return {
     ...merged,
     profileId: request.profileId ?? null,
+    folderId: request.folderId ?? null,
     profileRevision: null,
     password: request.password || null,
     expiresAt,

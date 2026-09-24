@@ -41,6 +41,7 @@ function readFilters(
   const groupBy = params.get('groupBy') as FileGrouping
   const selectedSort = sortOptions.includes(sortBy) ? sortBy : 'newest'
   return {
+    folder: params.get('folder') || null,
     tag: params.get('tag') || null,
     groupBy:
       groupOptions.includes(groupBy) &&
@@ -67,6 +68,7 @@ function readFilters(
 
 function writeFilters(filters: FileFilterOptions, defaultLimit: number) {
   const params = new URLSearchParams()
+  if (filters.folder) params.set('folder', filters.folder)
   if (filters.tag) params.set('tag', filters.tag)
   if (filters.groupBy !== 'none') params.set('groupBy', filters.groupBy)
   if (filters.search) params.set('search', filters.search)
@@ -142,6 +144,10 @@ export function useFileFilters(
     (tag: string | null) => updateFilters({ tag, page: 1 }),
     [updateFilters]
   )
+  const setFolder = useCallback(
+    (folder: string | null) => updateFilters({ folder, page: 1 }),
+    [updateFilters]
+  )
   const setTypes = useCallback(
     (types: string[]) => updateFilters({ types, page: 1 }),
     [updateFilters]
@@ -208,6 +214,7 @@ export function useFileFilters(
 
   return {
     filters,
+    setFolder,
     setTag,
     setSearch,
     setTypes,

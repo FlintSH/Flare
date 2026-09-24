@@ -341,6 +341,72 @@ describe('anchored image navigation API', () => {
     expect(mocks.transaction).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['folder-work', { folderId: 'folder-work', folder: { userId: 'owner' } }],
+    ['unfiled', { folderId: null }],
+  ])(
+    'keeps folder and tag filters in the gallery snapshot for %s',
+    async (folder, folderFilter) => {
+      await request({ folder: folder as string, tag: 'tag-work' })
+      const expectedWhere = {
+        AND: [
+          {
+            userId: 'owner',
+            AND: [
+              folderFilter,
+              {
+                tags: {
+                  some: {
+                    tagId: 'tag-work',
+                    excluded: false,
+                    tag: { userId: 'owner' },
+                  },
+                },
+              },
+            ],
+          },
+          { mimeType: { startsWith: 'image/' } },
+        ],
+      }
+      expect(mocks.transactionFile.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { AND: [expectedWhere, { id: anchor.id }] },
+        })
+      )
+      expect(mocks.transactionFile.count).toHaveBeenNthCalledWith(1, {
+        where: expectedWhere,
+      })
+      expect(
+        mocks.transactionFile.findMany.mock.calls[0][0].where.AND[0]
+      ).toEqual(expectedWhere)
+    }
+  )
+
+  it('filters the normal paginated list to direct folder contents and includes membership', async () => {
+    mocks.file.count.mockResolvedValue(1)
+    mocks.file.findMany.mockResolvedValue([
+      { ...file('own'), folderId: 'folder-work' },
+    ])
+    const response = await GET(
+      new Request(
+        'https://flare.example/api/files?folder=folder-work&tag=untagged'
+      )
+    )
+    const where = {
+      userId: 'owner',
+      AND: [
+        { folderId: 'folder-work', folder: { userId: 'owner' } },
+        { tags: { none: { excluded: false } } },
+      ],
+    }
+    expect(mocks.file.count).toHaveBeenCalledWith({ where })
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where })
+    )
+    expect(mocks.file.findMany.mock.calls[0][0].select.folderId).toBe(true)
+    expect((await response.json()).data[0].folderId).toBe('folder-work')
+  })
+
   it('caps requested neighbor windows at 100 images', async () => {
     const response = await request({ limit: '1000' })
     expect((await response.json()).pagination.limit).toBe(100)

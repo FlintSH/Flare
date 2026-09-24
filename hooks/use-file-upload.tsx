@@ -27,6 +27,7 @@ export type FileUploadOptions = {
   expiresAt?: Date | null
   expiryAction?: 'DELETE' | 'SET_PRIVATE'
   profileId?: string | null
+  folderId?: string | null
   onUploadComplete?: (responses: UploadResponse[]) => void
   onUploadError?: (error: string) => void
 }
@@ -50,6 +51,9 @@ export function useFileUpload(options: FileUploadOptions = {}) {
   >(options.expiryAction)
   const [profileId, setProfileId] = useState<string | null | undefined>(
     options.profileId
+  )
+  const [folderId, setFolderId] = useState<string | null>(
+    options.folderId ?? null
   )
   const progressToastRef = React.useRef<ReturnType<typeof toast> | null>(null)
 
@@ -146,6 +150,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
           mimeType: file.type || 'application/octet-stream',
           size: file.size,
           profileId,
+          folderId,
           visibility,
           password: password || undefined,
           expiresAt:
@@ -157,7 +162,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       })
 
       if (!initResponse.ok) {
-        throw new Error('Failed to initialize upload')
+        const result = await initResponse.json().catch(() => null)
+        throw new Error(result?.error || 'Failed to initialize upload')
       }
 
       const {
@@ -267,7 +273,8 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       )
 
       if (!completeResponse.ok) {
-        throw new Error('Failed to complete upload')
+        const result = await completeResponse.json().catch(() => null)
+        throw new Error(result?.error || 'Failed to complete upload')
       }
 
       return parseUploadResponse(await completeResponse.json())
@@ -304,6 +311,17 @@ export function useFileUpload(options: FileUploadOptions = {}) {
             reject(new Error('Could not read the upload response.'))
           }
         } else {
+          let serverError: string | undefined
+          try {
+            const result = JSON.parse(xhr.responseText)
+            if (typeof result.error === 'string') serverError = result.error
+          } catch {
+            // A proxy error may not contain the application's JSON response.
+          }
+          if (serverError) {
+            reject(new Error(serverError))
+            return
+          }
           if (xhr.status === 413) {
             reject(
               new Error(
@@ -323,6 +341,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       xhr.open('POST', '/api/files')
       if (profileId !== undefined)
         xhr.setRequestHeader('X-Upload-Profile', profileId ?? 'none')
+      if (folderId) xhr.setRequestHeader('X-Upload-Folder', folderId)
       xhr.send(formData)
     })
   }
@@ -480,5 +499,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
     setExpiryAction,
     profileId,
     setProfileId,
+    folderId,
+    setFolderId,
   }
 }
