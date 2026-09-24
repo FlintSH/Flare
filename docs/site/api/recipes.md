@@ -241,6 +241,8 @@ The receiver's in-memory duplicate cache is intentionally simple. For durable ac
 
 ## Pick a token for the job
 
+The [saved views browser example](./saved-views#runnable-browser-session-example) is a separate dashboard-session recipe. Run it on a signed-in Flare page; no named or legacy upload token authorizes those operations.
+
 | Connection                | Suggested permissions     | Optional profile                |
 | ------------------------- | ------------------------- | ------------------------------- |
 | Screenshot uploader       | `files:upload`            | Your screenshots sharing policy |

@@ -6,6 +6,8 @@ description: Back up, restore, upgrade, monitor, and move a Flare instance while
 
 A recoverable Flare instance needs its **PostgreSQL database, file bytes, deployment configuration, and encryption secrets**. The database stores settings as well as accounts and file records. Exporting an appearance pack or a user's data is useful, but is not an instance backup.
 
+[Saved views](../guide/saved-views) are stored in account preferences in PostgreSQL, so a database backup preserves them. Existing accounts start with an empty view list after upgrading; the feature needs no separate migration, storage directory, or environment setting. The personal account export does not include saved views.
+
 The commands below match the [Docker Compose guide](/hosting/docker): project name `flare`, services `db` and `flare`, and volumes `flare_postgres_data` and `flare_uploads`.
 
 ## Make a consistent local backup

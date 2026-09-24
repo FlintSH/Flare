@@ -30,6 +30,8 @@ Separate controls combine. For example, a folder, an image type, and a search ph
 
 The page address includes your filters and page selection. Bookmark it to return to the same view; browser Back and Forward restore the controls along with the results. The URL is a view of your signed-in library, not a public share link.
 
+To keep that search inside Flare, choose **Save view**. [Saved views](./saved-views) remember filters, sorting, and grouping in your account; pinned views appear above the file grid on any signed-in device. Opening a view starts at page one with your current page size. Saving a view does not change its files or their access settings.
+
 ## Browse by date
 
 Open **Upload date → Group files** to choose **By week**, **By month**, or **By year**. Grouping works with **Newest first** and **Oldest first**. Choosing a size or activity sort turns date grouping off; enabling grouping from those sorts returns to newest first.

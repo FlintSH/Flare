@@ -7,6 +7,8 @@ description: Manage your identity and sign-in details, verify or change email, c
 
 Open **Profile** from the account menu to manage settings that belong to you. **Settings** is the administrator's separate area for instance-wide behavior.
 
+[Saved views](./saved-views) also belong to your account and follow you between devices. Create and manage these private library shortcuts in **Files**.
+
 <Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Profile Account section with identity, password, and workspace settings" caption="Account brings your identity, password, and personal appearance into one section." />
 
 ## Update your name and avatar
@@ -83,7 +85,7 @@ The archive contains:
 - `user-data.json` with basic account details, file metadata, saved OCR text, and shortened URLs with click counts.
 - Available uploaded files under `files/`, grouped by upload date.
 
-This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, or webhook configuration. Export profile recipes separately if you want to keep those settings.
+This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, saved views, upload profiles, appearance preferences, API credentials, or webhook configuration. Export profile recipes separately if you want to keep those settings.
 
 Inspect the archive and open important files before deleting their originals. Files that are missing from storage or cannot be retrieved can be skipped during export. If an expected file is absent, download it individually if possible and ask the administrator to check storage.
 

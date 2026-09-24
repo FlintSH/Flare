@@ -78,3 +78,5 @@ Uploads follow the same maximum file size, storage quotas, file checks, upload p
 The API paths currently have no version prefix. These references describe the implementation shipped with the documentation. Webhook payloads do carry an explicit `version: 1`; check that field when processing events. Use the documentation from your Flare release when maintaining an older instance.
 
 Named tokens currently cover file listing/uploads and short links. Account administration, token/webhook management, file deletion, changing an existing file's settings, and organization management are dashboard operations. The [endpoint inventory](./endpoint-inventory) identifies their authentication boundaries without implying that they are additional bearer-token APIs.
+
+For dashboard contributors, the [saved views reference](./saved-views) documents the private browser-session API, revision checks, and a runnable same-origin example. Saved views are outside both the named-token OpenAPI surface and the token-based request builder above.

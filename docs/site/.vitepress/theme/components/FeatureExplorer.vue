@@ -68,6 +68,12 @@ const features = [
   ],
   [
     'Organize',
+    'Saved views',
+    'Name a library search, pin its filters and grouping, and return to it from any signed-in device.',
+    '/guide/saved-views',
+  ],
+  [
+    'Organize',
     'Image gallery',
     'Browse images by month, open the lightbox, and navigate with keyboard arrows or touch.',
     '/guide/library',

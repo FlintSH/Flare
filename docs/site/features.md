@@ -19,6 +19,7 @@ Filter the capabilities below, or [take a guided tour](./demos). Each card leads
 | Run a shared instance                    | [Users and permissions](./admin/users) → [email](./admin/email) → [backups](./hosting/maintenance) |
 | Send screenshots straight to your domain | [Screenshot tools](./guide/screenshot-tools) → [upload profiles](./guide/upload-profiles)          |
 | Share a collection                       | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                |
+| Return to a favorite library search      | [Saved views](./guide/saved-views) → [image browsing](./guide/library#inspect-images)              |
 | Match your own brand                     | [Appearance studio](./admin/appearance)                                                            |
 | Connect your own software                | [API](./api/) → [signed webhooks](./api/webhooks)                                                  |
 

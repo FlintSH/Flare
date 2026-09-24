@@ -4,6 +4,7 @@ node_modules/
 public/screenshots/
 public/icon.svg
 public/integrations.mjs
+public/saved-views.js
 public/llms.txt
 public/build-info.json
 public/demos/

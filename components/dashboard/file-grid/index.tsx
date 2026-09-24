@@ -25,6 +25,7 @@ import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
+import { SavedViews } from '@/components/saved-views/saved-views'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
@@ -64,6 +65,7 @@ export function FileGrid() {
   })
   const {
     filters,
+    filterRestoreKey,
     setFolder,
     setTag,
     setSearch,
@@ -74,6 +76,7 @@ export function FileGrid() {
     setGroupBy,
     setPage,
     resetFilters,
+    restoreFilters,
   } = useFileFilters()
   const {
     gallery,
@@ -275,7 +278,11 @@ export function FileGrid() {
           </p>
         </div>
         <div className="flex flex-col gap-3 lg:flex-row">
-          <SearchInput onSearch={setSearch} initialValue={filters.search} />
+          <SearchInput
+            onSearch={setSearch}
+            initialValue={filters.search}
+            resetKey={filterRestoreKey}
+          />
           <FileFilters
             sortBy={filters.sortBy}
             onSortChange={setSortBy}
@@ -364,6 +371,12 @@ export function FileGrid() {
           loading={foldersLoading}
           error={foldersError}
           onRetry={() => void reloadFolders()}
+        />
+        <SavedViews
+          filters={filters}
+          folders={folders}
+          tags={tags}
+          onRestore={restoreFilters}
         />
       </section>
 

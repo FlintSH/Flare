@@ -33,6 +33,13 @@ const steps = [
     link: '/guide/upload-profiles',
   },
   {
+    title: 'Your library, ready to return to',
+    label: 'Return',
+    src: '/screenshots/handbook/saved-views.webp',
+    text: 'Set a folder, tag, search, or image filter, then save and pin the view. Reopen that named view to restore its filters and grouping with current matching files.',
+    link: '/guide/saved-views',
+  },
+  {
     title: 'Put your name on it',
     label: 'Customize',
     src: '/screenshots/handbook/appearance-studio.webp',

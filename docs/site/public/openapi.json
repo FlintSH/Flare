@@ -4,7 +4,7 @@
     "title": "Flare named-token API",
     "version": "1.0.0",
     "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
-    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. In particular, /api/saved-views and /api/saved-views/{id} require a browser session and reject bearer credentials, so they are not operations in this document. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1.",
     "license": {
       "name": "MIT",
       "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"

@@ -35,6 +35,8 @@ Choose **Tags** beside the library filters, or click a tag on a file. Search, da
 
 Tags filter your own library. A bookmarked tagged view is not a public collection link. Use a [shared folder](./folders#share-a-folder) when you want to give another person a browsable collection.
 
+Choose **Save view** to keep a tagged search and its other filters in your account, then pin it above the grid. [Saved views](./saved-views) follow tag renames. Deleting the tag makes a view that references it unavailable until you update its filters.
+
 ## Rename and remove tags
 
 Open **Tags → Manage tags** to edit the tag list. Renaming updates the label wherever that tag is used. Deleting a tag removes the label from files and upload profiles while keeping all files intact.

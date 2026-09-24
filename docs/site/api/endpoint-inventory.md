@@ -58,6 +58,8 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                               |
 | `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                      |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                         |
+| `/api/saved-views`                 | GET, POST     | List or create private saved library views for the session account.                                                    |
+| `/api/saved-views/{id}`            | PATCH, DELETE | Update or delete an owned saved view using its current revision.                                                       |
 | `/api/customization`               | GET           | Read published appearance; administrators also receive draft/history state.                                            |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                              |
 | `/api/profile/avatar`              | POST          | Upload an account avatar.                                                                                              |
@@ -70,6 +72,8 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                               |
 
 Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
+
+[Saved view mutations](./saved-views) require same-origin JSON, enforce a 16 KiB body limit, and reject stale revisions. All saved-view routes reject an `Authorization` header, including requests that also contain a browser session.
 
 ### Email account flows
 

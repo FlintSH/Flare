@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 24')
+  await expect(page.getByRole('status')).toContainText('3 of 25')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -116,6 +116,8 @@ for (const width of [390, 1440]) {
       './demos.html',
       './hosting/docker.html',
       './api/files.html',
+      './guide/saved-views.html',
+      './api/saved-views.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -164,6 +166,8 @@ for (const theme of ['dark', 'light']) {
       './api/files.html',
       './hosting/docker.html',
       './guide/sharing.html',
+      './guide/saved-views.html',
+      './api/saved-views.html',
     ]) {
       await page.goto(path)
       await page.waitForLoadState('networkidle')
