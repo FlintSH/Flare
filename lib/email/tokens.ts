@@ -2,10 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { createHash, randomBytes } from 'node:crypto'
 
 export type EmailTokenPurpose =
-  | 'verify'
-  | 'reset'
-  | 'change'
-  | 'change_approval'
+  'verify' | 'reset' | 'change' | 'change_approval'
 
 export function hashEmailToken(token: string) {
   return createHash('sha256').update(token).digest('hex')

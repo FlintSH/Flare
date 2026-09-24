@@ -7,7 +7,9 @@ description: Search filenames and extracted text, combine filters, browse images
 
 **Files** is your home for uploaded files and pastes. Each card brings together a preview, filename, size, activity, and file actions. The library opens with all your files; organizing into folders or tags is optional.
 
-<Screenshot src="/screenshots/workspace/files-showcase.png" alt="File library containing images, documents, and other file types" caption="One library holds your screenshots, media, documents, and pastes." />
+Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upgrading-from-2-0-to-2-1) for plain copied links and URL-ID changes before updating saved links or custom clients. The dependency refresh keeps the filtering and viewer controls described here.
+
+<Screenshot src="/evidence/vault-folders/all-files.jpg" alt="All files with folder navigation, tag filtering, and image and document cards" caption="All files keeps your library together, with optional folders and tags for organization." />
 
 ## Search and narrow the results
 

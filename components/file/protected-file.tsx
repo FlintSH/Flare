@@ -29,8 +29,8 @@ export function ProtectedFile({
 }: ProtectedFileProps) {
   const isTextBased = Boolean(
     CODE_FILE_TYPES[file.mimeType] ||
-      TEXT_FILE_TYPES.includes(file.mimeType) ||
-      file.mimeType === 'text/csv'
+    TEXT_FILE_TYPES.includes(file.mimeType) ||
+    file.mimeType === 'text/csv'
   )
 
   return (

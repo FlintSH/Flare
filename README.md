@@ -1,8 +1,8 @@
 <div align="center">
   <img src="./public/banner.png" alt="Flare Banner" width="600px" />
   <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
-  
-  ### A modern, lightning-fast file sharing platform built for self-hosting
+
+### A modern, lightning-fast file sharing platform built for self-hosting
 
 [![Version](https://img.shields.io/github/v/release/FlintSH/flare?include_prereleases&style=flat-square&logo=github)](https://github.com/FlintSH/flare/releases)
 [![Last Commit](https://img.shields.io/github/last-commit/FlintSH/flare?style=flat-square&logo=git)](https://github.com/FlintSH/flare/commits/main)

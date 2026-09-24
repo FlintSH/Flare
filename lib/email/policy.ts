@@ -22,9 +22,9 @@ export function hasVerifiedEmail(
     (user.emailVerificationSource === 'oidc' && config?.verification.trustOidc)
   return Boolean(
     user.email &&
-      user.emailVerified &&
-      user.emailVerifiedFor === user.email &&
-      trustedSource
+    user.emailVerified &&
+    user.emailVerifiedFor === user.email &&
+    trustedSource
   )
 }
 

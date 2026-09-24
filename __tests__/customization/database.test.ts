@@ -577,12 +577,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
       )
       const fileRoutes = await import('@/app/api/files/route')
       const chunkRoutes = await import('@/app/api/files/chunks/route')
-      const partRoutes = await import(
-        '@/app/api/files/chunks/[uploadId]/part/[partNumber]/route'
-      )
-      const completion = await import(
-        '@/app/api/files/chunks/[uploadId]/complete/route'
-      )
+      const partRoutes =
+        await import('@/app/api/files/chunks/[uploadId]/part/[partNumber]/route')
+      const completion =
+        await import('@/app/api/files/chunks/[uploadId]/complete/route')
       const text = 'An actual multipart and chunked file payload.'
       const form = new FormData()
       form.append(
@@ -716,9 +714,8 @@ suite('customization contracts against disposable PostgreSQL', () => {
         },
       },
     })
-    const completion = await import(
-      '@/app/api/files/chunks/[uploadId]/complete/route'
-    )
+    const completion =
+      await import('@/app/api/files/chunks/[uploadId]/complete/route')
     const request = () =>
       completion.POST(
         jsonRequest(`/api/files/chunks/${data.uploadId}/complete`, {
@@ -795,9 +792,8 @@ suite('customization contracts against disposable PostgreSQL', () => {
     )
     const token = await tokenResponse.json()
     authentication.user = null
-    const parts = await import(
-      '@/app/api/files/chunks/[uploadId]/part/[partNumber]/route'
-    )
+    const parts =
+      await import('@/app/api/files/chunks/[uploadId]/part/[partNumber]/route')
     const response = await parts.PUT(
       new Request(`http://localhost/api/files/chunks/${data.uploadId}/part/1`, {
         method: 'PUT',

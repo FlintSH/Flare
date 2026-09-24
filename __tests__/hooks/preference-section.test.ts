@@ -32,8 +32,7 @@ vi.mock('react', () => ({
   useEffect: (effect: () => void | (() => void), dependencies: unknown[]) => {
     const index = harness.cursor++
     const previous = harness.slots[index] as
-      | { dependencies: unknown[]; cleanup?: () => void }
-      | undefined
+      { dependencies: unknown[]; cleanup?: () => void } | undefined
     if (
       previous &&
       dependencies.every((value, i) =>

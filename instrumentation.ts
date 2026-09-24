@@ -9,9 +9,8 @@ export async function register() {
 
     // Initialize before importing application modules, including Prisma.
     if (recording || replay) {
-      const { initBackendRecorder } = await import(
-        '@alwaysmeticulous/backend-recorder-launcher'
-      )
+      const { initBackendRecorder } =
+        await import('@alwaysmeticulous/backend-recorder-launcher')
       const recorder = await initBackendRecorder({
         enabled: true,
         exportMode: 's3',

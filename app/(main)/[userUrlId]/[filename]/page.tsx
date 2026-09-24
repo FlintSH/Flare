@@ -168,9 +168,7 @@ export async function generateMetadata({
       description: ogDescription,
       url: rawUrl,
       type: (isVideo ? 'video.other' : isImage ? 'article' : 'website') as
-        | 'video.other'
-        | 'article'
-        | 'website',
+        'video.other' | 'article' | 'website',
       images: isImage
         ? [
             {

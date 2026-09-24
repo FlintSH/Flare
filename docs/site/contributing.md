@@ -92,6 +92,12 @@ DOCS_BASE=/flare/ npm test
 
 `DOCS_BASE` must begin and end with `/`. Afterward rebuild without that variable if you want a root deployment. For Vue components, use `withBase()` for local links and assets. Regular Markdown links are handled by VitePress.
 
+## Dependency maintenance
+
+Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. Use Node.js 24 and the pnpm version in the root `package.json`; install with `pnpm install --frozen-lockfile` and `npm ci --prefix docs/site`. Check both dependency trees with `pnpm audit` and `npm audit --prefix docs/site` before a release. A clean audit describes the advisories known at that time, not a guarantee against future findings.
+
+The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress. Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

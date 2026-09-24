@@ -97,6 +97,19 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Upgrading from 2.0 to 2.1
+
+Use the normal backup and upgrade steps above. The image applies the new folder and tag database migrations on startup. Existing files stay available in **All files**; upgrading does not move them into folders or publish collections.
+
+The dependency refresh retains Next.js 15, React 18, Prisma 6, and Tailwind 3. It does not introduce new instance settings or environment variables. Source builds use Node.js 24 and the pnpm version declared in `package.json`; see [dependency maintenance](/contributing#dependency-maintenance) for the separate application and documentation checks.
+
+- [Folders](/guide/folders) and [tags](/guide/tags) are optional ways to organize your library. Folders start unshared, and tags stay private to your account. A shared folder lists only its direct public files; it does not publish private files or subfolders.
+- **Copy link** now always copies the plain share-page URL. The old **Copy format** preference has been removed. Upload responses use that same URL for `url`, `pageUrl`, and `copyText`; clients that need raw bytes or direct downloads should use `rawUrl` or `downloadUrl` explicitly. Review custom clients that relied on Markdown or HTML in `copyText`.
+- Changing your URL ID now updates public file URLs while preserving the storage paths used to read, download, and delete existing files. Links using the previous ID may stop working; copy the current link again. The fix does not automatically repair files affected by an earlier failed change. Restore those files from a matching backup if needed.
+- Screenshot tools can be configured directly from **Profile → Uploads → Screenshot tools and scripts**. [macOS setup with iTake](/guide/screenshot-tools#itake-on-macos) is available alongside the existing tools.
+
+After updating, test a new upload, a copied link, an existing download, and any screenshot-tool integration you use. Review a shared folder while signed out before distributing its link.
+
 ### Rollback
 
 An older image may not understand a newer database schema. Do not assume changing an image tag reverses migrations. The dependable rollback is the recorded old image **plus its matching pre-upgrade database and file backup** in a clean restore environment. Account for new uploads and account changes made since that backup before switching traffic.

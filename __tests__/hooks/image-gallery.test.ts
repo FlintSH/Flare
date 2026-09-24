@@ -42,8 +42,7 @@ vi.mock('react', () => ({
   useCallback: (callback: unknown, dependencies: unknown[]) => {
     const index = harness.cursor++
     const previous = harness.slots[index] as
-      | { callback: unknown; dependencies: unknown[] }
-      | undefined
+      { callback: unknown; dependencies: unknown[] } | undefined
     if (
       !previous ||
       dependencies.some(
@@ -58,8 +57,7 @@ vi.mock('react', () => ({
   useEffect: (effect: () => void | (() => void), dependencies: unknown[]) => {
     const index = harness.cursor++
     const previous = harness.slots[index] as
-      | { dependencies: unknown[]; cleanup?: () => void }
-      | undefined
+      { dependencies: unknown[]; cleanup?: () => void } | undefined
     if (
       previous &&
       dependencies.every((value, i) =>

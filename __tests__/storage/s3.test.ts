@@ -47,9 +47,9 @@ runStorageProviderContract(
 //   TEST_S3_FORCE_PATH_STYLE=true pnpm test
 const realS3Configured = Boolean(
   process.env.TEST_S3_BUCKET &&
-    process.env.TEST_S3_REGION &&
-    process.env.TEST_S3_ACCESS_KEY &&
-    process.env.TEST_S3_SECRET_KEY
+  process.env.TEST_S3_REGION &&
+  process.env.TEST_S3_ACCESS_KEY &&
+  process.env.TEST_S3_SECRET_KEY
 )
 
 if (realS3Configured) {
