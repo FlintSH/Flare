@@ -16,6 +16,7 @@ export const PUBLIC_PATHS = [
   '/auth/forgot-password',
   '/auth/reset-password',
   '/auth/verify-email',
+  '/s/folders/',
 ]
 
 export const SETUP_PATHS = ['/setup', '/api/setup']

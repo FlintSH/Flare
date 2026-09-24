@@ -12,6 +12,7 @@ export interface FileType {
   views: number
   downloads: number
   expiresAt?: string | null
+  folderId?: string | null
   tags?: { id: string; name: string }[]
 }
 
@@ -37,6 +38,7 @@ export type SortOption =
 export type FileGrouping = 'none' | 'week' | 'month' | 'year'
 
 export interface FileFilterOptions {
+  folder?: string | null
   tag?: string | null
   groupBy: FileGrouping
   page: number

@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import Image from 'next/image'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
 import { ExpiryAction } from '@/types/events'
 import { $Enums } from '@prisma/client'
@@ -12,6 +14,7 @@ import {
   Check,
   Copy,
   File,
+  Folder,
   Loader2,
   Upload,
   X,
@@ -32,9 +35,11 @@ import {
 } from '@/components/ui/select'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
+import { folderPath } from '@/lib/folders/navigation'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { UploadResponse, useFileUpload } from '@/hooks/use-file-upload'
+import { useFolders } from '@/hooks/use-folders'
 import { useToast } from '@/hooks/use-toast'
 
 interface UploadFormProps {
@@ -56,6 +61,10 @@ export function UploadForm({
   const [uploadError, setUploadError] = useState('')
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const { toast } = useToast()
+  const searchParams = useSearchParams()
+  const requestedFolder = searchParams.get('folder')
+  const initialFolder = requestedFolder === 'unfiled' ? null : requestedFolder
+  const { folders, loading: foldersLoading, error: foldersError } = useFolders()
   const {
     files,
     isUploading,
@@ -73,14 +82,23 @@ export function UploadForm({
     setExpiryAction,
     profileId,
     setProfileId,
+    folderId,
+    setFolderId,
   } = useFileUpload({
     maxSize,
+    folderId: initialFolder,
     onUploadComplete: (responses) => {
       setCompleted((previous) => [...responses, ...previous])
       setUploadError('')
+      window.dispatchEvent(new Event('flare:files-changed'))
     },
     onUploadError: setUploadError,
   })
+  useEffect(() => {
+    setFolderId(initialFolder)
+  }, [initialFolder, setFolderId])
+  const selectedFolder = folders.find((folder) => folder.id === folderId)
+  const unavailableFolder = !!folderId && !selectedFolder && !foldersLoading
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles, rejections) => {
@@ -228,6 +246,58 @@ export function UploadForm({
       )}
 
       <div className="space-y-4">
+        {(folders.length > 0 || folderId) && (
+          <div className="space-y-2">
+            <Label htmlFor="upload-folder">Save to</Label>
+            <Select
+              value={folderId ?? 'unfiled'}
+              onValueChange={(value) =>
+                setFolderId(value === 'unfiled' ? null : value)
+              }
+              disabled={isUploading || foldersLoading}
+            >
+              <SelectTrigger id="upload-folder" className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Folder
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <SelectValue placeholder="Choose a folder" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unfiled">Unfiled</SelectItem>
+                {folderId && !selectedFolder && (
+                  <SelectItem value={folderId} disabled>
+                    {foldersLoading ? 'Loading folder…' : 'Folder unavailable'}
+                  </SelectItem>
+                )}
+                {[...folders]
+                  .sort((a, b) =>
+                    folderPath(folders, a.id).localeCompare(
+                      folderPath(folders, b.id)
+                    )
+                  )
+                  .map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {folderPath(folders, folder.id)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {unavailableFolder ? (
+              <p className="text-sm text-destructive" role="alert">
+                {foldersError
+                  ? 'Folders could not be loaded. Try refreshing the page.'
+                  : 'This folder is no longer available. Choose another destination.'}
+              </p>
+            ) : selectedFolder?.shareToken ? (
+              <p className="text-xs text-muted-foreground">
+                Public files will also appear on this folder’s shared link.
+              </p>
+            ) : null}
+          </div>
+        )}
         <ProfilePicker
           value={profileId}
           onChange={setProfileId}
@@ -330,7 +400,12 @@ export function UploadForm({
             setUploadError('')
             void uploadFiles()
           }}
-          disabled={files.length === 0 || isUploading}
+          disabled={
+            files.length === 0 ||
+            isUploading ||
+            unavailableFolder ||
+            (!!folderId && foldersLoading)
+          }
         >
           {isUploading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -351,6 +426,16 @@ export function UploadForm({
             <h2 className="text-sm font-medium" role="status">
               Upload complete
             </h2>
+            {selectedFolder && (
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  href={`/dashboard?folder=${encodeURIComponent(selectedFolder.id)}`}
+                >
+                  <Folder className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Open folder
+                </Link>
+              </Button>
+            )}
             {completed.length > 1 && (
               <Button
                 variant="ghost"

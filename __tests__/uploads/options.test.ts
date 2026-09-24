@@ -20,6 +20,7 @@ import {
 const database = vi.hoisted(() => ({
   user: { findUnique: vi.fn() },
   uploadProfile: { findFirst: vi.fn() },
+  vaultFolder: { findFirst: vi.fn() },
 }))
 const validateOwnedTagIds = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/tags/service', () => ({
@@ -63,6 +64,7 @@ beforeEach(() => {
     options: { visibility: 'PRIVATE', expiration: 'DAY' },
     updatedAt: now,
   })
+  database.vaultFolder.findFirst.mockResolvedValue({ id: 'marketing' })
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -70,6 +72,69 @@ afterEach(() => {
 })
 
 describe('portable profile and upload policy contracts', () => {
+  it('validates upload folders against the owner without adding folder destinations to profiles', async () => {
+    expect((await resolveUploadOptions(user)).folderId).toBeNull()
+    expect(database.vaultFolder.findFirst).not.toHaveBeenCalled()
+    const resolved = await resolveUploadOptions(user, { folderId: 'marketing' })
+    expect(resolved.folderId).toBe('marketing')
+    expect(database.vaultFolder.findFirst).toHaveBeenCalledWith({
+      where: { id: 'marketing', userId: user.id },
+      select: { id: true },
+    })
+    database.vaultFolder.findFirst.mockResolvedValue(null)
+    await expect(
+      resolveUploadOptions(user, { folderId: 'someone-elses-folder' })
+    ).rejects.toMatchObject({ status: 404 })
+    expect(() =>
+      uploadProfileOptionsSchema.parse({ folderId: 'marketing' })
+    ).toThrow()
+  })
+
+  it('pins destinations throughout chunk completion, including explicit unfiled uploads', async () => {
+    const resolved = await resolveUploadOptions(user, { folderId: 'marketing' })
+    expect(applyUploadOverrides(user, resolved, {}).folderId).toBe('marketing')
+    expect(
+      applyUploadOverrides(user, resolved, { folderId: 'marketing' }).folderId
+    ).toBe('marketing')
+    expect(() =>
+      applyUploadOverrides(user, resolved, { folderId: null })
+    ).toThrow('folder cannot change')
+    expect(() =>
+      applyUploadOverrides(user, resolved, { folderId: 'other' })
+    ).toThrow('folder cannot change')
+    const legacySnapshot = { ...resolved }
+    delete legacySnapshot.folderId
+    expect(applyUploadOverrides(user, legacySnapshot, {}).folderId).toBeNull()
+    expect(parseUploadFields({ folderId: '' })).toEqual({ folderId: null })
+  })
+
+  it('selects an upload folder before streaming and rejects conflicting destinations', () => {
+    expect(
+      requestUploadOptions(
+        new Request('https://flare.test/api/files', {
+          headers: { 'X-Upload-Folder': 'marketing' },
+        })
+      )
+    ).toEqual({ folderId: 'marketing' })
+    expect(
+      requestUploadOptions(
+        new Request('https://flare.test/api/files?folderId=marketing')
+      )
+    ).toEqual({ folderId: 'marketing' })
+    expect(
+      requestUploadOptions(
+        new Request('https://flare.test/api/files?folderId=none')
+      )
+    ).toEqual({ folderId: null })
+    expect(() =>
+      requestUploadOptions(
+        new Request('https://flare.test/api/files?folderId=marketing', {
+          headers: { 'X-Upload-Folder': 'other' },
+        })
+      )
+    ).toThrow('Conflicting upload folder')
+  })
+
   it('keeps unconfigured uploads untagged, inherits profile tags, and allows explicit removal', () => {
     expect(mergeUploadOptions({}, {}, {}, now).tagIds).toEqual([])
     expect(

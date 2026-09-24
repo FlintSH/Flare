@@ -32,6 +32,7 @@ model User {
   uploadToken                 String          @unique
   randomizeFileUrls           Boolean         @default(false)
   files                       File[]
+  vaultFolders                VaultFolder[]
   vaultTags                   VaultTag[]
   shortenedUrls               ShortenedUrl[]
   defaultFileExpiration       FileExpiration  @default(DISABLED)
@@ -114,8 +115,31 @@ model File {
   uploadOptions    Json           @default("{}")
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags             VaultFileTag[]
+  folderId         String?        @map("vaultFolderId")
+  folder           VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([ocrTagsPendingAt])
+  @@index([userId, folderId])
+}
+
+// Independent of retired Folder tables: folders organize existing files without
+// changing their storage paths, links, tags, or visibility.
+model VaultFolder {
+  id             String        @id @default(cuid())
+  userId         String
+  name           String
+  normalizedName String
+  parentId       String?
+  shareToken     String?       @unique
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent         VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
+  children       VaultFolder[] @relation("FolderTree")
+  files          File[]
+
+  // Root names are also unique through a partial index in the migration.
+  @@unique([userId, parentId, normalizedName])
+  @@index([userId, parentId])
 }
 
 // Separate tables from the retired folder feature, whose tables may still

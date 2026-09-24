@@ -13,6 +13,8 @@ import {
   Clock,
   Download,
   Eye,
+  Folder,
+  FolderInput,
   Globe,
   KeyRound,
   Link as LinkIcon,
@@ -50,6 +52,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
+import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
 
@@ -62,6 +65,9 @@ interface FileCardProps {
   onPreview?: (file: FileType) => void
   onEditTags?: () => void
   onTagSelect?: (id: string) => void
+  onMove?: () => void
+  folder?: FolderView
+  onFolderSelect?: (id: string) => void
   selected?: boolean
   onSelect?: () => void
 }
@@ -73,6 +79,9 @@ export function FileCard({
   onPreview,
   onEditTags,
   onTagSelect,
+  onMove,
+  folder,
+  onFolderSelect,
   selected,
   onSelect,
 }: FileCardProps) {
@@ -482,6 +491,12 @@ export function FileCard({
                   Edit tags
                 </DropdownMenuItem>
               )}
+              {onMove && (
+                <DropdownMenuItem onSelect={onMove}>
+                  <FolderInput />
+                  Move to folder
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onSelect={() => {
                   setVisibility(file.visibility)
@@ -576,6 +591,19 @@ export function FileCard({
             {formatFileSize(file.size)}
           </span>
         </div>
+        {folder && (
+          <button
+            type="button"
+            onClick={() => onFolderSelect?.(folder.id)}
+            disabled={!onFolderSelect}
+            title={folder.name}
+            aria-label={`Open folder ${folder.name}`}
+            className="mt-2 flex max-w-full items-center gap-1.5 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Folder className="h-3 w-3 shrink-0" />
+            <span className="truncate">{folder.name}</span>
+          </button>
+        )}
         {!!initialFile.tags?.length && (
           <div className="mt-2 flex items-center gap-1.5">
             {initialFile.tags.slice(0, 2).map((tag) => (

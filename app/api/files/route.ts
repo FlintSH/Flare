@@ -157,6 +157,15 @@ export async function GET(request: Request) {
 
     const conditions: Prisma.FileWhereInput[] = []
 
+    const folder = searchParams.get('folder')
+    if (folder) {
+      conditions.push(
+        folder === 'unfiled'
+          ? { folderId: null }
+          : { folderId: folder, folder: { userId: user.id } }
+      )
+    }
+
     const tag = searchParams.get('tag')
     if (tag) {
       conditions.push({

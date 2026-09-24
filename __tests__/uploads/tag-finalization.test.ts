@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     config: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
     file: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+    vaultFolder: { findFirst: vi.fn() },
   },
 }))
 vi.mock('@/lib/database/prisma', () => ({
@@ -88,6 +89,29 @@ beforeEach(() => {
 })
 
 describe('tags at the shared upload commit boundary', () => {
+  it('rechecks folder ownership under the user lock before publishing direct and chunk uploads', async () => {
+    mocks.tx.vaultFolder.findFirst.mockResolvedValue({ id: 'marketing' })
+    const upload = input()
+    upload.options.folderId = 'marketing'
+    await finalizeUpload({ ...upload, transaction: mocks.tx as never })
+    expect(mocks.tx.vaultFolder.findFirst).toHaveBeenCalledWith({
+      where: { id: 'marketing', userId: user.id },
+      select: { id: true },
+    })
+    expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.tx.vaultFolder.findFirst.mock.invocationCallOrder[0]
+    )
+    expect(mocks.tx.file.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ folderId: 'marketing' }),
+      })
+    )
+    mocks.tx.file.create.mockClear()
+    mocks.tx.vaultFolder.findFirst.mockResolvedValue(null)
+    await expect(finalizeUpload(upload)).rejects.toMatchObject({ status: 404 })
+    expect(mocks.tx.file.create).not.toHaveBeenCalled()
+  })
+
   it('publishes profile tags and filename matches in the file transaction using the original name', async () => {
     await finalizeUpload(input())
     expect(mocks.tx.file.create).toHaveBeenCalledWith(

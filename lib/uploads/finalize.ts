@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getUniqueFilename } from '@/lib/files/filename'
+import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
@@ -85,6 +86,13 @@ export async function finalizeUpload(input: {
       where: { userId: user.id, path: filePath },
     })
     if (existing) return { file: existing, created: false }
+    // Folder mutations take the same user lock, keeping this ownership check
+    // and file publication atomic with folder removal.
+    const folderId = await validateOwnedFolderId(
+      user.id,
+      options.folderId ?? null,
+      tx
+    )
     if (user.apiToken) {
       const token = await tx.apiToken.findUnique({
         where: { id: user.apiToken.id },
@@ -141,7 +149,11 @@ export async function finalizeUpload(input: {
       const extension = extname(name)
       urlPath = `/${fresh.urlId}/${name.slice(0, name.length - extension.length)}-${randomUUID().slice(0, 12)}${extension}`
     }
-    const { password: _password, ...persistedOptions } = options
+    const {
+      password: _password,
+      folderId: _folderId,
+      ...persistedOptions
+    } = options
     const file = await tx.file.create({
       data: {
         name: displayName,
@@ -152,6 +164,7 @@ export async function finalizeUpload(input: {
         visibility: options.visibility,
         password: passwordHash,
         userId: user.id,
+        folderId,
         uploadOptions: persistedOptions as Prisma.InputJsonValue,
       },
     })

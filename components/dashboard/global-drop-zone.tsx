@@ -21,15 +21,17 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [_dragCounter, setDragCounter] = useState(0)
   const [shouldUpload, setShouldUpload] = useState(false)
-  const { onDrop, uploadFiles, files, isUploading } = useFileUpload({
-    maxSize,
-    onUploadComplete: () => {
-      router.refresh()
-      window.dispatchEvent(new Event('flare:files-changed'))
-      setShouldUpload(false)
-    },
-    onUploadError: () => setShouldUpload(false),
-  })
+  const [droppingInFolder, setDroppingInFolder] = useState(false)
+  const { onDrop, uploadFiles, files, isUploading, setFolderId } =
+    useFileUpload({
+      maxSize,
+      onUploadComplete: () => {
+        router.refresh()
+        window.dispatchEvent(new Event('flare:files-changed'))
+        setShouldUpload(false)
+      },
+      onUploadError: () => setShouldUpload(false),
+    })
 
   const handleDragEnter = useCallback(
     (e: DragEvent) => {
@@ -45,6 +47,14 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           (item) => item.kind === 'file'
         )
         if (hasFiles) {
+          const folder = new URLSearchParams(window.location.search).get(
+            'folder'
+          )
+          setDroppingInFolder(
+            window.location.pathname === '/dashboard' &&
+              !!folder &&
+              folder !== 'unfiled'
+          )
           setDragCounter((prev) => prev + 1)
           setIsDragging(true)
         }
@@ -114,11 +124,16 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
       }
 
       if (validFiles.length > 0) {
+        const folder =
+          window.location.pathname === '/dashboard'
+            ? new URLSearchParams(window.location.search).get('folder')
+            : null
+        setFolderId(folder === 'unfiled' ? null : folder)
         onDrop(validFiles)
         setShouldUpload(true)
       }
     },
-    [isUploading, maxSize, onDrop, toast]
+    [isUploading, maxSize, onDrop, setFolderId, toast]
   )
 
   useEffect(() => {
@@ -160,7 +175,9 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           Drop files to upload
         </h2>
         <p className="mt-3 text-muted-foreground">
-          Release to upload with your default upload profile.
+          {droppingInFolder
+            ? 'Release to upload into this folder with your default upload profile.'
+            : 'Release to upload with your default upload profile.'}
         </p>
       </div>
     </div>

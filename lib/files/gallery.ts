@@ -12,6 +12,7 @@ export function fileQuery(filters: FileFilterOptions, page = filters.page) {
     limit: filters.limit.toString(),
     search: filters.search,
     sortBy: filters.sortBy,
+    ...(filters.folder && { folder: filters.folder }),
     ...(filters.tag && { tag: filters.tag }),
     ...(filters.types.length > 0 && { types: filters.types.join(',') }),
     ...(filters.dateFrom && { dateFrom: filters.dateFrom }),
