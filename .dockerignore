@@ -4,6 +4,7 @@
 node_modules
 npm-debug.log
 README.md
+docs/site
 .env
 .env.*
 .dockerignore

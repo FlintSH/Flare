@@ -1,0 +1,74 @@
+name: Documentation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/site/package-lock.json
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs/site
+      - name: Require documentation with code changes
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
+        env:
+          DOCS_COMPARE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: npm run check:changes --prefix docs/site -- --base "$DOCS_COMPARE_BASE"
+      - name: Verify reference coverage
+        run: npm run check:coverage --prefix docs/site
+      - name: Check documentation formatting
+        run: npm run format:check --prefix docs/site
+      - name: Build and verify links and assets
+        run: npm run build --prefix docs/site
+      - name: Install browser
+        working-directory: docs/site
+        run: npx playwright install --with-deps chromium
+      - name: Test documentation interactions and responsive layouts
+        run: npm test --prefix docs/site
+      - name: Save browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-browser-failures
+          path: docs/site/test-results
+          if-no-files-found: ignore
+      - name: Upload deployable site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/.vitepress/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PAGES_ENABLED == 'true'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

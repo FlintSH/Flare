@@ -60,6 +60,14 @@ Note that pnpm only exposes packages you actually declare in `package.json`. If 
 
 No strict rules here on your commits, just make sure your commit messages describe what the change does in some capacity. The exact format isn't important to me. What matters is that anyone reading it can understand what was changed and why.
 
+Every commit that changes product behavior must include the corresponding handbook
+updates. Features, fixes, settings, permissions, API contracts, and operational
+changes need complete documentation when they ship. Read [AGENTS.md](AGENTS.md)
+for the coverage matrix and required checks, and the
+[documentation contribution guide](docs/site/contributing.md) for local preview,
+screenshots, testing, and publishing. The docs have their own dependencies and do
+not add anything to Flare's runtime.
+
 ## Pull Requests
 
 Follow the PR template and fill in all required info. If your PR includes any frontend changes please try to include screenshots/screen-recordings to make reviewing easier please.

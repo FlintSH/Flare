@@ -3,7 +3,48 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { basename } from 'node:path'
+import { basename, extname } from 'node:path'
+
+// Blob defaults to application/octet-stream, which does not match detected
+// image/archive/document bytes. Preserve the real type for common uploads and
+// accept an explicit MIME type for other formats.
+const mimeTypes = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.pdf': 'application/pdf',
+  '.zip': 'application/zip',
+  '.gz': 'application/gzip',
+  '.tar': 'application/x-tar',
+  '.7z': 'application/x-7z-compressed',
+  '.rar': 'application/vnd.rar',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.xml': 'application/xml',
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+}
 
 const mode = process.argv[2]
 if (mode === 'upload') {
@@ -11,10 +52,19 @@ if (mode === 'upload') {
   const path = process.argv[3]
   if (!FLARE_URL || !FLARE_TOKEN || !path)
     throw new Error(
-      'Set FLARE_URL and FLARE_TOKEN, then run: node examples/integrations.mjs upload /path/to/file.png'
+      'Set FLARE_URL and FLARE_TOKEN, then run: node examples/integrations.mjs upload /path/to/file.png [mime-type]'
+    )
+  const mimeType = process.argv[4] || mimeTypes[extname(path).toLowerCase()]
+  if (!mimeType)
+    throw new Error(
+      'Unknown file extension. Supply its real MIME type as the next argument (for example application/pdf).'
     )
   const form = new FormData()
-  form.set('file', new Blob([await readFile(path)]), basename(path))
+  form.set(
+    'file',
+    new Blob([await readFile(path)], { type: mimeType }),
+    basename(path)
+  )
   const response = await fetch(new URL('/api/files', FLARE_URL), {
     method: 'POST',
     headers: { authorization: `Bearer ${FLARE_TOKEN}` },
@@ -104,6 +154,8 @@ if (mode === 'upload') {
     console.log(`Listening on port ${port}, path /webhook`)
   )
 } else {
-  console.log('Usage: node examples/integrations.mjs upload <file> | receive')
+  console.log(
+    'Usage: node examples/integrations.mjs upload <file> [mime-type] | receive'
+  )
   process.exitCode = 1
 }
