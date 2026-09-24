@@ -24,6 +24,8 @@ Folder names can be up to 80 characters. Use a plain-text name without `/` or `\
 
 Search, tag filters, sorting, dates, and image browsing stay within the folder you are viewing. Resetting those filters keeps the folder selected.
 
+Use a [saved view](./saved-views) to return to a folder with your usual filters and grouping. The view still shows only that folder's direct files. Renaming the folder keeps the view connected; deleting the folder makes the view unavailable until you update its filters.
+
 ## Move files
 
 For one file, open its menu and choose **Move to folder**. For several files, choose **Select**, select the files or current page, and choose **Move**. Pick a destination and confirm.

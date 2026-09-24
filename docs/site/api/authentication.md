@@ -50,7 +50,7 @@ Named tokens do not authorize the following operations:
 
 - Creating or revoking tokens, managing webhooks, or retrieving the account upload token.
 - Editing accounts, server settings, branding, email policy, or users.
-- Creating or editing upload profiles, folders, or tags.
+- Creating or editing upload profiles, folders, tags, or saved views.
 - Deleting files or editing existing files' visibility, passwords, or expiration.
 
 This remains true when the token's owner is an administrator. See [all route boundaries](./endpoint-inventory) if you are investigating a request used by the dashboard.

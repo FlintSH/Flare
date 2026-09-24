@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input'
 interface SearchInputProps {
   onSearch: (value: string) => void
   initialValue?: string
+  resetKey?: number
 }
 
 export const SearchInput = memo(function SearchInput({
   onSearch,
   initialValue = '',
+  resetKey = 0,
 }: SearchInputProps) {
   const [value, setValue] = useState(initialValue)
   const pendingSearch = useRef<ReturnType<typeof setTimeout>>()
@@ -20,7 +22,7 @@ export const SearchInput = memo(function SearchInput({
   useEffect(() => {
     setValue(initialValue)
     clearTimeout(pendingSearch.current)
-  }, [initialValue])
+  }, [initialValue, resetKey])
 
   useEffect(() => () => clearTimeout(pendingSearch.current), [])
 
@@ -47,6 +49,9 @@ export const SearchInput = memo(function SearchInput({
         className="h-10 rounded-lg bg-background/70 pl-10 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
         value={value}
         onChange={(event) => updateSearch(event.target.value)}
+        onBlur={() => {
+          if (value !== initialValue) updateSearch(value, true)
+        }}
       />
       {value && (
         <Button

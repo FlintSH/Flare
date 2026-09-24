@@ -101,6 +101,10 @@ await copyFile(
   resolve(root, '../../examples/integrations.mjs'),
   resolve(root, 'public/integrations.mjs')
 )
+await copyFile(
+  resolve(root, '../../examples/saved-views.js'),
+  resolve(root, 'public/saved-views.js')
+)
 await mkdir(resolve(root, 'public/demos'), { recursive: true })
 for (const name of ['organizing-demo', 'sharing-demo', 'protected-file-demo']) {
   await copyFile(

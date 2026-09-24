@@ -17,6 +17,8 @@ Choose a step, then enlarge the screenshot to inspect the details. The screensho
 
 <DemoTour />
 
+The **Return** step shows [saved views](./guide/saved-views): choose library filters, save and pin the view, then reopen it to see current matching files. Its screenshot is from the real application with demonstration data, just like the other tour steps.
+
 ## Watch real workflows
 
 These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.

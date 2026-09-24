@@ -9,6 +9,8 @@ import {
   SortOption,
 } from '@/types/components/file'
 
+import type { SavedViewFilters } from '@/lib/saved-views/schema'
+
 const sortOptions: SortOption[] = [
   'newest',
   'oldest',
@@ -101,6 +103,7 @@ export function useFileFilters(
   const [filters, setFilters] = useState(() =>
     readFilters(new URLSearchParams(query), defaultLimit)
   )
+  const [filterRestoreKey, setFilterRestoreKey] = useState(0)
   const currentFilters = useRef(filters)
 
   // Browser back/forward and links to a filtered library restore the controls
@@ -113,6 +116,7 @@ export function useFileFilters(
     ) {
       currentFilters.current = restored
       setFilters(restored)
+      setFilterRestoreKey((value) => value + 1)
     }
   }, [query, defaultLimit])
 
@@ -211,9 +215,17 @@ export function useFileFilters(
       }),
     [defaultLimit, updateFilters]
   )
+  const restoreFilters = useCallback(
+    (saved: SavedViewFilters) => {
+      updateFilters({ ...saved, page: 1, limit: currentFilters.current.limit })
+      setFilterRestoreKey((value) => value + 1)
+    },
+    [updateFilters]
+  )
 
   return {
     filters,
+    filterRestoreKey,
     setFolder,
     setTag,
     setSearch,
@@ -225,5 +237,6 @@ export function useFileFilters(
     setPage,
     setLimit,
     resetFilters,
+    restoreFilters,
   }
 }
