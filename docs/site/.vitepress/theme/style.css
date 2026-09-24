@@ -174,18 +174,17 @@ summary {
   grid-template-columns: 1fr 1.02fr;
   align-items: center;
   gap: 55px;
-  min-height: 610px;
-  padding: 90px 0 86px;
+  padding: 70px 0 50px;
 }
 .hero-copy {
   position: relative;
   z-index: 1;
 }
 .hero-copy h1 {
-  font-size: clamp(60px, 6.3vw, 84px);
+  font-size: clamp(60px, 6.3vw, 76px);
   letter-spacing: -0.05em;
   line-height: 1.07;
-  margin: 27px 0 24px;
+  margin: 18px 0 22px;
   font-weight: 730;
 }
 .hero-copy h1 span {
@@ -237,28 +236,35 @@ summary {
   gap: 9px;
   align-items: center;
   color: var(--vp-c-text-3);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 25px;
 }
-.hero-footnote i {
-  height: 3px;
-  width: 3px;
-  background: var(--vp-c-text-3);
-  border-radius: 50%;
+.hero-footnote a {
+  color: var(--flare-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.home-reference {
+  border: 1px solid var(--flare-line);
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  padding: 26px 28px 12px;
+}
+.home-reference h2 {
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  margin: 6px 0 22px;
+}
+.home-reference .quick-links a:last-child {
+  border-bottom: 0;
+}
+.walkthrough-links {
+  margin-top: 30px;
 }
 .hero-visual {
   position: relative;
   min-width: 0;
-}
-.visual-orbit {
-  position: absolute;
-  inset: -65px 0;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(219, 114, 55, 0.1),
-    transparent 65%
-  );
 }
 .browser-frame {
   display: block;
@@ -268,11 +274,6 @@ summary {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 30px 60px #0003;
-  transform: perspective(1400px) rotateY(-5deg) rotateX(2deg);
-  transition: transform 0.25s;
-}
-.browser-frame:hover {
-  transform: none;
 }
 .browser-toolbar {
   color: #acb7c8;
@@ -345,7 +346,7 @@ summary {
 }
 .path-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 17px;
 }
 .path-card {
@@ -770,8 +771,11 @@ select:disabled {
     font-size: 66px;
   }
   .hero-footnote {
-    font-size: 9px;
+    font-size: 12px;
     gap: 6px;
+  }
+  .path-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .home-lower {
     gap: 50px;
@@ -791,9 +795,6 @@ select:disabled {
   }
   .hero-visual {
     max-width: 650px;
-  }
-  .browser-frame {
-    transform: none;
   }
   .hero-description {
     max-width: 500px;
@@ -844,7 +845,7 @@ select:disabled {
   }
   .hero-footnote {
     flex-wrap: wrap;
-    font-size: 9px;
+    font-size: 12px;
   }
   .home-hero {
     padding-top: 40px;
