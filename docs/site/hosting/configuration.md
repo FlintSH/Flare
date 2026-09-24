@@ -58,6 +58,8 @@ These belong to the app runtime or build tooling, rather than saved instance con
 
 The Dockerfile also sets Corepack/pnpm installation variables (`COREPACK_ENABLE_DOWNLOAD_PROMPT`, `COREPACK_HOME`, `npm_config_verify_deps_before_run`, and `HUSKY`) to make its packaged runtime work. They are not Flare feature controls. Build identity arguments `FLARE_RELEASE_CHANNEL` and `FLARE_COMMIT_SHA` are baked into the official image by release workflows.
 
+Meticulous's hosted CI workflow has been retired. Its recorder variables and disposable test image remain available for [local visual testing](/contributing#local-visual-testing-with-meticulous); ordinary production recording still requires explicit opt-in and a recording token. `METICULOUS_API_TOKEN` authenticates the optional CLI, not Flare's server or users, and is no longer required as a repository Actions secret.
+
 ## Email environment variables
 
 Every variable in the following tables also accepts a `_FILE` variant. For example, `FLARE_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password` reads that file's contents, trimming trailing whitespace. Set **one** of the direct variable or its `_FILE` variant. Booleans must be exactly `true` or `false`; numbers must be nonnegative integer strings and satisfy the listed range.

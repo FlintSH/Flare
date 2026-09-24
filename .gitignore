@@ -70,7 +70,8 @@ prisma/*.db-journal
 # Tesseract files
 eng.traineddata
 
-# Meticulous AI onboard workspace
+# Local Meticulous sessions, replay output, and onboard workspace
+.meticulous/
 .meticulous-onboard/
 
 # Python preview controller tests
