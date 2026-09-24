@@ -93,11 +93,11 @@ export function FileGrid() {
   )
   const hasActiveFilters = Boolean(
     filters.tag ||
-      filters.search ||
-      filters.types.length ||
-      filters.visibility.length ||
-      filters.dateFrom ||
-      filters.dateTo
+    filters.search ||
+    filters.types.length ||
+    filters.visibility.length ||
+    filters.dateFrom ||
+    filters.dateTo
   )
   const activeTagName =
     filters.tag === 'untagged'

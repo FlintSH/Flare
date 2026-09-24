@@ -40,8 +40,7 @@ export const SETUP_APPEARANCE_PRESETS = [
 ] as const
 
 export type SetupAppearancePreset =
-  | 'current'
-  | (typeof SETUP_APPEARANCE_PRESETS)[number]['id']
+  'current' | (typeof SETUP_APPEARANCE_PRESETS)[number]['id']
 
 export function createSetupAppearance(
   published: AppearanceDocument,

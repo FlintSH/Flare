@@ -1,4 +1,3 @@
-
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
@@ -14,3 +13,16 @@ overrides:
   'sharp@<0.35.0': ^0.35.3
   'brace-expansion@<1.1.17': ^1.1.18
   'brace-expansion@>=2.0.0 <2.1.3': ^2.1.4
+  # Prisma 6 pins deepmerge-ts 7; 8 fixes recursive-object stack exhaustion.
+  '@prisma/config@6>deepmerge-ts': 8.0.2
+  # Browser installer 2 still uses vulnerable extract-zip with no patched release.
+  '@puppeteer/browsers@<3.2.3': 3.2.3
+  '@puppeteer/browsers@3.2.3>proxy-agent': 8.0.2
+  '@alwaysmeticulous/client>proxy-agent': 8.0.2
+
+packageExtensions:
+  '@puppeteer/browsers@3.2.3':
+    dependencies:
+      # Preserve proxy downloads and ZIP extraction without system unzip.
+      proxy-agent: ^8.0.2
+      yauzl: ^3.4.0

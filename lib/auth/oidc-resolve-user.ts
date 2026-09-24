@@ -33,10 +33,7 @@ export type OidcResolveResult =
   | {
       ok: false
       reason:
-        | 'no_email'
-        | 'account_exists'
-        | 'not_provisioned'
-        | 'email_unverified'
+        'no_email' | 'account_exists' | 'not_provisioned' | 'email_unverified'
     }
 
 const userSelect = {

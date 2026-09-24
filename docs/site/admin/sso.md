@@ -6,6 +6,8 @@ description: Connect an OpenID Connect provider, understand provisioning and ema
 
 Flare supports one configured OpenID Connect provider. Users can sign in through your existing identity service while Flare retains its own accounts, file ownership, and roles. Configure it under **Settings → Access → Single Sign-On (OIDC)**.
 
+The 2.1 dependency refresh preserves existing provider settings and issuer/subject bindings; it does not enable email-only account linking. After [upgrading](/hosting/maintenance#upgrading-from-2-0-to-2-1), test both a linked SSO account and your local administrator fallback.
+
 ## Connect a provider
 
 1. Keep a working local administrator account and test `/auth/login?local=1` before changing the normal sign-in flow.
