@@ -37,10 +37,14 @@ export async function getSharedFolder(token: string, page = 1) {
     files: folder.files.map((file) => ({
       id: file.id,
       name: file.password ? 'Password-protected file' : file.name,
-      urlPath: file.urlPath
-        .split('/')
-        .map((segment) => encodeURIComponent(segment))
-        .join('/'),
+      // Even the link target must hide a protected file's filename. This route
+      // checks membership and the password before revealing its canonical URL.
+      urlPath: file.password
+        ? `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(file.id)}`
+        : file.urlPath
+            .split('/')
+            .map((segment) => encodeURIComponent(segment))
+            .join('/'),
       mimeType: file.password ? null : file.mimeType,
       size: file.password ? null : file.size,
       hasPassword: Boolean(file.password),

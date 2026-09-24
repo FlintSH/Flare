@@ -93,6 +93,7 @@ suite('vault folders against disposable PostgreSQL', () => {
       visibility?: 'PUBLIC' | 'PRIVATE'
       password?: string
       name?: string
+      urlPath?: string
     } = {}
   ) {
     return prisma.file.create({
@@ -364,10 +365,11 @@ suite('vault folders against disposable PostgreSQL', () => {
       visibility: 'PRIVATE',
       name: 'Private plans.png',
     })
-    await file({
+    const protectedFile = await file({
       folderId: photos.id,
       password: 'never-expose-this-hash',
       name: 'Protected secret.png',
+      urlPath: '/folder-owner/Protected-secret.png',
     })
     await file({ folderId: child.id, name: 'Nested.png' })
     const enabled = await service.updateFolder('folder-owner', photos.id, {
@@ -384,6 +386,7 @@ suite('vault folders against disposable PostgreSQL', () => {
         }),
         expect.objectContaining({
           name: 'Password-protected file',
+          urlPath: `/s/folders/${enabled.shareToken}/files/${protectedFile.id}`,
           mimeType: null,
           size: null,
           hasPassword: true,
@@ -394,6 +397,7 @@ suite('vault folders against disposable PostgreSQL', () => {
     for (const secret of [
       'Private plans',
       'Protected secret',
+      'Protected-secret',
       'never-expose-this-hash',
       'Hidden child',
       'Nested.png',

@@ -9,7 +9,7 @@ Folders give related files a home while **All files** stays the default view. Th
 
 ## Sharing
 
-Folders are private until you choose **Share → Create share link**. A shared folder lists only its direct public files. Private files, subfolders, tags, and account details are never listed. Password-protected files have a locked tile without a preview and still require their password when opened.
+Folders are private until you choose **Share → Create share link**. A shared folder lists only its direct public files. Private files, subfolders, tags, and account details are never listed. Password-protected files have a locked tile without a preview or filename, and their links lead to a password form that also keeps the filename hidden. Entering the password opens the usual file viewer; owners and admins retain their existing access. These links stop working if the folder link is disabled or the file is moved out or made private.
 
 Adding a public file to a shared folder makes it appear on the shared page. Moving it out removes it from that page. Its individual file link and privacy settings stay the same. Removing a folder whose parent is shared moves its public files onto the parent’s shared page.
 
