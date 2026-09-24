@@ -1,8 +1,8 @@
 ---
 layout: page
 sidebar: false
-title: The Flare handbook
-description: Everything you need to host, shape, automate, and get the most out of Flare.
+title: Flare documentation
+description: User guides, self-hosting instructions, administration, API reference, and practical walkthroughs for Flare.
 ---
 
 <Home />

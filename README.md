@@ -14,19 +14,19 @@ Flare is a modern, self-hostable file sharing platform designed to work seamless
 
 ## 📖 Documentation
 
-The [Flare handbook](docs/site/guide/index.md) covers every user workflow,
-instance administration, deployment, configuration, API, and webhooks. Its
-independent static site includes full-text search, interactive examples, real
-screenshots, and recorded app demos.
+The [Flare documentation](https://flintsh.github.io/Flare/) covers everyday workflows,
+self-hosting, administration, the API, and webhooks. Find what you need with
+search, explore interactive examples, and follow real screenshots and recorded
+app demos.
 
-- **Get started:** [Docker](docs/site/hosting/docker.md) · [Railway](docs/site/hosting/railway.md) · [First-run setup](docs/site/admin/setup.md)
-- **Use Flare:** [Upload and share](docs/site/guide/uploading.md) · [Folders](docs/site/guide/folders.md) · [Screenshot tools](docs/site/guide/screenshot-tools.md)
-- **Run your instance:** [Configuration](docs/site/hosting/configuration.md) · [Administration](docs/site/admin/index.md) · [Backups and upgrades](docs/site/hosting/maintenance.md)
-- **Build integrations:** [API reference](docs/site/api/index.md) · [Webhooks](docs/site/api/webhooks.md) · [OpenAPI](docs/site/public/openapi.json)
-- **Explore:** [Feature guide](docs/site/features.md) · [Demos](docs/site/demos.md) · [Troubleshooting](docs/site/hosting/troubleshooting.md)
+- **Get started:** [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [First-run setup](https://flintsh.github.io/Flare/admin/setup.html)
+- **Use Flare:** [Upload and share](https://flintsh.github.io/Flare/guide/uploading.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) · [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)
+- **Run your instance:** [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
+- **Build integrations:** [API reference](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html) · [OpenAPI](https://flintsh.github.io/Flare/openapi.json)
+- **Explore:** [Feature guide](https://flintsh.github.io/Flare/features.html) · [Demos](https://flintsh.github.io/Flare/demos.html) · [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)
 
 Preview the full site with `npm ci --prefix docs/site` then
-`npm run dev --prefix docs/site`. See [building and publishing the docs](docs/site/contributing.md).
+`npm run dev --prefix docs/site`. See [building and publishing the docs](https://flintsh.github.io/Flare/contributing.html).
 
 ## ✨ Features
 
@@ -37,14 +37,14 @@ Preview the full site with `npm ci --prefix docs/site` then
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
 - 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
-- 📁 **[Folders](docs/site/guide/folders.md)** - Organize files and subfolders, move files in bulk, and share a folder with one link
+- 📁 **[Folders](https://flintsh.github.io/Flare/guide/folders.html)** - Organize files and subfolders, move files in bulk, and share a folder with one link
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
-  - [Unified setup](docs/site/admin/setup.md): account, storage, access, optional personalization and email in one guided flow
-  - [Appearance studio](docs/site/admin/appearance.md): branding, paired palettes, share layouts, previews and portable packs
-  - [Upload profiles](docs/site/guide/upload-profiles.md): reusable defaults and recipes across browser and screenshot tools
-  - [Integrations](docs/site/api/index.md): scoped tokens and signed file-ready webhooks
+  - [Unified setup](https://flintsh.github.io/Flare/admin/setup.html): account, storage, access, optional personalization and email in one guided flow
+  - [Appearance studio](https://flintsh.github.io/Flare/admin/appearance.html): branding, paired palettes, share layouts, previews and portable packs
+  - [Upload profiles](https://flintsh.github.io/Flare/guide/upload-profiles.html): reusable defaults and recipes across browser and screenshot tools
+  - [Integrations](https://flintsh.github.io/Flare/api/): scoped tokens and signed file-ready webhooks
   - Personal light/dark/system preferences, CSS variables and custom colors
   - Advanced settings for custom CSS and HTML injection
 - 📊 **Admin Dashboard** - Usage metrics, user management, and system configuration
@@ -66,16 +66,16 @@ Click the button below to deploy Flare on Railway. Once deployed, just set your 
 
 ### Docker Deployment (Self-Hosted)
 
-Follow the [Docker Compose guide](docs/site/hosting/docker.md) for a complete
+Follow the [Docker Compose guide](https://flintsh.github.io/Flare/hosting/docker.html) for a complete
 configuration with PostgreSQL, persistent storage, generated secrets, health
 checks, and a first-upload check. Then add a
-[domain and HTTPS](docs/site/hosting/reverse-proxy.md) and set up
-[backups](docs/site/hosting/maintenance.md).
+[domain and HTTPS](https://flintsh.github.io/Flare/hosting/reverse-proxy.html) and set up
+[backups](https://flintsh.github.io/Flare/hosting/maintenance.html).
 
 The official image is available as `flintsh/flare` on Docker Hub and
 `ghcr.io/flintsh/flare` on GitHub Container Registry. The `rolling` tag tracks
 pre-releases; use a tested release tag or digest for repeatable deployments.
-See [release channels and updates](docs/site/hosting/maintenance.md).
+See [release channels and updates](https://flintsh.github.io/Flare/hosting/maintenance.html).
 
 ## 💬 Support
 
@@ -99,7 +99,7 @@ Optional SMTP email supports password recovery, address verification, and confir
 email changes. Configure it during first-time setup or in **Settings → Email**.
 Delivery, recovery, and verification requirements are independent; upgrades leave
 email disabled and preserve existing account access. See [account email setup,
-environment overrides, and recovery](docs/site/admin/email.md).
+environment overrides, and recovery](https://flintsh.github.io/Flare/admin/email.html).
 
 ### Single Sign-On (OIDC)
 
