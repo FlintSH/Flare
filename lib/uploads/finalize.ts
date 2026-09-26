@@ -15,6 +15,7 @@ import { hasPermission } from '@/lib/permissions/catalog'
 import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
+import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
 
 import { UploadError } from './options'
@@ -57,6 +58,7 @@ export async function finalizeUpload(input: {
 }) {
   const { user, storage, filePath, displayName, mimeType, size, options } =
     input
+  const storageTarget = captureStorageTarget(storage)
   if (!Number.isSafeInteger(size) || size < 0)
     throw new UploadError('Invalid file size.')
   const head = await storage.getFileStream(filePath, { start: 0, end: 4099 })
@@ -186,6 +188,7 @@ export async function finalizeUpload(input: {
         name: displayName,
         urlPath,
         path: filePath,
+        storageTarget,
         mimeType,
         size: sizeMB,
         visibility: hasPermission(access, 'files.share')

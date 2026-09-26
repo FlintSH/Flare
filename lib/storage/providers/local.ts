@@ -20,6 +20,7 @@ import type { RangeOptions, StorageProvider } from '../types'
 
 export class LocalStorageProvider implements StorageProvider {
   readonly kind = 'local' as const
+  readonly target = Object.freeze({ provider: 'local' as const })
 
   private activeWriteStreams = new Map<
     string,

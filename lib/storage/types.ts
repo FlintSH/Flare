@@ -1,5 +1,7 @@
 import type { Writable as NodeWritable, Readable } from 'node:stream'
 
+import type { StorageTarget } from './targets'
+
 export interface RangeOptions {
   start?: number
   end?: number
@@ -8,6 +10,8 @@ export interface RangeOptions {
 export interface StorageProvider {
   // Discriminates the backend without resorting to `instanceof` checks.
   readonly kind: 'local' | 's3'
+  /** Immutable, nonsecret identity of the backend this instance actually uses. */
+  readonly target: Readonly<StorageTarget>
   uploadFile(file: Buffer, path: string, mimeType: string): Promise<void>
   uploadStream(
     stream: Readable,

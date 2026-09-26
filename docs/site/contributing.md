@@ -98,6 +98,26 @@ Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. U
 
 The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress. Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
 
+## Database permission and avatar regression tests
+
+The role/cleanup and avatar race suites require **two separate disposable PostgreSQL databases**. Create them on a loopback server with names beginning `flare_roles_test_` and `flare_avatar_test_`. Use a local test database role allowed to apply migrations and manage fixture tables. Both suites clear fixture tables in their dedicated databases. Do not use an application or browser-demo database for these tests.
+
+From the repository root, set connection URLs appropriate to that disposable server. These examples assume the local test role can connect without a password; supply your test server's authentication and port when needed:
+
+```sh
+export FLARE_ROLES_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_roles_test_local?schema=public'
+export FLARE_AVATAR_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_avatar_test_local?schema=public'
+DATABASE_URL="$FLARE_ROLES_DATABASE_URL" pnpm exec prisma migrate deploy
+DATABASE_URL="$FLARE_AVATAR_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run \
+  __tests__/permissions/database.test.ts \
+  __tests__/storage/avatar-database.test.ts
+```
+
+Apply migrations to both databases before running the suites. Missing either environment variable **skips that suite**; check the test output rather than treating a skipped run as coverage. CI supplies both URLs. The database checks exercise role authority, recovery safeguards, bulk account cleanup, original storage targets, upload/deletion races, and durable avatar intents. They use real PostgreSQL and local files, with controlled S3 SDK responses; they do not substitute for testing a real S3-compatible provider.
+
+The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

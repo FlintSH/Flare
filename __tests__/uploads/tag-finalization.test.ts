@@ -71,6 +71,8 @@ const file = {
 const input = () => ({
   user,
   storage: {
+    kind: 'local',
+    target: { provider: 'local' },
     getFileStream: async () => Readable.from([Buffer.from('invoice')]),
   } as unknown as StorageProvider,
   filePath: file.path,
@@ -99,6 +101,27 @@ beforeEach(() => {
 })
 
 describe('tags at the shared upload commit boundary', () => {
+  it('records the actual writing backend even when current configuration differs', async () => {
+    const upload = input()
+    upload.storage = {
+      ...upload.storage,
+      kind: 's3',
+      target: {
+        provider: 's3',
+        bucket: 'original-upload-bucket',
+        region: 'us-east-1',
+        endpoint: 'https://objects.example.test',
+        forcePathStyle: true,
+      },
+    }
+    await finalizeUpload(upload)
+    expect(mocks.tx.file.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ storageTarget: upload.storage.target }),
+      })
+    )
+  })
+
   it('rechecks folder ownership under the user lock before publishing direct and chunk uploads', async () => {
     mocks.tx.vaultFolder.findFirst.mockResolvedValue({ id: 'marketing' })
     const upload = input()

@@ -30,7 +30,7 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                  |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                           |
 
-See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details.
+See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
 
 ## File content and access checks
 
@@ -51,23 +51,23 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 
 These routes explicitly read an interactive session. Neither a named API token nor a legacy account upload token by itself supplies that session. Ownership, current role permission, and feature-policy checks still apply. Profile edits use `profile.update`; full exports require `profile.export`, `files.read`, and `links.read` together (progress alone uses `profile.export`); upload profiles `uploadProfiles.manage`; token and uploader-configuration management `tokens.manage`; webhooks `webhooks.manage`; personal appearance `appearance.personal`. File changes separately check `files.share`, `files.update`, or `files.delete`.
 
-| Path                               | Methods       | Purpose                                                                                                                |
-| ---------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests. |
-| `/api/upload-profiles`             | GET, POST     | List profiles; create/import a profile.                                                                                |
-| `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                               |
-| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                      |
-| `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                         |
-| `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                         |
-| `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                              |
-| `/api/profile/avatar`              | POST          | Upload an account avatar.                                                                                              |
-| `/api/profile/sharex`              | GET           | Download a ShareX uploader configuration.                                                                              |
-| `/api/profile/itake`               | GET           | Download an iTake uploader configuration.                                                                              |
-| `/api/profile/bash`                | GET           | Download the Bash uploader script.                                                                                     |
-| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from submitted tool options.                                                               |
-| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from submitted tool options.                                                               |
-| `/api/profile/export/progress`     | GET           | Stream account-export progress using server-sent events.                                                               |
-| `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                               |
+| Path                               | Methods       | Purpose                                                                                                                           |
+| ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests.            |
+| `/api/upload-profiles`             | GET, POST     | List profiles; create/import a profile.                                                                                           |
+| `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                                          |
+| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                                 |
+| `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                                    |
+| `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                                    |
+| `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                                         |
+| `/api/profile/avatar`              | POST          | Upload an account avatar with a durable write intent and live authorization at publication; success remains `{success:true,url}`. |
+| `/api/profile/sharex`              | GET           | Download a ShareX uploader configuration.                                                                                         |
+| `/api/profile/itake`               | GET           | Download an iTake uploader configuration.                                                                                         |
+| `/api/profile/bash`                | GET           | Download the Bash uploader script.                                                                                                |
+| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from submitted tool options.                                                                          |
+| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from submitted tool options.                                                                          |
+| `/api/profile/export/progress`     | GET           | Stream account-export progress using server-sent events.                                                                          |
+| `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                                          |
 
 Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
 
@@ -119,7 +119,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/roles/{id}`                | PATCH, DELETE  | `roles.manage`; edit/delete a role within hierarchy and delegation limits.                                                                                |
 | `/api/users`                     | GET, POST, PUT | GET: `users.read`; POST: `users.create`; PUT identity: `users.update`. Assignment additionally requires `users.roles`; role-only PUT needs `users.roles`. |
 | `/api/users/{id}`                | DELETE         | `users.delete`; remove an account within delegation limits. Returns `204` after account removal and durable storage-cleanup work commit.                  |
-| `/api/users/{id}/avatar`         | DELETE         | `users.update`; remove an account's avatar.                                                                                                               |
+| `/api/users/{id}/avatar`         | DELETE         | `users.update`; clear an account's avatar and queue its stored bytes for cleanup; `204` after commit.                                                     |
 | `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account’s browser sessions. Success is `204 No Content`, with no JSON body. API credentials remain active.                |
 | `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
 | `/api/users/{id}/files`          | GET            | `content.read`; inspect an account's files.                                                                                                               |
@@ -152,7 +152,7 @@ Email administration validates origins for mutations; appearance administration 
 | `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                     |
 | `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection. |
 | `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                      |
-| `/api/avatars/{filename}`       | GET       | Serve an avatar image.                                                                                                                                                                      |
+| `/api/avatars/{filename}`       | GET       | Serve a currently referenced avatar; `404` for obsolete/unowned keys and `503` when its recorded storage target is unavailable.                                                             |
 
 Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
 

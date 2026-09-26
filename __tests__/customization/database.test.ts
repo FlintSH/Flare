@@ -290,6 +290,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
     })
     const first = await uploads.finalizeUpload(input)
     const repeated = await uploads.finalizeUpload(input)
+    expect(first.storageTarget).toEqual({ provider: 'local' })
     expect(repeated.id).toBe(first.id)
     expect(await prisma.file.count()).toBe(1)
     expect((await principal()).storageUsed).toBe(input.size / 1024 ** 2)
@@ -576,6 +577,28 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(JSON.stringify(metadata)).not.toContain('upload-password')
     return { data, metadata: metadata! }
   }
+
+  it('pins multipart sessions to their actual initializing backend and rejects unknown old sessions', async () => {
+    const { metadata } = await startChunk('A provider-bound multipart upload')
+    const { getUploadStorage } = await import('@/lib/uploads/chunks')
+    expect(metadata.storageTarget).toEqual({ provider: 'local' })
+    expect((await getUploadStorage(metadata)).kind).toBe('local')
+    await expect(
+      getUploadStorage({ ...metadata, storageTarget: undefined })
+    ).rejects.toMatchObject({ status: 409 })
+    await expect(
+      getUploadStorage({
+        ...metadata,
+        storageTarget: {
+          provider: 's3',
+          bucket: 'former-bucket',
+          region: 'us-east-1',
+          endpoint: '',
+          forcePathStyle: false,
+        },
+      })
+    ).rejects.toMatchObject({ status: 409 })
+  })
 
   it.each(['markdown', 'html', 'raw', 'download'])(
     'uses share-page links for legacy %s profiles through multipart and both chunk completion APIs',

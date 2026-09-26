@@ -20,6 +20,8 @@ model User {
   emailTokens                 EmailToken[]
   mailOutbox                  MailOutbox[]
   image                       String?
+  avatarStoragePath           String?
+  avatarStorageTarget         Json?
   password                    String?
   roles                       Role[]
   createdAt                   DateTime        @default(now())
@@ -119,6 +121,7 @@ model File {
   uploadedAt       DateTime       @default(now())
   userId           String
   path             String
+  storageTarget    Json?
   isOcrProcessed   Boolean        @default(false)
   ocrText          String?
   password         String?
@@ -271,19 +274,20 @@ model Config {
 // Durable object deletion survives removal of the owning account and its files.
 // Targets contain backend identity only; credentials are read fresh by the worker.
 model StorageDeletion {
-  id          String   @id @default(cuid())
-  ownerId     String
-  path        String
-  provider    String
-  target      Json     @default("{}")
-  status      String   @default("pending")
-  attempts    Int      @default(0)
-  availableAt DateTime @default(now())
-  leaseId     String?
-  leaseUntil  DateTime?
-  lastError   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  ownerId      String
+  path         String
+  provider     String
+  target       Json      @default("{}")
+  status       String    @default("pending")
+  attempts     Int       @default(0)
+  writePending Boolean   @default(false)
+  availableAt  DateTime  @default(now())
+  leaseId      String?
+  leaseUntil   DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([status, availableAt])
   @@index([leaseUntil])

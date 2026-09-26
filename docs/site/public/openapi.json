@@ -538,7 +538,7 @@
         "operationId": "initializeChunkUpload",
         "summary": "Initialize a chunk upload",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Records the actual storage target in server-side session metadata; clients cannot override that provenance.",
         "security": [
           {
             "BearerAuth": []
@@ -703,7 +703,7 @@
         "operationId": "getChunkPartUrlCompatibility",
         "summary": "Get a part upload URL (query form)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [
           {
             "BearerAuth": []
@@ -814,7 +814,7 @@
         "operationId": "completeChunkUploadCompatibility",
         "summary": "Complete a chunk upload (wrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [
           {
             "BearerAuth": []
@@ -966,7 +966,7 @@
         "operationId": "getChunkPartUrl",
         "summary": "Get a part upload URL",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [
           {
             "BearerAuth": []
@@ -1054,7 +1054,7 @@
         "operationId": "uploadChunkPart",
         "summary": "Upload raw part bytes through Flare",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [
           {
             "BearerAuth": []
@@ -1183,7 +1183,7 @@
         "operationId": "completeChunkUpload",
         "summary": "Complete a chunk upload (unwrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [
           {
             "BearerAuth": []

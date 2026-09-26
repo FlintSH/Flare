@@ -16,7 +16,8 @@ export async function mutateAccount<T>(
   targetId: string,
   permission: Permission,
   mutation: (tx: Prisma.TransactionClient) => Promise<T>,
-  self = false
+  self = false,
+  options?: { timeout?: number }
 ) {
   return prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
@@ -25,5 +26,5 @@ export async function mutateAccount<T>(
     const result = await mutation(tx)
     await assertAccessibleAdministrator(tx)
     return result
-  })
+  }, options)
 }

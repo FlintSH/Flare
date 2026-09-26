@@ -23,6 +23,8 @@ Under **Profile → Account**, update **Username** and choose **Save Changes**. 
 
 Choose **Change Avatar** and select an image to update your photo. Flare checks that the supplied content is an image. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
+Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
+
 Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults).
 
 ## Change your password
@@ -109,6 +111,6 @@ Under **Profile → Your data**, choose **Delete account** and review the confir
 
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 
-Storage cleanup can remain pending while the storage service is unavailable or its configuration has changed. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion does not erase operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
+Storage cleanup can remain pending while the storage service is unavailable, its configuration has changed, or an operator must verify an older file's original storage location. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion does not erase operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
 
 For a normal end to a session, use **Log out** instead of deleting the account.

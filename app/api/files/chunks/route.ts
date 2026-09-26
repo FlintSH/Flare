@@ -1,8 +1,8 @@
 import { requireAuth } from '@/lib/auth/api-auth'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
-import { getStorageProvider } from '@/lib/storage'
 import {
   completeChunkUpload,
+  getUploadStorage,
   initializeChunkUpload,
   requireUploadMetadata,
   saveUploadMetadata,
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     if (!id || !Number.isInteger(part) || part < 1 || part > 10000)
       throw new UploadError('Upload ID and valid part number are required.')
     const metadata = await requireUploadMetadata(user, id)
-    const storage = await getStorageProvider()
+    const storage = await getUploadStorage(metadata)
     const url = await storage.getPresignedPartUploadUrl(
       metadata.fileKey,
       metadata.s3UploadId,

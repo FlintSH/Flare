@@ -79,14 +79,15 @@ File types may be restricted by the administrator, and the server checks file co
 
 ## Fix an upload problem
 
-| What you see                              | What to do                                                                                                                                           |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| File rejected before upload               | Compare its size with the displayed maximum. Remove the oversized file and upload the others.                                                        |
-| Storage quota exceeded                    | Check **Profile → Your data**, delete files you no longer need, or ask your administrator about the quota. Making files private does not free space. |
-| A batch stops partway through             | Keep the successful links. Completed files leave the queue; retry uploads for the files still waiting.                                               |
-| Folder unavailable                        | Choose another destination. Flare will not silently move the upload somewhere else if its destination was deleted.                                   |
-| Network error                             | Check your connection and sign-in session, then retry the remaining files. If the outcome is uncertain, check Files before submitting again.         |
-| Progress reaches 100% but no link appears | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                   |
-| Small files work, large files fail        | Give your administrator the approximate size and error message so they can check storage, proxy limits, and chunked uploads.                         |
+| What you see                               | What to do                                                                                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File rejected before upload                | Compare its size with the displayed maximum. Remove the oversized file and upload the others.                                                                           |
+| Storage quota exceeded                     | Check **Profile → Your data**, delete files you no longer need, or ask your administrator about the quota. Making files private does not free space.                    |
+| A batch stops partway through              | Keep the successful links. Completed files leave the queue; retry uploads for the files still waiting.                                                                  |
+| Folder unavailable                         | Choose another destination. Flare will not silently move the upload somewhere else if its destination was deleted.                                                      |
+| Storage changed during this upload (`409`) | Start the affected file again. A backend change or an upgrade from older chunk-session metadata prevents reusing that upload session; completed files remain available. |
+| Network error                              | Check your connection and sign-in session, then retry the remaining files. If the outcome is uncertain, check Files before submitting again.                            |
+| Progress reaches 100% but no link appears  | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                                      |
+| Small files work, large files fail         | Give your administrator the approximate size and error message so they can check storage, proxy limits, and chunked uploads.                                            |
 
 For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).

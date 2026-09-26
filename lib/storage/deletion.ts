@@ -1,14 +1,17 @@
 import type { Prisma, StorageDeletion } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
 import { sanitizeFilename, validateStoragePath } from '@/lib/security/paths'
 
-import { LocalStorageProvider } from './providers/local'
-import { S3StorageProvider } from './providers/s3'
+import {
+  StorageTargetChangedError,
+  getStorageProviderForTarget,
+} from './target-provider'
+import { parseStorageTarget } from './targets'
+import type { StorageTarget } from './targets'
 import type { StorageProvider } from './types'
 
 export const STORAGE_DELETION_CONCURRENCY = 4
@@ -16,19 +19,23 @@ export const STORAGE_DELETION_LEASE_MS = 120_000
 export const STORAGE_DELETION_HEARTBEAT_MS = 30_000
 export const STORAGE_DELETION_RETRY_MS = 30_000
 export const STORAGE_DELETION_MAX_RETRY_MS = 3_600_000
+export const ACCOUNT_DELETION_TRANSACTION_MS = 120_000
 
-function s3Identity(s3: {
-  bucket: string
-  region: string
-  endpoint?: string
-  forcePathStyle?: boolean
-}) {
-  return {
-    bucket: s3.bucket,
-    region: s3.region,
-    endpoint: s3.endpoint ?? '',
-    forcePathStyle: s3.forcePathStyle ?? false,
-  }
+/** The caller establishes ownership and commits this with the record mutation. */
+export async function queueStorageDeletion(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  path: string,
+  target: StorageTarget | null
+): Promise<void> {
+  await tx.storageDeletion.create({
+    data: {
+      ownerId,
+      path: validateStoragePath(path),
+      provider: target?.provider ?? 'unknown',
+      target: target ?? {},
+    },
+  })
 }
 
 /** Call only inside the account mutation transaction, after authorization locks. */
@@ -41,41 +48,60 @@ async function queueAccountStorageDeletion(
   await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
   const user = await tx.user.findUnique({
     where: { id: userId },
-    select: { image: true },
+    select: {
+      id: true,
+      image: true,
+      avatarStoragePath: true,
+      avatarStorageTarget: true,
+    },
   })
   if (!user) throw new PermissionError('Account not found', 404)
-  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const { provider, s3 } = configSchema.parse(row?.value ?? DEFAULT_CONFIG)
-    .settings.general.storage
-  const target = provider === 's3' ? s3Identity(s3) : {}
-  const files = await tx.file.findMany({
-    where: { userId },
-    select: { path: true },
-  })
-  const paths = new Set(files.map((file) => validateStoragePath(file.path)))
-  // Uploaded avatars use this own-account key even when image stores a public
-  // S3 URL. Never turn an editable external/image URL into an arbitrary key.
-  const ownAvatar = sanitizeFilename(`${userId}.jpg`)
-  paths.add(`uploads/avatars/${ownAvatar}`)
-  const jobs = [...paths].map((path) => ({
-    ownerId: userId,
-    path,
-    provider,
-    target,
-  }))
-  if (user.image === `/avatars/${ownAvatar}`) {
-    jobs.push({
-      ownerId: userId,
-      path: `public/avatars/${ownAvatar}`,
-      provider: 'local',
-      target: {},
-    })
+  // Copy directly in PostgreSQL: materializing a large library in JavaScript
+  // and issuing hundreds of createMany calls makes account deletion time out.
+  // Historical rows have no trustworthy target; retain their paths for recovery.
+  await tx.$executeRaw`
+    INSERT INTO "StorageDeletion"
+      (id, "ownerId", path, provider, target, "updatedAt")
+    SELECT gen_random_uuid()::text, "userId", path,
+      CASE WHEN "storageTarget"->>'provider' IN ('local', 's3')
+        THEN "storageTarget"->>'provider' ELSE 'unknown' END,
+      COALESCE("storageTarget", '{}'::jsonb), NOW()
+    FROM "File" WHERE "userId" = ${userId}
+  `
+  await queueAvatarStorageDeletion(tx, user)
+}
+
+export async function queueAvatarStorageDeletion(
+  tx: Prisma.TransactionClient,
+  user: {
+    id: string
+    image: string | null
+    avatarStoragePath: string | null
+    avatarStorageTarget: unknown
   }
-  // Bound individual SQL statements for accounts with large file libraries.
-  for (let offset = 0; offset < jobs.length; offset += 500) {
-    await tx.storageDeletion.createMany({
-      data: jobs.slice(offset, offset + 500),
-    })
+): Promise<void> {
+  // New avatars retain their exact versioned key, independent of editable image
+  // URLs. Legacy app-owned image paths can be retained without guessing S3.
+  const ownAvatar = sanitizeFilename(`${user.id}.jpg`)
+  const legacyLocal = user.image === `/avatars/${ownAvatar}`
+  const legacyCurrent =
+    user.image === `/api/avatars/${ownAvatar}` ||
+    ((user.image?.startsWith('https://') ||
+      user.image?.startsWith('http://')) &&
+      URL.canParse(user.image) &&
+      new URL(user.image).pathname.endsWith(`/avatars/${ownAvatar}`))
+  const avatarPath =
+    user.avatarStoragePath ??
+    (legacyLocal
+      ? `public/avatars/${ownAvatar}`
+      : legacyCurrent
+        ? `uploads/avatars/${ownAvatar}`
+        : null)
+  if (avatarPath) {
+    const target =
+      parseStorageTarget(user.avatarStorageTarget) ??
+      (legacyLocal ? { provider: 'local' as const } : null)
+    await queueStorageDeletion(tx, user.id, avatarPath, target)
   }
 }
 
@@ -94,7 +120,8 @@ export async function deleteAccountWithStorageCleanup(
       await queueAccountStorageDeletion(tx, targetId)
       await tx.user.delete({ where: { id: targetId } })
     },
-    self
+    self,
+    { timeout: ACCOUNT_DELETION_TRANSACTION_MS }
   )
 }
 
@@ -113,8 +140,10 @@ export async function claimStorageDeletions(): Promise<StorageDeletion[]> {
     return tx.$queryRaw<StorageDeletion[]>`
       WITH candidates AS (
         SELECT id FROM "StorageDeletion"
-        WHERE (status = 'pending' AND "availableAt" <= ${now})
+        WHERE "writePending" = false AND (
+          (status = 'pending' AND "availableAt" <= ${now})
           OR (status = 'processing' AND "leaseUntil" <= ${now})
+        )
         ORDER BY "availableAt", "createdAt", id
         LIMIT ${slots}
         FOR UPDATE SKIP LOCKED
@@ -128,23 +157,18 @@ export async function claimStorageDeletions(): Promise<StorageDeletion[]> {
   })
 }
 
-class StorageTargetChanged extends Error {}
+class StorageTargetUnknown extends Error {}
 
 async function deletionProvider(
   job: StorageDeletion
 ): Promise<StorageProvider> {
-  if (job.provider === 'local') return new LocalStorageProvider()
-  if (job.provider !== 's3') throw new StorageTargetChanged()
+  if (job.provider === 'unknown') throw new StorageTargetUnknown()
   // Read credentials fresh. Never use the cached provider or its local fallback:
   // a configuration change must not delete an identical key in another bucket.
-  const row = await prisma.config.findUnique({ where: { key: 'flare_config' } })
-  const s3 = configSchema.parse(row?.value ?? DEFAULT_CONFIG).settings.general
-    .storage.s3
-  const current = s3Identity(s3)
-  const target = job.target as Record<string, unknown>
-  if (Object.entries(current).some(([key, value]) => target?.[key] !== value))
-    throw new StorageTargetChanged()
-  return new S3StorageProvider({ ...s3, endpoint: s3.endpoint || undefined })
+  const target = parseStorageTarget(job.target)
+  if (!target || target.provider !== job.provider)
+    throw new StorageTargetUnknown()
+  return getStorageProviderForTarget(target)
 }
 
 function leaseWhere(job: StorageDeletion) {
@@ -152,6 +176,7 @@ function leaseWhere(job: StorageDeletion) {
     id: job.id,
     status: 'processing',
     leaseId: job.leaseId,
+    writePending: false,
     leaseUntil: { gt: new Date() },
   }
 }
@@ -176,7 +201,7 @@ function missingObject(error: unknown): boolean {
 export async function processStorageDeletion(
   job: StorageDeletion
 ): Promise<boolean> {
-  if (!job.leaseId || !(await renewLease(job))) return false
+  if (job.writePending || !job.leaseId || !(await renewLease(job))) return false
   let heartbeatBusy = false
   const heartbeat = setInterval(() => {
     if (heartbeatBusy) return
@@ -215,9 +240,11 @@ export async function processStorageDeletion(
         leaseId: null,
         leaseUntil: null,
         lastError:
-          error instanceof StorageTargetChanged
-            ? 'Storage target changed; restore matching S3 bucket, region, endpoint and path style to resume cleanup.'
-            : 'Storage deletion failed; retrying. Check storage credentials, connectivity and permissions.',
+          error instanceof StorageTargetUnknown
+            ? 'Storage provenance is unknown; verify the original object location before assigning a cleanup target.'
+            : error instanceof StorageTargetChangedError
+              ? 'Storage target changed; restore matching S3 bucket, region, endpoint and path style to resume cleanup.'
+              : 'Storage deletion failed; retrying. Check storage credentials, connectivity and permissions.',
       },
     })
     return false

@@ -60,7 +60,7 @@ This is one default quota for accounts without bypass. Flare does not currently 
 ## Changing backend or bucket
 
 ::: warning A settings change does not move your files
-There is one active storage provider for the instance. Existing database records retain their storage paths; they do not retain a separate provider selection for each file. Switching from local to S3, between buckets, or back again requires migrating the bytes as well.
+There is one active storage provider for ordinary file reads and individual file deletion. New file records also retain the actual upload-time target for account cleanup; that metadata does not automatically serve files across multiple backends. Switching from local to S3, between buckets, or back again requires migrating the bytes and reconciling their storage metadata.
 :::
 
 Plan a maintenance window:
@@ -69,10 +69,31 @@ Plan a maintenance window:
 2. Pause account deletions and let [pending account-cleanup jobs](/hosting/maintenance#account-storage-cleanup) finish against the original backend. Confirm the queue is empty before switching its identity or removing the original uploads volume.
 3. Pause uploads and stop application writes while copying data.
 4. Copy every object, including avatars and favicon, preserving relative keys. A database path such as `uploads/abc/image.png` maps to local `/app/uploads/abc/image.png` and S3 key `abc/image.png`.
-5. Compare object counts, sizes, and representative checksums. Preserve appropriate content types and avatar access behavior.
+5. Compare object counts, sizes, and representative checksums. Preserve appropriate content types and avatar access behavior. Copying bytes outside Flare does not update `File.storageTarget` or the account's `avatarStoragePath`/`avatarStorageTarget`. Record which verified copy is authoritative and [reconcile the affected metadata](#reconcile-copied-object-metadata) as part of the migration; otherwise later cleanup still follows the original target and can leave the new copy behind. Retain an inventory of old copies for separate retirement after verification.
 6. Change the stored provider/bucket configuration, restart all app processes to clear cached providers, and test before reopening access.
 7. Keep the old files and backup until the migrated installation is verified.
 
-Account-cleanup jobs preserve the backend selected when deletion committed. Local jobs continue against the local volume after a switch to S3. S3 jobs wait when the saved bucket, region, endpoint, or path-style setting differs from their recorded target; changing the active provider alone does not cancel them. Restore matching settings during planned maintenance to resume pending work.
+Account-cleanup jobs preserve each object's recorded upload target, even when storage settings changed before the account was deleted. Older records with no reliable target remain unresolved for operator reconciliation. Local jobs continue against the local volume after a switch to S3. S3 jobs wait when the saved bucket, region, endpoint, or path-style setting differs from their recorded target; changing the active provider alone does not cancel them. Restore matching settings during planned maintenance to resume pending work.
 
 There is no built-in cross-provider migration wizard. Changing credentials or backend during a chunked upload can invalidate that upload; ask users to start it again after maintenance. See [backup and restore](/hosting/maintenance) for preserving the database/file relationship.
+
+### Reconcile copied-object metadata
+
+Keep every application writer and cleanup worker stopped while reconciling a storage move, and retain a database backup. For a file whose copied bytes have been verified, update only its inspected ID and unchanged stored path. This example records a verified local destination:
+
+```sh
+docker compose exec -T db psql -U flare -d flare \
+  -v ON_ERROR_STOP=1 \
+  -v file_id='VERIFIED_FILE_ID' \
+  -v file_path='uploads/VERIFIED_OBJECT_PATH' \
+  -v storage_target='{"provider":"local"}' <<'SQL'
+UPDATE "File"
+SET "storageTarget" = :'storage_target'::jsonb
+WHERE id = :'file_id' AND path = :'file_path'
+RETURNING id, path, "storageTarget";
+SQL
+```
+
+For S3, use the complete verified [target JSON](/hosting/maintenance#resolve-an-unknown-storage-target), including provider, bucket, region, endpoint, and path style. Confirm exactly the intended row is returned. A broader migration needs a verified per-object manifest; assigning all historical records to the currently selected provider does not establish their origin.
+
+An avatar also has `User.avatarStoragePath` and `User.avatarStorageTarget`. Reconcile those only for the verified account and object. These fields do **not** rewrite its displayed `image` URL: an old S3 public URL can still point to the old bucket. Uploading the avatar again through Profile after migration publishes a fresh URL and records its new target. Track any previous copies separately; each file or avatar records one authoritative target, not every backup or migration copy.

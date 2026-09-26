@@ -117,6 +117,16 @@ Migration `20260926020000_durable_account_cleanup` adds the `StorageDeletion` ta
 
 Whole-account deletions committed after this migration preserve cleanup jobs independently of the deleted account and file rows. Earlier deleted accounts have no remaining records from which this migration can reconstruct every orphaned object, so it does not retrospectively repair earlier cleanup failures. Reconcile those against storage records and backups separately. Include the queue in database backups and read the [restore precautions](#restore-into-a-separate-environment) before starting a copied database.
 
+### Storage-provenance migration
+
+Migration `20260926030000_storage_provenance` adds each file's recorded storage target, the avatar's stored path/target, and the `StorageDeletion.writePending` flag used to protect unfinished avatar writes. New uploads retain the nonsecret identity of the provider that actually wrote their bytes, so later account cleanup does not guess from the instance's current storage selection.
+
+Before upgrading, stop all old application processes and take a consistent database-and-storage backup. Existing file records have no trustworthy upload-time storage history, so the migration leaves their new target field unset. It also marks existing cleanup jobs **unknown**, clears their active leases, and preserves their former provider/target only as diagnostic hints. Those deletion-time values cannot prove where an earlier upload was stored.
+
+Chunk uploads started before this migration do not have the required target metadata. Their later part or completion requests return `409`; ask users and integrations to initialize fresh uploads and resend those files. Completed files keep their existing records.
+
+After starting the upgraded app, inspect [pending cleanup](#inspect-pending-cleanup). Unknown-target jobs retain the object path and former owner ID but do not delete bytes until an operator verifies and assigns the original target. New uploads record their targets automatically; upgrading does not move files, reconstruct lost storage history, or repair objects left by older deletions. Keep configuration history, storage inventories, and backups available for reconciliation.
+
 ### Upgrading from 2.0 to 2.1
 
 Use the normal backup and upgrade steps above. The image applies the new folder and tag database migrations on startup. Existing files stay available in **All files**; upgrading does not move them into folders or publish collections.
@@ -150,15 +160,18 @@ For an email lockout, `FLARE_EMAIL_ENABLED=false` disables sending and local ver
 
 ## Account storage cleanup
 
-Deleting an account from Profile or Users commits account removal and one durable cleanup job per recorded object together. The worker performs storage I/O only after that commit. Rejected deletions, including the last-administrator safeguard, leave the account and bytes intact. This queue covers **whole-account deletion**; individual file or moderation deletion does not use it.
+Deleting an account from Profile or Users commits account removal and durable cleanup jobs together, using the objects' recorded storage locations rather than the current instance backend. The worker performs storage I/O only after that commit. Rejected deletions, including the last-administrator safeguard, leave the account and bytes intact. This queue covers **whole-account deletion** and avatar replacement, removal, or failed publication; individual file or moderation deletion does not use it.
+
+Large libraries are copied into the queue directly by PostgreSQL in bulk. Account deletion has a **120-second database transaction budget**; other account mutations keep their normal limits. This is an upper bound, not a promised completion time. If the request times out, check whether the account still exists before retrying. A failed transaction rolls back both account removal and the queued work.
 
 The worker polls every **5 seconds** and allows **4 active jobs globally** across app processes. A claimed job has a **2-minute lease**, renewed every **30 seconds**; an expired lease can be claimed after a process stops. A missing object counts as success. Other failures retry after **30 seconds**, doubling up to **1 hour** between attempts, with no retry limit. Successful jobs are removed; pending jobs survive restarts. Keep at least one application process running to make progress.
 
-Jobs record the path, former owner ID, provider, and nonsecret storage identity. They do not store a copy of storage credentials:
+Jobs record the path, former owner ID, provider, and nonsecret storage identity captured when the object was written. They do not store a copy of storage credentials:
 
 - Local jobs always use the local filesystem, even if the instance now uses S3. Keep the original uploads volume mounted until its cleanup is complete.
 - S3 jobs use fresh saved credentials only when the saved **bucket, region, endpoint, and path-style setting** match the recorded target. Changing credentials for that same target permits subsequent retries. Changing its identity leaves the job pending; cleanup never falls back to local storage or deletes the same key in another bucket. Matching saved S3 settings can process jobs even when the active provider is local.
-- Uploaded avatars use the app-owned account key, including avatars whose profile value is an S3 public URL. The exact legacy local avatar path is also handled. Arbitrary external avatar URLs are never deletion targets.
+- Unknown historical targets remain pending with **Storage provenance is unknown**. Restoring current S3 settings does not resolve missing history, and a file path alone is not evidence of which backend stored it.
+- Uploaded avatars retain their app-owned path and provider independently of the displayed profile image URL. The exact legacy `/avatars/{accountId}.jpg` path is known local storage. Older `/api/avatars/{accountId}.jpg` or public URLs ending in the account's own avatar key retain that key as unknown provenance for review. Arbitrary external URLs never determine a backend or authorize deleting a different account's object.
 
 ### Inspect pending cleanup
 
@@ -166,19 +179,85 @@ There is no dashboard cleanup queue or manual retry button. With the documented 
 
 ```sh
 docker compose exec -T db psql -U flare -d flare -c \
-  'SELECT status, count(*) AS objects FROM "StorageDeletion" GROUP BY status ORDER BY status;'
+  'SELECT provider, status, "writePending", count(*) AS objects FROM "StorageDeletion" GROUP BY provider, status, "writePending" ORDER BY provider, status, "writePending";'
 
 docker compose exec -T db psql -U flare -d flare -c \
-  'SELECT id, "ownerId", provider, target, status, attempts, "availableAt", "leaseUntil", "lastError" FROM "StorageDeletion" ORDER BY "createdAt" LIMIT 50;'
+  'SELECT id, "ownerId", path, provider, target, status, "writePending", attempts, "availableAt", "leaseUntil", "lastError" FROM "StorageDeletion" ORDER BY "createdAt" LIMIT 50;'
 
 docker compose logs --tail=150 flare
 ```
 
-`availableAt` is the earliest next attempt for a pending job; `leaseUntil` describes an in-progress claim. `attempts` includes claims recovered after a crash. Logs use the `storage-cleanup` component, and `lastError` gives a sanitized recovery hint. Treat owner IDs and storage details as private when sharing diagnostics.
+`writePending = true` protects an unfinished avatar write and excludes it from cleanup claims. `availableAt` is the earliest next attempt for an eligible pending job; `leaseUntil` describes an in-progress claim. `attempts` includes claims recovered after a crash. Logs use the `storage-cleanup` component, and `lastError` gives a sanitized recovery hint. Treat owner IDs and storage details as private when sharing diagnostics.
+
+For **Storage provenance is unknown**, verify the original object location using deployment history, storage inventories, and backups. A migrated job's `previousProvider` and `previousTarget` are hints, not a verified deletion target. Do not assign every unknown job to the current backend or infer S3 ownership from an arbitrary profile-image URL.
 
 For **Storage deletion failed**, check storage reachability, credentials, delete permissions, and local-volume ownership. For **Storage target changed**, compare `target` with the saved S3 settings. Plan maintenance to restore the original matching target and valid credentials, let cleanup complete, then resume the storage migration. Do not rewrite a job's target to a different bucket or discard a pending row to make the count disappear. Wait until its next `availableAt`; restarting the app does not bypass the retry schedule.
 
 An empty queue means all recorded jobs completed; it does not certify erasure from backups, S3 object versions, external caches, or storage left by older deletions. Flare has no account undelete operation: recovery needs a consistent pre-deletion database and file backup. A copied database can itself resume pending deletions, so follow the isolation precautions above.
+
+### Resolve an unknown storage target
+
+This is an operator repair, not a bulk backfill. First identify the job's exact object path and verify the original backend using storage inventories, deployment history, and backups. A matching filename in the current bucket is not enough: the same key can exist in more than one backend. Preserve the old diagnostic values with your maintenance record.
+
+Stop **all application replicas and other writers**, including old versions, before editing cleanup or storage metadata. The Compose command below stops only the documented deployment's app service; stop any additional processes separately. Back up the database before making the repair.
+
+For one verified local-storage job, replace both placeholders with the inspected job ID and path:
+
+```sh
+docker compose stop flare
+docker compose exec -T db psql -U flare -d flare \
+  -v ON_ERROR_STOP=1 \
+  -v cleanup_id='VERIFIED_JOB_ID' \
+  -v cleanup_path='uploads/VERIFIED_OBJECT_PATH' \
+  -v storage_target='{"provider":"local"}' <<'SQL'
+UPDATE "StorageDeletion"
+SET provider = (:'storage_target'::jsonb)->>'provider',
+    target = :'storage_target'::jsonb,
+    status = 'pending', "availableAt" = NOW(),
+    "leaseId" = NULL, "leaseUntil" = NULL,
+    "lastError" = NULL, "updatedAt" = NOW()
+WHERE id = :'cleanup_id' AND path = :'cleanup_path' AND provider = 'unknown'
+RETURNING id, path, provider, target, "writePending";
+SQL
+```
+
+For a verified S3 job, supply its original target instead of the local JSON. Include all five fields; use an empty endpoint string for the AWS regional default. Never put access keys or secrets in this value:
+
+```json
+{
+  "provider": "s3",
+  "bucket": "verified-original-bucket",
+  "region": "verified-region",
+  "endpoint": "",
+  "forcePathStyle": false
+}
+```
+
+The update must return exactly the intended row. If it returns none, inspect the ID, path, and current state; do not broaden the condition to unrelated jobs. Matching saved S3 settings and valid current credentials are still required when the worker resumes. This repair preserves `writePending`; handle a retained writer separately below before restarting the app.
+
+### Recover an interrupted avatar write
+
+New avatar uploads create a durable `writePending = true` record before storage I/O. A successful publication removes that record and saves the new avatar's path/target; a settled failed upload releases the record for normal cleanup. Replaced and administratively removed avatars also use the durable queue. Each upload has a unique key, so cleaning up an older attempt cannot delete a replacement.
+
+If the process crashes, or cannot update PostgreSQL after the write settles, `writePending` can remain true. These rows have **no automatic timeout** and the worker cannot claim them. Their presence may represent an active upload, not a failure. Do not release a row merely because it is old: a writer could otherwise finish after cleanup had already removed the object.
+
+After stopping **every possible writer** and the cleanup workers, verify the retained row's exact key and target. Resolve unknown provenance first if needed. Release only that inspected row:
+
+```sh
+docker compose exec -T db psql -U flare -d flare \
+  -v ON_ERROR_STOP=1 \
+  -v cleanup_id='VERIFIED_JOB_ID' \
+  -v cleanup_path='uploads/avatars/VERIFIED_AVATAR_KEY.jpg' <<'SQL'
+UPDATE "StorageDeletion"
+SET "writePending" = false, status = 'pending', "availableAt" = NOW(),
+    "leaseId" = NULL, "leaseUntil" = NULL,
+    "lastError" = NULL, "updatedAt" = NOW()
+WHERE id = :'cleanup_id' AND path = :'cleanup_path' AND "writePending" = true
+RETURNING id, path, provider, target, "writePending";
+SQL
+```
+
+Once the selected repairs are verified, restart the app with `docker compose start flare` and inspect the queue. The worker now retries deletion normally. Do not remove the row to dismiss the warning: it is the durable record needed to clean up those bytes.
 
 ## Monitoring and routine checks
 

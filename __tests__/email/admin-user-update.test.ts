@@ -65,6 +65,8 @@ const initial: User = {
   pendingEmail: null,
   pendingEmailOldConfirmed: false,
   image: null,
+  avatarStoragePath: null,
+  avatarStorageTarget: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2026-01-01'),
   storageUsed: 0,

@@ -134,13 +134,25 @@ console.log('Sessions revoked')
 
 Revoking browser sessions does not revoke named API tokens or rotate the legacy upload credential. Those remain usable according to their scopes and the account's current permissions until separately revoked, expired, or rotated.
 
+## Avatar publication and removal
+
+`POST /api/profile/avatar` requires a browser session with `profile.update` and a multipart `file` containing an image. Success remains `200` with `{ "success": true, "url": "…" }`. Use that returned URL: new avatars have a unique key per upload, not a predictable account-ID filename.
+
+The server records a durable write intent before storage I/O, then rechecks the account, current permission, and quota before publishing the image. A failed publication leaves the previous avatar in place and retains cleanup work for the new bytes. Invalid image input returns `400`; missing authentication `401`; lost permission `403`; a deleted account `404`; a cancelled write intent `409`; an exceeded quota `413`; and a storage failure `500`.
+
+`DELETE /api/users/{id}/avatar` requires a same-origin browser session with `users.update` and target-account delegation authority. It clears the image and stored avatar metadata while queuing the old owned object's cleanup in the same transaction. Success is `204 No Content`; byte removal happens later through the worker.
+
+`GET /api/avatars/{filename}` remains public but serves only a currently referenced avatar. An obsolete or unowned key returns `404`. New stored avatars use their recorded target; missing or mismatched target configuration returns `503` rather than reading the same key from another backend. Legacy avatars without provenance retain their previous read behavior. Cached images and direct S3 public URLs can outlive a metadata change until cache expiry or object cleanup.
+
+The [operator recovery guide](/hosting/maintenance#recover-an-interrupted-avatar-write) covers retained write intents after a process crash. These changes add no named-token scope or webhook event.
+
 ## Account deletion
 
 `DELETE /api/users/{id}` requires a browser session with `users.delete`, a same-origin request, and the target-account delegation checks. `DELETE /api/profile` deletes the caller's own account with `profile.update`; it uses the [shared session/legacy-credential authentication rules](/api/endpoint-inventory#dashboard-routes-using-the-shared-account-helper) and is not available to named API tokens. Neither operation requires a separate session-revocation or file-deletion grant.
 
-Both return **204 No Content** after account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
+Both return **204 No Content** after account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. File jobs are queued in bulk, with a 120-second transaction budget for account deletion. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
 
-The response does not promise that object bytes have already been erased. An application worker deletes each recorded file and the app-owned avatar asynchronously, preserving failed jobs for retry. Already-issued object-storage links can remain usable until cleanup or link expiry. The [operator cleanup guide](/hosting/maintenance#account-storage-cleanup) covers retries, backend identity changes, and recovery. This durable queue applies to whole-account deletion; individual file and moderation deletion behavior is unchanged.
+The response does not promise that object bytes have already been erased. An application worker deletes recorded files and app-owned avatars asynchronously against their recorded storage targets, preserving failed jobs for retry. Historical files without reliable storage provenance create unknown-target jobs that retain their paths for operator reconciliation; they do not authorize deletion against the current backend. Already-issued object-storage links can remain usable until cleanup or link expiry. The [operator cleanup guide](/hosting/maintenance#account-storage-cleanup) covers retries, backend identity changes, and recovery. The same durable queue also handles avatar cleanup; individual file and moderation deletion behavior is unchanged.
 
 ## Content moderation deletion
 
