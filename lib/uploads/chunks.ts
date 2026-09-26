@@ -15,6 +15,7 @@ import { z } from 'zod'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -185,7 +186,7 @@ export async function initializeChunkUpload(
     (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
   if (
     storageConfig.quotas.enabled &&
-    user.role !== 'ADMIN' &&
+    !hasPermission(user, 'quotas.bypass') &&
     user.storageUsed + size / 1024 ** 2 > quotaMB
   )
     throw new UploadError('The file would exceed your storage quota.', 413)

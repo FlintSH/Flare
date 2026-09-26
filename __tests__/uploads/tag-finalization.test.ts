@@ -2,6 +2,7 @@ import { Readable } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import type { StorageProvider } from '@/lib/storage'
 import { finalizeUpload } from '@/lib/uploads/finalize'
 import { mergeUploadOptions } from '@/lib/uploads/schema'
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     $executeRaw: vi.fn(),
     $queryRaw: vi.fn(),
     config: { findUnique: vi.fn() },
+    role: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
     file: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     vaultFolder: { findFirst: vi.fn() },
@@ -55,7 +57,8 @@ const user: AuthenticatedUser = {
   storageUsed: 0,
   urlId: 'alice',
   vanityId: null,
-  role: 'USER',
+  roles: [],
+  permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: true,
 }
 const file = {
@@ -82,6 +85,13 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.tx.config.findUnique.mockResolvedValue(null)
   mocks.tx.user.findUnique.mockResolvedValue(user)
+  mocks.tx.role.findUnique.mockResolvedValue({
+    id: 'everyone',
+    name: 'Everyone',
+    position: 0,
+    systemKey: 'everyone',
+    permissions: [...DEFAULT_PERMISSIONS],
+  })
   mocks.tx.file.findFirst.mockResolvedValue(null)
   mocks.tx.file.findUnique.mockResolvedValue(null)
   mocks.tx.file.create.mockResolvedValue(file)
@@ -162,5 +172,60 @@ describe('tags at the shared upload commit boundary', () => {
     await expect(finalizeUpload(input())).resolves.toEqual(file)
     expect(mocks.applyProfileTags).not.toHaveBeenCalled()
     expect(mocks.applyAutomaticTags).not.toHaveBeenCalled()
+  })
+  it('rejects revoked upload permissions after the settings and access locks, despite stale caller authority', async () => {
+    mocks.tx.role.findUnique.mockResolvedValue({
+      id: 'everyone',
+      name: 'Everyone',
+      position: 0,
+      systemKey: 'everyone',
+      permissions: ['files.read'],
+    })
+    await expect(finalizeUpload(input())).rejects.toMatchObject({ status: 403 })
+    expect(mocks.tx.$executeRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.tx.role.findUnique.mock.invocationCallOrder[0]
+    )
+    expect(mocks.tx.file.create).not.toHaveBeenCalled()
+  })
+
+  it('requires paste, folder, and tag grants independently at commit time', async () => {
+    mocks.tx.role.findUnique.mockResolvedValue({
+      id: 'everyone',
+      name: 'Everyone',
+      position: 0,
+      systemKey: 'everyone',
+      permissions: ['files.upload'],
+    })
+    for (const upload of [
+      { ...input(), isPaste: true },
+      {
+        ...input(),
+        options: mergeUploadOptions({}, {}, { folderId: 'marketing' }),
+      },
+      input(),
+    ])
+      await expect(finalizeUpload(upload)).rejects.toMatchObject({
+        status: 403,
+      })
+    expect(mocks.tx.file.create).not.toHaveBeenCalled()
+  })
+
+  it('forces new files private when the current role cannot share', async () => {
+    mocks.tx.role.findUnique.mockResolvedValue({
+      id: 'everyone',
+      name: 'Everyone',
+      position: 0,
+      systemKey: 'everyone',
+      permissions: ['files.upload'],
+    })
+    await finalizeUpload({
+      ...input(),
+      options: mergeUploadOptions({}, {}, { visibility: 'PUBLIC' }),
+    })
+    expect(mocks.tx.file.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ visibility: 'PRIVATE' }),
+      })
+    )
   })
 })

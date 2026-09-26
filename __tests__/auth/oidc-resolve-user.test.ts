@@ -44,7 +44,6 @@ const dbUser = {
   id: 'existing-user-id',
   email: 'user@example.com',
   name: 'Existing User',
-  role: 'USER' as const,
   image: null,
   sessionVersion: 1,
   password: null,
@@ -54,7 +53,9 @@ const dbUser = {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb({}))
+  mocks.transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+    cb({ $executeRaw: vi.fn() })
+  )
 })
 
 describe('resolveOidcUser', () => {
@@ -186,7 +187,7 @@ describe('resolveOidcUser', () => {
       user: expect.objectContaining({ id: createdUser.id }),
     })
     expect(mocks.createUser).toHaveBeenCalledWith(
-      {},
+      expect.objectContaining({ $executeRaw: expect.any(Function) }),
       expect.objectContaining({
         email: 'newperson@example.com',
         name: 'newperson',

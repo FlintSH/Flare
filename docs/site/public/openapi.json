@@ -4,7 +4,7 @@
     "title": "Flare named-token API",
     "version": "1.0.0",
     "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
-    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration remains browser-session-only.",
     "license": {
       "name": "MIT",
       "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"
@@ -41,7 +41,7 @@
         "operationId": "listFiles",
         "summary": "List and search your files",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store.",
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request.",
         "security": [
           {
             "BearerAuth": []
@@ -97,7 +97,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -135,6 +135,19 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
                 }
               }
             }
@@ -266,13 +279,14 @@
               "enum": ["next", "previous"]
             }
           }
-        ]
+        ],
+        "x-flare-permissions": ["files.read"]
       },
       "post": {
         "operationId": "uploadFile",
         "summary": "Upload one file",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; administrators are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented.",
+        "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; accounts with quotas.bypass or Administrator are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -314,7 +328,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -337,7 +351,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -446,7 +460,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       }
     },
     "/api/files/types": {
@@ -454,7 +469,7 @@
         "operationId": "listFileTypes",
         "summary": "List MIME types present in your account",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Sorted distinct stored MIME types, not an allowlist of permitted upload types.",
+        "description": "Requires the files:read scope. Sorted distinct stored MIME types, not an allowlist of permitted upload types. The token owner must currently have files.read; role revocation applies on the next request.",
         "security": [
           {
             "BearerAuth": []
@@ -479,7 +494,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -500,8 +515,22 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
           }
-        }
+        },
+        "x-flare-permissions": ["files.read"]
       }
     },
     "/api/files/chunks": {
@@ -509,7 +538,7 @@
         "operationId": "initializeChunkUpload",
         "summary": "Initialize a chunk upload",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage.",
+        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -534,7 +563,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -557,7 +586,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -667,13 +696,14 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       },
       "get": {
         "operationId": "getChunkPartUrlCompatibility",
         "summary": "Get a part upload URL (query form)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route.",
+        "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -692,7 +722,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -715,7 +745,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -777,13 +807,14 @@
               "maximum": 10000
             }
           }
-        ]
+        ],
+        "x-flare-permissions": ["files.upload"]
       },
       "put": {
         "operationId": "completeChunkUploadCompatibility",
         "summary": "Complete a chunk upload (wrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp.",
+        "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -820,7 +851,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -843,7 +874,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -903,7 +934,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       }
     },
     "/api/files/chunks/{uploadId}/part/{partNumber}": {
@@ -934,7 +966,7 @@
         "operationId": "getChunkPartUrl",
         "summary": "Get a part upload URL",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity.",
+        "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -953,7 +985,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -976,7 +1008,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1015,13 +1047,14 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       },
       "put": {
         "operationId": "uploadChunkPart",
         "summary": "Upload raw part bytes through Flare",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity.",
+        "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -1045,7 +1078,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1068,7 +1101,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1129,7 +1162,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       }
     },
     "/api/files/chunks/{uploadId}/complete": {
@@ -1149,7 +1183,7 @@
         "operationId": "completeChunkUpload",
         "summary": "Complete a chunk upload (unwrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented.",
+        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
         "security": [
           {
             "BearerAuth": []
@@ -1178,7 +1212,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1201,7 +1235,7 @@
             }
           },
           "403": {
-            "description": "Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1261,7 +1295,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["files.upload"]
       }
     },
     "/api/urls": {
@@ -1269,7 +1304,7 @@
         "operationId": "listShortLinks",
         "summary": "List your short links",
         "tags": ["Short links"],
-        "description": "Requires the urls:read scope. Newest first; no pagination or filtering parameters.",
+        "description": "Requires the urls:read scope. Newest first; no pagination or filtering parameters. The token owner must currently have links.read; role revocation applies on the next request.",
         "security": [
           {
             "BearerAuth": []
@@ -1303,7 +1338,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1324,14 +1359,28 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
           }
-        }
+        },
+        "x-flare-permissions": ["links.read"]
       },
       "post": {
         "operationId": "createShortLink",
         "summary": "Create a short link",
         "tags": ["Short links"],
-        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON currently reaches the 500 handler.",
+        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON currently reaches the 500 handler. The token owner must currently have links.create; role revocation applies on the next request.",
         "security": [
           {
             "BearerAuth": []
@@ -1371,7 +1420,7 @@
             }
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1402,6 +1451,19 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1414,7 +1476,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["links.create"]
       }
     },
     "/api/urls/{id}": {
@@ -1422,7 +1485,7 @@
         "operationId": "deleteShortLink",
         "summary": "Delete your short link",
         "tags": ["Short links"],
-        "description": "Requires urls:write. Use the link record ID, not its shortCode.",
+        "description": "Requires urls:write. Use the link record ID, not its shortCode. The token owner must currently have links.delete; role revocation applies on the next request.",
         "security": [
           {
             "BearerAuth": []
@@ -1445,7 +1508,7 @@
             "description": "Deleted. No response body."
           },
           "401": {
-            "description": "Missing/invalid/revoked/expired token, missing required scope, or required email verification.",
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1458,7 +1521,7 @@
             }
           },
           "403": {
-            "description": "Link belongs to another account.",
+            "description": "Required current role permission is missing. Link belongs to another account.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1495,7 +1558,8 @@
               }
             }
           }
-        }
+        },
+        "x-flare-permissions": ["links.delete"]
       }
     }
   },
@@ -1575,7 +1639,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "flr_…",
-        "description": "Named API token from Profile → Integrations. Select files:read, files:upload, urls:read, urls:write as needed. Required scope is recorded in each operation description and x-flare-scope; HTTP bearer security arrays are empty because this is not OAuth. Missing scopes produce 401."
+        "description": "Named API token from Profile → Integrations. Select files:read, files:upload, urls:read, urls:write as needed. Required scope is recorded in each operation description and x-flare-scope; HTTP bearer security arrays are empty because this is not OAuth. Missing scopes produce 401. Required owner permission is recorded in x-flare-permissions. Missing current role permission produces 403 after authentication succeeds. Administrator never expands token scopes."
       }
     },
     "schemas": {

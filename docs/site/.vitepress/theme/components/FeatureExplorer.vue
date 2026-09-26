@@ -134,6 +134,12 @@ const features = [
   ],
   [
     'Host & administer',
+    'Roles & permissions',
+    'Combine permission groups, delegate moderation or design, and protect administrator access with role hierarchy.',
+    '/admin/roles',
+  ],
+  [
+    'Host & administer',
     'Access & moderation',
     'Manage users, roles, shared storage quotas, registration, and uploaded content.',
     '/admin/users',

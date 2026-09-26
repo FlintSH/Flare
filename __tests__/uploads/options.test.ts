@@ -2,6 +2,7 @@ import { UpdateProfileSchema } from '@/types/dto/profile'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import { uploadLinks } from '@/lib/uploads/links'
 import {
   applyUploadOverrides,
@@ -41,7 +42,8 @@ const user: AuthenticatedUser = {
   storageUsed: 0,
   urlId: 'alice',
   vanityId: null,
-  role: 'USER',
+  roles: [],
+  permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: false,
 }
 const now = new Date('2026-09-13T12:00:00.000Z')

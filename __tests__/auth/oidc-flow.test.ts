@@ -16,6 +16,7 @@ import {
 
 import { getAuthOptions } from '@/lib/auth'
 import type { FlareConfig } from '@/lib/config'
+import { type RoleSummary } from '@/lib/permissions/catalog'
 
 vi.mock('@/lib/email/config', async () => {
   const { DEFAULT_EMAIL_CONFIG } = await import('@/lib/email/schema')
@@ -27,7 +28,6 @@ type StoredUser = Pick<
   | 'id'
   | 'email'
   | 'name'
-  | 'role'
   | 'sessionVersion'
   | 'image'
   | 'password'
@@ -35,12 +35,14 @@ type StoredUser = Pick<
   | 'oidcSubject'
   | 'uploadToken'
   | 'urlId'
->
+> & { roles: RoleSummary[] }
 type UserWhere = Partial<
   Pick<StoredUser, 'id' | 'email' | 'oidcSubject' | 'urlId'>
 >
 type CreateUserData = Pick<StoredUser, 'urlId' | 'uploadToken'> &
-  Partial<Omit<StoredUser, 'id' | 'sessionVersion'>>
+  Partial<Omit<StoredUser, 'id' | 'sessionVersion' | 'roles'>> & {
+    roles?: { connect: { id: string }[] }
+  }
 type OidcSettings = FlareConfig['settings']['general']['oidc']
 
 const db = vi.hoisted(() => {
@@ -64,7 +66,37 @@ const db = vi.hoisted(() => {
 
 // Storage is simulated; the application resolver, user creation, NextAuth
 // callbacks, cookie handling, and OIDC discovery/token validation are real.
-vi.mock('@/lib/database/prisma', () => {
+vi.mock('@/lib/database/prisma', async () => {
+  const { DEFAULT_PERMISSIONS } = await import('@/lib/permissions/catalog')
+  const roles = [
+    {
+      id: 'everyone',
+      name: 'Everyone',
+      description: '',
+      color: '#64748b',
+      position: 0,
+      systemKey: 'everyone',
+      permissions: [...DEFAULT_PERMISSIONS],
+    },
+    {
+      id: 'admin',
+      name: 'Admin',
+      description: '',
+      color: '#ef4444',
+      position: 100,
+      systemKey: 'administrator',
+      permissions: ['administrator'],
+    },
+  ]
+  const role = {
+    findUnique: vi.fn(
+      async ({ where }: { where: { systemKey: string } }) =>
+        roles.find((role) => role.systemKey === where.systemKey) ?? null
+    ),
+    upsert: vi.fn(async ({ where }: { where: { systemKey: string } }) =>
+      roles.find((role) => role.systemKey === where.systemKey)
+    ),
+  }
   const user = {
     findUnique: vi.fn(async ({ where }: { where: UserWhere }) => {
       const row = db.rows.find((candidate) =>
@@ -81,7 +113,9 @@ vi.mock('@/lib/database/prisma', () => {
         id: `user-${db.rows.length}`,
         email: data.email ?? null,
         name: data.name ?? null,
-        role: data.role ?? 'USER',
+        roles: roles.filter((role) =>
+          data.roles?.connect.some((item) => item.id === role.id)
+        ),
         sessionVersion: 1,
         image: data.image ?? null,
         password: data.password ?? null,
@@ -112,8 +146,14 @@ vi.mock('@/lib/database/prisma', () => {
   return {
     prisma: {
       user,
-      $transaction: async <T>(callback: (tx: { user: typeof user }) => T) =>
-        callback({ user }),
+      role,
+      $transaction: async <T>(
+        callback: (tx: {
+          user: typeof user
+          role: typeof role
+          $executeRaw: ReturnType<typeof vi.fn>
+        }) => T
+      ) => callback({ user, role, $executeRaw: vi.fn() }),
     },
   }
 })
@@ -246,7 +286,17 @@ function makeUser(overrides: Partial<StoredUser> = {}): StoredUser {
     id,
     email: 'admin@example.test',
     name: 'Admin',
-    role: 'ADMIN',
+    roles: [
+      {
+        id: 'admin',
+        name: 'Admin',
+        description: '',
+        color: '#ef4444',
+        position: 100,
+        systemKey: 'administrator',
+        permissions: ['administrator'],
+      },
+    ],
     sessionVersion: 1,
     image: null,
     password: null,
@@ -371,7 +421,7 @@ describe.sequential('OIDC protocol and application sign-in', () => {
     expect((await client.request('session')).body?.user).toMatchObject({
       id: 'user-1',
       email: 'person@example.test',
-      role: 'USER',
+      permissions: expect.arrayContaining(['files.read', 'files.upload']),
     })
     expect(db.rows[1]).toMatchObject({
       oidcSubject: `${issuer}|subject-1`,
@@ -384,6 +434,36 @@ describe.sequential('OIDC protocol and application sign-in', () => {
 
     db.rows[1].sessionVersion++
     expect((await client.request('session')).body).toEqual({})
+  })
+
+  it('refreshes role grants and revocations in an existing browser session without storing them in cookies', async () => {
+    const client = browser()
+    expect((await client.login()).redirect).toBe(callbackUrl)
+    expect((await client.request('session')).body?.user).toMatchObject({
+      permissions: expect.arrayContaining(['files.read']),
+    })
+    db.rows[1].roles = [
+      {
+        id: 'moderator',
+        name: 'Moderator',
+        description: '',
+        color: '#123abc',
+        position: 20,
+        systemKey: null,
+        permissions: ['users.read'],
+      },
+    ]
+    expect((await client.request('session')).body?.user).toMatchObject({
+      permissions: expect.arrayContaining(['users.read']),
+      roles: expect.arrayContaining([
+        expect.objectContaining({ id: 'moderator' }),
+      ]),
+    })
+    db.rows[1].roles = []
+    const refreshed = (await client.request('session')).body?.user as {
+      permissions: string[]
+    }
+    expect(refreshed.permissions).not.toContain('users.read')
   })
 
   it('resolves an existing subject after its email claim changes without rewriting the account', async () => {
@@ -476,7 +556,7 @@ describe.sequential('OIDC protocol and application sign-in', () => {
               id: 'existing',
               email: claims.email,
               name: 'Existing User',
-              role: 'USER',
+              roles: [],
               sessionVersion: 7,
               password: 'existing-password-hash',
               oidcSubject:

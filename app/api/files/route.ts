@@ -18,6 +18,7 @@ import {
 } from '@/lib/files/gallery-navigation'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
 import {
@@ -46,6 +47,9 @@ export async function POST(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
+    const isPaste = req.headers.get('X-Flare-Paste') === 'true'
+    if (isPaste && !hasPermission(user, 'pastes.create'))
+      return apiError('You do not have permission to create pastes.', 403)
     if (!req.headers.get('content-type')?.includes('multipart/form-data'))
       throw new UploadError('Content-Type must be multipart/form-data.')
     const selection = requestUploadOptions(req)
@@ -59,7 +63,7 @@ export async function POST(req: Request) {
       limits.quotas.default.value *
       (limits.quotas.default.unit === 'GB' ? 1024 : 1)
     const quotaLimitBytes =
-      limits.quotas.enabled && user.role !== 'ADMIN'
+      limits.quotas.enabled && !hasPermission(user, 'quotas.bypass')
         ? Math.max(0, quotaMB - user.storageUsed) * 1024 ** 2
         : Infinity
     if (quotaLimitBytes <= 0)
@@ -104,7 +108,13 @@ export async function POST(req: Request) {
     )
       throw new UploadError('Select a naming strategy in your upload profile.')
     const options = applyUploadOverrides(user, initialOptions, overrides)
-    const file = await finalizeUpload({ user, storage, ...upload, options })
+    const file = await finalizeUpload({
+      user,
+      storage,
+      ...upload,
+      options,
+      isPaste,
+    })
     return apiResponse(uploadLinks(file, user))
   } catch (error) {
     if (storage && filePath) await cleanupUncommittedUpload(storage, filePath)

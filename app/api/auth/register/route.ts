@@ -9,6 +9,7 @@ import { lockEmailAddress, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
+import { lockRoleChanges } from '@/lib/permissions/server'
 import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
 import { createUser } from '@/lib/users/create-user'
 
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
     const hashedPassword = await hash(body.password, 10)
 
     const user = await prisma.$transaction(async (tx) => {
+      await lockRoleChanges(tx)
       if (emailConfig.enabled) await lockEmailAddress(tx, body.email)
       const exists = emailConfig.enabled
         ? await tx.user.findFirst({

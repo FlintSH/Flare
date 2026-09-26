@@ -23,6 +23,8 @@ import {
   PreferencesPanel,
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
+import { PermissionGate } from '@/components/roles/permission-gate'
+import { RoleBadges } from '@/components/roles/role-badges'
 import {
   Card,
   CardContent,
@@ -37,6 +39,7 @@ import {
   PROFILE_SECTION_ALIASES,
 } from '@/lib/preferences/navigation'
 
+import { usePermissions } from '@/hooks/use-permissions'
 import { usePreferenceSection } from '@/hooks/use-preference-section'
 
 import { ProfileAccount } from './account'
@@ -89,6 +92,7 @@ export function ProfileClient({
   initialSection,
   initialPreference,
 }: ProfileClientProps) {
+  const { can } = usePermissions()
   const router = useRouter()
   const [activeSection, setSection] = usePreferenceSection(
     PROFILE_SECTIONS,
@@ -97,98 +101,137 @@ export function ProfileClient({
   )
   const handleRefresh = useCallback(() => router.refresh(), [router])
 
+  const visibleSections = sections.filter(
+    (section) =>
+      (section.id !== 'uploads' && section.id !== 'integrations') ||
+      (section.id === 'uploads'
+        ? can('files.upload') || can('uploadProfiles.manage')
+        : can('tokens.manage') || can('webhooks.manage'))
+  )
+  const displayedSection = visibleSections.some(
+    (section) => section.id === activeSection
+  )
+    ? activeSection
+    : 'account'
+
   return (
     <PreferencesShell
       eyebrow="Your space"
       title="Profile"
       description="Everything that makes Flare work your way, in one place."
-      sections={sections}
-      activeSection={activeSection}
+      sections={visibleSections}
+      activeSection={displayedSection}
       onSectionChange={setSection}
       actions={<LogoutButton />}
       asideNote="These settings belong to your account. Your preferences travel with you."
     >
-      <PreferencesPanel active={activeSection === 'account'}>
+      <PreferencesPanel active={displayedSection === 'account'}>
         <Card>
-          <CardHeader className="space-y-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-              <Fingerprint className="h-5 w-5" />
-            </span>
-            <div className="space-y-1.5">
-              <CardTitle>A little about you</CardTitle>
-              <CardDescription>
-                The name and photo people see when you share.
-              </CardDescription>
-            </div>
+          <CardHeader>
+            <CardTitle>Your roles</CardTitle>
+            <CardDescription>
+              Your access combines Everyone with the roles assigned to you.
+              Contact an administrator to request changes.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ProfileAccount user={user} onUpdate={handleRefresh} />
+            <RoleBadges roles={user.roles} />
           </CardContent>
         </Card>
-        <Card id="password" className="scroll-mt-28">
-          <CardHeader className="space-y-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-              <KeyRound className="h-5 w-5" />
-            </span>
-            <div className="space-y-1.5">
-              <CardTitle>Change your password</CardTitle>
-              <CardDescription>
-                Use a strong password that you do not use elsewhere.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ProfileSecurity onUpdate={handleRefresh} />
-          </CardContent>
-        </Card>
-        <div id="workspace-appearance" className="scroll-mt-28">
-          <PersonalAppearanceSettings initialPreference={initialPreference} />
-        </div>
+        <PermissionGate permission="profile.update">
+          <Card>
+            <CardHeader className="space-y-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
+                <Fingerprint className="h-5 w-5" />
+              </span>
+              <div className="space-y-1.5">
+                <CardTitle>A little about you</CardTitle>
+                <CardDescription>
+                  The name and photo people see when you share.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ProfileAccount user={user} onUpdate={handleRefresh} />
+            </CardContent>
+          </Card>
+        </PermissionGate>
+        <PermissionGate permission="profile.update">
+          <Card id="password" className="scroll-mt-28">
+            <CardHeader className="space-y-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
+                <KeyRound className="h-5 w-5" />
+              </span>
+              <div className="space-y-1.5">
+                <CardTitle>Change your password</CardTitle>
+                <CardDescription>
+                  Use a strong password that you do not use elsewhere.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ProfileSecurity onUpdate={handleRefresh} />
+            </CardContent>
+          </Card>
+        </PermissionGate>
+        <PermissionGate permission="appearance.personal">
+          <div id="workspace-appearance" className="scroll-mt-28">
+            <PersonalAppearanceSettings initialPreference={initialPreference} />
+          </div>
+        </PermissionGate>
       </PreferencesPanel>
 
-      <PreferencesPanel active={activeSection === 'uploads'}>
+      <PreferencesPanel active={displayedSection === 'uploads'}>
         <div className="space-y-8">
-          <Card id="upload-tools" className="scroll-mt-6">
-            <CardHeader>
-              <CardTitle>Screenshot tools and scripts</CardTitle>
-              <CardDescription>
-                Choose your tool and download a ready-to-use configuration. Your
-                upload token is included automatically — no API key to create or
-                paste.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ProfileTools
-                onOpenIntegrations={() =>
-                  setSection('integrations', { updateHistory: false })
-                }
-              />
-            </CardContent>
-          </Card>
-          <ProfileManager embedded />
-          <Card id="upload-defaults" className="scroll-mt-6">
-            <CardHeader>
-              <CardTitle>Account upload defaults</CardTitle>
-              <CardDescription>
-                Choose the starting point for your uploads. A selected profile
-                or individual upload can override these choices.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ProfileUploadDefaults user={user} onUpdate={handleRefresh} />
-            </CardContent>
-          </Card>
+          <PermissionGate permission="files.upload">
+            <PermissionGate permission="tokens.manage">
+              <Card id="upload-tools" className="scroll-mt-6">
+                <CardHeader>
+                  <CardTitle>Screenshot tools and scripts</CardTitle>
+                  <CardDescription>
+                    Choose your tool and download a ready-to-use configuration.
+                    Your upload token is included automatically — no API key to
+                    create or paste.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ProfileTools
+                    onOpenIntegrations={() =>
+                      setSection('integrations', { updateHistory: false })
+                    }
+                  />
+                </CardContent>
+              </Card>
+            </PermissionGate>
+          </PermissionGate>
+          <PermissionGate permission="uploadProfiles.manage">
+            <ProfileManager embedded />
+          </PermissionGate>
+          <PermissionGate permission="profile.update">
+            <Card id="upload-defaults" className="scroll-mt-6">
+              <CardHeader>
+                <CardTitle>Account upload defaults</CardTitle>
+                <CardDescription>
+                  Choose the starting point for your uploads. A selected profile
+                  or individual upload can override these choices.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProfileUploadDefaults user={user} onUpdate={handleRefresh} />
+              </CardContent>
+            </Card>
+          </PermissionGate>
         </div>
       </PreferencesPanel>
 
-      <PreferencesPanel active={activeSection === 'integrations'}>
+      <PreferencesPanel active={displayedSection === 'integrations'}>
         <IntegrationsPanel
           embedded
           onSetupTool={() => setSection('uploads', { updateHistory: false })}
         />
       </PreferencesPanel>
 
-      <PreferencesPanel active={activeSection === 'data'}>
+      <PreferencesPanel active={displayedSection === 'data'}>
         <div className="space-y-6">
           <Card>
             <CardHeader className="space-y-3">
@@ -213,34 +256,43 @@ export function ProfileClient({
               />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Take your files with you</CardTitle>
-              <CardDescription>
-                Download a copy of your uploaded files and account information.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ProfileExport />
-            </CardContent>
-          </Card>
-          <Card className="border-destructive/30">
-            <CardHeader className="space-y-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 text-destructive">
-                <Trash2 className="h-5 w-5" />
-              </span>
-              <div className="space-y-1.5">
-                <CardTitle>Delete your account</CardTitle>
-                <CardDescription>
-                  Permanently remove your account and its data. Export anything
-                  you want to keep first.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ProfileDeleteAccount />
-            </CardContent>
-          </Card>
+          <PermissionGate permission="profile.export">
+            <PermissionGate permission="files.read">
+              <PermissionGate permission="links.read">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Take your files with you</CardTitle>
+                    <CardDescription>
+                      Download a copy of your uploaded files and account
+                      information.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ProfileExport />
+                  </CardContent>
+                </Card>
+              </PermissionGate>
+            </PermissionGate>
+          </PermissionGate>
+          <PermissionGate permission="profile.update">
+            <Card className="border-destructive/30">
+              <CardHeader className="space-y-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                </span>
+                <div className="space-y-1.5">
+                  <CardTitle>Delete your account</CardTitle>
+                  <CardDescription>
+                    Permanently remove your account and its data. Export
+                    anything you want to keep first.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ProfileDeleteAccount />
+              </CardContent>
+            </Card>
+          </PermissionGate>
         </div>
       </PreferencesPanel>
     </PreferencesShell>

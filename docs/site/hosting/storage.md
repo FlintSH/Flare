@@ -4,7 +4,7 @@ description: Choose local or S3-compatible storage, configure limits and quotas,
 
 # Storage, limits, and quotas
 
-Choose a storage backend during setup or under **Settings → Storage**. This controls where file bytes live. PostgreSQL remains required for both backends.
+Choose a storage backend during setup or under **Settings → Storage**. Changing this section requires `settings.storage`; navigating Settings also uses `settings.read`. This controls where file bytes live. PostgreSQL remains required for both backends.
 
 <Screenshot src="/screenshots/preferences/settings-storage.png" alt="Flare Storage settings showing the storage provider and upload limits" caption="Storage and quota controls live together in Settings." />
 
@@ -47,15 +47,15 @@ AWS S3's default bucket-owner-enforced mode disables ACLs. Plan for this compati
 
 ## Maximum upload size
 
-The default maximum is **100 MB per file**. The setting supports MB or GB and uses powers of 1024. It applies to administrators as well as ordinary users. Your reverse proxy and host may impose additional request limits; [align them](/hosting/reverse-proxy#align-all-upload-limits).
+The default maximum is **100 MB per file**. The setting supports MB or GB and uses powers of 1024. It applies to every role, including Administrator and roles with quota bypass. Your reverse proxy and host may impose additional request limits; [align them](/hosting/reverse-proxy#align-all-upload-limits).
 
 This limit is checked during upload and finalization. It does not shrink or remove files uploaded before you lower it.
 
 ## User quotas
 
-Quotas are **disabled by default**. Enabling them applies a shared per-user allowance; its starting value is **10 GB**. Each ordinary user's recorded storage usage is checked against that allowance. Administrators are exempt from the total quota.
+Quotas are **disabled by default**. Enabling them applies a shared per-user allowance; its starting value is **10 GB**. Each account's recorded storage usage is checked against that allowance unless its roles grant `quotas.bypass` or Administrator. Grant quota bypass independently of administration when appropriate.
 
-This is one default quota for all ordinary users. Flare does not currently expose separate per-account quota values, group quotas, or reserved disk capacity. If you lower the allowance below a user's existing usage, their files remain, but further uploads are blocked until enough space is freed or the limit is raised.
+This is one default quota for accounts without bypass. Flare does not currently expose separate per-account or per-role numeric quota values, shared group quotas, or reserved disk capacity. If you lower the allowance below a user's existing usage, their files remain, but further uploads are blocked until enough space is freed or the limit is raised.
 
 ## Changing backend or bucket
 

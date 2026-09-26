@@ -11,6 +11,8 @@ import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
+import { mutateAccount } from '@/lib/permissions/account-mutations'
+import { PermissionError } from '@/lib/permissions/server'
 
 const logger = loggers.users
 
@@ -207,6 +209,14 @@ export async function DELETE(req: Request) {
       return apiError('User not found', HTTP_STATUS.NOT_FOUND)
     }
 
+    await mutateAccount(
+      user.id,
+      user.id,
+      'profile.update',
+      (tx) => tx.user.delete({ where: { id: user.id } }),
+      true
+    )
+
     for (const file of userData.files) {
       try {
         await unlink(join(process.cwd(), file.path))
@@ -223,12 +233,10 @@ export async function DELETE(req: Request) {
       }
     }
 
-    await prisma.user.delete({
-      where: { id: user.id },
-    })
-
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {
+    if (error instanceof PermissionError)
+      return Response.json({ error: error.message }, { status: error.status })
     logger.error('Account deletion error:', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

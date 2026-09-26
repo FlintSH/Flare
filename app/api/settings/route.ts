@@ -1,19 +1,21 @@
-import {
-  PublicSettings,
-  SettingsUpdateResponse,
-  UpdateSettingSectionRequest,
-} from '@/types/dto/settings'
+import { PublicSettings, SettingsUpdateResponse } from '@/types/dto/settings'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
-import { requireAdmin, requireAuth } from '@/lib/auth/api-auth'
-import {
-  FlareConfig,
-  getConfig,
-  updateConfig,
-  updateConfigSection,
-} from '@/lib/config'
+import { getAccessSession } from '@/lib/auth'
+import { requireAuth, requirePermission } from '@/lib/auth/api-auth'
+import { FlareConfig, getConfig, updateConfig } from '@/lib/config'
 import { redactEmailConfig } from '@/lib/email/config'
 import { loggers } from '@/lib/logger'
+import { hasPermission } from '@/lib/permissions/catalog'
+import {
+  PermissionError,
+  assertAccessibleAdministrator,
+  getUserAccess,
+  lockRoleChanges,
+  requireActorPermission,
+} from '@/lib/permissions/server'
+import { settingsPatchAllowed } from '@/lib/permissions/settings'
+import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { invalidateStorageProvider } from '@/lib/storage'
 
 const logger = loggers.config
@@ -49,7 +51,11 @@ export async function GET(req: Request) {
 
     const config = await getConfig()
 
-    if (user.role !== 'ADMIN') {
+    if (
+      !hasPermission(user, 'settings.read') ||
+      user.apiToken ||
+      !(await getAccessSession())
+    ) {
       const publicSettings: PublicSettings = {
         version: config.version,
         settings: {
@@ -78,6 +84,18 @@ export async function GET(req: Request) {
       ...config,
       settings: {
         ...config.settings,
+        general: {
+          ...config.settings.general,
+          oidc: { ...config.settings.general.oidc, clientSecret: '' },
+          storage: {
+            ...config.settings.general.storage,
+            s3: {
+              ...config.settings.general.storage.s3,
+              secretAccessKey: '',
+              accessKeyId: '',
+            },
+          },
+        },
         email: redactEmailConfig(config.settings.email),
       },
     })
@@ -87,72 +105,74 @@ export async function GET(req: Request) {
   }
 }
 
-type SettingSection = keyof FlareConfig['settings']
-
 export async function PATCH(request: Request) {
+  const session = await getAccessSession()
+  if (!session?.user) return apiError('Unauthorized', 401)
+  if (!isSameOriginRequest(request))
+    return apiError('Invalid request origin', 403)
+  if (
+    request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !==
+    'application/json'
+  )
+    return apiError('Use application/json', 415)
   try {
-    const { response } = await requireAdmin()
-    if (response) return response
-
     const body = await request.json()
-    const { section, data } =
-      body as UpdateSettingSectionRequest<SettingSection>
-
-    if (section === 'email' || section === 'customization')
+    const settings =
+      body.settings ?? (body.section ? { [body.section]: body.data } : null)
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings))
+      return apiError('Choose settings to update', 400)
+    if (!settingsPatchAllowed(session.user, settings))
       return apiError(
-        `Use the ${section} settings endpoint`,
-        HTTP_STATUS.BAD_REQUEST
+        'You do not have permission to change these settings.',
+        403
       )
-
-    const config = await getConfig()
-
-    if (section === 'appearance' && 'customColors' in data) {
-      const customColors = data.customColors
-      if (customColors) {
-        let cssContent = config.settings.advanced.customCSS
-
-        cssContent = cssContent.replace(/:root\s*{[^}]*}/, '')
-
-        const cssVars = Object.entries(customColors)
-          .map(
-            ([key, value]) =>
-              `  --${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}: ${value};`
+    // Blank password fields represent the redacted saved secret, never a clear action.
+    if (settings.general?.oidc?.clientSecret === '')
+      delete settings.general.oidc.clientSecret
+    if (settings.general?.storage?.s3?.secretAccessKey === '')
+      delete settings.general.storage.s3.secretAccessKey
+    if (settings.general?.storage?.s3?.accessKeyId === '')
+      delete settings.general.storage.s3.accessKeyId
+    await updateConfig(
+      { settings },
+      async (tx) => {
+        await lockRoleChanges(tx)
+        const access = await getUserAccess(session.user.id, tx)
+        if (!settingsPatchAllowed(access, settings))
+          throw new PermissionError(
+            'You no longer have permission to change these settings.'
           )
-          .join('\n')
-
-        const newCssVars = `:root {\n${cssVars}\n}\n\n`
-        config.settings.advanced.customCSS = newCssVars + cssContent
-      }
-    }
-
-    await updateConfigSection(
-      section,
-      data as Partial<
-        FlareConfig['settings'][Exclude<
-          SettingSection,
-          'email' | 'customization'
-        >]
-      >
-    )
-    const updatedConfig = await getConfig()
-    return apiResponse<FlareConfig>({
-      ...updatedConfig,
-      settings: {
-        ...updatedConfig.settings,
-        email: redactEmailConfig(updatedConfig.settings.email),
+        // Validate current email access as well as authority before committing.
+        const permission = access.permissions[0]
+        if (!permission) throw new PermissionError('Permission denied')
+        await requireActorPermission(tx, session.user.id, permission)
       },
-    })
+      assertAccessibleAdministrator
+    )
+    if (settings.general?.storage) invalidateStorageProvider()
+    return apiResponse({ message: 'Settings updated successfully' })
   } catch (error) {
-    logger.error('Failed to update config', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
+    if (error instanceof PermissionError)
+      return apiError(error.message, error.status)
+    return apiError(
+      'Could not update settings. Check the values and try again.',
+      400
+    )
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { response } = await requireAdmin()
+    const { user, response } = await requirePermission('administrator')
     if (response) return response
 
+    if (!isSameOriginRequest(req))
+      return apiError('Invalid request origin', 403)
+    if (
+      req.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !==
+      'application/json'
+    )
+      return apiError('Use application/json', 415)
     const config: FlareConfig = await req.json()
     // The Email tab owns this section. A stale whole-settings form must not
     // overwrite its policy or submit masked SMTP credentials as a password.
@@ -167,7 +187,14 @@ export async function POST(req: Request) {
         .trim()
     }
 
-    await updateConfig(config)
+    await updateConfig(
+      config,
+      async (tx) => {
+        await lockRoleChanges(tx)
+        await requireActorPermission(tx, user.id, 'administrator')
+      },
+      assertAccessibleAdministrator
+    )
 
     if (config.settings?.general?.storage) {
       invalidateStorageProvider()
@@ -179,6 +206,9 @@ export async function POST(req: Request) {
 
     return apiResponse<SettingsUpdateResponse>(responseData)
   } catch (error) {
+    if (error instanceof PermissionError)
+      return apiError(error.message, error.status)
+    if (error instanceof SyntaxError) return apiError('Provide valid JSON', 400)
     logger.error('Error updating settings', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

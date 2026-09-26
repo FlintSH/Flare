@@ -7,7 +7,7 @@ description: Get comfortable with Flare, upload your first file, and choose how 
 
 Flare gives you a home for screenshots, recordings, files, text, and links on a server you control. Upload something, get a link, and decide who can open it. Your library keeps everything together, with folders, tags, search, and previews when you need them.
 
-This guide is for people using an existing Flare instance. If you're installing your own, start with the [administrator guide](../admin/index).
+This guide is for people using an existing Flare instance. Everyone supplies the starting permissions; additional [roles](/admin/roles) can add capabilities, and administrators can restrict the baseline. A missing navigation item or unavailable action may reflect your current permissions. If you're installing your own, start with the [administrator guide](../admin/index).
 
 <Screenshot src="/screenshots/workspace/files-library.png" alt="Flare file library with image previews, search, and file controls" caption="Your file library is the starting point for browsing, organizing, and sharing." />
 
@@ -25,7 +25,7 @@ The name, colors, logo, and background can differ between instances. The tasks a
 
 1. Open **Upload** in the navigation.
 2. Drop a file into the selection area, or click it to browse your device.
-3. Choose **Public (anyone with the link)** to share it with another person. Choose **Private (only me)** to keep it in your account; administrators also retain access.
+3. Choose **Public (anyone with the link)** to share it with another person. Choose **Private (only me)** to keep it in your account; accounts with `content.read` also retain access.
 4. Optionally add a password or expiration.
 5. Start the upload and wait for the completion result.
 6. Choose **Copy link**, then send that link to your recipient.
@@ -57,7 +57,7 @@ Create a **Public screenshots** [upload profile](./upload-profiles), review its 
 :::
 
 ::: details I need a private working library
-Create a private upload profile and make it your default. Use [folders](./folders) for projects and [tags](./tags) for topics that cross project boundaries. Private files are accessible to you and instance administrators. Making a folder public does not expose its private files.
+Create a private upload profile and make it your default. Use [folders](./folders) for projects and [tags](./tags) for topics that cross project boundaries. Private files are accessible to you (with `files.read`) and accounts with `content.read`. Making a folder public does not expose its private files.
 :::
 
 ::: details I send temporary reviews or recordings

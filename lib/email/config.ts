@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { assertAccessibleAdministrator } from '@/lib/permissions/server'
 
 import {
   assertEmailEncryptionKey,
@@ -10,7 +11,6 @@ import {
   encryptSecret,
   isEncryptedSecret,
 } from './crypto'
-import { hasVerifiedEmail } from './policy'
 import { EmailConfig, emailConfigSchema, validateEnabledEmail } from './schema'
 
 type Environment = Record<string, string | undefined>
@@ -266,16 +266,7 @@ export async function saveEmailConfig(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
     const finalConfig = resolveEmailConfig(candidate).config
     if (finalConfig.enabled && finalConfig.verification.mode === 'all_users') {
-      const admins = await tx.user.findMany({ where: { role: 'ADMIN' } })
-      if (
-        !admins.some(
-          (admin) => admin.emailExempt || hasVerifiedEmail(admin, finalConfig)
-        )
-      ) {
-        throw new Error(
-          'Verify an administrator recovery address or explicitly exempt an administrator before requiring verification for everyone'
-        )
-      }
+      await assertAccessibleAdministrator(tx, finalConfig)
     }
     const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
     if (!row)

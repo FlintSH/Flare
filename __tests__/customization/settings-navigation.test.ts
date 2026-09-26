@@ -35,8 +35,10 @@ vi.mock('@/components/profile', () => ({ ProfileClient: () => null }))
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.session.mockResolvedValue({ user: { id: 'operator', role: 'ADMIN' } })
-  mocks.user.mockResolvedValue({ role: 'ADMIN' })
+  mocks.session.mockResolvedValue({
+    user: { id: 'operator', permissions: ['administrator'], roles: [] },
+  })
+  mocks.user.mockResolvedValue({})
 })
 
 describe('settings permission and legacy navigation', () => {
@@ -50,10 +52,10 @@ describe('settings permission and legacy navigation', () => {
     expect(mocks.recovery).not.toHaveBeenCalled()
   })
 
-  it.each([{ role: 'USER' }, null])(
-    'rechecks the current role before reading private configuration: %j',
+  it.each([{ permissions: [] }, { permissions: ['files.upload'] }])(
+    'requires settings.read from the current session before reading private configuration: %j',
     async (user) => {
-      mocks.user.mockResolvedValue(user)
+      mocks.session.mockResolvedValue({ user: { id: 'operator', ...user } })
       await expect(
         SettingsPage({
           searchParams: Promise.resolve({ section: 'appearance' }),
@@ -65,7 +67,9 @@ describe('settings permission and legacy navigation', () => {
   )
 
   it('sends a former administrator to personal appearance without recovery', async () => {
-    mocks.user.mockResolvedValue({ role: 'USER' })
+    mocks.session.mockResolvedValue({
+      user: { id: 'operator', permissions: [] },
+    })
     await expect(
       CustomizePage({ searchParams: Promise.resolve({ recovery: '1' }) })
     ).rejects.toThrow(
@@ -86,7 +90,18 @@ describe('settings permission and legacy navigation', () => {
     'loads an authorized section without exposing email credentials: %s',
     async (section, expected) => {
       mocks.config.mockResolvedValue({
-        settings: { email: { password: 'private-mail-password' } },
+        settings: {
+          email: { password: 'private-mail-password' },
+          general: {
+            oidc: { clientSecret: 'private-oidc-secret' },
+            storage: {
+              s3: {
+                secretAccessKey: 'private-s3-secret',
+                accessKeyId: 'private-s3-key',
+              },
+            },
+          },
+        },
       })
       mocks.recovery.mockResolvedValue(false)
       const page = await SettingsPage({
@@ -97,6 +112,9 @@ describe('settings permission and legacy navigation', () => {
         redacted: true,
       })
       expect(JSON.stringify(page.props)).not.toContain('private-mail-password')
+      expect(JSON.stringify(page.props)).not.toContain('private-oidc-secret')
+      expect(JSON.stringify(page.props)).not.toContain('private-s3-secret')
+      expect(JSON.stringify(page.props)).not.toContain('private-s3-key')
     }
   )
 
@@ -145,7 +163,6 @@ describe('profile section compatibility', () => {
   ])('loads the canonical section for %s', async (section, expected) => {
     mocks.user.mockResolvedValue({
       id: 'operator',
-      role: 'ADMIN',
       storageUsed: 0,
       preferences: {},
       _count: { files: 0, shortenedUrls: 0 },

@@ -66,7 +66,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   vi.stubEnv('FLARE_RELEASE_CHANNEL', '')
   vi.stubEnv('FLARE_COMMIT_SHA', '')
-  mocks.getAccessSession.mockResolvedValue({ user: { role: 'ADMIN' } })
+  mocks.getAccessSession.mockResolvedValue({
+    user: { permissions: ['administrator'] },
+  })
 })
 
 afterEach(() => {
@@ -247,12 +249,15 @@ describe('rolling updates', () => {
 })
 
 describe('update API', () => {
-  it.each([null, { user: { role: 'USER' } }])(
+  it.each([
+    null,
+    { user: { permissions: ['files.read', 'appearance.personal'] } },
+  ])(
     'requires an administrator before making external requests',
     async (session) => {
       mocks.getAccessSession.mockResolvedValue(session)
       const response = await GET()
-      expect(response.status).toBe(401)
+      expect(response.status).toBe(session ? 403 : 401)
       expect(fetchMock).not.toHaveBeenCalled()
     }
   )

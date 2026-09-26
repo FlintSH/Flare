@@ -5,8 +5,9 @@ import { InstanceSettings } from '@/components/settings/instance-settings'
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
-import { prisma } from '@/lib/database/prisma'
 import { redactEmailConfig } from '@/lib/email/config'
+import { hasPermission } from '@/lib/permissions/catalog'
+import { redactSettings } from '@/lib/permissions/settings'
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
@@ -21,11 +22,8 @@ export default async function SettingsPage({
 }) {
   const session = await getPageSession()
   if (!session?.user?.id) redirect('/auth/login')
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true },
-  })
-  if (user?.role !== 'ADMIN') redirect('/dashboard/profile')
+  if (!hasPermission(session.user, 'settings.read'))
+    redirect('/dashboard/profile')
   const [config, recovery, params] = await Promise.all([
     getConfig(),
     isAppearanceRecovery(),
@@ -33,13 +31,13 @@ export default async function SettingsPage({
   ])
   return (
     <InstanceSettings
-      initialConfig={{
+      initialConfig={redactSettings({
         ...config,
         settings: {
           ...config.settings,
           email: redactEmailConfig(config.settings.email),
         },
-      }}
+      })}
       initialSection={readPreferenceSection(
         params.section,
         SETTINGS_SECTIONS,

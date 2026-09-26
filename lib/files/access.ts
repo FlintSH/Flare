@@ -1,5 +1,7 @@
 import { compare } from 'bcryptjs'
 
+import { hasPermission } from '@/lib/permissions/catalog'
+
 export type FileAccessInfo = {
   visibility: 'PUBLIC' | 'PRIVATE'
   userId: string
@@ -7,13 +9,13 @@ export type FileAccessInfo = {
 }
 
 export type SessionInfo = {
-  user?: { id: string; role?: string }
+  user?: { id: string; permissions?: readonly string[] }
 } | null
 
 export type FileAccessAllowed = {
   allowed: true
   isOwner: boolean
-  isAdmin: boolean
+  canModerate: boolean
 }
 
 export type FileAccessDenied = {
@@ -29,14 +31,16 @@ export async function checkFileAccess(
   session: SessionInfo,
   providedPassword?: string | null
 ): Promise<FileAccessResult> {
-  const isOwner = session?.user?.id === file.userId
-  const isAdmin = session?.user?.role === 'ADMIN'
+  const isOwner =
+    session?.user?.id === file.userId &&
+    hasPermission(session?.user, 'files.read')
+  const canModerate = hasPermission(session?.user, 'content.read')
 
-  if (file.visibility === 'PRIVATE' && !isOwner && !isAdmin) {
+  if (file.visibility === 'PRIVATE' && !isOwner && !canModerate) {
     return { allowed: false, reason: 'private', status: 404 }
   }
 
-  if (file.password && !isOwner && !isAdmin) {
+  if (file.password && !isOwner && !canModerate) {
     if (!providedPassword) {
       return { allowed: false, reason: 'password_required', status: 401 }
     }
@@ -47,5 +51,5 @@ export async function checkFileAccess(
     }
   }
 
-  return { allowed: true, isOwner, isAdmin }
+  return { allowed: true, isOwner, canModerate }
 }

@@ -5,6 +5,8 @@ description: Receive file-ready events, verify signatures, and operate reliable 
 
 # Webhooks
 
+Managing destinations, signing secrets, tests, and delivery controls requires `webhooks.manage`. It is separate from `tokens.manage` and remains session-only. Removing `webhooks.manage` hides and blocks configuration actions; existing enabled destinations and queued deliveries continue. Disable/delete a destination explicitly when you intend to stop that connection. Roles do not add role-change webhooks or change the `file.ready` JSON Schema, signature, ordering, retry, or deduplication contract described below.
+
 A webhook tells your service when a Flare upload has finished. Use it to notify a team, record an upload in another system, or queue your own workflow. Flare sends an HTTP POST to a destination you control.
 
 Webhooks belong to individual accounts. A destination receives events for its owner's files, including private files. It does not receive every user's uploads just because its owner is an administrator.

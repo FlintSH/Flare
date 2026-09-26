@@ -69,11 +69,11 @@ The API has a few established response shapes. Check the HTTP status before read
 | Complete with `POST /api/files/chunks/{uploadId}/complete` | Upload links directly, with no `data` wrapper           |
 | Delete short link                                          | `204 No Content`, with no JSON body                     |
 
-Errors contain an `error` string. Some include `success: false`; others do not. Authentication failures are `401` with `{ "error": "Unauthorized" }`, including an expired token or a missing scope. Do not depend on a `success` field being present on every response.
+Errors contain an `error` string. Some include `success: false`; others do not. Authentication failures are `401` with `{ "error": "Unauthorized" }`, including an expired token or a missing scope. Authenticated requests without the required role permission return `403`. Do not depend on a `success` field being present on every response.
 
 ## Limits and compatibility
 
-Uploads follow the same maximum file size, storage quotas, file checks, upload profiles, and expiration rules as the dashboard. There is no separate API storage pool. A named token owned by an administrator still has only its selected API scopes.
+Uploads follow the same maximum file size, storage quotas, file checks, upload profiles, and expiration rules as the dashboard. There is no separate API storage pool. A named token owned by an administrator still has only its selected API scopes. Every token request also requires the owner's current role permission; role revocation applies on the next request.
 
 The API paths currently have no version prefix. These references describe the implementation shipped with the documentation. Webhook payloads do carry an explicit `version: 1`; check that field when processing events. Use the documentation from your Flare release when maintaining an older instance.
 

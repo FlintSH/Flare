@@ -12,8 +12,10 @@ import {
   vi,
 } from 'vitest'
 
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
+
 const authentication = vi.hoisted(() => ({
-  user: null as { id: string; role: string } | null,
+  user: null as { id: string; permissions: string[] } | null,
 }))
 vi.mock('@/lib/auth', () => ({
   getAccessSession: async () =>
@@ -90,11 +92,14 @@ suite('customization contracts against disposable PostgreSQL', () => {
           name: id,
           urlId: id,
           uploadToken: `${id}-legacy`,
-          role: 'USER',
+          password: 'fixture-only',
         },
       })
     }
-    authentication.user = { id: 'owner-one', role: 'USER' }
+    authentication.user = {
+      id: 'owner-one',
+      permissions: [...DEFAULT_PERMISSIONS],
+    }
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -124,7 +129,11 @@ suite('customization contracts against disposable PostgreSQL', () => {
   }
 
   async function principal() {
-    return await prisma.user.findUniqueOrThrow({ where: { id: 'owner-one' } })
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: 'owner-one' },
+    })
+    const { getUserAccess } = await import('@/lib/permissions/server')
+    return { ...user, ...(await getUserAccess(user.id)) }
   }
 
   async function prepared(text = 'A private test document', overrides = {}) {
@@ -207,7 +216,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
       expiryAction: 'SET_PRIVATE',
       shareStyle: 'minimal',
     })
-    authentication.user = { id: 'owner-two', role: 'USER' }
+    authentication.user = {
+      id: 'owner-two',
+      permissions: [...DEFAULT_PERMISSIONS],
+    }
     expect(
       (
         await profileDefault.PUT(
@@ -328,12 +340,12 @@ suite('customization contracts against disposable PostgreSQL', () => {
     await prisma.user.update({
       where: { id: 'owner-one' },
       data: {
-        role: 'ADMIN',
+        roles: { connect: { systemKey: 'administrator' } },
         email: 'owner@example.test',
         vanityId: 'owner-alias',
       },
     })
-    authentication.user = { id: 'owner-one', role: 'ADMIN' }
+    authentication.user = { id: 'owner-one', permissions: ['administrator'] }
     const users = await import('@/app/api/users/route')
     const response = await users.PUT(
       jsonRequest(
@@ -342,7 +354,6 @@ suite('customization contracts against disposable PostgreSQL', () => {
           id: 'owner-one',
           name: 'Owner',
           email: 'owner@example.test',
-          role: 'ADMIN',
           urlId: 'SPECC',
         },
         'PUT'
@@ -385,13 +396,16 @@ suite('customization contracts against disposable PostgreSQL', () => {
     const second = await uploads.finalizeUpload(await prepared('Second file'))
     await prisma.user.update({
       where: { id: 'owner-one' },
-      data: { role: 'ADMIN', email: 'owner@example.test' },
+      data: {
+        roles: { connect: { systemKey: 'administrator' } },
+        email: 'owner@example.test',
+      },
     })
     await prisma.user.update({
       where: { id: 'owner-two' },
       data: { email: 'taken@example.test' },
     })
-    authentication.user = { id: 'owner-one', role: 'ADMIN' }
+    authentication.user = { id: 'owner-one', permissions: ['administrator'] }
     const users = await import('@/app/api/users/route')
     const response = await users.PUT(
       jsonRequest(
@@ -400,7 +414,6 @@ suite('customization contracts against disposable PostgreSQL', () => {
           id: 'owner-one',
           name: 'Owner',
           email: 'taken@example.test',
-          role: 'ADMIN',
           urlId: 'SPECC',
         },
         'PUT'
@@ -831,7 +844,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(body).not.toContain('"password"')
     expect(body).toContain('"hasPassword":true')
 
-    authentication.user = { id: 'owner-one', role: 'USER' }
+    authentication.user = {
+      id: 'owner-one',
+      permissions: [...DEFAULT_PERMISSIONS],
+    }
     const updates = await import('@/app/api/files/[id]/route')
     for (const changes of [
       { password: 'replacement-password' },
@@ -877,7 +893,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
       },
       { visibility: 'PUBLIC' as const, password: null, deniedStatus: null },
     ]) {
-      authentication.user = { id: 'owner-one', role: 'USER' }
+      authentication.user = {
+        id: 'owner-one',
+        permissions: [...DEFAULT_PERMISSIONS],
+      }
       const filePath = `${prefix}/${randomUUID()}.png`
       await storage.uploadFile(image, filePath, 'image/png')
       const file = await uploads.finalizeUpload({

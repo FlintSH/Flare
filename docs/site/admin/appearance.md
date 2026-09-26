@@ -4,6 +4,8 @@ description: Brand Flare with the appearance studio, paired palettes, share layo
 
 # Make Flare yours
 
+Publishing and managing instance appearance requires `appearance.manage`; Administrator includes it. Personal theme preference uses the separate `appearance.personal` permission. Delegate design with a role containing `settings.read` and `appearance.manage`; it need not grant account, email, or storage administration.
+
 Open **Settings → Appearance** to design the instance's identity and public share experience. Start with a preset, preview the result, then publish when it feels right. A separate draft lets you work without changing the site everyone is using.
 
 ## A draft-to-publish workflow
@@ -100,7 +102,7 @@ The favicon control accepts a **PNG up to 1 MB** in the dashboard. Save your cha
 
 ## Custom CSS and head HTML
 
-Open **Settings → Appearance → Custom CSS and HTML** for the advanced editors. They are saved separately from studio drafts and are not included in appearance packs. Custom CSS is applied to the live app; custom head content is inserted into the page as administrator-provided HTML.
+With the **Administrator** permission, open **Settings → Appearance → Custom CSS and HTML** for the advanced editors. The delegated `appearance.manage` permission covers the studio, branding, and favicon; it does not authorize custom CSS/head HTML. They are saved separately from studio drafts and are not included in appearance packs. Custom CSS is applied to the live app; custom head content is inserted into the page as administrator-provided HTML.
 
 Use these controls for an intentional site-wide change and test the login, dashboard, share, and mobile layouts after saving. Prefer studio fields for colors and identity when they provide the behavior you need. CSS selectors tied to internal components may need adjustment after upgrades. Treat head HTML as code with access to your site's browser context; only add content you understand and control.
 

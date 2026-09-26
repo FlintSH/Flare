@@ -9,6 +9,7 @@ import {
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
 import { loggers } from '@/lib/logger'
+import { hasPermission } from '@/lib/permissions/catalog'
 
 const logger = loggers.files
 
@@ -77,6 +78,14 @@ export async function POST(
 
     if (![ExpiryAction.DELETE, ExpiryAction.SET_PRIVATE].includes(action))
       return apiError('Invalid expiration action', HTTP_STATUS.BAD_REQUEST)
+
+    const actionPermission =
+      action === ExpiryAction.DELETE ? 'files.delete' : 'files.share'
+    if (!hasPermission(user, actionPermission))
+      return apiError(
+        'You do not have permission for this expiration action.',
+        403
+      )
 
     await scheduleFileExpiration(id, user.id, file.name, expirationDate, action)
 

@@ -2,20 +2,17 @@ import { NextResponse } from 'next/server'
 
 import { fileTypeFromBuffer } from 'file-type'
 
-import { getAccessSession } from '@/lib/auth'
 import { appearanceMutationGuard } from '@/lib/customization/http'
+import { requirePermission } from '@/lib/permissions/server'
 
 export async function POST(request: Request) {
-  const session = await getAccessSession()
+  const { session, response: permissionDenied } =
+    await requirePermission('appearance.manage')
+  if (permissionDenied) return permissionDenied
   if (!session?.user)
     return NextResponse.json(
       { error: 'Sign in to upload a logo.' },
       { status: 401 }
-    )
-  if (session.user.role !== 'ADMIN')
-    return NextResponse.json(
-      { error: 'Only administrators can upload instance logos.' },
-      { status: 403 }
     )
   const rejected = appearanceMutationGuard(request, 'image')
   if (rejected) return rejected

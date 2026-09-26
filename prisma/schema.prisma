@@ -21,7 +21,7 @@ model User {
   mailOutbox                  MailOutbox[]
   image                       String?
   password                    String?
-  role                        UserRole        @default(USER)
+  roles                       Role[]
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
   storageUsed                 Float           @default(0)
@@ -42,6 +42,21 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  color       String   @default("#64748b")
+  position    Int      @default(1)
+  permissions String[]
+  systemKey   String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@index([position])
 }
 
 model EmailToken {
@@ -287,11 +302,6 @@ model EventHandler {
   @@unique([eventType, handler])
   @@index([eventType])
   @@index([enabled])
-}
-
-enum UserRole {
-  ADMIN
-  USER
 }
 
 enum FileVisibility {

@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 24')
+  await expect(page.getByRole('status')).toContainText('3 of 25')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -116,6 +116,8 @@ for (const width of [390, 1440]) {
       './demos.html',
       './hosting/docker.html',
       './api/files.html',
+      './admin/roles.html',
+      './api/roles.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -162,6 +164,8 @@ for (const theme of ['dark', 'light']) {
       './features.html',
       './demos.html',
       './api/files.html',
+      './admin/roles.html',
+      './api/roles.html',
       './hosting/docker.html',
       './guide/sharing.html',
     ]) {
@@ -181,3 +185,62 @@ for (const theme of ['dark', 'light']) {
     }
   })
 }
+
+test('role simulation explains additive grants and token scope intersection', async ({
+  page,
+}) => {
+  await page.goto('./admin/roles.html')
+  const lab = page.getByLabel('Role permissions demonstration')
+  const result = lab.getByRole('status')
+  await expect(result).toContainText('Dashboard upload: Allowed')
+  await lab.getByLabel('Everyone grants uploads').uncheck()
+  await expect(result).toContainText('Dashboard upload: Denied')
+  await expect(result).toContainText('Named-token upload: Denied')
+  await lab.getByLabel('Assign Contributors (grants uploads)').check()
+  await expect(result).toContainText('Named-token upload: Allowed')
+  await lab.getByLabel('Named token has files:upload scope').uncheck()
+  await lab
+    .getByLabel('Assign Admin (grants Administrator)', { exact: true })
+    .check()
+  await expect(result).toContainText('Dashboard upload: Allowed')
+  await expect(result).toContainText('Named-token upload: Denied')
+  await lab.getByLabel('Named token has files:upload scope').check()
+  await expect(result).toContainText('Named-token upload: Allowed')
+})
+
+test('role walkthrough links to the guide and recording loads without autoplay', async ({
+  page,
+}) => {
+  await page.goto('./demos.html')
+  await page.getByRole('button', { name: '6. Delegate', exact: true }).click()
+  await expect(page.locator('.tour-description')).toContainText(
+    'Give every role a clear purpose'
+  )
+  await expect(page.locator('.tour-description a')).toHaveAttribute(
+    'href',
+    /admin\/roles\.html$/
+  )
+  const video = page.locator('video[src$="roles-demo.mp4"]')
+  await expect(video).toHaveAttribute('preload', 'none')
+  expect(await video.getAttribute('autoplay')).toBeNull()
+  const duration = await video.evaluate(
+    (element) =>
+      new Promise((resolve, reject) => {
+        element.addEventListener(
+          'loadedmetadata',
+          () => resolve(element.duration),
+          { once: true }
+        )
+        element.addEventListener(
+          'error',
+          () => reject(new Error('Role recording failed to load')),
+          { once: true }
+        )
+        element.load()
+      })
+  )
+  expect(duration).toBeGreaterThan(1)
+  await page.locator('.tour-description a').click()
+  await expect(page).toHaveURL(/admin\/roles\.html$/)
+  await expect(page.locator('h1')).toContainText('Roles and permissions')
+})

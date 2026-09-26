@@ -158,7 +158,7 @@ export function useUserContent(
     ) => {
       try {
         const response = await fetch(`/api/users/${userId}/files/${fileId}`, {
-          method: 'PUT',
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -248,7 +248,7 @@ export function useUserContent(
   const deleteUrl = useCallback(
     async (urlId: string) => {
       try {
-        const response = await fetch(`/api/urls/${urlId}`, {
+        const response = await fetch(`/api/users/${userId}/urls/${urlId}`, {
           method: 'DELETE',
         })
 
@@ -284,7 +284,7 @@ export function useUserContent(
         throw error
       }
     },
-    [urlPagination, toast, options]
+    [userId, urlPagination, toast, options]
   )
 
   const handleFileFilterChange = useCallback(

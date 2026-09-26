@@ -8,7 +8,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from '@/lib/api/response'
-import { requireAdmin } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import {
   lockEmailAddress,
@@ -16,9 +16,18 @@ import {
   sendAccountToken,
 } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
-import { hasDurableEmailAccess } from '@/lib/email/policy'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
+import { roleMutationGuard } from '@/lib/permissions/http'
+import {
+  PermissionError,
+  assertAccessibleAdministrator,
+  assertCanManageUser,
+  getUserAccess,
+  lockRoleChanges,
+  requireActorPermission,
+  validateRoleAssignment,
+} from '@/lib/permissions/server'
 import { createUser } from '@/lib/users/create-user'
 
 const logger = loggers.users
@@ -27,7 +36,7 @@ class UserEmailPolicyError extends Error {}
 
 export async function GET(req: Request) {
   try {
-    const { response } = await requireAdmin()
+    const { response } = await requirePermission('users.read')
     if (response) return response
 
     const { searchParams } = new URL(req.url)
@@ -42,9 +51,14 @@ export async function GET(req: Request) {
         ? Math.min(requestedLimit, 100)
         : 25
     const search = (searchParams.get('search') || '').trim().slice(0, 200)
-    const role = searchParams.get('role')
+    const roleId = searchParams.get('roleId')
+    const everyone = await prisma.role.findUnique({
+      where: { systemKey: 'everyone' },
+    })
     const where: Prisma.UserWhereInput = {
-      ...(role === 'ADMIN' || role === 'USER' ? { role } : {}),
+      ...(roleId && roleId !== everyone?.id
+        ? { roles: { some: { id: roleId } } }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -65,7 +79,7 @@ export async function GET(req: Request) {
         name: true,
         email: true,
         image: true,
-        role: true,
+        roles: true,
         urlId: true,
         vanityId: true,
         storageUsed: true,
@@ -90,19 +104,31 @@ export async function GET(req: Request) {
       limit,
     }
 
-    return paginatedResponse<UserResponse[]>(users, pagination)
+    return paginatedResponse<UserResponse[]>(
+      users.map((user) => ({
+        ...user,
+        roles: [...user.roles, ...(everyone ? [everyone] : [])],
+      })),
+      pagination
+    )
   } catch (error) {
+    if (error instanceof PermissionError)
+      return apiError(error.message, error.status)
     logger.error('Error fetching users', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
 }
 
 export async function POST(req: Request) {
+  const rejected = roleMutationGuard(req)
+  if (rejected) return rejected
   try {
-    const { response } = await requireAdmin()
+    const { user: actor, response } = await requirePermission('users.create')
     if (response) return response
 
-    const json = await req.json()
+    const json = await req.json().catch(() => null)
+    if (!json || typeof json !== 'object' || Array.isArray(json))
+      return apiError('Provide a JSON object', 400)
 
     const result = UserSchema.safeParse(json)
     if (!result.success) {
@@ -123,6 +149,12 @@ export async function POST(req: Request) {
       : undefined
 
     const user = await prisma.$transaction(async (tx) => {
+      await lockRoleChanges(tx)
+      await requireActorPermission(tx, actor.id, 'users.create')
+      if (body.roleIds?.length) {
+        await requireActorPermission(tx, actor.id, 'users.roles')
+        await validateRoleAssignment(tx, actor.id, null, body.roleIds)
+      }
       const emailConfig = await getEmailConfigForUpdate(tx)
       if (
         emailConfig.enabled &&
@@ -147,7 +179,7 @@ export async function POST(req: Request) {
         email: body.email,
         name: body.name,
         password: hashedPassword,
-        role: body.role,
+        roleIds: body.roleIds,
         emailExempt: emailConfig.verification.adminCreated === 'exempt',
         ...(sendVerification
           ? { emailVerificationSource: 'pending_local' }
@@ -163,13 +195,15 @@ export async function POST(req: Request) {
       name: user.name,
       email: user.email,
       image: user.image,
-      role: user.role,
+      roles: (await getUserAccess(user.id)).roles,
       urlId: user.urlId,
       vanityId: user.vanityId,
       storageUsed: user.storageUsed,
       _count: { files: 0, shortenedUrls: 0 },
     })
   } catch (error) {
+    if (error instanceof PermissionError)
+      return apiError(error.message, error.status)
     if (error instanceof UserEmailPolicyError)
       return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Error creating user', error as Error)
@@ -178,13 +212,22 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
+  const rejected = roleMutationGuard(req)
+  if (rejected) return rejected
   try {
-    const { response } = await requireAdmin()
+    const json = await req.json().catch(() => null)
+    if (!json || typeof json !== 'object' || Array.isArray(json))
+      return apiError('Provide a JSON object', 400)
+    const requiredPermission = Object.keys(json).some(
+      (key) => !['id', 'roleIds'].includes(key)
+    )
+      ? 'users.update'
+      : 'users.roles'
+    const { user: actor, response } =
+      await requirePermission(requiredPermission)
     if (response) return response
 
-    const json = await req.json()
-
-    const result = UserSchema.safeParse(json)
+    const result = UserSchema.partial().safeParse(json)
     if (!result.success) {
       return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
     }
@@ -204,7 +247,6 @@ export async function PUT(req: Request) {
     }
     const requestedEmailChange =
       body.email !== undefined && body.email !== existingUser.email
-    const requestedRoleChange = body.role !== existingUser.role
     const requestedUrlIdChange =
       body.urlId !== undefined && body.urlId !== existingUser.urlId
 
@@ -245,7 +287,6 @@ export async function PUT(req: Request) {
       updatedAt: new Date(),
       ...(body.name !== undefined && { name: body.name }),
       ...(requestedEmailChange && { email: body.email }),
-      ...(requestedRoleChange && { role: body.role }),
       ...(body.password && { password: await hash(body.password, 10) }),
       ...(requestedUrlIdChange && { urlId: body.urlId }),
       ...(body.vanityId !== undefined && {
@@ -254,12 +295,14 @@ export async function PUT(req: Request) {
     }
 
     const user = await prisma.$transaction(async (tx) => {
+      await lockRoleChanges(tx)
+      await requireActorPermission(tx, actor.id, requiredPermission)
+      await assertCanManageUser(tx, actor.id, existingUser.id)
       const latestConfig = await getEmailConfigForUpdate(tx)
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
       const currentUser = await lockEmailUser(tx, existingUser.id)
       if (
         (requestedEmailChange && currentUser.email !== existingUser.email) ||
-        (requestedRoleChange && currentUser.role !== existingUser.role) ||
         (requestedUrlIdChange && currentUser.urlId !== existingUser.urlId) ||
         (body.password &&
           (currentUser.password !== existingUser.password ||
@@ -279,37 +322,29 @@ export async function PUT(req: Request) {
       // verification or role changes unless this request actually edited them.
       const emailChanged =
         requestedEmailChange && body.email !== currentUser.email
-      const nextRole = requestedRoleChange ? body.role : currentUser.role
-      if (
-        latestConfig.enabled &&
-        currentUser.role === 'ADMIN' &&
-        (emailChanged || nextRole !== 'ADMIN')
-      ) {
-        const admins = await tx.user.findMany({ where: { role: 'ADMIN' } })
-        const remainsAccessible = admins.some((admin) => {
-          if (admin.id !== existingUser.id)
-            return hasDurableEmailAccess(admin, latestConfig)
-          if (nextRole !== 'ADMIN') return false
-          return hasDurableEmailAccess(
-            emailChanged
-              ? {
-                  ...admin,
-                  emailVerified: null,
-                  emailVerifiedFor: null,
-                  emailVerificationSource: null,
-                }
-              : admin,
-            latestConfig
-          )
+      let roles: { set: { id: string }[] } | undefined
+      if (body.roleIds !== undefined) {
+        const currentRoles = await tx.user.findUniqueOrThrow({
+          where: { id: currentUser.id },
+          select: { roles: { select: { id: true } } },
         })
-        if (!remainsAccessible)
-          throw new UserEmailPolicyError(
-            'Verify or exempt another administrator before changing the last administrator recovery address or role'
+        const changed =
+          JSON.stringify(currentRoles.roles.map((r) => r.id).sort()) !==
+          JSON.stringify([...new Set(body.roleIds)].sort())
+        if (changed) {
+          await requireActorPermission(tx, actor.id, 'users.roles')
+          await validateRoleAssignment(
+            tx,
+            actor.id,
+            currentUser.id,
+            body.roleIds
           )
+          roles = { set: body.roleIds.map((id) => ({ id })) }
+        }
       }
       if (emailChanged || body.password) {
         if (latestConfig.enabled && emailChanged) {
-          await lockEmailAddress(tx, body.email)
+          await lockEmailAddress(tx, body.email!)
           if (
             await tx.user.findFirst({
               where: {
@@ -341,10 +376,11 @@ export async function PUT(req: Request) {
           })
         }
       }
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id: body.id },
         data: {
           ...updateData,
+          ...(roles ? { roles } : {}),
           ...(emailChanged && {
             emailVerified: null,
             emailVerifiedFor: null,
@@ -364,7 +400,7 @@ export async function PUT(req: Request) {
           name: true,
           email: true,
           image: true,
-          role: true,
+          roles: true,
           urlId: true,
           vanityId: true,
           storageUsed: true,
@@ -376,10 +412,17 @@ export async function PUT(req: Request) {
           },
         },
       })
+      await assertAccessibleAdministrator(tx, latestConfig)
+      return updated
     })
 
-    return apiResponse<UserResponse>(user)
+    return apiResponse<UserResponse>({
+      ...user,
+      roles: (await getUserAccess(user.id)).roles,
+    })
   } catch (error) {
+    if (error instanceof PermissionError)
+      return apiError(error.message, error.status)
     if (error instanceof UserEmailPolicyError)
       return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Error updating user', error as Error)

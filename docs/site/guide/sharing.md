@@ -9,12 +9,14 @@ Every file has a share-page URL. Its visibility and password decide who can open
 
 ## Choose who can open a file
 
-| File setting               | Owner   | Instance administrator | Other signed-in users | Signed-out visitors |
-| -------------------------- | ------- | ---------------------- | --------------------- | ------------------- |
-| Public, no password        | Allowed | Allowed                | Allowed               | Allowed             |
-| Public, password-protected | Allowed | Allowed                | Password required     | Password required   |
-| Private                    | Allowed | Allowed                | Denied                | Denied              |
-| Private, with a password   | Allowed | Allowed                | Denied                | Denied              |
+| File setting               | Owner   | Account with `content.read` | Other signed-in users | Signed-out visitors |
+| -------------------------- | ------- | --------------------------- | --------------------- | ------------------- |
+| Public, no password        | Allowed | Allowed                     | Allowed               | Allowed             |
+| Public, password-protected | Allowed | Allowed                     | Password required     | Password required   |
+| Private                    | Allowed | Allowed                     | Denied                | Denied              |
+| Private, with a password   | Allowed | Allowed                     | Denied                | Denied              |
+
+The Owner column assumes the signed-in owner has `files.read`. The moderation column includes Administrator and delegated content readers, even when their role has no settings access. Removing `files.read` removes the owner’s privileged access to private/password-protected files; public visitor rules still apply.
 
 Private files deliberately return a not-found response to people without access. Another person signing in to the same instance does not make your private file accessible to them. Giving them its password does not override private visibility.
 
@@ -71,12 +73,12 @@ Dashboard copy buttons and generated screenshot tools copy the normal share-page
 
 ## Give a file a lifetime
 
-Use **Manage expiration** to schedule one of two actions:
+With `files.update`, use **Manage expiration** to schedule one of two actions:
 
-- **Delete:** remove the saved file and stop the link from serving it.
-- **Set to private:** stop public access while keeping your file and its storage usage.
+- **Delete:** also requires `files.delete`; remove the saved file and stop the link from serving it.
+- **Set to private:** also requires `files.share`; stop public access while keeping your file and its storage usage.
 
-Expiry work runs through the server's scheduled worker. A link can remain available until that worker processes the action. Downloaded copies and external caches cannot be recalled by expiration or deletion.
+A previously scheduled expiration keeps running if a role grant is later revoked; cancel the schedule explicitly to stop it. Expiry work runs through the server's scheduled worker. A link can remain available until that worker processes the action. Downloaded copies and external caches cannot be recalled by expiration or deletion.
 
 Changing account or profile defaults affects future uploads. To change the lifetime of a file already in the library, update that file's expiration directly.
 
@@ -95,7 +97,7 @@ Check visibility first. You can open your private files while another person can
 :::
 
 ::: details My protected file doesn't ask me for a password
-Owners and administrators bypass file-password prompts. Open the link while signed out to check the visitor experience.
+Owners with `files.read` and accounts with `content.read` bypass file-password prompts. Open the link while signed out to check the visitor experience.
 :::
 
 ::: details Will disabling a folder link revoke the file links inside it?

@@ -8,7 +8,7 @@ Open `/setup` on your new Flare instance. One guided flow takes you from an empt
 
 ## 1. Create the administrator
 
-Enter a username, email address, and password of at least eight characters. This account becomes the initial **administrator**, with access to instance settings and user management. Keep its password available even if you plan to enable SSO later.
+Enter a username, email address, and password of at least eight characters. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
 
 <Screenshot src="/screenshots/onboarding/account.png" alt="First-run account form with username, email, and password fields" caption="The first account owns administration of the instance." />
 
@@ -52,6 +52,6 @@ The ready step links to the workspace, a first upload, and the appearance studio
 
 Before account creation, form values live only in memory. Refreshing starts over; passwords and storage credentials are not put in browser storage or URLs.
 
-After creation, refreshing resumes the optional step identified in the URL. If automatic sign-in fails, the account has still been created; use the offered sign-in link and resume. A signed-out administrator can sign in to continue, but ordinary users cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
+After creation, refreshing resumes the optional step identified in the URL. If automatic sign-in fails, the account has still been created; use the offered sign-in link and resume. A signed-out administrator can sign in to continue, but accounts without Administrator cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
 
 Existing instances are not forced through setup after upgrading. If an established installation suddenly presents a fresh setup form, first check the database connection and persistent volumes; you may be looking at an empty database.

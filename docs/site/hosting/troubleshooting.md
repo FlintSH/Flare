@@ -33,7 +33,7 @@ All replicas must use the same authentication secret. A secret regenerated on ev
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `413` before Flare sees the request           | Reverse proxy/CDN body-size ceiling; allow multipart overhead                                      |
 | Maximum upload size message                   | Settings → Storage; the per-file limit applies to admins too                                       |
-| Quota exceeded                                | Ordinary user's usage versus the instance quota; admins are exempt from total quota                |
+| Quota exceeded                                | Account usage versus the instance quota; `quotas.bypass` or Administrator exempts total quota      |
 | `429`                                         | Wait for the returned retry period; avoid restarting the instance as a rate-limit workaround       |
 | `401` or `403` from a tool                    | Token value, scope, expiry, revocation, and required email verification                            |
 | Upload session not found after a restart      | In-progress chunk metadata was local to the previous process/filesystem; start the upload again    |

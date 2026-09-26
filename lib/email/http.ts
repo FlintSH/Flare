@@ -5,6 +5,7 @@ import { ZodError } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { PermissionError } from '@/lib/permissions/server'
 
 import { getEmailConfig } from './config'
 import { EmailRateLimitError } from './rate-limit'
@@ -22,7 +23,7 @@ export async function emailRoute(action: () => Promise<unknown>) {
   try {
     return NextResponse.json(await action())
   } catch (error) {
-    if (error instanceof EmailHttpError)
+    if (error instanceof EmailHttpError || error instanceof PermissionError)
       return NextResponse.json(
         { error: error.message },
         { status: error.status }

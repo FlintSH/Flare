@@ -5,6 +5,8 @@ description: Create and manage account-owned short links with scoped tokens.
 
 # Short links API
 
+The token owner's current role permissions also apply: `links.read` for listing, `links.create` for creation, and `links.delete` for deletion. The `urls:write` scope does not bypass these separate account permissions. Losing dashboard/API permission does not disable existing public redirects; delete the link to revoke its redirect.
+
 Flare can turn an HTTP or HTTPS destination into a short URL under your own domain. Short links belong to your account and track redirect counts.
 
 Use `urls:write` to create or delete links and `urls:read` to list them. These permissions are independent of file-upload permissions.
@@ -99,4 +101,4 @@ The count reflects redirect requests, including requests from bots and link prev
 
 ## Error handling
 
-Invalid destinations return `400` with an `error` message and `success: false`. Missing or insufficient credentials return `401` with `{ "error": "Unauthorized" }`. Server failures return `500`. Submit valid JSON: malformed JSON can currently reach the general `500` handler rather than a distinct parse-error response.
+Invalid destinations return `400` with an `error` message and `success: false`. Missing or insufficient credentials return `401` with `{ "error": "Unauthorized" }`. An authenticated account missing the required current role permission receives `403`. Server failures return `500`. Submit valid JSON: malformed JSON can currently reach the general `500` handler rather than a distinct parse-error response.

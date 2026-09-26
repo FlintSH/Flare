@@ -14,24 +14,28 @@ const operations = {
     method: 'POST',
     path: '/api/files',
     scope: 'files:upload',
+    permission: 'files.upload',
   },
   files: {
     label: 'List your files',
     method: 'GET',
     path: '/api/files',
     scope: 'files:read',
+    permission: 'files.read',
   },
   urls: {
     label: 'List short links',
     method: 'GET',
     path: '/api/urls',
     scope: 'urls:read',
+    permission: 'links.read',
   },
   createUrl: {
     label: 'Create a short link',
     method: 'POST',
     path: '/api/urls',
     scope: 'urls:write',
+    permission: 'links.create',
   },
 }
 const selected = computed(() => operations[operation.value])
@@ -82,7 +86,8 @@ async function copy() {
     <p>
       Choose an operation and copy a working starting point. Set
       <code>FLARE_TOKEN</code> in your terminal to a named token with the
-      required scope.
+      required scope. The token owner must also have the current role
+      permission.
     </p>
     <div class="lab-grid two">
       <div>
@@ -111,6 +116,8 @@ async function copy() {
       <code>{{ selected.method }} {{ selected.path }}</code
       ><span
         >Scope: <code>{{ selected.scope }}</code></span
+      ><span
+        >Account permission: <code>{{ selected.permission }}</code></span
       >
     </div>
     <div class="code-toolbar">

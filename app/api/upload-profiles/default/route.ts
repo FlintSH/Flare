@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
+import { requirePermission } from '@/lib/permissions/server'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
-import { profileError, profileSession } from '@/lib/uploads/profiles'
+import { profileError } from '@/lib/uploads/profiles'
 
 export async function PUT(req: Request) {
-  const user = await profileSession()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, response } = await requirePermission('uploadProfiles.manage')
+  if (response) return response
   const guarded = profileMutationGuard(req)
   if (guarded) return guarded
   try {

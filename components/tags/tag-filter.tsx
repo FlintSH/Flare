@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { Check, Settings2, Tag } from 'lucide-react'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -121,17 +122,19 @@ export function TagFilter({
             )}
         </div>
         <div className="mt-2 border-t pt-2">
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2"
-            onClick={() => {
-              setOpen(false)
-              onManage()
-            }}
-          >
-            <Settings2 className="h-4 w-4" />
-            {tags.length ? 'Manage tags' : 'Create your first tag'}
-          </Button>
+          <PermissionGate permission="tags.manage">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                setOpen(false)
+                onManage()
+              }}
+            >
+              <Settings2 className="h-4 w-4" />
+              {tags.length ? 'Manage tags' : 'Create your first tag'}
+            </Button>
+          </PermissionGate>
         </div>
       </PopoverContent>
     </Popover>

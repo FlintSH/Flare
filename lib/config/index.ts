@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
@@ -233,11 +234,14 @@ type ConfigUpdate = {
 }
 
 export async function updateConfig(
-  newConfig: ConfigUpdate
+  newConfig: ConfigUpdate,
+  authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
+  validateSaved?: (tx: Prisma.TransactionClient) => Promise<void>
 ): Promise<FlareConfig> {
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      await authorize?.(tx)
       const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
       const currentConfig = row ? configSchema.parse(row.value) : DEFAULT_CONFIG
       const mergedConfig = {
@@ -264,6 +268,10 @@ export async function updateConfig(
             storage: {
               ...currentConfig.settings.general.storage,
               ...(newConfig.settings?.general?.storage || {}),
+              s3: {
+                ...currentConfig.settings.general.storage.s3,
+                ...(newConfig.settings?.general?.storage?.s3 || {}),
+              },
               quotas: {
                 ...currentConfig.settings.general.storage.quotas,
                 ...(newConfig.settings?.general?.storage?.quotas || {}),
@@ -319,6 +327,7 @@ export async function updateConfig(
         },
       })
 
+      await validateSaved?.(tx)
       logger.info('Configuration updated successfully')
       return validatedConfig
     })

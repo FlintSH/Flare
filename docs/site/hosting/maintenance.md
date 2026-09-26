@@ -97,6 +97,20 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Upgrading to roles
+
+The role migration replaces the `User.role` enum with roles and account assignments. Every account inherits **Everyone**, whose initial permissions preserve existing personal workflows. Every former `ADMIN` account receives the new **Admin** role with all permissions. The first account on a fresh instance receives that role automatically. Existing files, SSO bindings, integrations, and account data are preserved.
+
+1. Back up the database and files before applying the migration; role assignments and Everyone permissions are database state and must be included in future backups.
+2. Let the normal image startup run migrations. Do not manually replace `ADMIN`/`USER` values or use `prisma db push` as a migration substitute.
+3. Sign in with an existing administrator and open **Roles**. Confirm Everyone and Admin exist and trusted administrators hold the Admin role.
+4. Test a former non-administrator account: uploading, library access, links, and integrations should retain their previous personal capabilities.
+5. Review Everyone before tightening access. Removing a grant affects existing accounts, future registrations, SSO provisioned accounts, and credentials owned by those accounts unless another role restores it.
+6. Check custom dashboard clients for the removed scalar `role` field/filter. Use `roleIds` for account writes, `roles` for responses, and `roleId` for filtering. The named-token scope names and supported paths are unchanged; tokens additionally obey their owner's current permissions.
+7. Test a delegated role with an isolated account and verify both its intended actions and denied actions. Keep a working local administrator recovery account.
+
+No new environment variables are required. [Roles and permissions](/admin/roles) covers hierarchy, additive grants, safe delegation, and the last-accessible-administrator safeguard. [Session contracts](/api/roles) describe the account DTO changes. An old app image expects the removed enum; rollback requires its matching pre-migration backup, not just a different image tag.
+
 ### Upgrading from 2.0 to 2.1
 
 Use the normal backup and upgrade steps above. The image applies the new folder and tag database migrations on startup. Existing files stay available in **All files**; upgrading does not move them into folders or publish collections.

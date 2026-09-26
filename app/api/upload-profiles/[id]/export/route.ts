@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/database/prisma'
-import { profileSession, profileView } from '@/lib/uploads/profiles'
+import { requirePermission } from '@/lib/permissions/server'
+import { profileView } from '@/lib/uploads/profiles'
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await profileSession()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, response } = await requirePermission('uploadProfiles.manage')
+  if (response) return response
   const { id } = await params
   const profile = await prisma.uploadProfile.findFirst({
     where: { id, userId: user.id },

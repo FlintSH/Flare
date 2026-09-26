@@ -5,6 +5,8 @@ description: Upload files, choose sharing options, search your library, and comp
 
 # Files API
 
+File listing needs both the `files:read` scope and `files.read` on the token owner. Uploads and every chunk step need `files:upload` plus `files.upload`. Current role grants are rechecked; a stored token does not retain revoked authority. Without `files.share`, new uploads are private. An upload with expiration also needs `files.delete` for `DELETE`, or `files.share` for `SET_PRIVATE`, including expiration inherited from profiles/defaults; otherwise finalization returns `403`. See [scope and role intersection](./authentication#scopes-and-account-roles).
+
 Use `files:upload` to add files and `files:read` to browse your account's metadata. The API uses the same storage and sharing policies as Flare's dashboard.
 
 ## Upload one file
@@ -51,7 +53,7 @@ Successful uploads return **200**, with this shape:
 | `size`            | File size in **bytes**.                                                |
 | `type`            | MIME type associated with the stored file.                             |
 
-Returned Flare links obey the file's sharing settings. A link to a private file is not a public access grant, and supplying the upload token to a download URL does not unlock it. Private content requires an eligible owner or administrator browser session. A public password-protected file requires its password for other viewers.
+Returned Flare links obey the file's sharing settings. A link to a private file is not a public access grant, and supplying the upload token to a download URL does not unlock it. Private content requires an eligible owner browser session with `files.read`, or a browser session with `content.read`. A public password-protected file requires its password for other viewers.
 
 After an allowed download, S3 can issue a temporary signed storage URL. That URL carries its own access grant and can remain usable until its expiry even if the Flare file's visibility or password changes. Changing Flare's access settings does not recall an already issued storage URL or a downloaded copy.
 
@@ -125,7 +127,7 @@ Base defaults are public visibility, no expiration, delete on expiration, origin
 
 `POST /api/files` and `POST /api/files/chunks` share a limit of **30 requests per 60 seconds per client IP per application process**. It runs before authentication. Limits reset on process restart and are not a distributed rate-limit service. Proxies should supply accurate client IP headers. Other file-read and part/completion routes do not use this upload-start limiter.
 
-Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Administrators are exempt from the default user quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check.
+Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Accounts with `quotas.bypass` or Administrator are exempt from the default quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check.
 
 The server checks detected file bytes against the claimed MIME type. A successful file-ready event means the upload was committed; optional OCR may finish later. Ordinary multipart uploads have no idempotency-key parameter: retrying after a lost response can create another file.
 

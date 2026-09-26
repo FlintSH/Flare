@@ -5,6 +5,8 @@ description: Set up ShareX, iTake, Flameshot, Spectacle, or a Bash uploader with
 
 # Screenshot tools and scripts
 
+The screenshot tools in Profile require both `tokens.manage` and `files.upload`. Managing or downloading credentials uses `tokens.manage`; performing an upload also requires `files.upload`. Your account’s [roles](/admin/roles) apply even to previously downloaded configurations. Removing upload permission stops their authenticated uploads without changing the credential.
+
 Capture, upload, and copy a link without opening your browser. **Profile → Uploads → Screenshot tools and scripts** provides ready-to-use downloads for common capture tools and a general Bash uploader.
 
 You do not need to create or manually paste an API key for these downloads. Flare includes your account upload token automatically.

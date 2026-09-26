@@ -2,17 +2,19 @@ import { NextResponse } from 'next/server'
 
 import { join } from 'path'
 
-import { getAccessSession } from '@/lib/auth'
 import { getConfig, updateConfigSection } from '@/lib/config'
 import { loggers } from '@/lib/logger'
+import { requirePermission } from '@/lib/permissions/server'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
 export async function POST(req: Request) {
   try {
-    const session = await getAccessSession()
-    if (session?.user?.role !== 'ADMIN') {
+    const { session, response: permissionDenied } =
+      await requirePermission('appearance.manage')
+    if (permissionDenied) return permissionDenied
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 

@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 import { ChevronDown } from 'lucide-react'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,17 +41,19 @@ export function ProfileTools({
           These downloads follow your default upload profile. Keep them private:
           they include access to upload to your account.
         </p>
-        <p>
-          Need separate permissions or a revocable key for a custom app?{' '}
-          <Link
-            href="/dashboard/profile?section=integrations"
-            onNavigate={onOpenIntegrations}
-            className="font-medium text-primary underline underline-offset-4"
-          >
-            Create an API token in Integrations
-          </Link>
-          .
-        </p>
+        <PermissionGate permission="tokens.manage">
+          <p>
+            Need separate permissions or a revocable key for a custom app?{' '}
+            <Link
+              href="/dashboard/profile?section=integrations"
+              onNavigate={onOpenIntegrations}
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Create an API token in Integrations
+            </Link>
+            .
+          </p>
+        </PermissionGate>
       </div>
       <Collapsible
         className="rounded-xl border bg-background/40"

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 
 import {
   Archive,
@@ -17,18 +18,21 @@ import {
   Image as ImageIcon,
   Link2,
   Lock,
+  LogOut,
   MoreVertical,
   Music,
   Plus,
   RefreshCw,
   Search,
-  Shield,
   Trash2,
   UserX,
   Video,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 
 import { UserEmailControls } from '@/components/email/user-email-controls'
+import { PermissionGate } from '@/components/roles/permission-gate'
+import { RoleBadges } from '@/components/roles/role-badges'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,10 +91,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import type { RoleSummary } from '@/lib/permissions/catalog'
 import { formatFileSize } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
 
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 import { UserFormData, useUserManagement } from '@/hooks/use-user-management'
 
@@ -99,7 +105,7 @@ interface User {
   name: string
   email: string
   image: string | null
-  role: 'ADMIN' | 'USER'
+  roles: RoleSummary[]
   urlId: string
   vanityId: string | null
   storageUsed: number
@@ -162,7 +168,7 @@ function UserTableSkeleton() {
         <TableHeader className="bg-muted/30">
           <TableRow>
             <TableHead className="pl-4">User</TableHead>
-            <TableHead className="hidden sm:table-cell">Role</TableHead>
+            <TableHead className="hidden sm:table-cell">Roles</TableHead>
             <TableHead className="hidden lg:table-cell">URL ID</TableHead>
             <TableHead className="hidden lg:table-cell">Files</TableHead>
             <TableHead className="hidden lg:table-cell">Storage Used</TableHead>
@@ -326,6 +332,38 @@ function FileSettingsDialog({
 }
 
 export function UserList() {
+  const router = useRouter()
+  const { update: refreshSession } = useSession()
+  const { can, user: actor } = usePermissions()
+  const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
+  const [roleLoadError, setRoleLoadError] = useState('')
+  const canManageUser = (target: User) =>
+    can('administrator') ||
+    (target.id !== actor?.id &&
+      !target.roles.some((role) =>
+        role.permissions.some(
+          (permission) =>
+            !(actor?.permissions as readonly string[] | undefined)?.includes(
+              permission
+            )
+        )
+      ) &&
+      Math.max(0, ...target.roles.map((role) => role.position)) <
+        highestPosition)
+  const highestPosition = Math.max(
+    0,
+    ...(actor?.roles ?? []).map((role) => role.position)
+  )
+  useEffect(() => {
+    fetch('/api/roles')
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok)
+          throw new Error(result.error || 'Could not load roles.')
+        setAvailableRoles(result.roles)
+      })
+      .catch((error) => setRoleLoadError(error.message))
+  }, [])
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [role, setRole] = useState('ALL')
@@ -344,7 +382,7 @@ export function UserList() {
     updateUser,
     deleteUser,
     removeUserAvatar,
-  } = useUserManagement({ search: query, role })
+  } = useUserManagement({ search: query, roleId: role })
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isViewingFiles, setIsViewingFiles] = useState(false)
@@ -360,7 +398,7 @@ export function UserList() {
     name: '',
     email: '',
     password: '',
-    role: 'USER',
+    roleIds: [],
   })
   const [fileFilters, setFileFilters] = useState<FileFilters>({
     search: '',
@@ -382,6 +420,8 @@ export function UserList() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isFileDeleteDialogOpen, setIsFileDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [userToSignOut, setUserToSignOut] = useState<User | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
 
   const fetchUserFiles = useCallback(
     async (userId: string, page: number) => {
@@ -499,10 +539,22 @@ export function UserList() {
     e.preventDefault()
     try {
       if (editingUser) {
-        await updateUser(editingUser.id, formData)
-        await notifyUserOfChanges(editingUser.id)
+        const { roleIds, ...identity } = formData
+        await updateUser(editingUser.id, {
+          ...(can('users.update') ? identity : {}),
+          ...(can('users.roles') ? { roleIds } : {}),
+        })
+        if (editingUser.id === actor?.id) {
+          await refreshSession()
+          router.refresh()
+        } else if (can('users.sessions'))
+          await notifyUserOfChanges(editingUser.id)
       } else {
-        await createUser(formData)
+        const { roleIds, ...identity } = formData
+        await createUser({
+          ...identity,
+          ...(can('users.roles') ? { roleIds } : {}),
+        })
       }
       setIsDialogOpen(false)
     } catch (error) {
@@ -515,7 +567,9 @@ export function UserList() {
     setFormData({
       name: user.name,
       email: user.email,
-      role: user.role,
+      roleIds: user.roles
+        .filter((role) => role.systemKey !== 'everyone')
+        .map((role) => role.id),
       urlId: user.urlId,
       vanityId: user.vanityId || '',
     })
@@ -528,7 +582,7 @@ export function UserList() {
       name: '',
       email: '',
       password: '',
-      role: 'USER',
+      roleIds: [],
     })
     setIsDialogOpen(true)
   }
@@ -724,16 +778,35 @@ export function UserList() {
     }
   }
 
-  const handleDeleteUser = async (userId: string) => {
+  const revokeSessions = async () => {
+    if (!userToSignOut) return
+    setSigningOut(true)
     try {
-      const invalidateResponse = await fetch(`/api/users/${userId}/sessions`, {
+      const response = await fetch(`/api/users/${userToSignOut.id}/sessions`, {
         method: 'DELETE',
       })
+      const result = await response.json()
+      if (!response.ok)
+        throw new Error(result.error || 'Could not revoke sessions.')
+      toast({
+        title: 'Sessions revoked',
+        description: `${userToSignOut.name} will need to sign in again.`,
+      })
+      setUserToSignOut(null)
+    } catch (error) {
+      toast({
+        title: 'Could not revoke sessions',
+        description:
+          error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
-      if (!invalidateResponse.ok) {
-        throw new Error('Failed to invalidate user sessions')
-      }
-
+  const handleDeleteUser = async (userId: string) => {
+    try {
       await deleteUser(userId)
       setIsDeleteDialogOpen(false)
       setUserToDelete(null)
@@ -765,14 +838,21 @@ export function UserList() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All roles</SelectItem>
-            <SelectItem value="ADMIN">Admin</SelectItem>
-            <SelectItem value="USER">User</SelectItem>
+            {availableRoles
+              .filter((role) => role.systemKey !== 'everyone')
+              .map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
-        <Button onClick={handleNew} className="ml-auto">
-          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-          New User
-        </Button>
+        <PermissionGate permission="users.create">
+          <Button onClick={handleNew} className="ml-auto">
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            New User
+          </Button>
+        </PermissionGate>
       </div>
       <div className="flex min-h-8 items-center justify-between gap-3 text-sm text-muted-foreground">
         <p role="status">
@@ -832,7 +912,7 @@ export function UserList() {
                 <TableRow>
                   <TableHead className="pl-3 sm:pl-4">User</TableHead>
                   <TableHead className="hidden w-24 sm:table-cell lg:w-auto">
-                    Role
+                    Roles
                   </TableHead>
                   <TableHead className="hidden lg:table-cell">URL ID</TableHead>
                   <TableHead className="hidden lg:table-cell">Files</TableHead>
@@ -873,7 +953,7 @@ export function UserList() {
                           </p>
                           <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
                             <p className="sm:hidden">
-                              {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                              <RoleBadges roles={user.roles} />
                             </p>
                             <p
                               className="truncate font-mono"
@@ -896,18 +976,7 @@ export function UserList() {
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <span className="inline-flex items-center gap-1.5 text-xs">
-                        <Shield
-                          className={cn(
-                            'h-3.5 w-3.5',
-                            user.role === 'ADMIN'
-                              ? 'text-primary'
-                              : 'text-muted-foreground'
-                          )}
-                          aria-hidden="true"
-                        />
-                        {user.role === 'ADMIN' ? 'Admin' : 'User'}
-                      </span>
+                      <RoleBadges roles={user.roles} />
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <div className="flex flex-col items-start gap-1">
@@ -941,6 +1010,12 @@ export function UserList() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
+                              disabled={
+                                !canManageUser(user) ||
+                                (!can('users.update') &&
+                                  !can('users.roles') &&
+                                  !can('users.email'))
+                              }
                               onClick={() => handleEdit(user)}
                               aria-label={`Edit ${user.name}`}
                             >
@@ -955,6 +1030,7 @@ export function UserList() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
+                              disabled={!can('content.read')}
                               onClick={() => handleViewFiles(user)}
                               aria-label={`View content for ${user.name}`}
                             >
@@ -966,6 +1042,26 @@ export function UserList() {
                           </TooltipTrigger>
                           <TooltipContent>View Content</TooltipContent>
                         </Tooltip>
+                        {can('users.sessions') && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={!canManageUser(user)}
+                                onClick={() => setUserToSignOut(user)}
+                                aria-label={`Revoke sessions for ${user.name}`}
+                              >
+                                <LogOut
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Revoke Sessions</TooltipContent>
+                          </Tooltip>
+                        )}
                         {user.image && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -973,6 +1069,9 @@ export function UserList() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
+                                disabled={
+                                  !can('users.update') || !canManageUser(user)
+                                }
                                 onClick={() => handleRemoveAvatar(user.id)}
                                 aria-label={`Remove avatar for ${user.name}`}
                               >
@@ -992,6 +1091,9 @@ export function UserList() {
                                 setUserToDelete(user)
                                 setIsDeleteDialogOpen(true)
                               }}
+                              disabled={
+                                !can('users.delete') || !canManageUser(user)
+                              }
                               aria-label={`Delete ${user.name}`}
                             >
                               <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -1025,6 +1127,7 @@ export function UserList() {
                 <Label htmlFor="name">Username</Label>
                 <Input
                   id="name"
+                  disabled={!!editingUser && !can('users.update')}
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
@@ -1037,6 +1140,7 @@ export function UserList() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  disabled={!!editingUser && !can('users.update')}
                   type="email"
                   value={formData.email}
                   onChange={(e) =>
@@ -1071,6 +1175,7 @@ export function UserList() {
                   </Label>
                   <Input
                     id="newPassword"
+                    disabled={!!editingUser && !can('users.update')}
                     type="password"
                     value={formData.password}
                     onChange={(e) =>
@@ -1080,23 +1185,61 @@ export function UserList() {
                   />
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value: 'ADMIN' | 'USER') =>
-                    setFormData({ ...formData, role: value })
-                  }
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue placeholder="Select a role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="USER">User</SelectItem>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <fieldset disabled={!can('users.roles')} className="space-y-2">
+                <legend className="text-sm font-medium">Roles</legend>
+                <p className="text-xs text-muted-foreground">
+                  Everyone applies automatically. Assigned roles add their
+                  permissions together.
+                </p>
+                {roleLoadError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {roleLoadError}
+                  </p>
+                )}
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
+                  {availableRoles
+                    .filter((role) => role.systemKey !== 'everyone')
+                    .map((role) => (
+                      <label
+                        key={role.id}
+                        className="flex items-center gap-3 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary"
+                          checked={formData.roleIds?.includes(role.id) ?? false}
+                          disabled={
+                            !can('administrator') &&
+                            (role.position >= highestPosition ||
+                              role.permissions.some(
+                                (permission) =>
+                                  !(
+                                    actor?.permissions as
+                                      readonly string[] | undefined
+                                  )?.includes(permission)
+                              ))
+                          }
+                          onChange={(event) =>
+                            setFormData({
+                              ...formData,
+                              roleIds: event.target.checked
+                                ? [...(formData.roleIds ?? []), role.id]
+                                : (formData.roleIds ?? []).filter(
+                                    (id) => id !== role.id
+                                  ),
+                            })
+                          }
+                        />
+                        <RoleBadges roles={[role]} />
+                      </label>
+                    ))}
+                </div>
+                {!can('users.roles') && (
+                  <p className="text-xs text-muted-foreground">
+                    Your roles do not allow assigning roles.
+                  </p>
+                )}
+              </fieldset>
               {editingUser && (
                 <div className="space-y-2">
                   <Label htmlFor="urlId">
@@ -1107,6 +1250,7 @@ export function UserList() {
                   </Label>
                   <Input
                     id="urlId"
+                    disabled={!!editingUser && !can('users.update')}
                     value={formData.urlId || ''}
                     onChange={(e) => {
                       const value = e.target.value.toUpperCase()
@@ -1129,6 +1273,7 @@ export function UserList() {
                   </Label>
                   <Input
                     id="vanityId"
+                    disabled={!!editingUser && !can('users.update')}
                     value={formData.vanityId || ''}
                     onChange={(e) => {
                       const value = e.target.value
@@ -1145,7 +1290,15 @@ export function UserList() {
               )}
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={isLoading}>
+              <Button
+                type="submit"
+                disabled={
+                  isLoading ||
+                  (Boolean(editingUser) &&
+                    !can('users.update') &&
+                    !can('users.roles'))
+                }
+              >
                 {isLoading
                   ? 'Saving…'
                   : editingUser
@@ -1154,7 +1307,7 @@ export function UserList() {
               </Button>
             </DialogFooter>
           </form>
-          {editingUser && (
+          {editingUser && can('users.email') && (
             <UserEmailControls key={editingUser.id} userId={editingUser.id} />
           )}
         </DialogContent>
@@ -1305,6 +1458,7 @@ export function UserList() {
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                       <DropdownMenuItem
+                                        disabled={!can('content.update')}
                                         onClick={() => {
                                           setSelectedFile(file)
                                           setIsFileSettingsOpen(true)
@@ -1314,6 +1468,7 @@ export function UserList() {
                                         Settings
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
+                                        disabled={!can('content.delete')}
                                         className="text-destructive"
                                         onClick={() => {
                                           setSelectedFile(file)
@@ -1480,6 +1635,7 @@ export function UserList() {
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
                                     <DropdownMenuItem
+                                      disabled={!can('content.delete')}
                                       className="text-destructive"
                                       onClick={() => handleDeleteUrl(url.id)}
                                     >
@@ -1655,6 +1811,35 @@ export function UserList() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={Boolean(userToSignOut)}
+        onOpenChange={(open) => {
+          if (!open && !signingOut) setUserToSignOut(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out {userToSignOut?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Revoke every browser session for this account. They can sign in
+              again with their existing credentials. Their API tokens are
+              unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={signingOut}
+              onClick={(event) => {
+                event.preventDefault()
+                void revokeSessions()
+              }}
+            >
+              {signingOut ? 'Revoking…' : 'Revoke sessions'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {pagination && pagination.pages > 1 && (
         <div className="flex justify-center">
           <Pagination>

@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server'
 
 import { join } from 'path'
 
-import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { mutateAccount } from '@/lib/permissions/account-mutations'
+import { PermissionError } from '@/lib/permissions/server'
+import { requirePermission } from '@/lib/permissions/server'
 import { sanitizeFilename } from '@/lib/security/paths'
+import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.users
@@ -14,11 +17,15 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!isSameOriginRequest(req))
+    return new NextResponse('Invalid request origin', { status: 403 })
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('users.update')
+    if (permissionDenied) return permissionDenied
     const { id } = await params
 
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
@@ -30,6 +37,10 @@ export async function DELETE(
     if (!user) {
       return new NextResponse('User not found', { status: 404 })
     }
+
+    await mutateAccount(session.user.id, id, 'users.update', (tx) =>
+      tx.user.update({ where: { id }, data: { image: null } })
+    )
 
     if (user.image?.startsWith('/api/avatars/')) {
       try {
@@ -48,13 +59,10 @@ export async function DELETE(
       }
     }
 
-    await prisma.user.update({
-      where: { id },
-      data: { image: null },
-    })
-
     return new NextResponse(null, { status: 204 })
   } catch (error) {
+    if (error instanceof PermissionError)
+      return Response.json({ error: error.message }, { status: error.status })
     logger.error('Error removing avatar', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }

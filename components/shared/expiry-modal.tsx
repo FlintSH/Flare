@@ -26,6 +26,8 @@ import {
 
 import { cn } from '@/lib/utils'
 
+import { usePermissions } from '@/hooks/use-permissions'
+
 interface ExpiryModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -45,6 +47,7 @@ export function ExpiryModal({
   title = 'Configure Expiration',
   description = 'Set when this file should expire',
 }: ExpiryModalProps) {
+  const { can } = usePermissions()
   const [expiresAt, setExpiresAt] = useState<Date | null>(initialDate || null)
   const [action, setAction] = useState<ExpiryAction>(initialAction)
   const [isLoading, setIsLoading] = useState(false)
@@ -122,6 +125,7 @@ export function ExpiryModal({
                 variant="outline"
                 size="sm"
                 aria-pressed={action === ExpiryAction.DELETE}
+                disabled={!can('files.delete')}
                 onClick={() => setAction(ExpiryAction.DELETE)}
                 className={cn(
                   action === ExpiryAction.DELETE &&
@@ -135,6 +139,7 @@ export function ExpiryModal({
                 variant="outline"
                 size="sm"
                 aria-pressed={action === ExpiryAction.SET_PRIVATE}
+                disabled={!can('files.share')}
                 onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
                   action === ExpiryAction.SET_PRIVATE &&
@@ -146,6 +151,13 @@ export function ExpiryModal({
             </div>
           </div>
 
+          {(!can('files.delete') || !can('files.share')) && (
+            <p className="text-xs text-muted-foreground">
+              Scheduling deletion requires Delete files. Making a file private
+              requires Share files. You can remove expiration if an inherited
+              action is no longer allowed.
+            </p>
+          )}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Quick Options</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -465,7 +477,18 @@ export function ExpiryModal({
           <Button variant="outline" onClick={handleCancel} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={isLoading}>
+          <Button
+            onClick={handleConfirm}
+            disabled={
+              isLoading ||
+              (Boolean(expiresAt) &&
+                !can(
+                  action === ExpiryAction.DELETE
+                    ? 'files.delete'
+                    : 'files.share'
+                ))
+            }
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

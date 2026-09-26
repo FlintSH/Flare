@@ -76,7 +76,7 @@ const winner = computed(() =>
         {{
           effective === 'PUBLIC'
             ? 'People with the share URL can view the file unless it also has password protection.'
-            : 'Only the signed-in owner and administrators can access the file. A password does not make a private file accessible to other people.'
+            : 'Only an eligible signed-in owner or an account with permission to read all content can access the file. A password does not make a private file accessible to other people.'
         }}
       </p>
     </div>

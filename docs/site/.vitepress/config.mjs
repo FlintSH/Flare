@@ -103,7 +103,8 @@ export default defineConfig({
       group('Administer', [
         ['Administration overview', '/admin/'],
         ['First-run setup', '/admin/setup'],
-        ['Users & permissions', '/admin/users'],
+        ['Roles & permissions', '/admin/roles'],
+        ['Manage accounts', '/admin/users'],
         ['Appearance studio', '/admin/appearance'],
         ['Account email', '/admin/email'],
         ['Single sign-on', '/admin/sso'],
@@ -115,6 +116,7 @@ export default defineConfig({
         ['Short-link API', '/api/short-links'],
         ['Webhooks', '/api/webhooks'],
         ['Recipes & examples', '/api/recipes'],
+        ['Roles & session contracts', '/api/roles'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
       group('Project', [['Contribute to the docs', '/contributing']]),

@@ -13,7 +13,7 @@ Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all 
 
 ## Named-token API
 
-All of these routes also use Flare's shared account authentication helper. A named token must have the specific scope, and results are limited to its owner's account.
+All of these routes also use Flare's shared account authentication helper. A named token must have the specific scope and its owner must currently have the matching role permission. Results are limited to its owner's account. See the [scope-to-permission table](./authentication#scopes-and-account-roles).
 
 | Path                                             | Method | Scope          | Purpose                                                               |
 | ------------------------------------------------ | ------ | -------------- | --------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ See [files](./files), [short links](./short-links), and [authentication](./authe
 
 ## File content and access checks
 
-These routes check the file's visibility, password, and an optional **browser session**. They do not use named bearer tokens to grant file access. Public unprotected files can be fetched anonymously. Private files require an owner or administrator session and return `404` to ineligible viewers. A password-protected public file requires its password unless the browser session belongs to its owner or an administrator.
+These routes check the file's visibility, password, and an optional **browser session**. They do not use named bearer tokens to grant file access. Public unprotected files can be fetched anonymously. Private files require an owner session with `files.read`, or a session with `content.read` and return `404` to ineligible viewers. A password-protected public file requires its password unless the browser session belongs to its owner with `files.read`, or a person with `content.read`.
 
 | Path                        | Methods   | Purpose                                                                                                                            |
 | --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,7 +49,7 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 
 ## Dashboard account routes requiring a browser session
 
-These routes explicitly read an interactive session. Neither a named API token nor a legacy account upload token by itself supplies that session. Ownership and feature-policy checks still apply.
+These routes explicitly read an interactive session. Neither a named API token nor a legacy account upload token by itself supplies that session. Ownership, current role permission, and feature-policy checks still apply. Profile edits use `profile.update`; full exports require `profile.export`, `files.read`, and `links.read` together (progress alone uses `profile.export`); upload profiles `uploadProfiles.manage`; token and uploader-configuration management `tokens.manage`; webhooks `webhooks.manage`; personal appearance `appearance.personal`. File changes separately check `files.share`, `files.update`, or `files.delete`.
 
 | Path                               | Methods       | Purpose                                                                                                                |
 | ---------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -58,7 +58,7 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                               |
 | `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                      |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                         |
-| `/api/customization`               | GET           | Read published appearance; administrators also receive draft/history state.                                            |
+| `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                         |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                              |
 | `/api/profile/avatar`              | POST          | Upload an account avatar.                                                                                              |
 | `/api/profile/sharex`              | GET           | Download a ShareX uploader configuration.                                                                              |
@@ -73,7 +73,7 @@ Profile and appearance mutations have explicit origin/content-type guards. Integ
 
 ### Email account flows
 
-Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials.
+Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions.
 
 | Path                            | Methods | Authentication and purpose                                                              |
 | ------------------------------- | ------- | --------------------------------------------------------------------------------------- |
@@ -109,47 +109,50 @@ These routes use `requireAuth`, whose compatibility path accepts a browser sessi
 
 Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 
-## Administrator session routes
+## Delegated administration session routes
 
-These operations require a signed-in administrator. Named tokens do not inherit an administrator's authority.
+These operations require a browser session and the permission listed below. Administrator grants every permission. Account writes and role assignments also check hierarchy; role/account mutations preserve an accessible administrator. Named tokens do not inherit these capabilities from their owner. [Role and account request/response contracts](./roles) document replacement of the old scalar role field.
 
-| Path                             | Methods        | Purpose                                                                                                                               |
-| -------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/users`                     | GET, POST, PUT | List, create, or edit users.                                                                                                          |
-| `/api/users/{id}`                | DELETE         | Delete a user.                                                                                                                        |
-| `/api/users/{id}/avatar`         | DELETE         | Remove a user's avatar.                                                                                                               |
-| `/api/users/{id}/sessions`       | DELETE         | Invalidate a user's sessions.                                                                                                         |
-| `/api/users/{id}/email`          | GET, POST      | View email-policy state and perform permitted administrator email actions.                                                            |
-| `/api/users/{id}/files`          | GET            | Inspect a user's file list.                                                                                                           |
-| `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | Change file access settings or remove a user's file.                                                                                  |
-| `/api/users/{id}/urls`           | GET            | Inspect a user's short links.                                                                                                         |
-| `/api/users/{id}/login`          | POST           | Fetch target-user information used by the administrator's account-switching flow; this endpoint alone does not issue a login session. |
-| `/api/settings`                  | PATCH, POST    | Update a settings section or legacy whole-settings payload. Email/customization use their dedicated routes.                           |
-| `/api/settings/favicon`          | POST           | Upload a legacy instance favicon.                                                                                                     |
-| `/api/settings/email`            | GET, PUT       | Read/save email configuration and diagnostics.                                                                                        |
-| `/api/settings/email/impact`     | GET, POST      | Preview the affected users for saved or proposed email policy.                                                                        |
-| `/api/settings/email/test`       | POST           | Test SMTP connection or send a test message.                                                                                          |
-| `/api/settings/email/retry`      | POST           | Retry an eligible mail-outbox entry.                                                                                                  |
-| `/api/customization`             | POST           | Save/import/publish/restore appearance using action commands.                                                                         |
-| `/api/customization/assets`      | POST           | Upload a validated appearance asset.                                                                                                  |
-| `/api/updates/check`             | GET            | Check for a newer Flare release.                                                                                                      |
+| Path                             | Methods        | Required permission and purpose                                                                                                                           |
+| -------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/roles`                     | GET, POST      | GET: any of `roles.manage`, `users.roles`, `users.read`; POST: `roles.manage`. List the catalog/roles or create a role.                                   |
+| `/api/roles/{id}`                | PATCH, DELETE  | `roles.manage`; edit/delete a role within hierarchy and delegation limits.                                                                                |
+| `/api/users`                     | GET, POST, PUT | GET: `users.read`; POST: `users.create`; PUT identity: `users.update`. Assignment additionally requires `users.roles`; role-only PUT needs `users.roles`. |
+| `/api/users/{id}`                | DELETE         | `users.delete`; remove an account below the actor's hierarchy.                                                                                            |
+| `/api/users/{id}/avatar`         | DELETE         | `users.update`; remove an account's avatar.                                                                                                               |
+| `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account's sessions.                                                                                                       |
+| `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
+| `/api/users/{id}/files`          | GET            | `content.read`; inspect an account's files.                                                                                                               |
+| `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`.                                                                                                        |
+| `/api/users/{id}/urls`           | GET            | `content.read`; inspect an account's short links.                                                                                                         |
+| `/api/users/{id}/urls/{urlId}`   | DELETE         | `content.delete`; session-only deletion of a short link owned by that target account. Returns `204`; wrong owner/missing URL returns `404`.               |
+| `/api/users/{id}/login`          | POST           | `users.read`; fetch target account information. Does not itself issue a login session.                                                                    |
+| `/api/settings`                  | PATCH, POST    | PATCH: corresponding section permission; legacy whole-settings POST: Administrator. [Field mapping](./roles#delegated-settings-writes).                   |
+| `/api/settings/favicon`          | POST           | `appearance.manage`; upload a legacy instance favicon.                                                                                                    |
+| `/api/settings/email`            | GET, PUT       | `settings.email`; read/save email configuration and diagnostics.                                                                                          |
+| `/api/settings/email/impact`     | GET, POST      | `settings.email`; preview email-policy impact.                                                                                                            |
+| `/api/settings/email/test`       | POST           | `settings.email`; test SMTP or send a test message.                                                                                                       |
+| `/api/settings/email/retry`      | POST           | `settings.email`; retry an eligible outbox entry.                                                                                                         |
+| `/api/customization`             | POST           | `appearance.manage`; save/import/publish/restore appearance.                                                                                              |
+| `/api/customization/assets`      | POST           | `appearance.manage`; upload an appearance asset.                                                                                                          |
+| `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 
-Email administration validates origins for mutations; appearance administration uses explicit same-origin/content-type guards. Role checks are independent of these request guards.
+Email administration validates origins for mutations; appearance administration uses same-origin/content-type guards. Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
 
 ## Public and bootstrap routes
 
-| Path                            | Methods   | Authentication and purpose                                                                                                                                                                       |
-| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                                |
-| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                             |
-| `/api/setup/check`              | GET       | Public setup-completion state.                                                                                                                                                                   |
-| `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates the initial administrator/settings atomically and rate-limits attempts.                                                                   |
-| `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                                    |
-| `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits.                                                                                            |
-| `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                          |
-| `/api/settings`                 | GET       | Returns public settings anonymously or to non-admins; an authenticated administrator through the shared helper receives the fuller settings view. Named tokens receive only the public fallback. |
-| `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                           |
-| `/api/avatars/{filename}`       | GET       | Serve an avatar image.                                                                                                                                                                           |
+| Path                            | Methods   | Authentication and purpose                                                                                                                                                                  |
+| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                           |
+| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                        |
+| `/api/setup/check`              | GET       | Public setup-completion state.                                                                                                                                                              |
+| `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates Everyone, the full-access Admin role, the first account assignment, and settings atomically and rate-limits attempts.                |
+| `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                               |
+| `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits.                                                                                       |
+| `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                     |
+| `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection. |
+| `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                      |
+| `/api/avatars/{filename}`       | GET       | Serve an avatar image.                                                                                                                                                                      |
 
 Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
 

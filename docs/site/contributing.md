@@ -81,7 +81,7 @@ npx playwright install chromium
 npm test
 ```
 
-Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
+Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
 
 When changing links or theme components, also test a subpath build:
 
@@ -178,7 +178,9 @@ The former `.github/workflows/meticulous.yaml` workflow has been removed. Once t
 
 ## Automatic coverage checks
 
-`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations and scopes against `openapi.json`, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
+`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
+
+Changes to role and user-management components or `lib/permissions/` require administration guidance; changes to the permission-to-route map also require the API reference. The gate tests these paths with an isolated Git fixture.
 
 CI also checks each non-merge commit on pull requests and direct pushes to `main`:
 

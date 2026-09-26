@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
-import { requireAdmin } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 
 export async function emailAdminAccess(request: Request) {
-  const auth = await requireAdmin()
+  const auth = await requirePermission('settings.email')
   if (auth.response) return auth.response
   const origin = request.headers.get('origin')
   const allowed = [new URL(request.url).origin]

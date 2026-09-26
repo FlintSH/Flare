@@ -5,6 +5,8 @@ description: Create short redirects on your Flare domain, copy and manage them, 
 
 # Short links
 
+Your [roles](/admin/roles) control short-link actions independently: `links.read` to list them, `links.create` to create, and `links.delete` to remove. Revoking these dashboard permissions does not disable existing public redirects; delete a link to stop its redirect.
+
 Flare's **Links** page turns a long web address into a short redirect under your instance's domain. A short link sends visitors to its original destination; it does not copy or host that destination's content.
 
 <Screenshot src="/screenshots/workspace/urls.png" alt="Short links page with a URL input and existing links table" caption="Create and manage redirects alongside your uploaded files." />

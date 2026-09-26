@@ -20,6 +20,7 @@ import {
   type FolderAction,
   FolderDialog,
 } from '@/components/folders/folder-dialog'
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -32,6 +33,8 @@ import {
 import { folderTrail } from '@/lib/folders/navigation'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
+
+import { usePermissions } from '@/hooks/use-permissions'
 
 export function FolderBrowser({
   folders,
@@ -48,6 +51,7 @@ export function FolderBrowser({
   error: boolean
   onRetry: () => void
 }) {
+  const { can } = usePermissions()
   const [action, setAction] = useState<FolderAction | null>(null)
   const current = folders.find((folder) => folder.id === value)
   const trail = folderTrail(folders, current?.id ?? null)
@@ -67,30 +71,40 @@ export function FolderBrowser({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onSelect={() => setAction({ kind: 'rename', folder })}
-        >
-          <Pencil />
-          Rename folder
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setAction({ kind: 'share', folder })}>
-          <Share2 />
-          Share folder
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => setAction({ kind: 'create', parentId: folder.id })}
-        >
-          <FolderPlus />
-          New subfolder
-        </DropdownMenuItem>
+        <PermissionGate permission="folders.manage">
+          <DropdownMenuItem
+            onSelect={() => setAction({ kind: 'rename', folder })}
+          >
+            <Pencil />
+            Rename folder
+          </DropdownMenuItem>
+        </PermissionGate>
+        <PermissionGate permission="folders.share">
+          <DropdownMenuItem
+            onSelect={() => setAction({ kind: 'share', folder })}
+          >
+            <Share2 />
+            Share folder
+          </DropdownMenuItem>
+        </PermissionGate>
+        <PermissionGate permission="folders.manage">
+          <DropdownMenuItem
+            onSelect={() => setAction({ kind: 'create', parentId: folder.id })}
+          >
+            <FolderPlus />
+            New subfolder
+          </DropdownMenuItem>
+        </PermissionGate>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={() => setAction({ kind: 'delete', folder })}
-        >
-          <Trash2 />
-          Remove folder
-        </DropdownMenuItem>
+        <PermissionGate permission="folders.manage">
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => setAction({ kind: 'delete', folder })}
+          >
+            <Trash2 />
+            Remove folder
+          </DropdownMenuItem>
+        </PermissionGate>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -126,31 +140,37 @@ export function FolderBrowser({
         )}
         <div className="flex items-center gap-1">
           {current && (
+            <PermissionGate permission="folders.share">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                onClick={() => setAction({ kind: 'share', folder: current })}
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            </PermissionGate>
+          )}
+          <PermissionGate permission="folders.manage">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => setAction({ kind: 'share', folder: current })}
+              disabled={
+                loading || error || (!!value && value !== 'unfiled' && !current)
+              }
+              onClick={() =>
+                setAction({ kind: 'create', parentId: current?.id ?? null })
+              }
             >
-              <Share2 className="h-4 w-4" />
-              Share
+              <FolderPlus className="h-4 w-4" />
+              New folder
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            disabled={
-              loading || error || (!!value && value !== 'unfiled' && !current)
-            }
-            onClick={() =>
-              setAction({ kind: 'create', parentId: current?.id ?? null })
-            }
-          >
-            <FolderPlus className="h-4 w-4" />
-            New folder
-          </Button>
-          {current && menu(current)}
+          </PermissionGate>
+          {current &&
+            (can('folders.manage') || can('folders.share')) &&
+            menu(current)}
         </div>
       </div>
       {error ? (
@@ -218,12 +238,14 @@ export function FolderBrowser({
                   ))}
                 </ol>
               </nav>
-              <Button variant="ghost" size="sm" className="gap-2" asChild>
-                <Link href={`/dashboard/upload?folder=${current.id}`}>
-                  <Upload className="h-4 w-4" />
-                  Upload here
-                </Link>
-              </Button>
+              <PermissionGate permission="files.upload">
+                <Button variant="ghost" size="sm" className="gap-2" asChild>
+                  <Link href={`/dashboard/upload?folder=${current.id}`}>
+                    <Upload className="h-4 w-4" />
+                    Upload here
+                  </Link>
+                </Button>
+              </PermissionGate>
             </div>
           )}
           {value !== 'unfiled' && children.length > 0 && (
@@ -267,7 +289,8 @@ export function FolderBrowser({
                       </span>
                     </span>
                   </button>
-                  {menu(folder)}
+                  {(can('folders.manage') || can('folders.share')) &&
+                    menu(folder)}
                 </div>
               ))}
             </section>

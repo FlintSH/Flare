@@ -16,7 +16,7 @@ async function seed() {
       email: 'meticulous@example.test',
       name: 'Meticulous Test',
       password: await bcrypt.hash('Flare-test-only-2026!', 10),
-      role: 'ADMIN',
+      roles: { connect: { systemKey: 'administrator' } },
       urlId: 'meticulous-test',
       uploadToken: 'meticulous-local-fixture-upload-token',
     },

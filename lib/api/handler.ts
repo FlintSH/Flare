@@ -3,12 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAccessSession } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
 import { LoggingContext } from '@/lib/logger/middleware'
+import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 
 const logger = loggers.api
 
 interface ApiHandlerOptions {
   requireAuth?: boolean
-  requireAdmin?: boolean
+  permission?: Permission
   loggerName?: string
 }
 
@@ -16,13 +17,13 @@ interface ApiContext extends LoggingContext {
   user?: {
     id: string
     email: string
-    isAdmin?: boolean
+    permissions?: string[]
   }
   session?: {
     user: {
       id: string
       email: string
-      isAdmin?: boolean
+      permissions?: string[]
     }
     sessionToken?: string
   }
@@ -61,7 +62,7 @@ export function withApiHandler<T = unknown>(
         ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
       })
 
-      if (options.requireAuth || options.requireAdmin) {
+      if (options.requireAuth || options.permission) {
         const session = await getAccessSession()
 
         if (!session?.user) {
@@ -84,8 +85,11 @@ export function withApiHandler<T = unknown>(
         context.session = session as ApiContext['session']
         context.userId = context.user?.id
 
-        if (options.requireAdmin && !context.user?.isAdmin) {
-          apiLogger.warn('Forbidden: Admin access required', {
+        if (
+          options.permission &&
+          !hasPermission(context.user, options.permission)
+        ) {
+          apiLogger.warn('Forbidden: Required permission missing', {
             requestId,
             userId: context.userId,
             method: req.method,

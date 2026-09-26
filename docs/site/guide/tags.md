@@ -5,6 +5,8 @@ description: Label related files, tag a selection in bulk, and automatically org
 
 # Tags and automatic organization
 
+Viewing tags in your library uses `files.read`. Creating tags/rules and applying tags requires `tags.manage`; changing tags on existing files or applying rules to existing files also needs `files.update`. Automatic background filename/OCR rules remain saved configuration and keep running after a role grant is removed; edit or remove those rules explicitly to stop them. Ask an administrator to review your [roles](/admin/roles) if the relevant action is unavailable.
+
 Tags let a file belong to several topics without duplicating or moving it. A screenshot might have **Website**, **Bug report**, and **Release 2** tags while staying in its project folder.
 
 Tags, automatic matching rules, and tag names are private to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs.

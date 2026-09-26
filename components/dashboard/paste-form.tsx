@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 import { ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,11 +20,13 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 export function PasteForm() {
   const [content, setContent] = useState('')
   const [filename, setFilename] = useState('')
+  const { can } = usePermissions()
   const [visibility, setVisibility] = useState('inherit')
   const [profileId, setProfileId] = useState<string | null | undefined>(
     undefined
@@ -55,15 +58,19 @@ export function PasteForm() {
       })
       const formData = new FormData()
       formData.append('file', file)
-      if (visibility !== 'inherit') formData.append('visibility', visibility)
+      if (!can('files.share')) formData.append('visibility', 'PRIVATE')
+      else if (visibility !== 'inherit')
+        formData.append('visibility', visibility)
       if (password) formData.append('password', password)
 
       const response = await fetch('/api/files', {
         method: 'POST',
-        headers:
-          profileId !== undefined
+        headers: {
+          'X-Flare-Paste': 'true',
+          ...(profileId !== undefined
             ? { 'X-Upload-Profile': profileId ?? 'none' }
-            : undefined,
+            : {}),
+        },
         body: formData,
       })
       const responseData = await response.json().catch(() => null)
@@ -216,41 +223,47 @@ export function PasteForm() {
             Add an extension such as .js, .py, or .md for syntax highlighting.
           </p>
         </div>
+        <PermissionGate permission="files.share">
+          <div className="space-y-2">
+            <Label htmlFor="paste-visibility">Visibility</Label>
+            <Select
+              value={visibility}
+              onValueChange={setVisibility}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger id="paste-visibility">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">From upload profile</SelectItem>
+                <SelectItem value="PUBLIC">
+                  Public (anyone with the link)
+                </SelectItem>
+                <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </PermissionGate>
+      </div>
+      <PermissionGate permission="files.share">
         <div className="space-y-2">
-          <Label htmlFor="paste-visibility">Visibility</Label>
-          <Select
-            value={visibility}
-            onValueChange={setVisibility}
+          <Label htmlFor="paste-password">
+            Password protection{' '}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+          <Input
+            id="paste-password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Leave empty for no password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
             disabled={isSubmitting}
-          >
-            <SelectTrigger id="paste-visibility">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inherit">From upload profile</SelectItem>
-              <SelectItem value="PUBLIC">
-                Public (anyone with the link)
-              </SelectItem>
-              <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-            </SelectContent>
-          </Select>
+          />
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="paste-password">
-          Password protection{' '}
-          <span className="font-normal text-muted-foreground">(optional)</span>
-        </Label>
-        <Input
-          id="paste-password"
-          type="password"
-          autoComplete="new-password"
-          placeholder="Leave empty for no password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          disabled={isSubmitting}
-        />
-      </div>
+      </PermissionGate>
       {error && (
         <p
           id="paste-error"

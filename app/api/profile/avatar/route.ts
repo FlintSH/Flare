@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { join } from 'path'
 
-import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { hasPermission } from '@/lib/permissions/catalog'
+import { requirePermission } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import { getStorageProvider } from '@/lib/storage'
 import { bytesToMB } from '@/lib/utils'
@@ -14,7 +15,9 @@ const logger = loggers.users
 
 export async function POST(req: Request) {
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('profile.update')
+    if (permissionDenied) return permissionDenied
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
     const quotasEnabled = config.settings.general.storage.quotas.enabled
     const defaultQuota = config.settings.general.storage.quotas.default
 
-    if (quotasEnabled && session.user.role !== 'ADMIN') {
+    if (quotasEnabled && !hasPermission(session.user, 'quotas.bypass')) {
       const user = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: { storageUsed: true },

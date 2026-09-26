@@ -13,6 +13,7 @@ import {
   WEBHOOK_MAX_PENDING_PER_USER,
   WEBHOOK_SECRET_PURPOSE,
 } from '@/lib/integrations/webhooks'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 export const runtime = 'nodejs'
@@ -79,6 +80,14 @@ export async function GET() {
       { error: 'Sign in to manage integrations.' },
       { status: 401 }
     )
+  if (
+    !hasPermission(session.user, 'tokens.manage') &&
+    !hasPermission(session.user, 'webhooks.manage')
+  )
+    return NextResponse.json(
+      { error: 'You do not have permission to manage integrations.' },
+      { status: 403 }
+    )
   const userId = session.user.id
   const [tokens, webhooks, deliveries, profiles] = await Promise.all([
     prisma.apiToken.findMany({
@@ -115,7 +124,14 @@ export async function GET() {
     }),
   ])
   return NextResponse.json(
-    { tokens, webhooks, deliveries, profiles },
+    {
+      tokens: hasPermission(session.user, 'tokens.manage') ? tokens : [],
+      webhooks: hasPermission(session.user, 'webhooks.manage') ? webhooks : [],
+      deliveries: hasPermission(session.user, 'webhooks.manage')
+        ? deliveries
+        : [],
+      profiles: hasPermission(session.user, 'tokens.manage') ? profiles : [],
+    },
     { headers: { 'cache-control': 'no-store' } }
   )
 }
@@ -152,6 +168,14 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     const input = parsed.data
+    const required = input.action.endsWith('token')
+      ? 'tokens.manage'
+      : 'webhooks.manage'
+    if (!hasPermission(session.user, required))
+      return NextResponse.json(
+        { error: 'You do not have permission to perform this action.' },
+        { status: 403 }
+      )
     if (input.action === 'create-webhook') {
       try {
         await resolveWebhookTarget(input.url)

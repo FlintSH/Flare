@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Check, Copy, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -223,16 +224,18 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
                           <Copy className="h-4 w-4" />
                         )}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleting(url)}
-                        aria-label={`Delete short link ${url.shortCode}`}
-                        title="Delete short link"
-                        className="text-muted-foreground hover:bg-destructive/10 hover:text-foreground"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <PermissionGate permission="links.delete">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleting(url)}
+                          aria-label={`Delete short link ${url.shortCode}`}
+                          title="Delete short link"
+                          className="text-muted-foreground hover:bg-destructive/10 hover:text-foreground"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </PermissionGate>
                     </div>
                   </TableCell>
                 </TableRow>

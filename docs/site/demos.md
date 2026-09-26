@@ -21,6 +21,20 @@ Choose a step, then enlarge the screenshot to inspect the details. The screensho
 
 These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.
 
+### Create and assign a role
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 17-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open **Roles** and choose **Create role**.
+2. Name the role **Content reviewer**, choose an amber color, and describe its purpose: “Review uploads and help keep the workspace tidy.” Set **Position** to `30`.
+3. Search for **View users** and turn it on.
+4. Search for **moderation**. Turn on **View all content** and **Edit all content**; leave **Delete all content** off.
+5. Choose **Save role**. The role exists without any members yet.
+6. Open **Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save Changes**.
+7. Return to **Roles**, select **Content reviewer**, and confirm it shows **1 member** and the selected moderation permissions.
+
+This recording makes real role and account changes in an isolated instance. Everyone remains the shared baseline; the new role adds review/edit capabilities without granting deletion of other users' content or settings administration. [Read the role guide](./admin/roles) for hierarchy and permission details. The separate [roles lab](#roles-and-permissions-lab) below is a local simulation.
+
 ### Organize and upload
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 23-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
@@ -53,6 +67,12 @@ Disabling a folder link does not revoke a file’s separate public URL. [Underst
 3. Enter the correct password to reveal the file and its normal viewer.
 
 This flow is for a **public file protected by a password**. Private files are not included in a public folder share.
+
+## Roles and permissions lab
+
+Try Everyone, an additional contributor role, and Administrator. Removing a permission from one role does not deny a grant from another. The simulation also shows why a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
+
+<RoleLab />
 
 ## Upload options lab
 

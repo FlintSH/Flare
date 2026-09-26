@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 
-import { getAccessSession } from '@/lib/auth'
 import { loggers } from '@/lib/logger'
+import { requirePermission } from '@/lib/permissions/server'
 import { checkForUpdates, getBuildInfo } from '@/lib/releases'
 
 const logger = loggers.api
 
 export async function GET() {
   try {
-    const session = await getAccessSession()
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    const { session, response: permissionDenied } =
+      await requirePermission('settings.read')
+    if (permissionDenied) return permissionDenied
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 

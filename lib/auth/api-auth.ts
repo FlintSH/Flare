@@ -9,13 +9,23 @@ import {
   hashApiToken,
   tokenAllowsRequest,
 } from '@/lib/integrations/tokens'
+import {
+  type Permission,
+  type RoleSummary,
+  hasPermission,
+} from '@/lib/permissions/catalog'
+import { requestPermissions } from '@/lib/permissions/requests'
+import { getUserAccess } from '@/lib/permissions/server'
+
+export { requirePermission } from '@/lib/permissions/server'
 
 export type AuthenticatedUser = {
   id: string
   storageUsed: number
   urlId: string
   vanityId: string | null
-  role: string
+  permissions: string[]
+  roles: RoleSummary[]
   randomizeFileUrls: boolean
   apiToken?: { id: string; scopes: string[]; profileId: string | null }
 }
@@ -45,14 +55,13 @@ export async function getAuthenticatedUser(
     await prisma.apiToken
       .update({ where: { id: token.id }, data: { lastUsedAt: new Date() } })
       .catch(() => {})
-    const { id, storageUsed, urlId, vanityId, role, randomizeFileUrls } =
-      token.user
+    const { id, storageUsed, urlId, vanityId, randomizeFileUrls } = token.user
     return {
       id,
       storageUsed,
       urlId,
       vanityId,
-      role,
+      ...(await getUserAccess(id)),
       randomizeFileUrls,
       apiToken: {
         id: token.id,
@@ -70,7 +79,6 @@ export async function getAuthenticatedUser(
         storageUsed: true,
         urlId: true,
         vanityId: true,
-        role: true,
         randomizeFileUrls: true,
         email: true,
         emailVerified: true,
@@ -81,7 +89,7 @@ export async function getAuthenticatedUser(
       },
     })
     return user && !requiresEmailVerification(user, await getEmailConfig())
-      ? user
+      ? { ...user, ...(await getUserAccess(user.id)) }
       : null
   }
 
@@ -93,7 +101,6 @@ export async function getAuthenticatedUser(
         storageUsed: true,
         urlId: true,
         vanityId: true,
-        role: true,
         randomizeFileUrls: true,
         email: true,
         emailVerified: true,
@@ -104,14 +111,14 @@ export async function getAuthenticatedUser(
       },
     })
     return user && !requiresEmailVerification(user, await getEmailConfig())
-      ? user
+      ? { ...user, ...(await getUserAccess(user.id)) }
       : null
   }
 
   return null
 }
 
-export async function requireAuth(req: Request) {
+export async function requireAuth(req: Request, permissions?: Permission[]) {
   const user = await getAuthenticatedUser(req)
   if (!user) {
     return {
@@ -119,18 +126,19 @@ export async function requireAuth(req: Request) {
       user: null,
     }
   }
-  return { user, response: null }
-}
-
-export async function requireAdmin() {
-  const session = await getAccessSession()
-
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  const required =
+    permissions ?? requestPermissions(req.method, new URL(req.url).pathname)
+  if (
+    !required ||
+    required.some((permission) => !hasPermission(user, permission))
+  ) {
     return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
       user: null,
+      response: NextResponse.json(
+        { error: 'You do not have permission to perform this action.' },
+        { status: 403 }
+      ),
     }
   }
-
-  return { user: session.user, response: null }
+  return { user, response: null }
 }

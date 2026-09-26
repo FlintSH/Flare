@@ -49,7 +49,7 @@ Email is optional. A working Flare instance does not require SMTP, a domain-spec
 
 There is no universal minimum memory or CPU figure: image OCR, large uploads, concurrent previews, and source builds have different costs. Start with one instance, monitor memory, CPU, disk, and database connections, then adjust to your workload. [Disable background OCR](/admin/#general) if text extraction is unnecessary on a small machine.
 
-Keep sufficient local free space for temporary uploads as well as completed local files. An upload size limit is a per-file rule, not a disk reservation. User quotas do not protect you from every source of disk growth: administrators are exempt, and PostgreSQL, logs, temporary data, and backups also consume space.
+Keep sufficient local free space for temporary uploads as well as completed local files. An upload size limit is a per-file rule, not a disk reservation. User quotas do not protect you from every source of disk growth: roles with `quotas.bypass` or Administrator are exempt, and PostgreSQL, logs, temporary data, and backups also consume space.
 
 ### Multiple replicas and serverless hosts
 

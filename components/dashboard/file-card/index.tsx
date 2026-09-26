@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,7 @@ import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
 
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileCardProps {
@@ -85,6 +87,7 @@ export function FileCard({
   selected,
   onSelect,
 }: FileCardProps) {
+  const { can } = usePermissions()
   const { toast } = useToast()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
@@ -363,16 +366,18 @@ export function FileCard({
             </Button>
           )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleCopyLink}
-              aria-label={`Copy link to ${file.name}`}
-              title="Copy link"
-            >
-              <LinkIcon className="h-4 w-4" />
-            </Button>
+            <PermissionGate permission="files.share">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleCopyLink}
+                aria-label={`Copy link to ${file.name}`}
+                title="Copy link"
+              >
+                <LinkIcon className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
             <Button variant="secondary" size="icon" className="h-8 w-8" asChild>
               <a
                 href={`/api/files/${file.id}/download`}
@@ -383,29 +388,33 @@ export function FileCard({
                 <Download className="h-4 w-4" />
               </a>
             </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                setVisibility(file.visibility)
-                setIsVisibilityDialogOpen(true)
-              }}
-              aria-label={`Change visibility of ${file.name}`}
-              title="Change visibility"
-            >
-              <Eye className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => handlePasswordDialogOpenChange(true)}
-              aria-label={`Password protection for ${file.name}`}
-              title="Password protection"
-            >
-              <KeyRound className="h-4 w-4" />
-            </Button>
+            <PermissionGate permission="files.share">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  setVisibility(file.visibility)
+                  setIsVisibilityDialogOpen(true)
+                }}
+                aria-label={`Change visibility of ${file.name}`}
+                title="Change visibility"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
+            <PermissionGate permission="files.share">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => handlePasswordDialogOpenChange(true)}
+                aria-label={`Password protection for ${file.name}`}
+                title="Password protection"
+              >
+                <KeyRound className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
             {isImage && (
               <Button
                 variant="secondary"
@@ -419,26 +428,30 @@ export function FileCard({
                 <ScanText className="h-4 w-4" />
               </Button>
             )}
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setIsExpiryModalOpen(true)}
-              aria-label={`Manage expiration of ${file.name}`}
-              title="Manage expiration"
-            >
-              <Timer className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              aria-label={`Delete ${file.name}`}
-              title="Delete"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <PermissionGate permission="files.update">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsExpiryModalOpen(true)}
+                aria-label={`Manage expiration of ${file.name}`}
+                title="Manage expiration"
+              >
+                <Timer className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
+            <PermissionGate permission="files.delete">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => setIsDeleteDialogOpen(true)}
+                aria-label={`Delete ${file.name}`}
+                title="Delete"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </PermissionGate>
           </div>
         </div>
         {onSelect && (
@@ -474,10 +487,12 @@ export function FileCard({
                   Open file
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void handleCopyLink()}>
-                <LinkIcon />
-                Copy link
-              </DropdownMenuItem>
+              <PermissionGate permission="files.share">
+                <DropdownMenuItem onSelect={() => void handleCopyLink()}>
+                  <LinkIcon />
+                  Copy link
+                </DropdownMenuItem>
+              </PermissionGate>
               <DropdownMenuItem asChild>
                 <a href={`/api/files/${file.id}/download`} download={file.name}>
                   <Download />
@@ -485,37 +500,43 @@ export function FileCard({
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              {onEditTags && (
+              {onEditTags && can('tags.manage') && can('files.update') && (
                 <DropdownMenuItem onSelect={onEditTags}>
                   <Tag />
                   Edit tags
                 </DropdownMenuItem>
               )}
-              {onMove && (
+              {onMove && can('folders.manage') && can('files.update') && (
                 <DropdownMenuItem onSelect={onMove}>
                   <FolderInput />
                   Move to folder
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                onSelect={() => {
-                  setVisibility(file.visibility)
-                  setIsVisibilityDialogOpen(true)
-                }}
-              >
-                <Eye />
-                Change visibility
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => handlePasswordDialogOpenChange(true)}
-              >
-                <KeyRound />
-                {file.hasPassword ? 'Manage password' : 'Add password'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setIsExpiryModalOpen(true)}>
-                <Timer />
-                Manage expiration
-              </DropdownMenuItem>
+              <PermissionGate permission="files.share">
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setVisibility(file.visibility)
+                    setIsVisibilityDialogOpen(true)
+                  }}
+                >
+                  <Eye />
+                  Change visibility
+                </DropdownMenuItem>
+              </PermissionGate>
+              <PermissionGate permission="files.share">
+                <PermissionGate permission="files.update">
+                  <DropdownMenuItem
+                    onSelect={() => handlePasswordDialogOpenChange(true)}
+                  >
+                    <KeyRound />
+                    {file.hasPassword ? 'Manage password' : 'Add password'}
+                  </DropdownMenuItem>
+                </PermissionGate>
+                <DropdownMenuItem onSelect={() => setIsExpiryModalOpen(true)}>
+                  <Timer />
+                  Manage expiration
+                </DropdownMenuItem>
+              </PermissionGate>
               {isImage && (
                 <DropdownMenuItem
                   disabled={isLoadingOcr}
@@ -526,13 +547,15 @@ export function FileCard({
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                onSelect={() => setIsDeleteDialogOpen(true)}
-              >
-                <Trash2 />
-                Delete file
-              </DropdownMenuItem>
+              <PermissionGate permission="files.delete">
+                <DropdownMenuItem
+                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  onSelect={() => setIsDeleteDialogOpen(true)}
+                >
+                  <Trash2 />
+                  Delete file
+                </DropdownMenuItem>
+              </PermissionGate>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -553,7 +576,7 @@ export function FileCard({
             {getRelativeTime(new Date(file.uploadedAt))}
           </span>
         </div>
-        {file.expiresAt && !onSelect && (
+        {file.expiresAt && !onSelect && can('files.update') && (
           <button
             type="button"
             onClick={() => setIsExpiryModalOpen(true)}

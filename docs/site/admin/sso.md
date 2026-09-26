@@ -4,11 +4,13 @@ description: Connect an OpenID Connect provider, understand provisioning and ema
 
 # Single sign-on with OIDC
 
-Flare supports one configured OpenID Connect provider. Users can sign in through your existing identity service while Flare retains its own accounts, file ownership, and roles. Configure it under **Settings → Access → Single Sign-On (OIDC)**.
+Flare supports one configured OpenID Connect provider. Users can sign in through your existing identity service while Flare retains its own accounts, file ownership, and roles. Configure it under **Settings → Access → Single Sign-On (OIDC)** with `settings.security`.
 
 The 2.1 dependency refresh preserves existing provider settings and issuer/subject bindings; it does not enable email-only account linking. After [upgrading](/hosting/maintenance#upgrading-from-2-0-to-2-1), test both a linked SSO account and your local administrator fallback.
 
 ## Connect a provider
+
+The administrator recovery safeguard checks that an SSO-only administrator’s saved issuer matches the configured, enabled provider. Disabling or changing the only working administrator provider is refused; create and test a local-password administrator before making that change.
 
 1. Keep a working local administrator account and test `/auth/login?local=1` before changing the normal sign-in flow.
 2. Create a confidential OIDC application in your identity provider.
@@ -35,7 +37,7 @@ Flare uses provider discovery, ID tokens, PKCE, and state checks. The callback o
 | Issuer URL                | Empty              | Identity provider's issuer; trailing slash is normalized for subject identity             |
 | Client ID / Client Secret | Empty              | Credentials for the provider application                                                  |
 | Sign-In Button Text       | `Sign in with SSO` | Label shown to users                                                                      |
-| Auto-Provision Users      | On                 | Allows a new eligible provider identity to create a Flare User account                    |
+| Auto-Provision Users      | On                 | Allows a new eligible provider identity to create a Flare account inheriting Everyone     |
 | Require Verified Email    | On                 | Requires `email_verified=true` for a new identity before account creation                 |
 | OIDC Auto-login           | Off                | Redirects the usual login page to OIDC; `/auth/login?local=1` still exposes local sign-in |
 
@@ -43,12 +45,12 @@ These settings are stored in the database. There are no `FLARE_OIDC_*` server en
 
 ## Account creation and identity
 
-Flare identifies an OIDC account by **issuer and subject**, not by its email alone. New provisioned accounts receive the ordinary **User** role. Promote an account through Users when that person should administer Flare; provider groups or role claims are not mapped to Flare roles.
+Flare identifies an OIDC account by **issuer and subject**, not by its email alone. New provisioned accounts inherit **Everyone**, just like local registrations. Assign additional roles through **Users** when needed. Provider groups or role claims are not mapped to Flare roles; changing identity-provider membership does not edit Flare role assignments. Existing OIDC accounts keep their assigned Flare roles on sign-in.
 
 | Situation                                                             | Result                                      |
 | --------------------------------------------------------------------- | ------------------------------------------- |
 | Original issuer/subject already linked                                | Sign in to the existing Flare account       |
-| New identity, auto-provision on, unused email, required claim present | Create a new User account                   |
+| New identity, auto-provision on, unused email, required claim present | Create an account inheriting Everyone       |
 | New identity, auto-provision off                                      | Sign-in rejected; no account is created     |
 | New identity using an existing local account's email                  | Sign-in rejected; no automatic linking      |
 | Different identity using an existing linked account's email           | Sign-in rejected; the original link remains |

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 // Node.js 20+; no package installation required.
+// Uploads require a files:upload token and files.upload in its owner’s current
+// roles. Administrator does not expand token scopes. Missing files.share makes
+// new uploads private. Role changes apply to subsequent authenticated requests.
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -72,7 +75,12 @@ if (mode === 'upload') {
   })
   const body = await response.text()
   if (!response.ok)
-    throw new Error(`Upload failed (${response.status}): ${body}`)
+    throw new Error(
+      `Upload failed (${response.status}): ${body}` +
+        (response.status === 401
+          ? '\nCheck the token, files:upload scope, owner files.upload permission, and email eligibility.'
+          : '')
+    )
   process.stdout.write(body + '\n')
 } else if (mode === 'receive') {
   const secret = process.env.FLARE_WEBHOOK_SECRET

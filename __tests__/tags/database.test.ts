@@ -13,7 +13,7 @@ import {
 const authentication = vi.hoisted(() => ({ userId: 'tag-owner' }))
 vi.mock('@/lib/auth/api-auth', () => ({
   requireAuth: async () => ({
-    user: { id: authentication.userId, role: 'ADMIN' },
+    user: { id: authentication.userId, permissions: ['administrator'] },
     response: null,
   }),
 }))

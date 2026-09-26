@@ -59,9 +59,10 @@ jobs:
           FLARE_CUSTOMIZATION_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_customization_test
           FLARE_SETUP_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_setup_test
           FLARE_TAGS_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_tags_test_ci
+          FLARE_ROLES_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_roles_test_ci
           FLARE_FOLDERS_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_folders_test_ci
         run: |
-          for database in flare_email_test flare_email_delivery flare_email_config_test flare_customization_test flare_setup_test flare_tags_test_ci flare_folders_test_ci; do
+          for database in flare_email_test flare_email_delivery flare_email_config_test flare_customization_test flare_setup_test flare_tags_test_ci flare_folders_test_ci flare_roles_test_ci; do
             createdb -h 127.0.0.1 -U flare_test "$database"
             DATABASE_URL="postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/$database" pnpm prisma migrate deploy
           done

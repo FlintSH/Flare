@@ -25,6 +25,7 @@ import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
@@ -35,9 +36,11 @@ import { fileQuery, groupFiles } from '@/lib/files/gallery'
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFolders } from '@/hooks/use-folders'
 import { useImageGallery } from '@/hooks/use-image-gallery'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useTags } from '@/hooks/use-tags'
 
 export function FileGrid() {
+  const { can } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -230,7 +233,11 @@ export function FileGrid() {
                 variant="ghost"
                 size="sm"
                 className="h-8 gap-1.5 px-2"
-                disabled={!selecting && !files.length}
+                disabled={
+                  (!selecting && !files.length) ||
+                  (!can('folders.manage') && !can('tags.manage')) ||
+                  !can('files.update')
+                }
                 onClick={() => {
                   setSelecting(!selecting)
                   setSelectedIds([])
@@ -389,33 +396,41 @@ export function FileGrid() {
           <span className="text-xs text-muted-foreground" role="status">
             {selectedIds.length} selected
           </span>
-          <Button
-            size="sm"
-            className="ml-auto"
-            variant="outline"
-            disabled={!selectedIds.length || isLoading}
-            onClick={() =>
-              setMovingFiles(
-                files.filter((file) => selectedIds.includes(file.id))
-              )
-            }
-          >
-            <FolderInput className="mr-2 h-4 w-4" />
-            Move
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!selectedIds.length || isLoading}
-            onClick={() =>
-              setTaggingFiles(
-                files.filter((file) => selectedIds.includes(file.id))
-              )
-            }
-          >
-            <Tag className="mr-2 h-4 w-4" />
-            Edit tags
-          </Button>
+          <PermissionGate permission="files.update">
+            <PermissionGate permission="folders.manage">
+              <Button
+                size="sm"
+                className="ml-auto"
+                variant="outline"
+                disabled={!selectedIds.length || isLoading}
+                onClick={() =>
+                  setMovingFiles(
+                    files.filter((file) => selectedIds.includes(file.id))
+                  )
+                }
+              >
+                <FolderInput className="mr-2 h-4 w-4" />
+                Move
+              </Button>
+            </PermissionGate>
+          </PermissionGate>
+          <PermissionGate permission="files.update">
+            <PermissionGate permission="tags.manage">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!selectedIds.length || isLoading}
+                onClick={() =>
+                  setTaggingFiles(
+                    files.filter((file) => selectedIds.includes(file.id))
+                  )
+                }
+              >
+                <Tag className="mr-2 h-4 w-4" />
+                Edit tags
+              </Button>
+            </PermissionGate>
+          </PermissionGate>
           <Button
             variant="ghost"
             size="sm"
@@ -501,18 +516,20 @@ export function FileGrid() {
               All files
             </Button>
           ) : (
-            <Button asChild>
-              <Link
-                href={
-                  filters.folder
-                    ? `/dashboard/upload?folder=${filters.folder}`
-                    : '/dashboard/upload'
-                }
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                {filters.folder ? 'Upload here' : 'Upload your first file'}
-              </Link>
-            </Button>
+            <PermissionGate permission="files.upload">
+              <Button asChild>
+                <Link
+                  href={
+                    filters.folder
+                      ? `/dashboard/upload?folder=${filters.folder}`
+                      : '/dashboard/upload'
+                  }
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  {filters.folder ? 'Upload here' : 'Upload your first file'}
+                </Link>
+              </Button>
+            </PermissionGate>
           )}
         </div>
       ) : (
