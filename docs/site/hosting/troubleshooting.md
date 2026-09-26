@@ -61,6 +61,14 @@ If accounts and settings also disappeared, inspect the PostgreSQL volume and dat
 
 Use the endpoint your provider documents for its S3 API, not its web console or a bucket browsing URL. Test path-style access if required by that provider. Do not change a bucket to public as a blanket fix for access errors.
 
+## A deleted account still has objects in storage
+
+Whole-account deletion removes account records immediately and queues file/avatar cleanup for the background worker. Storage downtime or a changed S3 target can leave those jobs pending. Inspect the [cleanup queue and retry times](/hosting/maintenance#inspect-pending-cleanup), then correct the reported connectivity, permissions, or target mismatch. Jobs retry indefinitely and survive app restarts; no manual retry button is needed.
+
+Keep the original local uploads volume mounted for local jobs. S3 jobs need the saved bucket, region, endpoint, and path-style identity to match their recorded target, plus working current credentials. They never redirect cleanup to a new bucket. An already-issued signed URL can remain usable until its object is removed or the URL expires.
+
+If no job exists, confirm whether the deletion happened before the durable-cleanup migration or was an individual file deletion; those older or separate operations are not backfilled into the account queue. Check sanitized logs and backups before reconciling orphaned objects. Account deletion does not remove backups, object versions, or external caches.
+
 ## OIDC sign-in loops or rejects an account
 
 Use `/auth/login?local=1` to reach password sign-in as a local administrator. Check the configured issuer's discovery URL and the provider redirect URI, which must be `https://your-host/api/auth/callback/oidc`.
@@ -85,7 +93,7 @@ Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WE
 
 Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General and may be opted out for an upload. Processing an image takes time and does not guarantee useful extracted text.
 
-Expiration is a background action; an unavailable process cannot apply it on schedule. Email and webhook jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
+Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
 
 ## Collect a useful support report
 

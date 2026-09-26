@@ -785,9 +785,10 @@ export function UserList() {
       const response = await fetch(`/api/users/${userToSignOut.id}/sessions`, {
         method: 'DELETE',
       })
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not revoke sessions.')
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        throw new Error(result?.error || 'Could not revoke sessions.')
+      }
       toast({
         title: 'Sessions revoked',
         description: `${userToSignOut.name} will need to sign in again.`,

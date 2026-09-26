@@ -105,10 +105,10 @@ Inspect the archive and open important files before deleting their originals. Fi
 
 Deleting your own account requires `profile.update` and removes its content even when `files.delete` is absent. The last-accessible-administrator safeguard also applies.
 
-Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming permanently removes your account and its files and short links from Flare, then signs you out. There is no account-restore button.
+Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, and integrations from Flare, then signs you out. The same database transaction saves cleanup work for your stored files and uploaded avatar. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
 
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 
-Account deletion is not a guarantee of erasure from operator backups, external caches, or every storage backend. Ask the operator about their storage-cleanup and retention procedures if complete data removal matters for your use case.
+Storage cleanup can remain pending while the storage service is unavailable or its configuration has changed. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion does not erase operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
 
 For a normal end to a session, use **Log out** instead of deleting the account.

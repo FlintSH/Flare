@@ -160,3 +160,13 @@ node scripts/roles/verify.cjs
 Linux hosts also need Playwright's browser system libraries; a machine administrator can install those using `npx playwright install-deps chromium`. The script rejects non-loopback hostnames. `PW_CHROMIUM_EXECUTABLE_PATH` can select an existing Chromium binary.
 
 The checks exercise first-account grants, additive roles, role and account hierarchy, self-escalation rejection, administrator recovery guards, delegated settings writes, credential redaction, live session/token revocation, and private uploads without sharing permission. Review its JSON results and exit status. It restores Everyone's starting grants on completion but deliberately leaves demonstration fixtures for inspection; discard the whole isolated instance afterward. The [session request walkthrough](/api/roles#run-a-request-against-a-disposable-instance) provides a smaller manual create/assign/remove example.
+
+For the file-card and session-revocation UI checks, run this second script against the same disposable setup after the first script has finished:
+
+```sh
+node scripts/roles/verify-ui.cjs
+```
+
+It verifies that sharing-only roles can save a file password, editing-only roles can open expiration controls and cancel a schedule, and a real `204` session-revocation response closes the confirmation and signs out the target. It also injects a plain-text `403` and JSON `409` to test error rendering; those failure cases are simulations, clearly labeled in the result output. The script temporarily changes Everyone, restores its original grants, and removes its own fixture account and role. Run the scripts sequentially so their permission fixtures do not interfere.
+
+Set `FLARE_ROLES_UI_SCREENSHOTS=docs/images/roles` only when intentionally refreshing the three documented UI regression screenshots from a production build. Review the captured images before committing them.

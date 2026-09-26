@@ -66,10 +66,13 @@ There is one active storage provider for the instance. Existing database records
 Plan a maintenance window:
 
 1. Take a database backup and a complete file backup.
-2. Pause uploads and stop application writes while copying data.
-3. Copy every object, including avatars and favicon, preserving relative keys. A database path such as `uploads/abc/image.png` maps to local `/app/uploads/abc/image.png` and S3 key `abc/image.png`.
-4. Compare object counts, sizes, and representative checksums. Preserve appropriate content types and avatar access behavior.
-5. Change the stored provider/bucket configuration, restart all app processes to clear cached providers, and test before reopening access.
-6. Keep the old files and backup until the migrated installation is verified.
+2. Pause account deletions and let [pending account-cleanup jobs](/hosting/maintenance#account-storage-cleanup) finish against the original backend. Confirm the queue is empty before switching its identity or removing the original uploads volume.
+3. Pause uploads and stop application writes while copying data.
+4. Copy every object, including avatars and favicon, preserving relative keys. A database path such as `uploads/abc/image.png` maps to local `/app/uploads/abc/image.png` and S3 key `abc/image.png`.
+5. Compare object counts, sizes, and representative checksums. Preserve appropriate content types and avatar access behavior.
+6. Change the stored provider/bucket configuration, restart all app processes to clear cached providers, and test before reopening access.
+7. Keep the old files and backup until the migrated installation is verified.
+
+Account-cleanup jobs preserve the backend selected when deletion committed. Local jobs continue against the local volume after a switch to S3. S3 jobs wait when the saved bucket, region, endpoint, or path-style setting differs from their recorded target; changing the active provider alone does not cancel them. Restore matching settings during planned maintenance to resume pending work.
 
 There is no built-in cross-provider migration wizard. Changing credentials or backend during a chunked upload can invalidate that upload; ask users to start it again after maintenance. See [backup and restore](/hosting/maintenance) for preserving the database/file relationship.

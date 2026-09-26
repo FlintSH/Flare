@@ -1,7 +1,12 @@
+import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { PrismaClient } from '@prisma/client'
+import { mockClient } from 'aws-sdk-client-mock'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { readFile, rm } from 'node:fs/promises'
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -39,6 +44,11 @@ suite.sequential('roles against disposable PostgreSQL', () => {
   let collection: typeof import('@/app/api/roles/route')
   let detail: typeof import('@/app/api/roles/[id]/route')
   let createUser: typeof import('@/lib/users/create-user').createUser
+  let cleanup: typeof import('@/lib/storage/deletion')
+  let LocalStorage: typeof import('@/lib/storage/providers/local').LocalStorageProvider
+  const cleanupPaths = new Set<string>()
+  const cleanupPrefix = `uploads/roles-cleanup-test-${randomUUID()}`
+  const s3Mock = mockClient(S3Client)
 
   beforeAll(async () => {
     const url = new URL(databaseUrl!)
@@ -53,9 +63,14 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     collection = await import('@/app/api/roles/route')
     detail = await import('@/app/api/roles/[id]/route')
     createUser = (await import('@/lib/users/create-user')).createUser
+    cleanup = await import('@/lib/storage/deletion')
+    LocalStorage = (await import('@/lib/storage/providers/local'))
+      .LocalStorageProvider
   })
 
   beforeEach(async () => {
+    s3Mock.reset()
+    await prisma.storageDeletion.deleteMany()
     await prisma.user.deleteMany()
     await prisma.role.deleteMany()
     await prisma.config.deleteMany()
@@ -85,7 +100,14 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     authentication.permissions = ['administrator']
     authentication.signedIn = true
   })
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    for (const path of cleanupPaths) await rm(path, { force: true })
+    cleanupPaths.clear()
+  })
   afterAll(async () => {
+    s3Mock.restore()
+    await rm(cleanupPrefix, { force: true, recursive: true })
     await prisma?.$disconnect()
     vi.unstubAllEnvs()
   })
@@ -691,6 +713,519 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         )
       ).status
     ).toBe(200)
+  })
+
+  async function cleanupAccount() {
+    const id = `cleanup-${randomUUID()}`
+    return prisma.user.create({
+      data: {
+        id,
+        name: 'Cleanup fixture',
+        email: `${id}@example.test`,
+        password: 'fixture-only',
+        urlId: id,
+        uploadToken: id,
+      },
+    })
+  }
+
+  async function cleanupFile(
+    userId: string,
+    name = 'fixture.txt',
+    path = `${cleanupPrefix}/${randomUUID()}/${name}`
+  ) {
+    return prisma.file.create({
+      data: {
+        userId,
+        name,
+        path,
+        urlPath: `/${randomUUID()}`,
+        mimeType: 'text/plain',
+        size: 1,
+      },
+    })
+  }
+
+  async function cleanupConfig(provider: 'local' | 's3' = 'local') {
+    const { DEFAULT_CONFIG } = await import('@/lib/config')
+    const config = structuredClone(DEFAULT_CONFIG)
+    config.settings.general.storage = {
+      ...config.settings.general.storage,
+      provider,
+      s3: {
+        bucket: 'cleanup-original',
+        region: 'us-east-1',
+        endpoint: 'https://s3.example.test',
+        forcePathStyle: true,
+        accessKeyId: 'fixture-access',
+        secretAccessKey: 'fixture-secret',
+      },
+    }
+    await prisma.config.upsert({
+      where: { key: 'flare_config' },
+      create: { key: 'flare_config', value: config },
+      update: { value: config },
+    })
+    return config
+  }
+
+  it.each(['self', 'administrator'] as const)(
+    'durably queues %s account bytes and avatar before cascading, without storage I/O in the request',
+    async (kind) => {
+      const user = await cleanupAccount()
+      const file = await cleanupFile(user.id)
+      const avatar = `uploads/avatars/${user.id}.jpg`
+      const storage = new LocalStorage()
+      await storage.uploadFile(
+        Buffer.from('retained until worker'),
+        file.path,
+        'text/plain'
+      )
+      await storage.uploadFile(
+        Buffer.from('avatar fixture'),
+        avatar,
+        'image/jpeg'
+      )
+      cleanupPaths.add(file.path)
+      cleanupPaths.add(avatar)
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { image: `/api/avatars/${user.id}.jpg` },
+      })
+      const remove = vi.spyOn(LocalStorage.prototype, 'deleteFile')
+      let response: Response
+      if (kind === 'self') {
+        authentication.userId = user.id
+        authentication.permissions = [...DEFAULT_PERMISSIONS]
+        const route = await import('@/app/api/profile/route')
+        response = await route.DELETE(
+          new Request('http://localhost/api/profile', { method: 'DELETE' })
+        )
+      } else {
+        const route = await import('@/app/api/users/[id]/route')
+        response = await route.DELETE(
+          new Request(`http://localhost/api/users/${user.id}`, {
+            method: 'DELETE',
+          }),
+          context(user.id)
+        )
+      }
+      expect(response.status).toBe(204)
+      expect(remove).not.toHaveBeenCalled()
+      expect(
+        await prisma.user.findUnique({ where: { id: user.id } })
+      ).toBeNull()
+      expect(await prisma.file.count({ where: { userId: user.id } })).toBe(0)
+      expect(
+        (await prisma.storageDeletion.findMany({ where: { ownerId: user.id } }))
+          .map((job) => job.path)
+          .sort()
+      ).toEqual([file.path, avatar].sort())
+      expect((await readFile(file.path)).toString()).toBe(
+        'retained until worker'
+      )
+      const jobs = await cleanup.claimStorageDeletions()
+      expect(
+        await Promise.all(jobs.map(cleanup.processStorageDeletion))
+      ).toEqual([true, true])
+      await expect(readFile(file.path)).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+      await expect(readFile(avatar)).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(await prisma.storageDeletion.count()).toBe(0)
+    }
+  )
+
+  it('rolls back queued cleanup and leaves physical bytes untouched when the final administrator cannot be deleted', async () => {
+    const file = await cleanupFile('admin')
+    await new LocalStorage().uploadFile(
+      Buffer.from('administrator bytes'),
+      file.path,
+      'text/plain'
+    )
+    cleanupPaths.add(file.path)
+    const remove = vi.spyOn(LocalStorage.prototype, 'deleteFile')
+    await expect(
+      cleanup.deleteAccountWithStorageCleanup(
+        'admin',
+        'admin',
+        'profile.update',
+        true
+      )
+    ).rejects.toMatchObject({ status: 409 })
+    expect(await prisma.user.count({ where: { id: 'admin' } })).toBe(1)
+    expect(await prisma.file.count({ where: { id: file.id } })).toBe(1)
+    expect(await prisma.storageDeletion.count()).toBe(0)
+    expect(remove).not.toHaveBeenCalled()
+    expect((await readFile(file.path)).toString()).toBe('administrator bytes')
+  })
+
+  it('rolls back queue inserts and cascades together when deletion fails after queueing', async () => {
+    const user = await cleanupAccount()
+    const file = await cleanupFile(user.id)
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION roles_test_reject_account_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected account deletion failure'; END $$`
+    )
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER roles_test_reject_account_delete BEFORE DELETE ON "User" FOR EACH ROW EXECUTE FUNCTION roles_test_reject_account_delete()`
+    )
+    try {
+      await expect(
+        cleanup.deleteAccountWithStorageCleanup(
+          'admin',
+          user.id,
+          'users.delete'
+        )
+      ).rejects.toThrow('injected account deletion failure')
+      expect(await prisma.storageDeletion.count()).toBe(0)
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(1)
+      expect(await prisma.file.count({ where: { id: file.id } })).toBe(1)
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER roles_test_reject_account_delete ON "User"'
+      )
+      await prisma.$executeRawUnsafe(
+        'DROP FUNCTION roles_test_reject_account_delete()'
+      )
+    }
+  })
+
+  it('retries transient storage failures after backoff and recovers a claimed job after a worker restart', async () => {
+    const user = await cleanupAccount()
+    const file = await cleanupFile(user.id)
+    await new LocalStorage().uploadFile(
+      Buffer.from('retry me'),
+      file.path,
+      'text/plain'
+    )
+    cleanupPaths.add(file.path)
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    await prisma.storageDeletion.deleteMany({
+      where: { path: { not: file.path } },
+    })
+    const remove = vi.spyOn(LocalStorage.prototype, 'deleteFile')
+    remove.mockRejectedValueOnce(
+      Object.assign(new Error('private provider details'), { code: 'EACCES' })
+    )
+    const [first] = await cleanup.claimStorageDeletions()
+    const failedAt = Date.now()
+    expect(await cleanup.processStorageDeletion(first)).toBe(false)
+    const pending = await prisma.storageDeletion.findUniqueOrThrow({
+      where: { id: first.id },
+    })
+    expect(pending).toMatchObject({
+      status: 'pending',
+      attempts: 1,
+      leaseId: null,
+      leaseUntil: null,
+    })
+    expect(pending.availableAt.getTime()).toBeGreaterThanOrEqual(
+      failedAt + cleanup.STORAGE_DELETION_RETRY_MS
+    )
+    expect(pending.lastError).not.toContain('private provider details')
+    expect(await cleanup.claimStorageDeletions()).toEqual([])
+    await prisma.storageDeletion.update({
+      where: { id: first.id },
+      data: { availableAt: new Date(0) },
+    })
+    const [crashed] = await cleanup.claimStorageDeletions()
+    // The process dies after claiming; the independent durable row survives.
+    await prisma.storageDeletion.update({
+      where: { id: first.id },
+      data: { leaseUntil: new Date(0) },
+    })
+    await prisma.$disconnect()
+    const [recovered] = await cleanup.claimStorageDeletions()
+    expect(recovered.attempts).toBe(3)
+    expect(recovered.leaseId).not.toBe(crashed.leaseId)
+    expect(await cleanup.processStorageDeletion(crashed)).toBe(false)
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(await cleanup.processStorageDeletion(recovered)).toBe(true)
+    expect(remove).toHaveBeenCalledTimes(2)
+    expect(await prisma.storageDeletion.count()).toBe(0)
+    await expect(readFile(file.path)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('retries safely after bytes disappear but the worker crashes before acknowledging', async () => {
+    const user = await cleanupAccount()
+    const file = await cleanupFile(user.id)
+    await new LocalStorage().uploadFile(
+      Buffer.from('one deletion'),
+      file.path,
+      'text/plain'
+    )
+    cleanupPaths.add(file.path)
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    await prisma.storageDeletion.deleteMany({
+      where: { path: { not: file.path } },
+    })
+    const [crashed] = await cleanup.claimStorageDeletions()
+    await new LocalStorage().deleteFile(file.path)
+    await prisma.storageDeletion.update({
+      where: { id: crashed.id },
+      data: { leaseUntil: new Date(0) },
+    })
+    const [recovered] = await cleanup.claimStorageDeletions()
+    expect(await cleanup.processStorageDeletion(recovered)).toBe(true)
+    expect(await prisma.storageDeletion.count()).toBe(0)
+  })
+
+  it('fences a slow worker acknowledgement after its expired lease is reclaimed', async () => {
+    const user = await cleanupAccount()
+    const file = await cleanupFile(user.id)
+    await new LocalStorage().uploadFile(
+      Buffer.from('slow storage'),
+      file.path,
+      'text/plain'
+    )
+    cleanupPaths.add(file.path)
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    await prisma.storageDeletion.deleteMany({
+      where: { path: { not: file.path } },
+    })
+    let started!: () => void
+    let release!: () => void
+    const enteredStorage = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const deferredStorage = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const original = LocalStorage.prototype.deleteFile
+    vi.spyOn(LocalStorage.prototype, 'deleteFile').mockImplementationOnce(
+      async function (path) {
+        started()
+        await deferredStorage
+        await original.call(this, path)
+      }
+    )
+    const [slow] = await cleanup.claimStorageDeletions()
+    const processing = cleanup.processStorageDeletion(slow)
+    try {
+      await enteredStorage
+      // A process pause outlasts its lease while the storage request is in flight.
+      await prisma.storageDeletion.update({
+        where: { id: slow.id },
+        data: { leaseUntil: new Date(0) },
+      })
+      const [recovered] = await cleanup.claimStorageDeletions()
+      release()
+      expect(await processing).toBe(false)
+      expect(
+        await prisma.storageDeletion.findUnique({ where: { id: slow.id } })
+      ).toMatchObject({ leaseId: recovered.leaseId, status: 'processing' })
+      // The new owner handles the already removed object idempotently.
+      expect(await cleanup.processStorageDeletion(recovered)).toBe(true)
+      expect(await prisma.storageDeletion.count()).toBe(0)
+    } finally {
+      release()
+      await processing
+    }
+  })
+
+  it('bounds concurrent claims globally and never discards repeatedly failing jobs', async () => {
+    const user = await cleanupAccount()
+    for (let i = 0; i < 8; i++) await cleanupFile(user.id)
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    const claims = (
+      await Promise.all(
+        Array.from({ length: 12 }, () => cleanup.claimStorageDeletions())
+      )
+    ).flat()
+    expect(claims).toHaveLength(cleanup.STORAGE_DELETION_CONCURRENCY)
+    expect(new Set(claims.map((job) => job.id)).size).toBe(claims.length)
+    expect(await cleanup.claimStorageDeletions()).toEqual([])
+    const job = claims[0]
+    await prisma.storageDeletion.update({
+      where: { id: job.id },
+      data: { attempts: 100 },
+    })
+    vi.spyOn(LocalStorage.prototype, 'deleteFile').mockRejectedValue(
+      new Error('offline')
+    )
+    const started = Date.now()
+    expect(
+      await cleanup.processStorageDeletion({ ...job, attempts: 100 })
+    ).toBe(false)
+    const retained = await prisma.storageDeletion.findUniqueOrThrow({
+      where: { id: job.id },
+    })
+    expect(retained.attempts).toBe(100)
+    expect(retained.availableAt.getTime()).toBeGreaterThanOrEqual(
+      started + cleanup.STORAGE_DELETION_MAX_RETRY_MS
+    )
+    expect(retained.availableAt.getTime()).toBeLessThan(
+      Date.now() + cleanup.STORAGE_DELETION_MAX_RETRY_MS + 1000
+    )
+  })
+
+  it('pins S3 destinations, uses fresh matching credentials, and never falls back to local', async () => {
+    const config = await cleanupConfig('s3')
+    const user = await cleanupAccount()
+    const file = await cleanupFile(user.id)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        image: `https://s3.example.test/cleanup-original/avatars/${user.id}.jpg`,
+      },
+    })
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    const jobs = await prisma.storageDeletion.findMany()
+    expect(jobs).toHaveLength(2)
+    expect(jobs.every((job) => job.provider === 's3')).toBe(true)
+    expect(jobs.map((job) => job.path)).toContain(
+      `uploads/avatars/${user.id}.jpg`
+    )
+    expect(JSON.stringify(jobs)).not.toContain('fixture-secret')
+    expect(JSON.stringify(jobs)).not.toContain('fixture-access')
+    const localDelete = vi.spyOn(LocalStorage.prototype, 'deleteFile')
+    config.settings.general.storage.s3.bucket = 'different-bucket'
+    await prisma.config.update({
+      where: { key: 'flare_config' },
+      data: { value: config },
+    })
+    s3Mock.on(DeleteObjectCommand).resolves({})
+    const mismatched = await cleanup.claimStorageDeletions()
+    expect(
+      await Promise.all(mismatched.map(cleanup.processStorageDeletion))
+    ).toEqual([false, false])
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0)
+    expect(localDelete).not.toHaveBeenCalled()
+    expect(
+      (await prisma.storageDeletion.findMany()).every((job) =>
+        job.lastError?.includes('Storage target changed')
+      )
+    ).toBe(true)
+    config.settings.general.storage.provider = 'local'
+    config.settings.general.storage.s3.bucket = 'cleanup-original'
+    config.settings.general.storage.s3.accessKeyId = 'rotated-access'
+    config.settings.general.storage.s3.secretAccessKey = 'rotated-secret'
+    await prisma.config.update({
+      where: { key: 'flare_config' },
+      data: { value: config },
+    })
+    await prisma.storageDeletion.updateMany({
+      data: { availableAt: new Date(0) },
+    })
+    const matching = await cleanup.claimStorageDeletions()
+    expect(
+      await Promise.all(matching.map(cleanup.processStorageDeletion))
+    ).toEqual([true, true])
+    expect(
+      s3Mock.commandCalls(DeleteObjectCommand).map((call) => call.args[0].input)
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          Bucket: 'cleanup-original',
+          Key: file.path.replace(/^uploads\//, ''),
+        },
+        { Bucket: 'cleanup-original', Key: `avatars/${user.id}.jpg` },
+      ])
+    )
+    const client = s3Mock.commandCalls(DeleteObjectCommand)[0]
+      .thisValue as S3Client
+    expect(await client.config.credentials()).toMatchObject({
+      accessKeyId: 'rotated-access',
+      secretAccessKey: 'rotated-secret',
+    })
+    expect(localDelete).not.toHaveBeenCalled()
+    expect(await prisma.storageDeletion.count()).toBe(0)
+  })
+
+  it('treats a missing S3 key as success but keeps a missing bucket for recovery', async () => {
+    await cleanupConfig('s3')
+    const user = await cleanupAccount()
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    s3Mock
+      .on(DeleteObjectCommand)
+      .rejects(
+        Object.assign(new Error('bucket unavailable'), { name: 'NoSuchBucket' })
+      )
+    const [first] = await cleanup.claimStorageDeletions()
+    expect(await cleanup.processStorageDeletion(first)).toBe(false)
+    expect(await prisma.storageDeletion.count()).toBe(1)
+    await prisma.storageDeletion.updateMany({
+      data: { availableAt: new Date(0) },
+    })
+    s3Mock
+      .on(DeleteObjectCommand)
+      .rejects(Object.assign(new Error('key absent'), { name: 'NoSuchKey' }))
+    const [second] = await cleanup.claimStorageDeletions()
+    expect(await cleanup.processStorageDeletion(second)).toBe(true)
+    expect(await prisma.storageDeletion.count()).toBe(0)
+  })
+
+  it('cleans owned legacy avatars locally without deriving paths from external images', async () => {
+    const user = await cleanupAccount()
+    const legacy = `public/avatars/${user.id}.jpg`
+    await new LocalStorage().uploadFile(
+      Buffer.from('legacy avatar'),
+      legacy,
+      'image/jpeg'
+    )
+    cleanupPaths.add(legacy)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { image: `/avatars/${user.id}.jpg` },
+    })
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      user.id,
+      'users.delete'
+    )
+    const queued = await prisma.storageDeletion.findMany()
+    expect(queued).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: legacy, provider: 'local' }),
+      ])
+    )
+    await cleanupConfig('s3')
+    expect(
+      await Promise.all(
+        (await cleanup.claimStorageDeletions()).map(
+          cleanup.processStorageDeletion
+        )
+      )
+    ).toEqual([true, true])
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0)
+    await expect(readFile(legacy)).rejects.toMatchObject({ code: 'ENOENT' })
+    const external = await cleanupAccount()
+    await prisma.user.update({
+      where: { id: external.id },
+      data: { image: '/api/avatars/another-user.jpg' },
+    })
+    await cleanup.deleteAccountWithStorageCleanup(
+      'admin',
+      external.id,
+      'users.delete'
+    )
+    expect(
+      (await prisma.storageDeletion.findMany()).map((job) => job.path)
+    ).toEqual([`uploads/avatars/${external.id}.jpg`])
   })
 
   it('migrates legacy authority without losing identities or content', async () => {

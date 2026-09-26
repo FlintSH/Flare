@@ -1,8 +1,6 @@
 import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
 import { Prisma } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
-import { unlink } from 'fs/promises'
-import { join } from 'path'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
@@ -11,8 +9,8 @@ import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
-import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
+import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
 
 const logger = loggers.users
 
@@ -194,44 +192,12 @@ export async function DELETE(req: Request) {
     const { user, response } = await requireAuth(req)
     if (response) return response
 
-    const userData = await prisma.user.findUnique({
-      where: { id: user.id },
-      include: {
-        files: {
-          select: {
-            path: true,
-          },
-        },
-      },
-    })
-
-    if (!userData) {
-      return apiError('User not found', HTTP_STATUS.NOT_FOUND)
-    }
-
-    await mutateAccount(
+    await deleteAccountWithStorageCleanup(
       user.id,
       user.id,
       'profile.update',
-      (tx) => tx.user.delete({ where: { id: user.id } }),
       true
     )
-
-    for (const file of userData.files) {
-      try {
-        await unlink(join(process.cwd(), file.path))
-      } catch (error) {
-        logger.error(`Error deleting file ${file.path}:`, error as Error)
-      }
-    }
-
-    if (userData.image?.startsWith('/avatars/')) {
-      try {
-        await unlink(join(process.cwd(), 'public', userData.image))
-      } catch (error) {
-        logger.error('Error deleting avatar:', error as Error)
-      }
-    }
 
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
   } catch (error) {

@@ -524,14 +524,14 @@ export function FileCard({
                 </DropdownMenuItem>
               </PermissionGate>
               <PermissionGate permission="files.share">
-                <PermissionGate permission="files.update">
-                  <DropdownMenuItem
-                    onSelect={() => handlePasswordDialogOpenChange(true)}
-                  >
-                    <KeyRound />
-                    {file.hasPassword ? 'Manage password' : 'Add password'}
-                  </DropdownMenuItem>
-                </PermissionGate>
+                <DropdownMenuItem
+                  onSelect={() => handlePasswordDialogOpenChange(true)}
+                >
+                  <KeyRound />
+                  {file.hasPassword ? 'Manage password' : 'Add password'}
+                </DropdownMenuItem>
+              </PermissionGate>
+              <PermissionGate permission="files.update">
                 <DropdownMenuItem onSelect={() => setIsExpiryModalOpen(true)}>
                   <Timer />
                   Manage expiration

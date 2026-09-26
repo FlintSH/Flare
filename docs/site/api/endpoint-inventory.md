@@ -93,19 +93,19 @@ Email session mutations validate the request origin when provided. Password/iden
 
 These routes use `requireAuth`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
 
-| Path                        | Methods           | Purpose                                                                |
-| --------------------------- | ----------------- | ---------------------------------------------------------------------- |
-| `/api/profile`              | PUT, DELETE       | Update the account or delete it, subject to route-specific safeguards. |
-| `/api/profile/upload-token` | GET, POST         | Read or regenerate the legacy account upload credential.               |
-| `/api/profile/export`       | GET               | Export account data/files.                                             |
-| `/api/files/{id}/expiry`    | GET, POST, DELETE | Inspect, schedule, or cancel expiration for an owned file.             |
-| `/api/folders`              | GET, POST         | List or create folders.                                                |
-| `/api/folders/{id}`         | PATCH, DELETE     | Rename/move or delete an owned folder.                                 |
-| `/api/files/folders`        | POST              | Move owned files into a folder or make them unfiled.                   |
-| `/api/tags`                 | GET, POST         | List or create tags and their rules.                                   |
-| `/api/tags/{id}`            | PATCH, DELETE     | Edit or delete an owned tag.                                           |
-| `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                  |
-| `/api/files/tags`           | PATCH             | Change tag associations for selected owned files.                      |
+| Path                        | Methods           | Purpose                                                                                                                                     |
+| --------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/profile`              | PUT, DELETE       | Update the account, or delete it with `profile.update`; DELETE returns `204` after account removal and durable storage-cleanup work commit. |
+| `/api/profile/upload-token` | GET, POST         | Read or regenerate the legacy account upload credential.                                                                                    |
+| `/api/profile/export`       | GET               | Export account data/files.                                                                                                                  |
+| `/api/files/{id}/expiry`    | GET, POST, DELETE | Inspect, schedule, or cancel expiration for an owned file.                                                                                  |
+| `/api/folders`              | GET, POST         | List or create folders.                                                                                                                     |
+| `/api/folders/{id}`         | PATCH, DELETE     | Rename/move or delete an owned folder.                                                                                                      |
+| `/api/files/folders`        | POST              | Move owned files into a folder or make them unfiled.                                                                                        |
+| `/api/tags`                 | GET, POST         | List or create tags and their rules.                                                                                                        |
+| `/api/tags/{id}`            | PATCH, DELETE     | Edit or delete an owned tag.                                                                                                                |
+| `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                                                                                       |
+| `/api/files/tags`           | PATCH             | Change tag associations for selected owned files.                                                                                           |
 
 Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 
@@ -118,9 +118,9 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/roles`                     | GET, POST      | GET: any of `roles.manage`, `users.roles`, `users.read`; POST: `roles.manage`. List the catalog/roles or create a role.                                   |
 | `/api/roles/{id}`                | PATCH, DELETE  | `roles.manage`; edit/delete a role within hierarchy and delegation limits.                                                                                |
 | `/api/users`                     | GET, POST, PUT | GET: `users.read`; POST: `users.create`; PUT identity: `users.update`. Assignment additionally requires `users.roles`; role-only PUT needs `users.roles`. |
-| `/api/users/{id}`                | DELETE         | `users.delete`; remove an account below the actor's hierarchy.                                                                                            |
+| `/api/users/{id}`                | DELETE         | `users.delete`; remove an account within delegation limits. Returns `204` after account removal and durable storage-cleanup work commit.                  |
 | `/api/users/{id}/avatar`         | DELETE         | `users.update`; remove an account's avatar.                                                                                                               |
-| `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account's sessions.                                                                                                       |
+| `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account’s browser sessions. Success is `204 No Content`, with no JSON body. API credentials remain active.                |
 | `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
 | `/api/users/{id}/files`          | GET            | `content.read`; inspect an account's files.                                                                                                               |
 | `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`.                                                                                                        |

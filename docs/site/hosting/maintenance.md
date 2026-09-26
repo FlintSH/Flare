@@ -4,7 +4,7 @@ description: Back up, restore, upgrade, monitor, and move a Flare instance while
 
 # Backups, upgrades, and maintenance
 
-A recoverable Flare instance needs its **PostgreSQL database, file bytes, deployment configuration, and encryption secrets**. The database stores settings as well as accounts and file records. Exporting an appearance pack or a user's data is useful, but is not an instance backup.
+A recoverable Flare instance needs its **PostgreSQL database, file bytes, deployment configuration, and encryption secrets**. The database stores settings as well as accounts, file records, and durable background jobs, including pending account storage cleanup. Exporting an appearance pack or a user's data is useful, but is not an instance backup.
 
 The commands below match the [Docker Compose guide](/hosting/docker): project name `flare`, services `db` and `flare`, and volumes `flare_postgres_data` and `flare_uploads`.
 
@@ -49,14 +49,14 @@ Stop the app for the database dump and a coordinated bucket snapshot/copy, or us
 
 Include avatars and favicon, not only files visible in the library. A database restore references the keys that existed at that restore point. If a bucket lifecycle rule deletes objects sooner than Flare expects, the database can retain records whose bytes no longer exist.
 
-Before starting a restored instance, consider queued email, webhooks, and expiry jobs. Restoring a database restores pending work too. A test restore should have email disabled and network egress restricted from real webhook recipients. Do not let a restore drill accidentally resend production events or delete production objects.
+Before starting a restored instance, consider queued email, webhooks, expiry jobs, and account storage cleanup. Restoring a database restores pending work too. A test restore should have email disabled and network egress restricted from real webhook recipients and production object storage. Account cleanup jobs retain the original storage target; changing the restored instance's active provider alone does not disable them. Isolate both its upload volume and storage credentials/network before starting the app so a restore drill cannot delete production objects.
 
 ## Restore into a separate environment
 
 Practice on a new deployment directory with a new Compose project name and isolated storage. The example below assumes its project name is `flare-restore`, the services still use `db`/`flare`, and `BACKUP_DIR` points to a complete backup.
 
 1. Copy the backed-up Compose configuration and `.env` into the new directory. Set `name: flare-restore`, use another host port such as `127.0.0.1:3001:3000`, and set `NEXTAUTH_URL=http://localhost:3001` for a local test.
-2. Keep the original encryption key. Add `FLARE_EMAIL_ENABLED: "false"` to the app environment for a drill, and block real webhook delivery with the test environment's network policy.
+2. Keep the original encryption key. Add `FLARE_EMAIL_ENABLED: "false"` to the app environment for a drill. Block real webhook delivery and production object-storage access with the test environment's network policy before starting the app.
 3. Start only the new database, then restore the dump and uploads:
 
 ```sh
@@ -74,7 +74,7 @@ docker compose up -d flare
 
 Use an absolute `BACKUP_DIR`; wait until `pg_isready` succeeds before restoring. Restore into a **new, empty database and uploads volume**. `docker compose create flare` creates the stopped application container and its correctly labeled volume without starting background jobs. These commands deliberately do not drop or overwrite an existing instance.
 
-For an S3 restore, use a separate restored bucket. The restored database contains the original bucket configuration, so prevent production bucket access and update the copied instance's storage settings before testing files or allowing background jobs to run against it. A controlled local restore can instead restore matching object keys into its uploads directory and change the copied configuration to local storage before starting the app.
+For an S3 restore, use a separate restored bucket. The restored database contains both the original bucket configuration and any pending cleanup targets, so prevent production bucket access before starting the app. Update the copied instance's storage settings before testing files. Cleanup jobs pinned to the old bucket remain pending when its identity no longer matches; they are not redirected to the restored bucket. A controlled local restore can instead restore matching object keys into its isolated uploads directory and change the copied configuration to local storage. S3 cleanup can still run when saved S3 settings match a job, even with local storage active, so retain the network restriction throughout the drill.
 
 Verify sign-in, Settings, several file types, a private file, a password-protected file, folders, short links, avatars, and a new upload/delete cycle. Confirm the app can decrypt its secrets without printing them. A health-check response alone is not a restore test.
 
@@ -111,6 +111,12 @@ The role migration replaces the `User.role` enum with roles and account assignme
 
 No new environment variables are required. [Roles and permissions](/admin/roles) covers hierarchy, additive grants, safe delegation, and the last-accessible-administrator safeguard. [Session contracts](/api/roles) describe the account DTO changes. An old app image expects the removed enum; rollback requires its matching pre-migration backup, not just a different image tag.
 
+### Durable account-cleanup migration
+
+Migration `20260926020000_durable_account_cleanup` adds the `StorageDeletion` table. Normal image startup applies it. No new environment variable, separate worker service, or manual backfill is required. Each application process starts the worker; database leases coordinate its work across replicas.
+
+Whole-account deletions committed after this migration preserve cleanup jobs independently of the deleted account and file rows. Earlier deleted accounts have no remaining records from which this migration can reconstruct every orphaned object, so it does not retrospectively repair earlier cleanup failures. Reconcile those against storage records and backups separately. Include the queue in database backups and read the [restore precautions](#restore-into-a-separate-environment) before starting a copied database.
+
 ### Upgrading from 2.0 to 2.1
 
 Use the normal backup and upgrade steps above. The image applies the new folder and tag database migrations on startup. Existing files stay available in **All files**; upgrading does not move them into folders or publish collections.
@@ -142,17 +148,50 @@ For planned encryption rotation, pause email and webhooks, handle or cancel queu
 
 For an email lockout, `FLARE_EMAIL_ENABLED=false` disables sending and local verification enforcement. It does not repair encryption, change passwords, disable SSO, or restore webhook secrets. Use the [email recovery workflow](/admin/email#recover-from-an-email-lockout).
 
+## Account storage cleanup
+
+Deleting an account from Profile or Users commits account removal and one durable cleanup job per recorded object together. The worker performs storage I/O only after that commit. Rejected deletions, including the last-administrator safeguard, leave the account and bytes intact. This queue covers **whole-account deletion**; individual file or moderation deletion does not use it.
+
+The worker polls every **5 seconds** and allows **4 active jobs globally** across app processes. A claimed job has a **2-minute lease**, renewed every **30 seconds**; an expired lease can be claimed after a process stops. A missing object counts as success. Other failures retry after **30 seconds**, doubling up to **1 hour** between attempts, with no retry limit. Successful jobs are removed; pending jobs survive restarts. Keep at least one application process running to make progress.
+
+Jobs record the path, former owner ID, provider, and nonsecret storage identity. They do not store a copy of storage credentials:
+
+- Local jobs always use the local filesystem, even if the instance now uses S3. Keep the original uploads volume mounted until its cleanup is complete.
+- S3 jobs use fresh saved credentials only when the saved **bucket, region, endpoint, and path-style setting** match the recorded target. Changing credentials for that same target permits subsequent retries. Changing its identity leaves the job pending; cleanup never falls back to local storage or deletes the same key in another bucket. Matching saved S3 settings can process jobs even when the active provider is local.
+- Uploaded avatars use the app-owned account key, including avatars whose profile value is an S3 public URL. The exact legacy local avatar path is also handled. Arbitrary external avatar URLs are never deletion targets.
+
+### Inspect pending cleanup
+
+There is no dashboard cleanup queue or manual retry button. With the documented Compose deployment, inspect it using read-only SQL:
+
+```sh
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT status, count(*) AS objects FROM "StorageDeletion" GROUP BY status ORDER BY status;'
+
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT id, "ownerId", provider, target, status, attempts, "availableAt", "leaseUntil", "lastError" FROM "StorageDeletion" ORDER BY "createdAt" LIMIT 50;'
+
+docker compose logs --tail=150 flare
+```
+
+`availableAt` is the earliest next attempt for a pending job; `leaseUntil` describes an in-progress claim. `attempts` includes claims recovered after a crash. Logs use the `storage-cleanup` component, and `lastError` gives a sanitized recovery hint. Treat owner IDs and storage details as private when sharing diagnostics.
+
+For **Storage deletion failed**, check storage reachability, credentials, delete permissions, and local-volume ownership. For **Storage target changed**, compare `target` with the saved S3 settings. Plan maintenance to restore the original matching target and valid credentials, let cleanup complete, then resume the storage migration. Do not rewrite a job's target to a different bucket or discard a pending row to make the count disappear. Wait until its next `availableAt`; restarting the app does not bypass the retry schedule.
+
+An empty queue means all recorded jobs completed; it does not certify erasure from backups, S3 object versions, external caches, or storage left by older deletions. Flare has no account undelete operation: recovery needs a consistent pre-deletion database and file backup. A copied database can itself resume pending deletions, so follow the isolation precautions above.
+
 ## Monitoring and routine checks
 
-| Signal                                | Why it matters                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `/api/health` responds                | Web process liveness only; the endpoint does not query PostgreSQL, storage, or SMTP |
-| Disk free space and inodes            | Local uploads, temporary files, database, and logs can fill disk independently      |
-| Memory and CPU                        | Large uploads and OCR increase resource use                                         |
-| Database reachability and connections | Authentication, settings, file records, and durable jobs rely on PostgreSQL         |
-| Failed email/webhook deliveries       | A running web service can still fail external delivery                              |
-| A periodic upload/download check      | Tests the database-and-storage path together                                        |
-| Backup age and restore result         | Confirms recovery is practical                                                      |
+| Signal                                | Why it matters                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `/api/health` responds                | Web process liveness only; the endpoint does not query PostgreSQL, storage, or SMTP       |
+| Disk free space and inodes            | Local uploads, temporary files, database, and logs can fill disk independently            |
+| Memory and CPU                        | Large uploads and OCR increase resource use                                               |
+| Database reachability and connections | Authentication, settings, file records, and durable jobs rely on PostgreSQL               |
+| Pending account-cleanup jobs          | Storage failures can outlive the deleted account; inspect retries and the recorded target |
+| Failed email/webhook deliveries       | A running web service can still fail external delivery                                    |
+| A periodic upload/download check      | Tests the database-and-storage path together                                              |
+| Backup age and restore result         | Confirms recovery is practical                                                            |
 
 Use `docker compose logs --tail=100 flare` for app diagnostics and `docker compose logs --tail=100 db` for database startup issues. Set `LOG_LEVEL=debug` temporarily when investigating a reproducible problem, then restore your usual level. Review logs before sharing them externally.
 

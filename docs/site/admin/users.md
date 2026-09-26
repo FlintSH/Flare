@@ -69,14 +69,20 @@ With `users.read` and `content.read`, choose **View Content** on a user to inspe
 
 <Screenshot src="/screenshots/roles/users-content.webp" alt="Administrator content dialog listing a user's files and moderation actions" caption="Review an account's content without switching to its identity." />
 
-Deletion has no recycle bin. File deletion removes the database record and attempts to remove its bytes. If the storage backend is unavailable during administrative cleanup, check logs for objects that may need reconciliation. Never make broad direct bucket deletions from a UI count alone.
+Deletion has no recycle bin. Individual file deletion removes the database record and attempts to remove its bytes; it does not use the account-cleanup queue described below. If the storage backend is unavailable during individual file deletion, check logs for objects that may need reconciliation. Never make broad direct bucket deletions from a UI count alone.
 
 ## Revoke browser sessions
 
-Choose **Revoke Sessions** on an account, review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.
+Choose **Revoke Sessions** on an account, review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. On success, the confirmation closes and **Sessions revoked** appears; the person must sign in again. The server returns an empty `204 No Content`, which is a successful result. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.
+
+If the request fails, the confirmation stays open and shows an error so you can address the cause and retry.
+
+<Screenshot src="/screenshots/roles/sessions-revoked.webp" alt="Users list with a Sessions revoked notification saying Morgan Lee will need to sign in again" caption="Successful session revocation closes the confirmation and reports that the account must sign in again." />
 
 ## Delete an account
 
-With `users.delete` and authority above the target account, read the confirmation carefully: deleting an account removes its account data and associated content, including file records, profiles, integrations, and short links. The UI invalidates its browser sessions before deletion and the server attempts to delete its stored files and uploaded avatar.
+With `users.delete` and authority above the target account, read the confirmation carefully: deleting an account removes its account data and associated content, including file records, profiles, integrations, and short links. Account removal and durable cleanup jobs for stored files and the uploaded avatar commit together. A permission or last-administrator refusal leaves both the account and its stored bytes untouched. Once deletion succeeds, the removed account can no longer authenticate; no separate session-revocation permission is required.
+
+A successful response means the account is gone and cleanup is queued. A background worker removes the bytes after commit and retries failures automatically, including after a restart. Storage downtime can delay that cleanup; already-issued S3 links or public avatar URLs can remain usable until the objects are deleted or links expire. For pending work, ask the operator to follow [account storage cleanup](/hosting/maintenance#account-storage-cleanup). External avatar URLs, backups, and external caches are outside that cleanup.
 
 Offer a data export or make a backup before deleting content that may need to be retained. Account deletion is not temporary suspension; restoring it requires a suitable backup. Deleting a user also removes their API tokens and webhook configurations, so automations owned by that account stop working.

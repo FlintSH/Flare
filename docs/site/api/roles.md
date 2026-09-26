@@ -5,7 +5,7 @@ description: Session-only role management, account role assignments, settings de
 
 # Roles and session contracts
 
-The dashboard uses a **browser session** to administer roles and accounts. These routes do not accept named API tokens or a legacy upload credential as a substitute for that session. They are listed here for contributors and existing dashboard clients; the [named-token OpenAPI document](/openapi.json) deliberately excludes them.
+The dashboard uses a **browser session** to administer roles and other accounts. These administration routes do not accept named API tokens or a legacy upload credential as a substitute for that session. The self-service profile route retains the separately documented legacy-credential compatibility path. They are listed here for contributors and existing dashboard clients; the [named-token OpenAPI document](/openapi.json) deliberately excludes them.
 
 Authorization uses the current account's permissions from Everyone plus all assigned roles, reloaded for authenticated requests. The server rechecks authority inside serialized role/account mutations, so a stale open editor does not preserve permission after revocation. See the [roles guide](/admin/roles) for the permission catalog and safety rules.
 
@@ -116,6 +116,31 @@ await request(`/api/roles/${encodeURIComponent(role.id)}`, 'DELETE')
 ```
 
 Removing the demo role removes its assignments, leaving the account's Everyone permissions. This is a session example, not a token recipe. The [API request builder](/api/#explore-a-request) continues to offer only supported named-token operations.
+
+## Revoke browser sessions
+
+`DELETE /api/users/{id}/sessions` requires a browser session with `users.sessions` and the target-account delegation checks. Success is **204 No Content**. Check the HTTP status without calling `response.json()` on that empty body. The dashboard closes the confirmation and shows **Sessions revoked**; the target must authenticate again on a subsequent protected request.
+
+From the developer console of the disposable instance above, use a session with `users.sessions` and an isolated target account:
+
+```js
+const revocation = await fetch(
+  `/api/users/${encodeURIComponent(targetUserId)}/sessions`,
+  { method: 'DELETE', credentials: 'same-origin' }
+)
+if (!revocation.ok) throw new Error(`Revocation failed: ${revocation.status}`)
+console.log('Sessions revoked')
+```
+
+Revoking browser sessions does not revoke named API tokens or rotate the legacy upload credential. Those remain usable according to their scopes and the account's current permissions until separately revoked, expired, or rotated.
+
+## Account deletion
+
+`DELETE /api/users/{id}` requires a browser session with `users.delete`, a same-origin request, and the target-account delegation checks. `DELETE /api/profile` deletes the caller's own account with `profile.update`; it uses the [shared session/legacy-credential authentication rules](/api/endpoint-inventory#dashboard-routes-using-the-shared-account-helper) and is not available to named API tokens. Neither operation requires a separate session-revocation or file-deletion grant.
+
+Both return **204 No Content** after account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
+
+The response does not promise that object bytes have already been erased. An application worker deletes each recorded file and the app-owned avatar asynchronously, preserving failed jobs for retry. Already-issued object-storage links can remain usable until cleanup or link expiry. The [operator cleanup guide](/hosting/maintenance#account-storage-cleanup) covers retries, backend identity changes, and recovery. This durable queue applies to whole-account deletion; individual file and moderation deletion behavior is unchanged.
 
 ## Content moderation deletion
 
