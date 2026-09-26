@@ -318,7 +318,9 @@ export default async function FilePage({
     urlPath: file.urlPath,
     visibility: file.visibility,
     password:
-      file.password && !access.isOwner && !access.isAdmin ? 'protected' : null,
+      file.password && !access.isOwner && !access.canModerate
+        ? 'protected'
+        : null,
     userId: access.isOwner ? file.userId : '',
     mimeType: file.mimeType,
   }

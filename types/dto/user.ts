@@ -1,9 +1,6 @@
 import { z } from 'zod'
 
-export enum UserRole {
-  ADMIN = 'ADMIN',
-  USER = 'USER',
-}
+import type { RoleSummary } from '@/lib/permissions/catalog'
 
 /**
  * Reserved route paths that cannot be used as vanity IDs.
@@ -44,21 +41,23 @@ export const VanityIdSchema = z
     'This URL path is reserved and cannot be used'
   )
 
-export const UserSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(8).optional(),
-  role: z.enum(['ADMIN', 'USER']),
-  urlId: z
-    .string()
-    .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
-    .optional(),
-  // Empty form fields clear the vanity URL; omitted fields leave it unchanged.
-  vanityId: VanityIdSchema.or(z.literal('').transform(() => null))
-    .nullable()
-    .optional(),
-})
+export const UserSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(2),
+    email: z.string().email(),
+    password: z.string().min(8).optional(),
+    roleIds: z.array(z.string().min(1).max(128)).max(100).optional(),
+    urlId: z
+      .string()
+      .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
+      .optional(),
+    // Empty form fields clear the vanity URL; omitted fields leave it unchanged.
+    vanityId: VanityIdSchema.or(z.literal('').transform(() => null))
+      .nullable()
+      .optional(),
+  })
+  .strict()
 
 export type CreateUserRequest = Omit<z.infer<typeof UserSchema>, 'id'>
 export type UpdateUserRequest = z.infer<typeof UserSchema>
@@ -68,7 +67,7 @@ export interface UserResponse {
   name: string | null
   email: string | null
   image: string | null
-  role: string
+  roles: RoleSummary[]
   urlId: string
   vanityId: string | null
   storageUsed: number

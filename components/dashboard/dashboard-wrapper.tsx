@@ -3,6 +3,7 @@ import { DashboardNav } from '@/components/dashboard/nav'
 import { UserNav } from '@/components/dashboard/user-nav'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
+import { PermissionGate } from '@/components/roles/permission-gate'
 
 interface DashboardWrapperProps {
   children: React.ReactNode
@@ -18,7 +19,9 @@ export function DashboardWrapper({
   return (
     <div className="relative flex flex-col flex-1 min-h-screen">
       <DynamicBackground />
-      <GlobalDropZone maxSize={maxUploadSize} />
+      <PermissionGate permission="files.upload">
+        <GlobalDropZone maxSize={maxUploadSize} />
+      </PermissionGate>
 
       <a
         href="#main-content"

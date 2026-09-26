@@ -17,12 +17,15 @@ import type { Writable as NodeWritable, Readable } from 'node:stream'
 
 import { loggers } from '@/lib/logger'
 
+import { s3StorageTarget } from '../targets'
+import type { StorageTarget } from '../targets'
 import type { RangeOptions, S3Config, StorageProvider } from '../types'
 
 const logger = loggers.storage.getChildLogger('s3')
 
 export class S3StorageProvider implements StorageProvider {
   readonly kind = 's3' as const
+  readonly target: Readonly<Extract<StorageTarget, { provider: 's3' }>>
 
   private client: S3Client
   private bucket: string
@@ -35,6 +38,7 @@ export class S3StorageProvider implements StorageProvider {
     if (!config.secretAccessKey)
       throw new Error('S3 secret access key is required')
 
+    this.target = Object.freeze(s3StorageTarget(config))
     this.bucket = config.bucket
     this.endpoint = config.endpoint
     this.client = new S3Client({

@@ -1,4 +1,4 @@
-import { Prisma, UserRole } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { compare } from 'bcryptjs'
 import { NextAuthOptions, Session, getServerSession } from 'next-auth'
 import { JWT } from 'next-auth/jwt'
@@ -9,6 +9,8 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
+import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
+import { getUserAccess } from '@/lib/permissions/server'
 
 import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
 
@@ -17,7 +19,6 @@ const userSelect = {
   email: true,
   name: true,
   password: true,
-  role: true,
   image: true,
   sessionVersion: true,
   emailVerified: true,
@@ -43,7 +44,8 @@ declare module 'next-auth' {
       name: string
       email: string
       image: string | null
-      role: UserRole
+      roles: RoleSummary[]
+      permissions: Permission[]
       emailAccessRequired?: boolean
       authTime?: number
       authMethod?: string
@@ -51,7 +53,6 @@ declare module 'next-auth' {
   }
 
   interface User {
-    role?: UserRole
     sessionVersion?: number
   }
 }
@@ -59,7 +60,6 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     id: string
-    role: UserRole
     sessionVersion: number
     name?: string | null
     email?: string | null
@@ -107,7 +107,6 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
           image: user.image,
           sessionVersion: user.sessionVersion,
         }
@@ -147,7 +146,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         const sessionUser = user as UserWithSession
         token.id = sessionUser.id
-        token.role = sessionUser.role
         token.image = sessionUser.image
         token.sessionVersion = sessionUser.sessionVersion
         token.name = sessionUser.name
@@ -172,7 +170,8 @@ export const authOptions: NextAuthOptions = {
         throw new Error('Session invalidated: Version mismatch')
       }
 
-      token.role = freshUser.role
+      // Remove obsolete authority from cookies issued before the role migration.
+      delete token.role
       token.image = freshUser.image
       token.name = freshUser.name
       token.email = freshUser.email
@@ -187,7 +186,9 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }): Promise<Session> {
       if (token) {
         session.user.id = token.id
-        session.user.role = token.role
+        const access = await getUserAccess(token.id)
+        session.user.roles = access.roles
+        session.user.permissions = access.permissions
         session.user.image = token.image || null
         session.user.name = token.name || ''
         session.user.email = token.email || ''

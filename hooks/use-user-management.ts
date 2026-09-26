@@ -9,7 +9,7 @@ export interface User {
   name: string
   email: string
   image: string | null
-  role: 'ADMIN' | 'USER'
+  roles: import('@/lib/permissions/catalog').RoleSummary[]
   urlId: string
   vanityId: string | null
   storageUsed: number
@@ -32,17 +32,17 @@ export interface UsersResponse {
 }
 
 export interface UserFormData {
-  name: string
-  email: string
+  name?: string
+  email?: string
   password?: string
-  role: 'ADMIN' | 'USER'
+  roleIds?: string[]
   urlId?: string
   vanityId?: string | null
 }
 
 export interface UseUserManagementOptions {
   search?: string
-  role?: string
+  roleId?: string
   onUserDeleted?: (userId: string) => void
   onUserUpdated?: (user: User) => void
   onUserCreated?: (user: User) => void
@@ -57,7 +57,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
   const [loadError, setLoadError] = useState(false)
   const pendingRequest = useRef<AbortController | null>(null)
   const search = options.search || ''
-  const role = options.role || 'ALL'
+  const role = options.roleId || 'ALL'
   const latestQuery = useRef({ search, role })
   useEffect(() => {
     latestQuery.current = { search, role }
@@ -83,7 +83,7 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           page: String(requestedPage),
           limit: '25',
           search: query.search,
-          role: query.role,
+          ...(query.role !== 'ALL' ? { roleId: query.role } : {}),
         })
         const response = await fetch(`/api/users?${params}`, {
           signal: controller.signal,
@@ -174,7 +174,9 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           body: JSON.stringify({
             ...formData,
             password: formData.password || undefined,
-            vanityId: formData.vanityId?.trim() || null,
+            ...(formData.vanityId !== undefined
+              ? { vanityId: formData.vanityId?.trim() || null }
+              : {}),
             id: userId,
           }),
         })
@@ -224,7 +226,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         })
 
         if (!response.ok) {
-          throw new Error('Failed to delete user')
+          const data = await response.json().catch(() => null)
+          throw new Error(data?.error || 'Failed to delete user')
         }
 
         await fetchUsers(currentPage)
@@ -243,9 +246,11 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         console.error('Error deleting user:', error)
         toast({
           title: 'Error',
-          description: 'Failed to delete user',
+          description:
+            error instanceof Error ? error.message : 'Failed to delete user',
           variant: 'destructive',
         })
+        throw error
       } finally {
         setPendingMutations((count) => count - 1)
       }
@@ -262,7 +267,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         })
 
         if (!response.ok) {
-          throw new Error('Failed to remove avatar')
+          const data = await response.json().catch(() => null)
+          throw new Error(data?.error || 'Failed to remove avatar')
         }
 
         setUsers((prevUsers) =>
@@ -279,7 +285,8 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
         console.error('Error removing avatar:', error)
         toast({
           title: 'Error',
-          description: 'Failed to remove avatar',
+          description:
+            error instanceof Error ? error.message : 'Failed to remove avatar',
           variant: 'destructive',
         })
       } finally {

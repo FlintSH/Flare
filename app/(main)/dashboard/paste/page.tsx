@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { PasteForm } from '@/components/dashboard/paste-form'
 
 import { getPageSession } from '@/lib/auth/page-session'
+import { hasPermission } from '@/lib/permissions/catalog'
 
 export default async function PastePage() {
   const session = await getPageSession()
@@ -10,6 +11,12 @@ export default async function PastePage() {
   if (!session?.user) {
     redirect('/auth/login')
   }
+
+  if (
+    !hasPermission(session.user, 'pastes.create') ||
+    !hasPermission(session.user, 'files.upload')
+  )
+    redirect('/dashboard/profile')
 
   return (
     <div className="container space-y-6">

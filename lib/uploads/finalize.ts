@@ -11,8 +11,11 @@ import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
+import { hasPermission } from '@/lib/permissions/catalog'
+import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
+import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
 
 import { UploadError } from './options'
@@ -49,11 +52,13 @@ export async function finalizeUpload(input: {
   size: number
   options: ResolvedUploadOptions
   passwordHash?: string | null
+  isPaste?: boolean
   /** Chunk assembly already holds an upload lock on this transaction. */
   transaction?: Prisma.TransactionClient
 }) {
   const { user, storage, filePath, displayName, mimeType, size, options } =
     input
+  const storageTarget = captureStorageTarget(storage)
   if (!Number.isSafeInteger(size) || size < 0)
     throw new UploadError('Invalid file size.')
   const head = await storage.getFileStream(filePath, { start: 0, end: 4099 })
@@ -72,7 +77,7 @@ export async function finalizeUpload(input: {
         : null
   const persist = async (tx: Prisma.TransactionClient) => {
     // Same order as settings/account policy updates: policy lock, then user lock.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+    await lockRoleChanges(tx)
     const configRow = await tx.config.findUnique({
       where: { key: 'flare_config' },
     })
@@ -82,6 +87,30 @@ export async function finalizeUpload(input: {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
     const fresh = await tx.user.findUnique({ where: { id: user.id } })
     if (!fresh) throw new UploadError('Account no longer exists.', 401)
+    const access = await getUserAccess(user.id, tx)
+    if (
+      !hasPermission(access, 'files.upload') ||
+      (input.isPaste && !hasPermission(access, 'pastes.create'))
+    )
+      throw new UploadError('Your role no longer allows this upload.', 403)
+    if (options.folderId && !hasPermission(access, 'folders.manage'))
+      throw new UploadError(
+        'Your role cannot organize uploads into folders.',
+        403
+      )
+    if (options.tagIds?.length && !hasPermission(access, 'tags.manage'))
+      throw new UploadError('Your role cannot apply tags.', 403)
+    if (
+      options.expiresAt &&
+      !hasPermission(
+        access,
+        options.expiryAction === 'DELETE' ? 'files.delete' : 'files.share'
+      )
+    )
+      throw new UploadError(
+        'Your role does not allow the selected expiration action. Disable expiration or ask for the required permission.',
+        403
+      )
     const existing = await tx.file.findFirst({
       where: { userId: user.id, path: filePath },
     })
@@ -133,7 +162,7 @@ export async function finalizeUpload(input: {
       (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
     if (
       storageConfig.quotas.enabled &&
-      fresh.role !== 'ADMIN' &&
+      !hasPermission(access, 'quotas.bypass') &&
       fresh.storageUsed + sizeMB > quota
     )
       throw new UploadError('The file would exceed your storage quota.', 413)
@@ -159,9 +188,13 @@ export async function finalizeUpload(input: {
         name: displayName,
         urlPath,
         path: filePath,
+        storageTarget,
         mimeType,
         size: sizeMB,
-        visibility: options.visibility,
+        visibility: hasPermission(access, 'files.share')
+          ? options.visibility
+          : 'PRIVATE',
+        isPaste: input.isPaste ?? false,
         password: passwordHash,
         userId: user.id,
         folderId,

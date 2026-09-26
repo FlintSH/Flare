@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
 import { hashApiToken } from '@/lib/integrations/tokens'
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -15,6 +16,15 @@ vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     apiToken: { findUnique: mocks.token, update: mocks.update },
     user: { findUnique: mocks.user },
+    role: {
+      findUnique: vi.fn(async () => ({
+        id: 'everyone',
+        name: 'Everyone',
+        position: 0,
+        systemKey: 'everyone',
+        permissions: [...DEFAULT_PERMISSIONS],
+      })),
+    },
   },
 }))
 vi.mock('@/lib/email/config', () => ({
@@ -35,7 +45,8 @@ const token = {
     storageUsed: 0,
     urlId: 'u',
     vanityId: null,
-    role: 'USER',
+    roles: [],
+    permissions: [...DEFAULT_PERMISSIONS],
     randomizeFileUrls: true,
     password: 'never-return',
   },
@@ -43,6 +54,7 @@ const token = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.token.mockResolvedValue(token)
+  mocks.user.mockResolvedValue(token.user)
   mocks.update.mockResolvedValue({})
   mocks.policy.mockReturnValue(false)
   mocks.session.mockResolvedValue(null)
@@ -66,7 +78,10 @@ describe('named bearer authentication', () => {
       profileId: 'profile-1',
     })
     expect(user).not.toHaveProperty('password')
-    expect(mocks.user).not.toHaveBeenCalled()
+    expect(mocks.user).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      select: { roles: { select: expect.any(Object) } },
+    })
   })
   it.each(['Bearer', 'bearer', 'BEARER', 'bEaReR', 'Bearer  '])(
     'accepts the %s scheme without changing the named token value',

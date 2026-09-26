@@ -6,6 +6,7 @@ import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import {
   PROFILE_SECTIONS,
   PROFILE_SECTION_ALIASES,
@@ -39,7 +40,6 @@ export default async function ProfilePage({
       email: true,
       image: true,
       storageUsed: true,
-      role: true,
       preferences: true,
       randomizeFileUrls: true,
       defaultFileExpirationAction: true,
@@ -58,7 +58,8 @@ export default async function ProfilePage({
 
   const config = await getConfig()
   const quotasEnabled =
-    config.settings.general.storage.quotas.enabled && user.role !== 'ADMIN'
+    config.settings.general.storage.quotas.enabled &&
+    !hasPermission(session.user, 'quotas.bypass')
   const defaultQuota = config.settings.general.storage.quotas.default
   const quotaMB =
     defaultQuota.unit === 'GB' ? defaultQuota.value * 1024 : defaultQuota.value
@@ -75,7 +76,8 @@ export default async function ProfilePage({
         email: user.email,
         image: user.image,
         storageUsed: user.storageUsed,
-        role: user.role,
+        roles: session.user.roles,
+        permissions: session.user.permissions,
         randomizeFileUrls: user.randomizeFileUrls,
         urlId: user.urlId,
         vanityId: user.vanityId,
@@ -88,7 +90,6 @@ export default async function ProfilePage({
       formattedQuota={formattedQuota}
       formattedUsed={formattedUsed}
       usagePercentage={usagePercentage}
-      isAdmin={user.role === 'ADMIN'}
       initialSection={initialSection}
       initialPreference={readPersonalAppearance(user.preferences)}
     />

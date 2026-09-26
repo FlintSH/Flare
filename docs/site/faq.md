@@ -18,7 +18,7 @@ No. Local storage is a good starting point for a single server. Mount a persiste
 
 ## Can I share a private file by giving someone its password?
 
-No. A private file requires the signed-in owner or an administrator. To share with a password, use a public file and add password protection. A folder share never lists private files.
+No. A private file requires the signed-in owner with `files.read`, or a person with `content.read`. To share with a password, use a public file and add password protection. A folder share never lists private files.
 
 ## Does deleting a folder delete its files?
 
@@ -30,7 +30,7 @@ Account defaults are overlaid by a selected upload profile, then permitted reque
 
 ## Can one API token administer the entire instance?
 
-Named tokens support file upload/listing and short-link operations through four scopes. They do not grant account, user, integration, or instance administration. Administrator ownership does not expand a named token’s scope. [API authentication](./api/authentication).
+Named tokens support file upload/listing and short-link operations through four scopes. They do not grant account, user, integration, or instance administration. Administrator ownership does not expand a named token’s scope. Each request also needs the owner’s current role permission. [API authentication](./api/authentication).
 
 ## Does file.ready mean OCR is finished?
 
@@ -51,3 +51,7 @@ Matching email addresses do not link accounts. Flare identifies SSO users by iss
 ## Where do I get help?
 
 Start with [troubleshooting](./hosting/troubleshooting). For a reproducible problem, [open a GitHub issue](https://github.com/FlintSH/Flare/issues) with your version, deployment method, and sanitized logs. For community discussion, [join Discord](https://discord.gg/mwVAjKwPus). Never include tokens, signing secrets, SMTP passwords, database URLs with credentials, or real private files.
+
+## Can I create moderators without giving full administration?
+
+Yes. [Create a role](./admin/roles) with the relevant account/content permissions and assign it in Users. Everyone and additional roles combine additively; there are no explicit deny rules. Delegated role and account management obey hierarchy, while Administrator grants every permission.

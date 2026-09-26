@@ -7,7 +7,7 @@ import { S3StorageProvider } from '@/lib/storage/providers/s3'
 import { createInMemoryS3 } from '../storage/helpers/in-memory-s3'
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requirePermission: vi.fn(),
   lockEmailUser: vi.fn(),
   getEmailConfigForUpdate: vi.fn(),
   getStorageProvider: vi.fn(),
@@ -22,7 +22,18 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({ requireAdmin: mocks.requireAdmin }))
+vi.mock('@/lib/auth/api-auth', () => ({
+  requirePermission: mocks.requirePermission,
+}))
+vi.mock('@/lib/permissions/server', () => ({
+  PermissionError: class PermissionError extends Error {},
+  lockRoleChanges: vi.fn(),
+  requireActorPermission: vi.fn(),
+  assertCanManageUser: vi.fn(),
+  validateRoleAssignment: vi.fn(),
+  assertAccessibleAdministrator: vi.fn(),
+  getUserAccess: async () => ({ roles: [], permissions: [] }),
+}))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks.db }))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfigForUpdate: mocks.getEmailConfigForUpdate,
@@ -50,7 +61,6 @@ const initialUser = {
   id: 'owner',
   name: 'File owner',
   email: 'owner@example.com',
-  role: 'USER',
   urlId: 'abc12',
   vanityId: null,
   password: null,
@@ -93,7 +103,6 @@ function request(urlId: string) {
       id: initialUser.id,
       name: initialUser.name,
       email: initialUser.email,
-      role: initialUser.role,
       urlId,
     }),
   })
@@ -116,7 +125,10 @@ beforeEach(async () => {
   vi.resetAllMocks()
   s3.clear()
   state = structuredClone({ user: initialUser, files: initialFiles })
-  mocks.requireAdmin.mockResolvedValue({ response: null })
+  mocks.requirePermission.mockResolvedValue({
+    response: null,
+    user: { id: 'operator', permissions: ['administrator'] },
+  })
   mocks.getEmailConfigForUpdate.mockResolvedValue(DEFAULT_EMAIL_CONFIG)
   mocks.getStorageProvider.mockResolvedValue(storage)
   mocks.db.user.findUnique.mockImplementation(async ({ where }) =>

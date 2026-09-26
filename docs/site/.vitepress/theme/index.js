@@ -7,6 +7,7 @@ import DemoTour from './components/DemoTour.vue'
 import FeatureExplorer from './components/FeatureExplorer.vue'
 import Home from './components/Home.vue'
 import Screenshot from './components/Screenshot.vue'
+import RoleLab from './components/RoleLab.vue'
 import UploadLab from './components/UploadLab.vue'
 import './style.css'
 
@@ -20,6 +21,7 @@ export default {
       FeatureExplorer,
       DemoTour,
       UploadLab,
+      RoleLab,
       ApiPlayground,
     })) {
       app.component(name, component)

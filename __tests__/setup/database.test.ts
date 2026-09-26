@@ -82,10 +82,17 @@ suite('setup contracts against disposable PostgreSQL', () => {
   it('creates one initial admin with stock appearance and no exposed credentials', async () => {
     const response = await setup.POST(request())
     expect(response.status).toBe(200)
-    const user = await prisma.user.findFirstOrThrow()
+    const user = await prisma.user.findFirstOrThrow({
+      include: { roles: true },
+    })
     expect(user.name).toBe('Administrator')
     expect(user.email).toBe('admin@example.test')
-    expect(user.role).toBe('ADMIN')
+    expect(user.roles).toEqual([
+      expect.objectContaining({
+        systemKey: 'administrator',
+        permissions: ['administrator'],
+      }),
+    ])
     expect(user.emailExempt).toBe(true)
     expect(user.emailVerified).toBeNull()
     expect(user.emailVerifiedFor).toBeNull()

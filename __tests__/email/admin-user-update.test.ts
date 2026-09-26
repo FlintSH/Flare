@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
 
 const mocks = vi.hoisted(() => ({
-  requireAdmin: vi.fn(),
+  requirePermission: vi.fn(),
   getEmailConfig: vi.fn(),
   getEmailConfigForUpdate: vi.fn(),
   lockEmailUser: vi.fn(),
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   invalidateEmailTokens: vi.fn(),
   db: {
     user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    role: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
   tx: {
@@ -23,7 +24,18 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({ requireAdmin: mocks.requireAdmin }))
+vi.mock('@/lib/auth/api-auth', () => ({
+  requirePermission: mocks.requirePermission,
+}))
+vi.mock('@/lib/permissions/server', () => ({
+  PermissionError: class PermissionError extends Error {},
+  lockRoleChanges: vi.fn(),
+  requireActorPermission: vi.fn(),
+  assertCanManageUser: vi.fn(),
+  validateRoleAssignment: vi.fn(),
+  assertAccessibleAdministrator: vi.fn(),
+  getUserAccess: async () => ({ roles: [], permissions: [] }),
+}))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks.db }))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfig: mocks.getEmailConfig,
@@ -45,7 +57,6 @@ const initial: User = {
   id: 'target',
   name: 'Original name',
   email: 'old@example.com',
-  role: 'USER',
   password: 'original-password-hash',
   emailVerified: new Date('2026-01-01'),
   emailVerifiedFor: 'old@example.com',
@@ -54,6 +65,8 @@ const initial: User = {
   pendingEmail: null,
   pendingEmailOldConfirmed: false,
   image: null,
+  avatarStoragePath: null,
+  avatarStorageTarget: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2026-01-01'),
   storageUsed: 0,
@@ -77,7 +90,6 @@ function request(changes: Record<string, unknown> = {}, method = 'PUT') {
       id: initial.id,
       name: 'Edited name',
       email: initial.email,
-      role: initial.role,
       ...changes,
     }),
   })
@@ -85,9 +97,9 @@ function request(changes: Record<string, unknown> = {}, method = 'PUT') {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.requireAdmin.mockResolvedValue({
+  mocks.requirePermission.mockResolvedValue({
     response: null,
-    user: { id: 'operator', role: 'ADMIN' },
+    user: { id: 'operator', permissions: ['administrator'] },
   })
   mocks.db.user.findUnique.mockResolvedValue(initial)
   mocks.db.$transaction.mockImplementation(async (callback) =>
@@ -224,12 +236,15 @@ describe('administrator account update serialization', () => {
     expect(mocks.tx.user.update).not.toHaveBeenCalled()
   })
 
-  it('preserves a concurrent role change when the submitted role was unchanged', async () => {
-    mocks.lockEmailUser.mockResolvedValue({ ...initial, role: 'ADMIN' })
+  it('preserves assigned roles when an identity update omits roleIds', async () => {
+    mocks.lockEmailUser.mockResolvedValue({
+      ...initial,
+      roles: [{ id: 'concurrent-role' }],
+    })
     const response = await PUT(request())
     expect(response.status).toBe(200)
     expect(mocks.tx.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'role'
+      'roles'
     )
   })
 
@@ -338,7 +353,7 @@ describe('optional administrator vanity URLs', () => {
 
 describe('user directory', () => {
   it('keeps directory search behind the administrator guard', async () => {
-    mocks.requireAdmin.mockResolvedValue({
+    mocks.requirePermission.mockResolvedValue({
       response: new Response(null, { status: 403 }),
     })
     const response = await GET(
@@ -366,7 +381,6 @@ describe('user directory', () => {
     })
     const query = mocks.db.user.findMany.mock.calls[0][0]
     expect(query.where).toEqual({
-      role: 'USER',
       OR: [
         { name: { contains: 'Jordan', mode: 'insensitive' } },
         { email: { contains: 'Jordan', mode: 'insensitive' } },

@@ -1,6 +1,6 @@
 import { requireAuth } from '@/lib/auth/api-auth'
-import { getStorageProvider } from '@/lib/storage'
 import {
+  getUploadStorage,
   requireUploadMetadata,
   saveUploadMetadata,
   withUploadLock,
@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: Context) {
     const { uploadId, partNumber } = await params
     const part = validPart(partNumber)
     const metadata = await requireUploadMetadata(user, uploadId)
-    const storage = await getStorageProvider()
+    const storage = await getUploadStorage(metadata)
     const url = await storage.getPresignedPartUploadUrl(
       metadata.fileKey,
       metadata.s3UploadId,
@@ -59,7 +59,7 @@ export async function PUT(req: Request, { params }: Context) {
     } finally {
       reader.releaseLock()
     }
-    const storage = await getStorageProvider()
+    const storage = await getUploadStorage(metadata)
     const result = await withUploadLock(uploadId, async (transaction) => {
       await requireUploadMetadata(user, uploadId, transaction)
       if (

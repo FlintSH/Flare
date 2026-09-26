@@ -113,7 +113,8 @@ suite('email configuration against disposable PostgreSQL', () => {
       data: {
         email: 'legacy@example.test',
         emailVerified: new Date(),
-        role: 'ADMIN',
+        roles: { connect: { systemKey: 'administrator' } },
+        password: 'fixture-only',
         urlId: 'legacy',
         uploadToken: 'legacy-test-token',
         createdAt: new Date('2020-01-01'),
@@ -144,7 +145,8 @@ suite('email configuration against disposable PostgreSQL', () => {
       data: {
         email: 'admin@example.test',
         emailExempt: true,
-        role: 'ADMIN',
+        roles: { connect: { systemKey: 'administrator' } },
+        password: 'fixture-only',
         urlId: 'admin',
         uploadToken: 'admin-test-token',
       },

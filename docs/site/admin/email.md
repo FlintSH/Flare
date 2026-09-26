@@ -6,7 +6,7 @@ description: Configure SMTP, recover local accounts, roll out email verification
 
 Flare can send verification, password recovery, and email-change messages through your SMTP provider. **Sending, password recovery, and required verification are separate choices.** You can enable recovery for your users without making verification a condition of using the instance.
 
-Open **Settings → Email**. No additional queue service or worker container is required; messages are queued in PostgreSQL and sent by the running Flare application.
+Open **Settings → Email** with `settings.email` (and `settings.read` to navigate Settings). Account-specific verification/exemption actions instead use `users.email` and obey account hierarchy. A role with **Administrator** includes both capabilities. No additional queue service or worker container is required; messages are queued in PostgreSQL and sent by the running Flare application.
 
 <Screenshot src="/screenshots/email/settings.png" alt="Flare email settings with SMTP provider configuration and testing controls" caption="Test your provider before enabling automatic account mail." />
 

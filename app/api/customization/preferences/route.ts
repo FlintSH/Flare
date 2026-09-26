@@ -9,6 +9,7 @@ import {
   readPersonalAppearance,
 } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
+import { requirePermission } from '@/lib/permissions/server'
 
 export async function GET() {
   const session = await getAccessSession()
@@ -28,7 +29,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await getAccessSession()
+  const { session, response: permissionDenied } = await requirePermission(
+    'appearance.personal'
+  )
+  if (permissionDenied) return permissionDenied
   if (!session?.user)
     return NextResponse.json(
       { error: 'Sign in to save preferences.' },

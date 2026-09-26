@@ -72,6 +72,29 @@ test('coverage gate requires docs in the feature commit, not a later follow-up',
     commit('API change with wrong documentation area')
     assert.equal(check().status, 1)
     assert.match(check().stderr, /API\/integration reference/)
+    const beforePermissions = git('rev-parse', 'HEAD')
+    await mkdir(resolve(root, 'lib/permissions'), { recursive: true })
+    await writeFile(
+      resolve(root, 'lib/permissions/catalog.ts'),
+      '// Changed a role permission\n'
+    )
+    commit('permission change without administration guidance')
+    const checkPermissions = () =>
+      spawnSync(
+        process.execPath,
+        ['docs/site/scripts/check-changes.mjs', '--base', beforePermissions],
+        { cwd: root, encoding: 'utf8' }
+      )
+    assert.equal(checkPermissions().status, 1)
+    assert.match(checkPermissions().stderr, /administration/)
+    await mkdir(resolve(root, 'docs/site/admin'), { recursive: true })
+    await writeFile(
+      resolve(root, 'docs/site/admin/roles.md'),
+      '# Role permission behavior\n'
+    )
+    git('add', '.')
+    git('commit', '--amend', '--no-edit')
+    assert.equal(checkPermissions().status, 0)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

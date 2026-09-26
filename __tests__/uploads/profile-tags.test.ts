@@ -14,7 +14,12 @@ const database = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: database }))
 vi.mock('@/lib/auth', () => ({
-  getAccessSession: async () => ({ user: { id: 'alice' } }),
+  getAccessSession: async () => ({
+    user: {
+      id: 'alice',
+      permissions: ['uploadProfiles.manage', 'tags.manage'],
+    },
+  }),
 }))
 vi.mock('@/lib/config', () => ({ getConfig: vi.fn() }))
 

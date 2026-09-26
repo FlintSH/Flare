@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 
-import { getAccessSession } from '@/lib/auth'
+import { hash } from 'bcryptjs'
+import { z } from 'zod'
+
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { requirePermission } from '@/lib/permissions/server'
+import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
@@ -11,11 +15,15 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ): Promise<NextResponse> {
+  if (!isSameOriginRequest(request))
+    return new NextResponse('Invalid request origin', { status: 403 })
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('content.delete')
+    if (permissionDenied) return permissionDenied
     const { id: userId, fileId } = await params
 
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
@@ -66,16 +74,32 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ): Promise<NextResponse> {
+  if (!isSameOriginRequest(request))
+    return new NextResponse('Invalid request origin', { status: 403 })
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('content.update')
+    if (permissionDenied) return permissionDenied
     const { id: userId, fileId } = await params
 
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
     const body = await request.json()
-    const { visibility, password } = body
+    const parsed = z
+      .object({
+        visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+        password: z.string().max(256).nullable().optional(),
+      })
+      .strict()
+      .safeParse(body)
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: 'Invalid file settings' },
+        { status: 400 }
+      )
+    const { visibility, password } = parsed.data
 
     const file = await prisma.file.update({
       where: {
@@ -84,11 +108,14 @@ export async function PATCH(
       },
       data: {
         visibility,
-        ...(password && { password }),
+        ...(password !== undefined && {
+          password: password ? await hash(password, 10) : null,
+        }),
       },
     })
 
-    return NextResponse.json(file)
+    const { password: secret, ...metadata } = file
+    return NextResponse.json({ ...metadata, hasPassword: Boolean(secret) })
   } catch (error) {
     logger.error('Error updating file:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })

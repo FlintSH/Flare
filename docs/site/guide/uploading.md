@@ -5,6 +5,8 @@ description: Upload from your browser, manage a queue, choose access and expirat
 
 # Uploading files
 
+Uploading requires `files.upload`, including drag-and-drop, screenshot tools, and chunked uploads. Role changes apply on the next request; an existing upload credential cannot bypass them. Sharing changes use `files.share`. Without that permission, new uploads are private even if a profile or request selected public visibility; you can still upload when `files.upload` is granted. Existing public links stay public until explicitly changed. If Upload is unavailable, ask the instance administrator to review your [roles](/admin/roles).
+
 Use **Upload** when you want to review settings before sending files. For quick uploads with your saved defaults, drop files onto another dashboard page or use a [screenshot tool](./screenshot-tools).
 
 <Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area and sharing options" caption="The upload page brings file selection and sharing choices into one flow." />
@@ -24,19 +26,21 @@ The same selected options apply to the queued files. To give different files dif
 
 ## Choose your upload settings
 
-| Setting                 | What it does                                                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Save to**             | Puts the file in one of your folders. A public file placed directly in a shared folder also appears on that folder's share page. |
-| **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                       |
-| **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                               |
-| **Password protection** | Requires recipients of a public file to enter the password before opening it. Owners and administrators retain access.           |
-| **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                  |
+| Setting                 | What it does                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Save to**             | Puts the file in one of your folders. A public file placed directly in a shared folder also appears on that folder's share page.              |
+| **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                                    |
+| **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                            |
+| **Password protection** | Requires recipients of a public file to enter the password before opening it. Eligible owners and accounts with `content.read` retain access. |
+| **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                               |
 
 Choosing **From upload profile** also includes the account defaults that the profile inherits. If you have not configured a default profile, account and instance settings supply the starting values. See [upload profiles](./upload-profiles) for the exact order.
 
 Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. Flare accepts file passwords up to 72 bytes; accented characters and emoji can use more than one byte each.
 
 ## Set an expiration
+
+An upload with a **Delete file** expiration requires `files.delete`; **Set to private** requires `files.share`. This also applies when expiration comes from a saved profile or account default. If the upload is rejected after a role change, choose no expiration (or a permitted action), update the profile/default, or ask the administrator for the required permission.
 
 Open **File expiration** and choose what should happen:
 
@@ -75,14 +79,15 @@ File types may be restricted by the administrator, and the server checks file co
 
 ## Fix an upload problem
 
-| What you see                              | What to do                                                                                                                                           |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| File rejected before upload               | Compare its size with the displayed maximum. Remove the oversized file and upload the others.                                                        |
-| Storage quota exceeded                    | Check **Profile → Your data**, delete files you no longer need, or ask your administrator about the quota. Making files private does not free space. |
-| A batch stops partway through             | Keep the successful links. Completed files leave the queue; retry uploads for the files still waiting.                                               |
-| Folder unavailable                        | Choose another destination. Flare will not silently move the upload somewhere else if its destination was deleted.                                   |
-| Network error                             | Check your connection and sign-in session, then retry the remaining files. If the outcome is uncertain, check Files before submitting again.         |
-| Progress reaches 100% but no link appears | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                   |
-| Small files work, large files fail        | Give your administrator the approximate size and error message so they can check storage, proxy limits, and chunked uploads.                         |
+| What you see                               | What to do                                                                                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File rejected before upload                | Compare its size with the displayed maximum. Remove the oversized file and upload the others.                                                                           |
+| Storage quota exceeded                     | Check **Profile → Your data**, delete files you no longer need, or ask your administrator about the quota. Making files private does not free space.                    |
+| A batch stops partway through              | Keep the successful links. Completed files leave the queue; retry uploads for the files still waiting.                                                                  |
+| Folder unavailable                         | Choose another destination. Flare will not silently move the upload somewhere else if its destination was deleted.                                                      |
+| Storage changed during this upload (`409`) | Start the affected file again. A backend change or an upgrade from older chunk-session metadata prevents reusing that upload session; completed files remain available. |
+| Network error                              | Check your connection and sign-in session, then retry the remaining files. If the outcome is uncertain, check Files before submitting again.                            |
+| Progress reaches 100% but no link appears  | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                                      |
+| Small files work, large files fail         | Give your administrator the approximate size and error message so they can check storage, proxy limits, and chunked uploads.                                            |
 
 For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).

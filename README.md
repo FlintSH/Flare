@@ -21,7 +21,7 @@ app demos.
 
 - **Get started:** [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [First-run setup](https://flintsh.github.io/Flare/admin/setup.html)
 - **Use Flare:** [Upload and share](https://flintsh.github.io/Flare/guide/uploading.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) · [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)
-- **Run your instance:** [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
+- **Run your instance:** [Roles and permissions](https://flintsh.github.io/Flare/admin/roles.html) · [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
 - **Build integrations:** [API reference](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html) · [OpenAPI](https://flintsh.github.io/Flare/openapi.json)
 - **Explore:** [Feature guide](https://flintsh.github.io/Flare/features.html) · [Demos](https://flintsh.github.io/Flare/demos.html) · [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)
 
@@ -83,13 +83,13 @@ Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) f
 
 ## 📝 Configuration
 
-Instance-wide controls live in **Settings** (`/dashboard/settings`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
+Instance-wide controls live in **Settings** (`/dashboard/settings`), with granular grants managed in **Roles** (`/dashboard/roles`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
 
-In Settings, administrators can configure:
+In Settings, accounts with the corresponding role permissions can configure:
 
-- Setting a shared ordinary-user storage quota and a maximum file size
+- Setting a shared storage quota (roles can grant a quota exemption) and a maximum file size
 - Choosing storage and optional OCR processing
-- Configuring registration options and user permissions
+- Configuring registration options and sign-in policy
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 

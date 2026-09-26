@@ -34,7 +34,9 @@ beforeEach(() => {
 
 describe('appearance permission boundary', () => {
   it('rejects cross-origin session writes on every appearance mutation endpoint', async () => {
-    mocks.session.mockResolvedValue({ user: { id: 'admin', role: 'ADMIN' } })
+    mocks.session.mockResolvedValue({
+      user: { id: 'admin', permissions: ['administrator'] },
+    })
     for (const [path, handler, contentType] of [
       ['/api/customization', POST, 'application/json'],
       ['/api/customization/preferences', updatePreference, 'application/json'],
@@ -60,7 +62,9 @@ describe('appearance permission boundary', () => {
   })
 
   it('rejects simple text form writes even when no origin is supplied', async () => {
-    mocks.session.mockResolvedValue({ user: { id: 'admin', role: 'ADMIN' } })
+    mocks.session.mockResolvedValue({
+      user: { id: 'admin', permissions: ['administrator'] },
+    })
     const response = await POST(
       new Request('http://flare.test/api/customization', {
         method: 'POST',
@@ -89,7 +93,9 @@ describe('appearance permission boundary', () => {
   })
 
   it('lets users see only the published appearance and forbids writes', async () => {
-    mocks.session.mockResolvedValue({ user: { id: 'user', role: 'USER' } })
+    mocks.session.mockResolvedValue({
+      user: { id: 'user', permissions: ['files.read', 'appearance.personal'] },
+    })
     const visible = await (await GET()).json()
     expect(visible.data).toEqual({ published: DEFAULT_APPEARANCE })
     const response = await POST(
@@ -108,7 +114,9 @@ describe('appearance permission boundary', () => {
   })
 
   it('rejects malformed administrator packs before any write', async () => {
-    mocks.session.mockResolvedValue({ user: { id: 'admin', role: 'ADMIN' } })
+    mocks.session.mockResolvedValue({
+      user: { id: 'admin', permissions: ['administrator'] },
+    })
     const response = await POST(
       new Request('http://flare.test/api/customization', {
         method: 'POST',
@@ -125,7 +133,9 @@ describe('appearance permission boundary', () => {
   })
 
   it('passes validated administrator publications to the revision-checked store', async () => {
-    mocks.session.mockResolvedValue({ user: { id: 'admin', role: 'ADMIN' } })
+    mocks.session.mockResolvedValue({
+      user: { id: 'admin', permissions: ['administrator'] },
+    })
     mocks.save.mockResolvedValue(DEFAULT_CUSTOMIZATION)
     const command = {
       action: 'publish',

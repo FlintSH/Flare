@@ -1,7 +1,6 @@
-import { UserRole } from '@prisma/client'
-
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailAddress } from '@/lib/email/account'
+import { lockRoleChanges } from '@/lib/permissions/server'
 import { createUser } from '@/lib/users/create-user'
 
 export interface OidcProfile {
@@ -24,7 +23,6 @@ export interface ResolvedOidcUser {
   name: string
   email: string
   image: string | null
-  role: UserRole
   sessionVersion: number
 }
 
@@ -40,7 +38,6 @@ const userSelect = {
   id: true,
   email: true,
   name: true,
-  role: true,
   image: true,
   sessionVersion: true,
 } as const
@@ -97,6 +94,7 @@ export async function resolveOidcUser(
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    await lockRoleChanges(tx)
     if (config.emailEnabled) {
       await lockEmailAddress(tx, profile.email as string)
       if (
@@ -132,7 +130,6 @@ function toResolvedUser(user: {
   id: string
   email: string | null
   name: string | null
-  role: UserRole
   image: string | null
   sessionVersion: number
 }): ResolvedOidcUser {
@@ -141,7 +138,6 @@ function toResolvedUser(user: {
     email: user.email || '',
     name: user.name || '',
     image: user.image,
-    role: user.role,
     sessionVersion: user.sessionVersion,
   }
 }

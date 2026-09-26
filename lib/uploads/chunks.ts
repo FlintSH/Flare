@@ -15,8 +15,15 @@ import { z } from 'zod'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
+import {
+  captureStorageTarget,
+  parseStorageTarget,
+  sameStorageTarget,
+} from '@/lib/storage/targets'
+import type { StorageTarget } from '@/lib/storage/targets'
 
 import {
   cleanupUncommittedUpload,
@@ -71,6 +78,19 @@ export interface UploadMetadata {
   s3UploadId: string
   options?: ResolvedUploadOptions
   storageFingerprint?: string
+  storageTarget?: StorageTarget
+}
+
+/** A multipart ID belongs to the backend which initialized it, including fallback. */
+export async function getUploadStorage(metadata: UploadMetadata) {
+  const target = parseStorageTarget(metadata.storageTarget)
+  const storage = await getStorageProvider()
+  if (!target || !sameStorageTarget(target, captureStorageTarget(storage)))
+    throw new UploadError(
+      'Storage changed during this upload. Please start a new upload.',
+      409
+    )
+  return storage
 }
 
 async function fingerprint(tx?: Prisma.TransactionClient) {
@@ -185,7 +205,7 @@ export async function initializeChunkUpload(
     (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
   if (
     storageConfig.quotas.enabled &&
-    user.role !== 'ADMIN' &&
+    !hasPermission(user, 'quotas.bypass') &&
     user.storageUsed + size / 1024 ** 2 > quotaMB
   )
     throw new UploadError('The file would exceed your storage quota.', 413)
@@ -213,6 +233,7 @@ export async function initializeChunkUpload(
     s3UploadId,
     options: { ...options, password: null },
     storageFingerprint: await fingerprint(),
+    storageTarget: captureStorageTarget(storage),
   })
   return { uploadId, fileKey: destination.filePath }
 }
@@ -271,7 +292,7 @@ export async function completeChunkUpload(
   const options = applyUploadOverrides(user, initial, overrides)
   // Resolve the provider before entering the lock: its lazy initialization reads
   // configuration through the global client, which may have only one connection.
-  const storage = await getStorageProvider()
+  const storage = await getUploadStorage(metadata)
   try {
     const result = await withUploadLock(id, async (transaction) => {
       await requireUploadMetadata(user, id, transaction)

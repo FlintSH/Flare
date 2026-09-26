@@ -5,6 +5,7 @@ import { UploadForm } from '@/components/file/upload-form'
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { formatBytes } from '@/lib/utils'
 
 export default async function UploadPage() {
@@ -31,6 +32,9 @@ export default async function UploadPage() {
   const { value, unit } = config.settings.general.storage.maxUploadSize
   const maxSizeBytes =
     value * (unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
+
+  if (!hasPermission(session.user, 'files.upload'))
+    redirect('/dashboard/profile')
 
   return (
     <div className="container space-y-6">

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 
-import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { requirePermission } from '@/lib/permissions/server'
 
 const logger = loggers.users
 
@@ -11,10 +11,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('content.read')
+    if (permissionDenied) return permissionDenied
     const { id } = await params
 
-    if (!session?.user || session.user.role !== 'ADMIN') {
+    if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 

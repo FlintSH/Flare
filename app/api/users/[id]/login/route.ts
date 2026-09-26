@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { requireAdmin } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 
@@ -10,7 +10,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const { response } = await requireAdmin()
+  const { response } = await requirePermission('users.read')
   if (response) return response
 
   try {
@@ -22,7 +22,7 @@ export async function POST(
         name: true,
         email: true,
         image: true,
-        role: true,
+        roles: true,
       },
     })
 

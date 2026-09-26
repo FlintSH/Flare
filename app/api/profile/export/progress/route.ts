@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 
-import { getAccessSession } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions/server'
 import { clearProgress, getProgress } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 export async function GET() {
-  const session = await getAccessSession()
+  const { session, response: permissionDenied } =
+    await requirePermission('profile.export')
+  if (permissionDenied) return permissionDenied
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

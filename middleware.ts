@@ -22,10 +22,14 @@ export async function middleware(request: NextRequest) {
     request.headers,
     request.nextUrl.pathname,
     requestedRecovery,
-    recoveryToken?.role === 'ADMIN'
+    Boolean(recoveryToken)
   )
   const next = () =>
     NextResponse.next({ request: { headers: forwardedHeaders } })
+  // API handlers own their explicit session/bearer boundary and return JSON 401/403.
+  // Redirecting here would replace permission errors with login HTML and reject
+  // valid scoped tokens before their route-specific checks can run.
+  if (request.nextUrl.pathname.startsWith('/api/')) return next()
   if (
     (request.nextUrl.pathname.endsWith('/raw') ||
       request.nextUrl.pathname.endsWith('/direct')) &&

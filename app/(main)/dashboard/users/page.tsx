@@ -3,11 +3,12 @@ import { redirect } from 'next/navigation'
 import { UserList } from '@/components/dashboard/user-list'
 
 import { getPageSession } from '@/lib/auth/page-session'
+import { hasPermission } from '@/lib/permissions/catalog'
 
 export default async function UsersPage() {
   const session = await getPageSession()
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !hasPermission(session.user, 'users.read')) {
     redirect('/dashboard')
   }
 

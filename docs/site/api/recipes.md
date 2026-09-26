@@ -5,7 +5,7 @@ description: Practical cURL and Node.js recipes for uploads, pagination, chunkin
 
 # Integration recipes
 
-These examples call your own Flare instance. Set `FLARE_URL` to its origin, such as `https://files.example.com`, and provide `FLARE_TOKEN` through your local environment or your automation platform's secret store. Pick a token with the scopes each recipe needs.
+These examples call your own Flare instance. Set `FLARE_URL` to its origin, such as `https://files.example.com`, and provide `FLARE_TOKEN` through your local environment or your automation platform's secret store. Pick a token with the scopes each recipe needs, and ensure its owner currently holds the corresponding [role permissions](./authentication#scopes-and-account-roles). Upload recipes need `files.upload`, metadata listing needs `files.read`, and link creation needs `links.create`.
 
 The Node.js examples use Node 20+ built-ins. Save each complete JavaScript example as a `.mjs` file and run it with `node`. There is no Flare SDK package to install.
 
@@ -250,3 +250,7 @@ The receiver's in-memory duplicate cache is intentionally simple. For durable ac
 | Link management tool      | `urls:read`, `urls:write` | None                            |
 
 Bind a token when a tool should always follow one profile. Use separate tokens for unrelated jobs so revoking a retired machine does not interrupt active services.
+
+## Exercise delegated administration
+
+Role and account writes require a browser session and are outside named-token recipes. For a runnable example that creates, assigns, verifies, and removes a demonstration role on a disposable instance, use the [session contract walkthrough](./roles#run-a-request-against-a-disposable-instance).

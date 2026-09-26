@@ -29,16 +29,16 @@ All replicas must use the same authentication secret. A secret regenerated on ev
 
 ## Upload error reference
 
-| Symptom                                       | Check                                                                                              |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `413` before Flare sees the request           | Reverse proxy/CDN body-size ceiling; allow multipart overhead                                      |
-| Maximum upload size message                   | Settings → Storage; the per-file limit applies to admins too                                       |
-| Quota exceeded                                | Ordinary user's usage versus the instance quota; admins are exempt from total quota                |
-| `429`                                         | Wait for the returned retry period; avoid restarting the instance as a rate-limit workaround       |
-| `401` or `403` from a tool                    | Token value, scope, expiry, revocation, and required email verification                            |
-| Upload session not found after a restart      | In-progress chunk metadata was local to the previous process/filesystem; start the upload again    |
-| Upload breaks after changing storage settings | Restart the upload after the storage change; active multipart sessions track storage configuration |
-| Small uploads work, large ones fail           | Proxy timeouts, host request limits, temp disk, memory, and S3 multipart permissions               |
+| Symptom                                                    | Check                                                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `413` before Flare sees the request                        | Reverse proxy/CDN body-size ceiling; allow multipart overhead                                                                              |
+| Maximum upload size message                                | Settings → Storage; the per-file limit applies to admins too                                                                               |
+| Quota exceeded                                             | Account usage versus the instance quota; `quotas.bypass` or Administrator exempts total quota                                              |
+| `429`                                                      | Wait for the returned retry period; avoid restarting the instance as a rate-limit workaround                                               |
+| `401` or `403` from a tool                                 | Token value, scope, expiry, revocation, and required email verification                                                                    |
+| Upload session not found after a restart                   | In-progress chunk metadata was local to the previous process/filesystem; start the upload again                                            |
+| Upload breaks after a storage change or provenance upgrade | Start a new upload. Part/completion requests reject `409` for a changed actual provider or old session metadata without a recorded target. |
+| Small uploads work, large ones fail                        | Proxy timeouts, host request limits, temp disk, memory, and S3 multipart permissions                                                       |
 
 Flare has process-local request throttles as well as persistent email throttles. If unrelated users appear to share a rate limit, inspect your proxy's forwarding headers. The app should receive a trusted client IP, not a spoofed header or the same proxy IP for everyone.
 
@@ -60,6 +60,22 @@ If accounts and settings also disappeared, inspect the PostgreSQL volume and dat
 | Expired signed link                                   | Open the original Flare share link again to obtain an authorized fresh URL                                        |
 
 Use the endpoint your provider documents for its S3 API, not its web console or a bucket browsing URL. Test path-style access if required by that provider. Do not change a bucket to public as a blanket fix for access errors.
+
+## A deleted account still has objects in storage
+
+Whole-account deletion removes account records immediately and queues file/avatar cleanup for the background worker. Storage downtime, a changed S3 target, or unknown historical storage locations can leave those jobs pending. Inspect the [cleanup queue and retry times](/hosting/maintenance#inspect-pending-cleanup), then correct the reported connectivity, permissions, or target mismatch. Jobs retry indefinitely and survive app restarts; no manual retry button is needed. **Storage provenance is unknown** needs operator verification of the original location before cleanup can proceed. The current backend and the migration's `previousTarget` diagnostic hint are not proof of that location.
+
+Keep the original local uploads volume mounted for local jobs. S3 jobs need the saved bucket, region, endpoint, and path-style identity to match their recorded target, plus working current credentials. They never redirect cleanup to a new bucket. An already-issued signed URL can remain usable until its object is removed or the URL expires.
+
+If no job exists, confirm whether the deletion happened before the durable-cleanup migration or was an individual file deletion; those older or separate operations are not backfilled into the account queue. Check sanitized logs and backups before reconciling orphaned objects. Account deletion does not remove backups, object versions, or external caches.
+
+## An avatar upload failed or cleanup remains blocked
+
+A new avatar is published only after the storage write succeeds and the account's current permission and quota pass a second check. A deleted account or revoked `profile.update` permission can reject an upload that was already in progress. The old avatar stays in place if publication fails.
+
+Inspect the [cleanup queue](/hosting/maintenance#inspect-pending-cleanup). A `writePending = true` row protects an active or interrupted avatar write from premature deletion. A restart deliberately does not clear that flag. If a writer crashed, follow [interrupted-write recovery](/hosting/maintenance#recover-an-interrupted-avatar-write): stop every possible old writer before releasing the one verified record.
+
+A fresh request to `/api/avatars/{filename}` returns `404` for a key no longer referenced by an account. For a newly recorded avatar, `503` means its stored target cannot be resolved; restore matching S3 settings if applicable. Do not point it at another bucket merely because an identically named key exists there.
 
 ## OIDC sign-in loops or rejects an account
 
@@ -85,7 +101,7 @@ Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WE
 
 Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General and may be opted out for an upload. Processing an image takes time and does not guarantee useful extracted text.
 
-Expiration is a background action; an unavailable process cannot apply it on schedule. Email and webhook jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
+Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
 
 ## Collect a useful support report
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { requireAdmin } from '@/lib/auth/api-auth'
+import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig, resolveEmailConfig } from '@/lib/email/config'
@@ -9,17 +9,18 @@ import {
   emailRoute,
   validateEmailOrigin,
 } from '@/lib/email/http'
-import {
-  hasDurableEmailAccess,
-  hasVerifiedEmail,
-  requiresEmailVerification,
-} from '@/lib/email/policy'
+import { hasVerifiedEmail, requiresEmailVerification } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
+import {
+  assertAccessibleAdministrator,
+  assertCanManageUser,
+  requireActorPermission,
+} from '@/lib/permissions/server'
 
 type Context = { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params }: Context) {
-  const { response } = await requireAdmin()
+  const { response } = await requirePermission('users.email')
   if (response) return response
   return emailRoute(async () => {
     const { id } = await params
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: Context) {
 }
 
 export async function POST(req: Request, { params }: Context) {
-  const { response } = await requireAdmin()
+  const { user: actor, response } = await requirePermission('users.email')
   if (response) return response
   return emailRoute(async () => {
     const { id } = await params
@@ -58,6 +59,8 @@ export async function POST(req: Request, { params }: Context) {
         config = resolveEmailConfig(saved.settings?.email).config
       }
       if (!config.enabled) throw new EmailHttpError('Email is disabled.')
+      await requireActorPermission(tx, actor.id, 'users.email')
+      await assertCanManageUser(tx, actor.id, id)
       const user = await lockEmailUser(tx, id)
       if (action === 'resend') {
         if (
@@ -71,25 +74,11 @@ export async function POST(req: Request, { params }: Context) {
         await sendAccountToken(tx, user, 'verify', config)
         return
       }
-      if (action === 'require' && user.role === 'ADMIN') {
-        const admins = await tx.user.findMany({ where: { role: 'ADMIN' } })
-        if (
-          !admins.some((admin) =>
-            hasDurableEmailAccess(
-              admin.id === id ? { ...admin, emailExempt: false } : admin,
-              config
-            )
-          )
-        ) {
-          throw new EmailHttpError(
-            'Verify an administrator email before removing the last administrator exemption.'
-          )
-        }
-      }
       await tx.user.update({
         where: { id },
         data: { emailExempt: action === 'exempt' },
       })
+      await assertAccessibleAdministrator(tx, config)
     })
     return {
       message:

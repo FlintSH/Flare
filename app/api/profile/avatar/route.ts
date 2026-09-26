@@ -1,27 +1,24 @@
 import { NextResponse } from 'next/server'
 
-import { join } from 'path'
-
-import { getAccessSession } from '@/lib/auth'
-import { getConfig } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { PermissionError, requirePermission } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
-import { getStorageProvider } from '@/lib/storage'
-import { bytesToMB } from '@/lib/utils'
+import { uploadAvatar } from '@/lib/storage/avatar'
 
 const logger = loggers.users
 
 export async function POST(req: Request) {
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('profile.update')
+    if (permissionDenied) return permissionDenied
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const formData = await req.formData()
-    const file = formData.get('file') as File
-    if (!file) {
+    const file = formData.get('file')
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
@@ -51,79 +48,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const config = await getConfig()
-    const quotasEnabled = config.settings.general.storage.quotas.enabled
-    const defaultQuota = config.settings.general.storage.quotas.default
-
-    if (quotasEnabled && session.user.role !== 'ADMIN') {
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { storageUsed: true },
-      })
-
-      if (!user) {
-        return NextResponse.json({ error: 'User not found' }, { status: 400 })
-      }
-
-      const quotaMB =
-        defaultQuota.value * (defaultQuota.unit === 'GB' ? 1024 : 1)
-      const fileSizeMB = bytesToMB(file.size)
-
-      if (user.storageUsed + fileSizeMB > quotaMB) {
-        return NextResponse.json(
-          {
-            error: 'Storage quota exceeded',
-            message: `You have reached your storage quota of ${defaultQuota.value}${defaultQuota.unit}`,
-          },
-          { status: 413 }
-        )
-      }
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { image: true },
-    })
-
-    const processedImage = avatarBuffer
-
-    const storageProvider = await getStorageProvider()
-    const avatarFilename = `${session.user.id}.jpg`
-    const avatarPath = join('uploads', 'avatars', avatarFilename)
-    let publicPath = `/api/avatars/${avatarFilename}`
-
-    if (user?.image?.startsWith('/api/avatars/')) {
-      try {
-        const oldFilename = user.image.split('/').pop()
-        if (oldFilename) {
-          const oldPath = join('uploads', 'avatars', oldFilename)
-          await storageProvider.deleteFile(oldPath)
-        }
-      } catch (error) {
-        logger.error('Failed to delete old avatar', error as Error, {
-          userId: session.user.id,
-          oldPath: user.image,
-        })
-      }
-    }
-
-    await storageProvider.uploadFile(processedImage, avatarPath, 'image/jpeg')
-
-    // S3 exposes a stable public URL; local is served via /api/avatars/*.
-    const publicUrl = await storageProvider.getPublicUrl(avatarPath)
-    if (publicUrl) {
-      publicPath = publicUrl
-    }
-
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        image: publicPath,
-      },
-    })
-
+    const publicPath = await uploadAvatar(session.user.id, avatarBuffer)
     return NextResponse.json({ success: true, url: publicPath })
   } catch (error) {
+    if (error instanceof PermissionError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      )
     logger.error('Avatar upload error', error as Error)
     return NextResponse.json(
       { error: 'Failed to upload avatar' },

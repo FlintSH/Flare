@@ -20,8 +20,10 @@ model User {
   emailTokens                 EmailToken[]
   mailOutbox                  MailOutbox[]
   image                       String?
+  avatarStoragePath           String?
+  avatarStorageTarget         Json?
   password                    String?
-  role                        UserRole        @default(USER)
+  roles                       Role[]
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
   storageUsed                 Float           @default(0)
@@ -42,6 +44,21 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  color       String   @default("#64748b")
+  position    Int      @default(1)
+  permissions String[]
+  systemKey   String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@index([position])
 }
 
 model EmailToken {
@@ -104,6 +121,7 @@ model File {
   uploadedAt       DateTime       @default(now())
   userId           String
   path             String
+  storageTarget    Json?
   isOcrProcessed   Boolean        @default(false)
   ocrText          String?
   password         String?
@@ -253,6 +271,29 @@ model Config {
   @@index([key])
 }
 
+// Durable object deletion survives removal of the owning account and its files.
+// Targets contain backend identity only; credentials are read fresh by the worker.
+model StorageDeletion {
+  id           String    @id @default(cuid())
+  ownerId      String
+  path         String
+  provider     String
+  target       Json      @default("{}")
+  status       String    @default("pending")
+  attempts     Int       @default(0)
+  writePending Boolean   @default(false)
+  availableAt  DateTime  @default(now())
+  leaseId      String?
+  leaseUntil   DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, availableAt])
+  @@index([leaseUntil])
+  @@index([ownerId])
+}
+
 model Event {
   id          String      @id @default(cuid())
   type        String
@@ -287,11 +328,6 @@ model EventHandler {
   @@unique([eventType, handler])
   @@index([eventType])
   @@index([enabled])
-}
-
-enum UserRole {
-  ADMIN
-  USER
 }
 
 enum FileVisibility {

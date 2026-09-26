@@ -1,12 +1,9 @@
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { requirePermission } from '@/lib/permissions/server'
 import { validateOwnedTagIds } from '@/lib/tags/service'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
-import {
-  profileError,
-  profileSession,
-  profileView,
-} from '@/lib/uploads/profiles'
+import { profileError, profileView } from '@/lib/uploads/profiles'
 import {
   mergeUploadOptions,
   uploadProfileInputSchema,
@@ -15,8 +12,8 @@ import {
 } from '@/lib/uploads/schema'
 
 export async function GET() {
-  const user = await profileSession()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, response } = await requirePermission('uploadProfiles.manage')
+  if (response) return response
   try {
     const [profiles, account] = await Promise.all([
       prisma.uploadProfile.findMany({
@@ -64,8 +61,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = await profileSession()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const { user, response } = await requirePermission('uploadProfiles.manage')
+  if (response) return response
   const guarded = profileMutationGuard(req)
   if (guarded) return guarded
   try {

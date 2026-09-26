@@ -62,7 +62,6 @@ export async function POST(req: Request) {
         name: validatedData.admin.name,
         email: validatedData.admin.email,
         password: hashedPassword,
-        role: 'ADMIN',
         emailExempt: true,
       })
       await tx.config.upsert({

@@ -5,9 +5,11 @@ description: Organize files and subfolders, move files in bulk, and share a coll
 
 # Folders and collections
 
+Browsing folders uses `files.read`; creating and organizing them requires `folders.manage`. Moving existing files also needs `files.update`. Publishing or revoking a folder link requires `folders.share`. These grants come from your [roles](/admin/roles), not from membership in the folder.
+
 Folders give a project or collection its own place while **All files** keeps your entire library available. Each file belongs to one folder or is unfiled. [Tags](./tags) work across folders when a file belongs to several topics.
 
-Folders are available without an administrator enabling a setting. Creating a folder does not change file links, storage paths, visibility, or passwords.
+Everyone initially includes folder permissions; an administrator can restrict them through roles. Creating a folder does not change file links, storage paths, visibility, or passwords.
 
 <Screenshot src="/evidence/vault-folders/folder-desktop.jpg" alt="A folder containing files, a child folder, tags, and Share and Upload here controls" caption="Browse a project's direct files while keeping subfolders and sharing controls close by." />
 

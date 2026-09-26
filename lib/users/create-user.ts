@@ -1,6 +1,8 @@
-import { Prisma, User, UserRole } from '@prisma/client'
+import { Prisma, User } from '@prisma/client'
 import { nanoid } from 'nanoid'
 import { v4 as uuidv4 } from 'uuid'
+
+import { ensureBuiltInRoles, lockRoleChanges } from '@/lib/permissions/server'
 
 type TransactionClient = Prisma.TransactionClient
 
@@ -35,7 +37,7 @@ interface CreateUserInput {
   image?: string | null
   password?: string
   oidcSubject?: string
-  role?: UserRole
+  roleIds?: string[]
   emailVerified?: Date
   emailVerifiedFor?: string
   emailVerificationSource?: string
@@ -46,13 +48,14 @@ export async function createUser(
   tx: TransactionClient,
   input: CreateUserInput
 ): Promise<User> {
-  const urlId = await generateUniqueUrlId(tx)
-
-  let role = input.role
-  if (!role) {
-    const userCount = await tx.user.count()
-    role = userCount === 0 ? 'ADMIN' : 'USER'
+  await lockRoleChanges(tx)
+  const firstAccount = (await tx.user.count()) === 0
+  const roleIds = [...new Set(input.roleIds ?? [])]
+  if (firstAccount) {
+    const { administrator } = await ensureBuiltInRoles(tx)
+    if (!roleIds.includes(administrator.id)) roleIds.push(administrator.id)
   }
+  const urlId = await generateUniqueUrlId(tx)
 
   return tx.user.create({
     data: {
@@ -66,7 +69,7 @@ export async function createUser(
       emailVerificationSource: input.emailVerificationSource,
       emailExempt: input.emailExempt,
       urlId,
-      role,
+      roles: { connect: roleIds.map((id) => ({ id })) },
       uploadToken: uuidv4(),
     },
   })

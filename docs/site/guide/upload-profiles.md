@@ -5,6 +5,8 @@ description: Save reusable sharing choices, understand inheritance, and use the 
 
 # Upload profiles and defaults
 
+Managing saved profiles, importing/exporting recipes, and selecting an account default requires `uploadProfiles.manage`. Changing account upload defaults uses `profile.update`. Uploading with an existing profile still requires `files.upload`; a profile never grants a permission missing from your [roles](/admin/roles).
+
 An upload profile saves how you want a new upload to behave. Make one for everyday screenshots, another for private work, and another for temporary clips. The same choices can follow uploads from the browser, pastes, screenshot tools, and your own integrations.
 
 Open **Profile → Uploads** to manage profiles. [Try the upload-options lab](/demos#upload-options-lab) to explore how defaults combine before changing your account.

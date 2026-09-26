@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { URLForm } from '@/components/dashboard/url-form'
 import { URLList } from '@/components/dashboard/url-list'
+import { PermissionGate } from '@/components/roles/permission-gate'
 
 export function URLsClient() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -11,16 +12,17 @@ export function URLsClient() {
 
   return (
     <div className="space-y-6">
-      <URLForm
-        createdUrl={createdUrl}
-        onUrlAdded={(shortCode) => {
-          setCreatedUrl(
-            shortCode ? `${window.location.origin}/u/${shortCode}` : ''
-          )
-          setRefreshTrigger((previous) => previous + 1)
-        }}
-      />
-
+      <PermissionGate permission="links.create">
+        <URLForm
+          createdUrl={createdUrl}
+          onUrlAdded={(shortCode) => {
+            setCreatedUrl(
+              shortCode ? `${window.location.origin}/u/${shortCode}` : ''
+            )
+            setRefreshTrigger((previous) => previous + 1)
+          }}
+        />
+      </PermissionGate>
       <URLList
         refreshTrigger={refreshTrigger}
         onUrlDeleted={(shortCode) => {

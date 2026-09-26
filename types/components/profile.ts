@@ -9,7 +9,6 @@ export interface ProfileClientProps {
   formattedQuota: string
   formattedUsed: string
   usagePercentage: number
-  isAdmin: boolean
   initialSection: (typeof PROFILE_SECTIONS)[number]
   initialPreference: PersonalAppearance
 }

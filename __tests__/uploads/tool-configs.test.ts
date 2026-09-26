@@ -6,6 +6,7 @@ import { POST as spectacle } from '@/app/api/profile/spectacle/route'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getAuthenticatedUser } from '@/lib/auth/api-auth'
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import {
   requestUploadOptions,
   resolveUploadOptions,
@@ -22,6 +23,15 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     user: { findUnique: mocks.user },
+    role: {
+      findUnique: vi.fn(async () => ({
+        id: 'everyone',
+        name: 'Everyone',
+        position: 0,
+        systemKey: 'everyone',
+        permissions: [...DEFAULT_PERMISSIONS],
+      })),
+    },
     uploadProfile: { findFirst: mocks.profile },
     apiToken: {
       findUnique: mocks.findApiToken,
@@ -51,7 +61,8 @@ const owner = {
   storageUsed: 0,
   urlId: 'owner',
   vanityId: null,
-  role: 'USER',
+  roles: [],
+  permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: false,
   defaultUploadProfileId: 'default-profile',
   defaultFileExpiration: 'DISABLED',
@@ -85,7 +96,9 @@ const clients = [
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('NEXTAUTH_URL', 'https://flare.test/')
-  mocks.session.mockResolvedValue({ user: { id: owner.id } })
+  mocks.session.mockResolvedValue({
+    user: { id: owner.id, permissions: [...DEFAULT_PERMISSIONS] },
+  })
   mocks.user.mockResolvedValue(owner)
   mocks.profile.mockImplementation(async ({ where }) =>
     where.userId === owner.id &&
@@ -183,7 +196,7 @@ describe.each(clients)('$name setup download', (client) => {
     mocks.session.mockResolvedValue(null)
     const user = await getAuthenticatedUser(request)
     expect(user?.id).toBe(owner.id)
-    expect(mocks.user).toHaveBeenLastCalledWith(
+    expect(mocks.user).toHaveBeenCalledWith(
       expect.objectContaining({ where: { uploadToken: owner.uploadToken } })
     )
     await expect(
@@ -225,7 +238,9 @@ describe.each(clients)('$name setup download', (client) => {
       mocks.session.mockResolvedValue(null)
       const response = await download(undefined, authorization)
       expect(response.status).toBe(401)
-      expect(await response.json()).toEqual({ error: 'Unauthorized' })
+      expect(await response.json()).toEqual({
+        error: 'Authentication required',
+      })
       expect(mocks.user).not.toHaveBeenCalled()
       expect(mocks.profile).not.toHaveBeenCalled()
     }

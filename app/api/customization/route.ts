@@ -8,6 +8,8 @@ import { appearanceMutationGuard } from '@/lib/customization/http'
 import { appearanceCommandSchema } from '@/lib/customization/schema'
 import { CustomizationError } from '@/lib/customization/state'
 import { saveAppearance } from '@/lib/customization/store'
+import { hasPermission } from '@/lib/permissions/catalog'
+import { requirePermission } from '@/lib/permissions/server'
 
 export async function GET() {
   const session = await getAccessSession()
@@ -19,26 +21,22 @@ export async function GET() {
   const { customization } = (await getConfig()).settings
   return NextResponse.json(
     {
-      data:
-        session.user.role === 'ADMIN'
-          ? customization
-          : { published: customization.published },
+      data: hasPermission(session.user, 'appearance.manage')
+        ? customization
+        : { published: customization.published },
     },
     { headers: { 'Cache-Control': 'private, no-store' } }
   )
 }
 
 export async function POST(request: Request) {
-  const session = await getAccessSession()
+  const { session, response: permissionDenied } =
+    await requirePermission('appearance.manage')
+  if (permissionDenied) return permissionDenied
   if (!session?.user)
     return NextResponse.json(
       { error: 'Sign in to customize Flare.' },
       { status: 401 }
-    )
-  if (session.user.role !== 'ADMIN')
-    return NextResponse.json(
-      { error: 'Only administrators can change instance appearance.' },
-      { status: 403 }
     )
   const rejected = appearanceMutationGuard(request)
   if (rejected) return rejected

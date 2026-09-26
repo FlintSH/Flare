@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 
-import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { requirePermission } from '@/lib/permissions/server'
 import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
 import { generatorProfile } from '@/lib/uploads/profiles'
 
@@ -10,7 +10,9 @@ const logger = loggers.users
 
 export async function GET(req: Request) {
   try {
-    const session = await getAccessSession()
+    const { session, response: permissionDenied } =
+      await requirePermission('tokens.manage')
+    if (permissionDenied) return permissionDenied
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

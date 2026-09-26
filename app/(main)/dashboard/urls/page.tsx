@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { URLsClient } from '@/components/dashboard/urls-client'
 
 import { getPageSession } from '@/lib/auth/page-session'
+import { hasPermission } from '@/lib/permissions/catalog'
 
 export default async function URLsPage() {
   const session = await getPageSession()
@@ -10,6 +11,8 @@ export default async function URLsPage() {
   if (!session?.user) {
     redirect('/auth/login')
   }
+
+  if (!hasPermission(session.user, 'links.read')) redirect('/dashboard/profile')
 
   return (
     <div className="container space-y-6">

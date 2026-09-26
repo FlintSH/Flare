@@ -11,6 +11,7 @@ import {
   LinkIcon,
   Menu,
   Settings,
+  Shield,
   Upload,
   UserRound,
   Users,
@@ -27,6 +28,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
+import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
 
 const baseRoutes = [
@@ -34,39 +36,52 @@ const baseRoutes = [
     href: '/dashboard',
     label: 'Files',
     icon: FolderOpen,
+    permission: 'files.read',
   },
   {
     href: '/dashboard/upload',
     label: 'Upload',
     icon: Upload,
+    permission: 'files.upload',
   },
   {
     href: '/dashboard/paste',
     label: 'Paste',
     icon: FileText,
+    permission: 'pastes.create',
   },
   {
     href: '/dashboard/urls',
     label: 'Links',
     icon: LinkIcon,
+    permission: 'links.read',
   },
   {
     href: '/dashboard/profile',
     label: 'Profile',
     icon: UserRound,
+    permission: null,
   },
 ]
 
-const adminRoutes = [
+const managementRoutes = [
+  {
+    href: '/dashboard/roles',
+    label: 'Roles',
+    icon: Shield,
+    permission: 'roles.manage',
+  },
   {
     href: '/dashboard/users',
     label: 'Users',
     icon: Users,
+    permission: 'users.read',
   },
   {
     href: '/dashboard/settings',
     label: 'Settings',
     icon: Settings,
+    permission: 'settings.read',
   },
 ]
 
@@ -75,10 +90,13 @@ export function DashboardNav() {
   const [open, setOpen] = useState(false)
   const { data: session } = useSession()
 
-  const routes =
-    session?.user?.role === 'ADMIN'
-      ? [...baseRoutes, ...adminRoutes]
-      : baseRoutes
+  const routes = [...baseRoutes, ...managementRoutes].filter(
+    (route) =>
+      !route.permission ||
+      (hasPermission(session?.user, route.permission as Permission) &&
+        (route.permission !== 'pastes.create' ||
+          hasPermission(session?.user, 'files.upload')))
+  )
 
   return (
     <nav
@@ -86,8 +104,12 @@ export function DashboardNav() {
       className="flex min-w-0 flex-1 items-center gap-4"
     >
       <Link
-        href="/dashboard"
-        aria-label="Go to your files"
+        href={
+          hasPermission(session?.user, 'files.read')
+            ? '/dashboard'
+            : '/dashboard/profile'
+        }
+        aria-label="Go to your dashboard"
         className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:max-w-[220px]"
       >
         <InstanceBrand iconClassName="h-6 w-6 text-primary" />

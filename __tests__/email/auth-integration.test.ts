@@ -637,17 +637,19 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         Date.now() + 86400000
       ).toISOString()
       const account = await user({
-        role: 'ADMIN',
+        roles: { connect: { systemKey: 'administrator' } },
         emailExempt: true,
         emailVerifiedFor: null,
         emailVerificationSource: null,
       })
       await persistConfig(config)
-      state.session = { user: { id: account.id, role: 'ADMIN' } }
+      state.session = {
+        user: { id: account.id, permissions: ['administrator'] },
+      }
       const response = await adminEmail(request({ action: 'require' }), {
         params: Promise.resolve({ id: account.id }),
       })
-      expect(response.status).toBe(400)
+      expect(response.status).toBe(409)
       expect(
         (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
           .emailExempt

@@ -5,6 +5,8 @@ description: Search filenames and extracted text, combine filters, browse images
 
 # Your file library
 
+Browsing your library requires `files.read`. File edits, sharing changes, and deletion use the separate `files.update`, `files.share`, and `files.delete` permissions. Bulk actions follow the same checks; missing actions may reflect your [roles](/admin/roles).
+
 **Files** is your home for uploaded files and pastes. Each card brings together a preview, filename, size, activity, and file actions. The library opens with all your files; organizing into folders or tags is optional.
 
 Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upgrading-from-2-0-to-2-1) for plain copied links and URL-ID changes before updating saved links or custom clients. The dependency refresh keeps the filtering and viewer controls described here.
@@ -70,7 +72,11 @@ Open the card's menu for the full action list. On a desktop, preview actions als
 - **Extract text (OCR):** read text from an image.
 - **Delete file:** permanently remove the file after confirmation.
 
-<Screenshot src="/screenshots/workspace/files-actions.png" alt="File action menu in the library" caption="The file menu keeps access, organization, download, and deletion controls together." />
+The card menu and the buttons shown when you hover a file follow the same permissions. **Change visibility** and **Add password / Manage password** require `files.share`; **Manage expiration** requires `files.update`. Neither grant implies the other: a person allowed to share can manage passwords without file-edit permission, and a person allowed to edit can open expiration controls without sharing permission. Scheduling **Delete** still additionally requires `files.delete`, and **Set to private** requires `files.share`.
+
+<Screenshot src="/screenshots/roles/share-only-menu.webp" alt="File menu for an account with sharing permission showing Add password and Change visibility, without Manage expiration" caption="Sharing permission makes password controls available independently of file-edit permission." />
+
+<Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
 
 Use **Select** to work with multiple files. Select individual items or the current page, then **Edit tags** or **Move**. Selecting a page applies to the files on that page, not every result in your library.
 

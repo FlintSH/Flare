@@ -102,9 +102,14 @@ await copyFile(
   resolve(root, 'public/integrations.mjs')
 )
 await mkdir(resolve(root, 'public/demos'), { recursive: true })
-for (const name of ['organizing-demo', 'sharing-demo', 'protected-file-demo']) {
+for (const [directory, name] of [
+  ['vault-folders', 'organizing-demo'],
+  ['vault-folders', 'sharing-demo'],
+  ['vault-folders', 'protected-file-demo'],
+  ['roles', 'roles-demo'],
+]) {
   await copyFile(
-    resolve(root, '../../.github/assets/vault-folders', `${name}.mp4`),
+    resolve(root, '../../.github/assets', directory, `${name}.mp4`),
     resolve(root, 'public/demos', `${name}.mp4`)
   )
 }

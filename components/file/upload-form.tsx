@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -303,44 +304,48 @@ export function UploadForm({
           onChange={setProfileId}
           disabled={isUploading}
         />
-        <div className="space-y-2">
-          <Label htmlFor="upload-visibility">Visibility</Label>
-          <Select
-            value={visibility || 'inherit'}
-            disabled={isUploading}
-            onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
-              setVisibility(value === 'inherit' ? undefined : value)
-            }
-          >
-            <SelectTrigger id="upload-visibility">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inherit">From upload profile</SelectItem>
-              <SelectItem value="PUBLIC">
-                Public (anyone with the link)
-              </SelectItem>
-              <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="upload-password">
-            Password protection{' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <Input
-            id="upload-password"
-            type="password"
-            autoComplete="new-password"
-            disabled={isUploading}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Leave empty for no password"
-          />
-        </div>
+        <PermissionGate permission="files.share">
+          <div className="space-y-2">
+            <Label htmlFor="upload-visibility">Visibility</Label>
+            <Select
+              value={visibility || 'inherit'}
+              disabled={isUploading}
+              onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
+                setVisibility(value === 'inherit' ? undefined : value)
+              }
+            >
+              <SelectTrigger id="upload-visibility">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="inherit">From upload profile</SelectItem>
+                <SelectItem value="PUBLIC">
+                  Public (anyone with the link)
+                </SelectItem>
+                <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </PermissionGate>
+        <PermissionGate permission="files.share">
+          <div className="space-y-2">
+            <Label htmlFor="upload-password">
+              Password protection{' '}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              id="upload-password"
+              type="password"
+              autoComplete="new-password"
+              disabled={isUploading}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Leave empty for no password"
+            />
+          </div>
+        </PermissionGate>
         <div className="space-y-2">
           <Label htmlFor="upload-expiration">
             File expiration{' '}

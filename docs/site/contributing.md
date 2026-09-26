@@ -81,7 +81,7 @@ npx playwright install chromium
 npm test
 ```
 
-Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
+Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
 
 When changing links or theme components, also test a subpath build:
 
@@ -97,6 +97,26 @@ DOCS_BASE=/flare/ npm test
 Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. Use Node.js 24 and the pnpm version in the root `package.json`; install with `pnpm install --frozen-lockfile` and `npm ci --prefix docs/site`. Check both dependency trees with `pnpm audit` and `npm audit --prefix docs/site` before a release. A clean audit describes the advisories known at that time, not a guarantee against future findings.
 
 The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress. Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
+
+## Database permission and avatar regression tests
+
+The role/cleanup and avatar race suites require **two separate disposable PostgreSQL databases**. Create them on a loopback server with names beginning `flare_roles_test_` and `flare_avatar_test_`. Use a local test database role allowed to apply migrations and manage fixture tables. Both suites clear fixture tables in their dedicated databases. Do not use an application or browser-demo database for these tests.
+
+From the repository root, set connection URLs appropriate to that disposable server. These examples assume the local test role can connect without a password; supply your test server's authentication and port when needed:
+
+```sh
+export FLARE_ROLES_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_roles_test_local?schema=public'
+export FLARE_AVATAR_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_avatar_test_local?schema=public'
+DATABASE_URL="$FLARE_ROLES_DATABASE_URL" pnpm exec prisma migrate deploy
+DATABASE_URL="$FLARE_AVATAR_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run \
+  __tests__/permissions/database.test.ts \
+  __tests__/storage/avatar-database.test.ts
+```
+
+Apply migrations to both databases before running the suites. Missing either environment variable **skips that suite**; check the test output rather than treating a skipped run as coverage. CI supplies both URLs. The database checks exercise role authority, recovery safeguards, bulk account cleanup, original storage targets, upload/deletion races, and durable avatar intents. They use real PostgreSQL and local files, with controlled S3 SDK responses; they do not substitute for testing a real S3-compatible provider.
+
+The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
 
 ## Local visual testing with Meticulous
 
@@ -178,7 +198,9 @@ The former `.github/workflows/meticulous.yaml` workflow has been removed. Once t
 
 ## Automatic coverage checks
 
-`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations and scopes against `openapi.json`, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
+`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
+
+Changes to role and user-management components or `lib/permissions/` require administration guidance; changes to the permission-to-route map also require the API reference. The gate tests these paths with an isolated Git fixture.
 
 CI also checks each non-merge commit on pull requests and direct pushes to `main`:
 

@@ -40,6 +40,13 @@ const steps = [
     link: '/admin/appearance',
   },
   {
+    title: 'Give every role a clear purpose',
+    label: 'Delegate',
+    src: '/screenshots/roles/role-editor.webp',
+    text: 'Create reusable permission groups, combine roles on an account, and delegate moderation or design. Everyone supplies the baseline; additional roles add access.',
+    link: '/admin/roles',
+  },
+  {
     title: 'Keep your tools connected',
     label: 'Automate',
     src: '/screenshots/handbook/integrations.webp',

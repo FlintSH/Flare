@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
+import { PermissionGate } from '@/components/roles/permission-gate'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -18,6 +19,8 @@ import {
   type UploadProfileOptions,
   type UploadProfileView,
 } from '@/lib/uploads/schema'
+
+import { usePermissions } from '@/hooks/use-permissions'
 
 export type ProfilesData = {
   profiles: UploadProfileView[]
@@ -63,6 +66,7 @@ export function ProfilePicker({
   onChange: (value: string | null | undefined) => void
   disabled?: boolean
 }) {
+  const { can } = usePermissions()
   const { data, error } = useUploadProfiles()
   const selectedId = value === undefined ? data?.defaultProfileId : value
   const profile = data?.profiles.find((entry) => entry.id === selectedId)
@@ -80,12 +84,14 @@ export function ProfilePicker({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor="upload-profile">Upload profile</Label>
-        <Link
-          href="/dashboard/profile?section=uploads"
-          className="text-sm underline underline-offset-4 text-muted-foreground"
-        >
-          Manage profiles
-        </Link>
+        <PermissionGate permission="uploadProfiles.manage">
+          <Link
+            href="/dashboard/profile?section=uploads"
+            className="text-sm underline underline-offset-4 text-muted-foreground"
+          >
+            Manage profiles
+          </Link>
+        </PermissionGate>
       </div>
       <Select
         value={
@@ -116,10 +122,15 @@ export function ProfilePicker({
           ))}
         </SelectContent>
       </Select>
+      {!can('files.share') && (
+        <p className="text-xs text-muted-foreground">
+          Your uploads are private because your roles do not allow sharing.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         {error ||
           (effective
-            ? `${effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. Options below override this upload only.`
+            ? `${!can('files.share') || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. Options below override this upload only.`
             : 'Your saved default is applied by the server.')}
       </p>
     </div>

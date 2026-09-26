@@ -2,6 +2,7 @@ import { startMailWorker } from '@/lib/email/worker'
 import { initializeEventSystem } from '@/lib/events/init'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
+import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
 import { startOcrTagWorker } from '@/lib/tags/worker'
 
 const logger = loggers.startup
@@ -18,6 +19,7 @@ export async function runStartupTasks() {
   try {
     logger.info('Running startup tasks...')
 
+    startStorageDeletionWorker()
     await initializeEventSystem()
     startMailWorker()
     startWebhookWorker()

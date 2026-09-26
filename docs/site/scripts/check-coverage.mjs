@@ -27,6 +27,22 @@ const moduleSource = stripTypeScriptTypes(
 const { requiredApiScope } = await import(
   `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`
 )
+const permissionSource = stripTypeScriptTypes(
+  await read('lib/permissions/requests.ts')
+)
+const { requestPermissions } = await import(
+  `data:text/javascript;base64,${Buffer.from(permissionSource).toString('base64')}`
+)
+const catalogSource = stripTypeScriptTypes(
+  await read('lib/permissions/catalog.ts')
+)
+const { ALL_PERMISSIONS } = await import(
+  `data:text/javascript;base64,${Buffer.from(catalogSource).toString('base64')}`
+)
+const rolesGuide = await read('docs/site/admin/roles.md')
+for (const permission of ALL_PERMISSIONS)
+  if (!rolesGuide.includes('`' + permission + '`'))
+    errors.push(`Role permission missing from handbook: ${permission}`)
 const operations = new Set()
 let routes = 0
 for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
@@ -61,6 +77,19 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
       errors.push(
         `Wrong OpenAPI scope for ${method} ${path}: expected ${scope}`
       )
+    if (operation) {
+      const permissions = requestPermissions(
+        method,
+        path.replace(/\{partNumber\}/g, '1').replace(/\{[^}]+\}/g, 'example-id')
+      )
+      if (
+        JSON.stringify(operation['x-flare-permissions']) !==
+        JSON.stringify(permissions)
+      )
+        errors.push(
+          `Wrong OpenAPI role permissions for ${method} ${path}: expected ${permissions}`
+        )
+    }
   }
 }
 for (const [path, entry] of Object.entries(spec.paths || {})) {
@@ -140,5 +169,5 @@ if (errors.length) {
   process.exit(1)
 }
 console.log(
-  `Documentation covers ${routes} API route files, ${operations.size} named-token operations, ${envNames.size} environment options, and the canonical webhook schema.`
+  `Documentation covers ${routes} API route files, ${operations.size} named-token operations, ${envNames.size} environment options, ${ALL_PERMISSIONS.length} role permissions, and the canonical webhook schema.`
 )

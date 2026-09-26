@@ -5,9 +5,9 @@ import { getServerSession } from 'next-auth'
 import { SetupWizard } from '@/components/setup/setup-wizard'
 
 import { getAuthOptions } from '@/lib/auth'
-import { prisma } from '@/lib/database/prisma'
 import { checkSetupCompletion } from '@/lib/database/setup'
 import { getEmailConfig } from '@/lib/email/config'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { getSetupSignInPath, getSetupStep } from '@/lib/setup/navigation'
 
 export default async function SetupPage({
@@ -19,11 +19,7 @@ export default async function SetupPage({
   const { step } = await searchParams
   const session = await getServerSession(await getAuthOptions())
   if (!session?.user?.id) redirect(getSetupSignInPath(step))
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true },
-  })
-  if (user?.role !== 'ADMIN') redirect('/dashboard')
+  if (!hasPermission(session.user, 'administrator')) redirect('/dashboard')
   const email = await getEmailConfig()
   return (
     <SetupWizard

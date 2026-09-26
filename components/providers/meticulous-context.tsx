@@ -24,8 +24,8 @@ export function MeticulousContext({
       window.Meticulous?.context.recordUserId(session.user.id)
       window.Meticulous?.context.recordUserEmail(session.user.email)
       window.Meticulous?.context.recordCustomContext(
-        'userRole',
-        session.user.role
+        'userRoles',
+        session.user.roles.map((role) => role.name).join(', ')
       )
     }
     window.Meticulous?.context.recordCustomContext('authStatus', status)

@@ -76,7 +76,7 @@ describe('optional user fields', () => {
       await render().updateUser('existing', {
         name: 'Edited user',
         email: 'edited@example.test',
-        role: 'USER',
+        roleIds: [],
         vanityId,
       })
 
@@ -108,7 +108,7 @@ describe('user-list loading ownership', () => {
     const mutation = render().createUser({
       name: 'New user',
       email: 'new@example.test',
-      role: 'USER',
+      roleIds: [],
     })
     harness.fetch.mockResolvedValueOnce(listResponse('Matching user'))
     await render('Matching').fetchUsers()
@@ -177,7 +177,7 @@ describe('user-list loading ownership', () => {
       const form = {
         name: 'New user',
         email: 'new@example.test',
-        role: 'USER' as const,
+        roleIds: [] as string[],
       }
       const mutation =
         operation === 'create'
@@ -208,4 +208,16 @@ describe('user-list loading ownership', () => {
       expect(render('Matching').users[0].name).toBe('Matching user')
     }
   )
+  it('preserves the server explanation and rejects a blocked account deletion', async () => {
+    const message = 'Keep at least one accessible administrator.'
+    harness.fetch.mockResolvedValueOnce(
+      Response.json({ error: message }, { status: 409 })
+    )
+    const hook = render()
+    await expect(hook.deleteUser('last-administrator')).rejects.toThrow(message)
+    expect(harness.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ description: message, variant: 'destructive' })
+    )
+    expect(harness.refresh).not.toHaveBeenCalled()
+  })
 })

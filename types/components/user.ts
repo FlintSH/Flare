@@ -6,7 +6,8 @@ export interface User {
   email: string | null
   image: string | null
   storageUsed: number
-  role: 'ADMIN' | 'USER'
+  roles: import('@/lib/permissions/catalog').RoleSummary[]
+  permissions: string[]
   randomizeFileUrls: boolean
   urlId: string
   vanityId: string | null
@@ -22,7 +23,6 @@ export interface ProfileClientProps {
   formattedQuota: string
   formattedUsed: string
   usagePercentage: number
-  isAdmin: boolean
 }
 
 export interface PaginationData {
@@ -40,6 +40,7 @@ export interface UsersResponse {
 export interface UserFormData {
   name: string
   email: string
-  role: 'ADMIN' | 'USER'
+  roles: import('@/lib/permissions/catalog').RoleSummary[]
+  permissions: string[]
   quota?: number
 }

@@ -172,7 +172,12 @@ describe('protected shared-folder links', () => {
   })
 
   it('lets the existing owner access rule bypass the password', async () => {
-    mocks.session.mockResolvedValue({ user: { id: file.userId, role: 'USER' } })
+    mocks.session.mockResolvedValue({
+      user: {
+        id: file.userId,
+        permissions: ['files.read', 'appearance.personal'],
+      },
+    })
     await expect(openFile()).rejects.toThrow('REDIRECT:')
     expect(mocks.redirect).toHaveBeenCalledWith(
       '/recipient-slug/Quarterly%20Budget%20FY26.pdf'

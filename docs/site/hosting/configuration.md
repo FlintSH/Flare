@@ -169,8 +169,8 @@ The following paths are relative to `settings` in Flare's saved configuration. T
 | `general.storage.s3.secretAccessKey`    | Empty string       | Configured S3 credential secret; protect database backups                                                       |
 | `general.storage.s3.endpoint`           | Empty string       | Optional custom S3 API endpoint; saved settings normalize a missing scheme to HTTPS and remove trailing slashes |
 | `general.storage.s3.forcePathStyle`     | `false`            | Use path-style addressing with a custom endpoint                                                                |
-| `general.storage.quotas.enabled`        | `false`            | Apply the shared allowance to ordinary users                                                                    |
-| `general.storage.quotas.default.value`  | `10`               | Allowance amount per ordinary user                                                                              |
+| `general.storage.quotas.enabled`        | `false`            | Apply the shared allowance to accounts without `quotas.bypass`                                                  |
+| `general.storage.quotas.default.value`  | `10`               | Allowance amount per account without quota bypass                                                               |
 | `general.storage.quotas.default.unit`   | `GB`               | Dashboard choices are MB or GB, using binary units                                                              |
 | `general.storage.maxUploadSize.value`   | `100`              | Maximum size of one uploaded file                                                                               |
 | `general.storage.maxUploadSize.unit`    | `MB`               | Dashboard choices are MB or GB, using binary units                                                              |
@@ -181,7 +181,7 @@ The following paths are relative to `settings` in Flare's saved configuration. T
 | `general.oidc.clientId`                 | Empty string       | OIDC application identifier                                                                                     |
 | `general.oidc.clientSecret`             | Empty string       | OIDC application secret; protect database backups                                                               |
 | `general.oidc.buttonText`               | `Sign in with SSO` | Sign-in button label                                                                                            |
-| `general.oidc.autoProvision`            | `true`             | Create eligible new OIDC User accounts                                                                          |
+| `general.oidc.autoProvision`            | `true`             | Create eligible OIDC accounts inheriting Everyone                                                               |
 | `general.oidc.requireEmailVerified`     | `true`             | Require provider verification for a new identity                                                                |
 | `general.oidc.enforceSso`               | `false`            | OIDC auto-login and suppression of local email recovery; explicit local password login remains available        |
 
@@ -250,4 +250,6 @@ Account-specific settings are stored separately from the instance configuration:
 
 ## Test-only database variables
 
-The repository's integration suites use explicit disposable databases: `FLARE_SETUP_DATABASE_URL`, `FLARE_FOLDERS_DATABASE_URL`, `FLARE_TAGS_DATABASE_URL`, `FLARE_CUSTOMIZATION_DATABASE_URL`, `FLARE_EMAIL_AUTH_DATABASE_URL`, `FLARE_EMAIL_DELIVERY_DATABASE_URL`, and `FLARE_EMAIL_CONFIG_DATABASE_URL`. They are not production connection settings. These tests delete fixtures; never point them at an application database.
+The repository's integration suites use explicit disposable databases: `FLARE_ROLES_DATABASE_URL`, `FLARE_AVATAR_DATABASE_URL`, `FLARE_SETUP_DATABASE_URL`, `FLARE_FOLDERS_DATABASE_URL`, `FLARE_TAGS_DATABASE_URL`, `FLARE_CUSTOMIZATION_DATABASE_URL`, `FLARE_EMAIL_AUTH_DATABASE_URL`, `FLARE_EMAIL_DELIVERY_DATABASE_URL`, and `FLARE_EMAIL_CONFIG_DATABASE_URL`. They are not production connection settings. These tests delete fixtures; never point them at an application database. The [permission/avatar test recipe](/contributing#database-permission-and-avatar-regression-tests) explains the separate database-name requirements and how to avoid accidentally skipping either suite.
+
+The real role browser/API checks use `FLARE_ROLES_TEST_ORIGIN` (default `http://127.0.0.1:3060`) and optionally `PW_CHROMIUM_EXECUTABLE_PATH`. These are local test-runner inputs, not server configuration. The runner accepts only loopback hosts and changes its disposable fixtures; follow the [role testing recipe](/admin/roles#reproduce-the-permission-checks-locally).

@@ -1,18 +1,12 @@
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
-import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { TagError } from '@/lib/tags/service'
 
 import { UploadError } from './options'
 import { uploadProfileOptionsSchema } from './schema'
-
-export async function profileSession() {
-  const session = await getAccessSession()
-  return session?.user ?? null
-}
 
 export function profileMutationGuard(request: Request, requireJson = true) {
   if (!isSameOriginRequest(request))

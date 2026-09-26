@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import { getPageSession } from '@/lib/auth/page-session'
-import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 
 export default async function CustomizePage({
   searchParams,
@@ -10,12 +10,7 @@ export default async function CustomizePage({
 }) {
   const session = await getPageSession()
   if (!session?.user) redirect('/auth/login')
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true },
-  })
-  if (!user) redirect('/auth/login')
-  if (user.role !== 'ADMIN')
+  if (!hasPermission(session.user, 'appearance.manage'))
     redirect('/dashboard/profile?section=account#workspace-appearance')
 
   const { recovery } = await searchParams

@@ -24,7 +24,7 @@ const rules = [
   },
   {
     name: 'administration',
-    code: /^(components\/(settings|setup|customization|auth)|lib\/(setup|customization|email|auth)|app\/api\/settings)/,
+    code: /^(components\/(settings|setup|customization|auth|roles|users)|lib\/(setup|customization|email|auth|permissions)|app\/api\/settings)/,
     docs: /^docs\/site\/admin\/.*\.md$/,
   },
   {
@@ -34,7 +34,7 @@ const rules = [
   },
   {
     name: 'API/integration reference',
-    code: /^(app\/api\/|lib\/integrations\/|types\/dto\/)/,
+    code: /^(app\/api\/|lib\/integrations\/|lib\/permissions\/requests\.ts$|types\/dto\/)/,
     docs: /^docs\/site\/api\/.*\.md$/,
   },
 ]
