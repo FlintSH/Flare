@@ -1005,7 +1005,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     })
     const original = LocalStorage.prototype.deleteFile
     vi.spyOn(LocalStorage.prototype, 'deleteFile').mockImplementationOnce(
-      async function (path) {
+      async function (this: InstanceType<typeof LocalStorage>, path) {
         started()
         await deferredStorage
         await original.call(this, path)
