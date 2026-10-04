@@ -47,6 +47,13 @@ const steps = [
     link: '/admin/roles',
   },
   {
+    title: 'Protect the way you sign in',
+    label: 'Secure',
+    src: '/screenshots/security/security-overview.webp',
+    text: 'Add an authenticator app with saved recovery codes, or register a passkey to sign in with your device. Each account controls its own methods in Profile → Account.',
+    link: '/guide/security',
+  },
+  {
     title: 'Keep your tools connected',
     label: 'Automate',
     src: '/screenshots/handbook/integrations.webp',

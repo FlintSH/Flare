@@ -97,6 +97,18 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Two-factor authentication and passkey migration
+
+Migration `20261004010000_account_security` adds account authenticator state, hashed one-time recovery codes, public passkey credentials, short-lived verification challenges, and shared rate-limit counters. Normal image startup applies it. Existing accounts retain their passwords, SSO bindings, roles, integrations, and content; two-factor authentication stays off and passkeys stay empty until each account enrolls. No additional environment variable is required.
+
+Before upgrading, back up the database and preserve the existing `NEXTAUTH_SECRET`. Authenticator secrets are encrypted with a key derived from that secret, independently of `FLARE_EMAIL_ENCRYPTION_KEY`. All application replicas must share the same value. Do not rotate it during this upgrade.
+
+Afterward, use an isolated account to test authenticator enrollment, saving recovery codes, password-plus-code sign-in, one-time recovery, and passkey registration/sign-in. Authenticator/recovery changes and passkey additions/removals end browser sessions; renaming a passkey does not. Review custom browser clients against the [security session contract](/api/security); direct password callbacks must also satisfy an enabled authenticator. Named-token scopes and upload-tool credentials retain their existing behavior.
+
+Include the new security records in future database backups. A restore also restores recovery-code usage and passkey registration/revocation state at the backup time; codes used or passkeys removed after that point can become usable again. Review affected credentials after disaster recovery. A test restore at localhost cannot authenticate with production-hostname passkeys; keep a tested alternative sign-in method. Do not disable second factors merely to make a restore drill easier.
+
+Before a [hostname change](./reverse-proxy#passkeys-and-hostname-changes), arrange a working password plus authenticator/recovery code or SSO method, then register new passkeys on the new hostname. Keep independent administrator recovery methods: there is no dashboard administrator bypass for a lost authenticator.
+
 ### Upgrading to roles
 
 The role migration replaces the `User.role` enum with roles and account assignments. Every account inherits **Everyone**, whose initial permissions preserve existing personal workflows. Every former `ADMIN` account receives the new **Admin** role with all permissions. The first account on a fresh instance receives that role automatically. Existing files, SSO bindings, integrations, and account data are preserved.
@@ -150,13 +162,13 @@ Upgrade PostgreSQL separately from Flare. Keeping `postgres:16-alpine` within Po
 
 ## Secrets and key rotation
 
-Flare encrypts saved SMTP passwords, token-bearing mail payloads, and webhook signing secrets. Its active encryption key is `FLARE_EMAIL_ENCRYPTION_KEY` or its `_FILE` equivalent, otherwise `NEXTAUTH_SECRET`.
+Flare encrypts saved SMTP passwords, token-bearing mail payloads, and webhook signing secrets. The active encryption key for those values is `FLARE_EMAIL_ENCRYPTION_KEY` or its `_FILE` equivalent, otherwise `NEXTAUTH_SECRET`.
 
 Preserve the same effective key during recreation and restores. Introducing a dedicated key that differs from the previous fallback is a key change too. Setting a new key does not automatically re-encrypt database values.
 
-For planned encryption rotation, pause email and webhooks, handle or cancel queued work, and retain a recovery copy of the old key. After changing the key, re-enter SMTP credentials and recreate webhooks with newly shared receiver secrets; issue fresh account links as needed. Existing encrypted webhook secrets cannot be recovered using the new key. A dedicated key lets you rotate the session secret later without simultaneously changing the encryption key.
+For planned encryption rotation, pause email and webhooks, handle or cancel queued work, and retain a recovery copy of the old key. After changing the key, re-enter SMTP credentials and recreate webhooks with newly shared receiver secrets; issue fresh account links as needed. Existing encrypted webhook secrets cannot be recovered using the new key. A dedicated email key separates email/webhook encryption from session-secret rotation. Authenticator secrets still depend on `NEXTAUTH_SECRET`: changing it without an authenticated re-enrollment or a separately implemented migration makes existing authenticators unreadable. Preserve the old secret. Flare does not provide automatic authenticator key rotation: a planned change requires users to disable their authenticators while the old key is active, then enroll again after rotation, or a separately reviewed data migration. Keep tested alternative administrator access throughout that process. If a key was lost unexpectedly, an unused recovery code or registered passkey can restore access. Use the five-minute proof window after recovery-code sign-in to disable the unreadable authenticator and arrange re-enrollment; the last unused recovery code is sufficient for that repair.
 
-For an email lockout, `FLARE_EMAIL_ENABLED=false` disables sending and local verification enforcement. It does not repair encryption, change passwords, disable SSO, or restore webhook secrets. Use the [email recovery workflow](/admin/email#recover-from-an-email-lockout).
+For an email lockout, `FLARE_EMAIL_ENABLED=false` disables sending and local verification enforcement. It does not repair encryption, change passwords, disable two-factor authentication or SSO, remove passkeys, or restore webhook secrets. Use the [email recovery workflow](/admin/email#recover-from-an-email-lockout).
 
 ## Account storage cleanup
 

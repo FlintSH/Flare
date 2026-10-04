@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 25')
+  await expect(page.getByRole('status')).toContainText('3 of 27')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -119,6 +119,8 @@ for (const width of [390, 1440]) {
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
+      './guide/security.html',
+      './api/security.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -168,6 +170,8 @@ for (const theme of ['dark', 'light']) {
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
+      './guide/security.html',
+      './api/security.html',
       './hosting/docker.html',
       './guide/sharing.html',
     ]) {
@@ -245,6 +249,63 @@ test('role walkthrough links to the guide and recording loads without autoplay',
   await page.locator('.tour-description a').click()
   await expect(page).toHaveURL(/admin\/roles\.html$/)
   await expect(page.locator('h1')).toContainText('Roles and permissions')
+})
+
+test('security guide is discoverable and both recordings load without autoplay', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Find a capability').fill('passkeys')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/security\.html$/)
+  await expect(page.locator('h2#add-a-passkey')).toBeVisible()
+  await page.goto('./demos.html')
+  await page.getByRole('button', { name: '7. Secure', exact: true }).click()
+  await expect(page.locator('.tour-description a')).toHaveAttribute(
+    'href',
+    /guide\/security\.html$/
+  )
+  for (const name of ['two-factor-demo.webm', 'passkey-demo.webm']) {
+    const video = page.locator(`video[src$="${name}"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Recording metadata timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Security recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
+  await expect(
+    page.getByRole('heading', {
+      name: 'Enable, use, and recover two-factor authentication',
+    })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Create, use, and remove a passkey' })
+  ).toBeVisible()
 })
 
 test('development preview explains where dated release docs are available', async ({

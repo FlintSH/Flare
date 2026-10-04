@@ -62,6 +62,8 @@ Reset links expire after **30 minutes** by default, configurable from 5–120 mi
 
 Recovery requests do not reveal whether the submitted email belongs to an eligible account. If an old user never enrolled a recovery address, an administrator must help them regain access; the stored address alone is insufficient. An exemption from verification does not enable recovery.
 
+A password reset does not disable [two-factor authentication](/guide/security), reset recovery codes, or remove passkeys. A user with local two-factor authentication still needs their authenticator or an unused recovery code after resetting the password; a registered passkey remains another sign-in method. Email verification is still enforced after authenticator/passkey sign-in when required by policy.
+
 SSO-only accounts recover through the identity provider. OIDC auto-login's `enforceSso` setting also disables local email recovery, while preserving the explicit local password sign-in fallback. Keep a usable local administrator credential for identity-provider outages.
 
 ## Email changes

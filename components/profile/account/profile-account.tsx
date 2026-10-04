@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 
 import { ProfileAccountProps } from '@/types/components/profile'
-import { useSession } from 'next-auth/react'
+import { signIn, signOut, useSession } from 'next-auth/react'
 
 import {
   AccountEmail,
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
@@ -21,10 +22,16 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
   const { status: emailStatus, refresh: refreshEmail } = useAccountEmailStatus()
+  const { data: security, refetch: refreshSecurity } = useSecurityStatus()
+  const recentProof =
+    security?.canUseRecentPasskey || security?.canUseRecentRecovery
+  const [emailChanged, setEmailChanged] = useState(false)
 
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const emailPasswordRef = useRef<HTMLInputElement>(null)
+  const emailSecurityCodeRef = useRef<HTMLInputElement>(null)
 
   const triggerAvatarUpload = () => {
     fileInputRef.current?.click()
@@ -90,6 +97,12 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         body: JSON.stringify({
           name: nameRef.current?.value,
           ...(emailStatus?.enabled ? {} : { email: emailRef.current?.value }),
+          ...(!emailStatus?.enabled && emailChanged
+            ? {
+                currentPassword: emailPasswordRef.current?.value || undefined,
+                securityCode: emailSecurityCodeRef.current?.value || undefined,
+              }
+            : {}),
         }),
       })
 
@@ -99,6 +112,15 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
       }
 
       const { data } = await response.json()
+
+      if (!emailStatus?.enabled && emailChanged) {
+        toast({
+          title: 'Email updated',
+          description: 'Sign in again with your new email address.',
+        })
+        await signOut({ callbackUrl: '/auth/login?local=1' })
+        return
+      }
 
       await updateSession({
         user: {
@@ -110,11 +132,16 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       onUpdate()
 
+      setEmailChanged(false)
+      if (emailPasswordRef.current) emailPasswordRef.current.value = ''
+      if (emailSecurityCodeRef.current) emailSecurityCodeRef.current.value = ''
+
       toast({
         title: 'Success',
         description: 'Profile updated successfully',
       })
     } catch (error) {
+      void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -191,8 +218,85 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                     autoComplete="email"
                     required
                     disabled={isLoading}
+                    onChange={(event) =>
+                      setEmailChanged(event.target.value !== user.email)
+                    }
                   />
                 </div>
+              )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                !recentProof &&
+                security?.hasPassword && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="email-current-password">
+                        Current password
+                      </Label>
+                      <Input
+                        id="email-current-password"
+                        ref={emailPasswordRef}
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        disabled={isLoading}
+                        data-sensitive="true"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Confirm your password to change your sign-in email
+                        address.
+                      </p>
+                    </div>
+                    {security.twoFactorEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="email-security-code">
+                          Authenticator or recovery code
+                        </Label>
+                        <Input
+                          id="email-security-code"
+                          ref={emailSecurityCodeRef}
+                          autoComplete="one-time-code"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          maxLength={32}
+                          required
+                          disabled={isLoading}
+                          data-sensitive="true"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                security &&
+                !security.hasPassword &&
+                !security.canUseRecentPasskey &&
+                !security.canUseRecentRecovery &&
+                !security.canUseRecentSso && (
+                  <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Confirm your identity with a fresh SSO sign-in, then
+                      return here to change your email.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        signIn('oidc', { callbackUrl: '/dashboard/profile' })
+                      }
+                    >
+                      Confirm with SSO
+                    </Button>
+                  </div>
+                )}
+              {!emailStatus?.enabled && emailChanged && recentProof && (
+                <p className="text-sm text-muted-foreground">
+                  Your recent{' '}
+                  {security?.canUseRecentPasskey ? 'passkey' : 'recovery code'}{' '}
+                  sign-in confirms your identity for this email change.
+                </p>
               )}
             </div>
 

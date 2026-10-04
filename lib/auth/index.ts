@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { compare } from 'bcryptjs'
 import { NextAuthOptions, Session, getServerSession } from 'next-auth'
 import { JWT } from 'next-auth/jwt'
@@ -13,6 +14,13 @@ import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
 
 import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
+import { authenticatePasskey, passkeyCookieName } from './security/passkeys'
+import { consumeSecondFactor } from './security/service'
+import {
+  SecurityError,
+  lockSecurityUser,
+  securityLimit,
+} from './security/shared'
 
 const userSelect = {
   id: true,
@@ -49,11 +57,14 @@ declare module 'next-auth' {
       emailAccessRequired?: boolean
       authTime?: number
       authMethod?: string
+      sessionVersion?: number
     }
   }
 
   interface User {
     sessionVersion?: number
+    /** Server-only evidence returned by the credentials authorizer. */
+    authenticationMethod?: 'recovery'
   }
 }
 
@@ -77,38 +88,113 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        code: { label: 'Authenticator or recovery code', type: 'text' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           return null
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
-          select: userSelect,
-        })
-
-        if (!user?.password) {
-          return null
-        }
-
-        const isPasswordValid = await compare(
-          credentials.password,
-          user.password
+        if (
+          credentials.email.length > 320 ||
+          credentials.password.length > 256 ||
+          (credentials.code?.length || 0) > 80
         )
-
-        if (!isPasswordValid) {
+          return null
+        try {
+          const ip =
+            req.headers?.['x-real-ip'] ||
+            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+            'unknown'
+          await securityLimit(`password-ip:${ip}`, 100)
+          await securityLimit(
+            `password-account:${credentials.email.trim().toLowerCase()}`,
+            30
+          )
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+            select: userSelect,
+          })
+          if (
+            !user?.password ||
+            !(await compare(credentials.password, user.password))
+          )
+            return null
+          return await prisma.$transaction(async (tx) => {
+            const fresh = await lockSecurityUser(tx, user.id)
+            if (
+              fresh.password !== user.password ||
+              fresh.email !== user.email ||
+              fresh.sessionVersion !== user.sessionVersion
+            )
+              return null
+            if (fresh.totpSecret && !credentials.code)
+              throw new Error('TwoFactorRequired')
+            const secondFactor = await consumeSecondFactor(
+              tx,
+              fresh,
+              credentials.code
+            )
+            return {
+              id: fresh.id,
+              email: fresh.email,
+              name: fresh.name,
+              image: fresh.image,
+              sessionVersion: fresh.sessionVersion,
+              ...(secondFactor === 'recovery'
+                ? { authenticationMethod: 'recovery' as const }
+                : {}),
+            }
+          })
+        } catch (error) {
+          if (error instanceof Error && error.message === 'TwoFactorRequired')
+            throw error
+          if (error instanceof SecurityError && error.status === 429)
+            throw new Error('TooManyAttempts')
           return null
         }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          sessionVersion: user.sessionVersion,
+      },
+    }),
+    CredentialsProvider({
+      id: 'passkey',
+      name: 'Passkey',
+      credentials: {
+        challengeId: { label: 'Challenge', type: 'text' },
+        response: { label: 'Passkey response', type: 'text' },
+      },
+      async authorize(credentials, req) {
+        if (
+          !credentials?.challengeId ||
+          !credentials.response ||
+          credentials.challengeId.length > 100 ||
+          credentials.response.length > 65536
+        )
+          return null
+        try {
+          const ip =
+            req.headers?.['x-real-ip'] ||
+            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+            'unknown'
+          await securityLimit(`passkey-login:${ip}`, 100)
+          const cookieName = passkeyCookieName()
+          const user = await authenticatePasskey(
+            credentials.challengeId,
+            JSON.parse(credentials.response) as AuthenticationResponseJSON,
+            req.headers?.cookie
+              ?.split(';')
+              .map((value: string) => value.trim())
+              .find((value: string) => value.startsWith(`${cookieName}=`))
+              ?.slice(cookieName.length + 1) || ''
+          )
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            sessionVersion: user.sessionVersion,
+          }
+        } catch {
+          return null
         }
       },
     }),
@@ -139,6 +225,13 @@ export const authOptions: NextAuthOptions = {
         return `/auth/login?error=${oidcErrorParams[result.reason]}`
       }
 
+      const security = await prisma.user.findUnique({
+        where: { id: result.user.id },
+        select: { totpSecret: true },
+      })
+      if (security?.totpSecret)
+        return '/auth/login?local=1&error=OidcTwoFactorRequired'
+
       Object.assign(user, result.user)
       return true
     },
@@ -151,7 +244,13 @@ export const authOptions: NextAuthOptions = {
         token.name = sessionUser.name
         token.email = sessionUser.email
         token.authTime = Date.now()
-        token.authMethod = account?.provider || 'credentials'
+        // Only the authorizer can establish recovery proof. Never accept it
+        // from OAuth profile data or a client-triggered session update.
+        token.authMethod =
+          account?.provider === 'credentials' &&
+          user.authenticationMethod === 'recovery'
+            ? 'recovery'
+            : account?.provider || 'credentials'
       }
 
       const freshUser = await prisma.user.findUnique({
@@ -163,10 +262,7 @@ export const authOptions: NextAuthOptions = {
         throw new Error('Session invalidated: User not found')
       }
 
-      if (
-        token.sessionVersion &&
-        token.sessionVersion !== freshUser.sessionVersion
-      ) {
+      if (token.sessionVersion !== freshUser.sessionVersion) {
         throw new Error('Session invalidated: Version mismatch')
       }
 
@@ -195,6 +291,7 @@ export const authOptions: NextAuthOptions = {
         session.user.emailAccessRequired = token.emailAccessRequired
         session.user.authTime = token.authTime
         session.user.authMethod = token.authMethod
+        session.user.sessionVersion = token.sessionVersion
       }
       return session
     },

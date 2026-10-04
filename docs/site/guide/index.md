@@ -17,9 +17,13 @@ Open the address your administrator gave you and sign in. Depending on the insta
 
 - **Registration available:** create an account, then follow any email-verification instructions.
 - **Registration closed:** ask the administrator for access. A public file link does not require an account unless the file's access settings require one.
+- **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
+- **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
 - **Single sign-on:** use the provider offered by your instance. Existing local accounts are not automatically linked to SSO accounts with the same email address.
 
 The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.
+
+<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="Use your account password, or a passkey you previously registered on this instance. Enabled two-factor authentication adds a code step after the password." />
 
 ## Upload and share your first file
 

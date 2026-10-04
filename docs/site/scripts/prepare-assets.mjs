@@ -121,6 +121,12 @@ for (const [directory, name] of [
     resolve(root, 'public/demos', `${name}.mp4`)
   )
 }
+for (const name of ['two-factor-demo', 'passkey-demo']) {
+  await copyFile(
+    resolve(root, '../../.github/assets/security', `${name}.webm`),
+    resolve(root, 'public/demos', `${name}.webm`)
+  )
+}
 const index = [
   '# Flare documentation',
   '',

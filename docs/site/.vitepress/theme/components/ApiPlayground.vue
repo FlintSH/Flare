@@ -87,7 +87,8 @@ async function copy() {
       Choose an operation and copy a working starting point. Set
       <code>FLARE_TOKEN</code> in your terminal to a named token with the
       required scope. The token owner must also have the current role
-      permission.
+      permission. This builder covers named-token operations; account security
+      changes use the signed-in Flare interface.
     </p>
     <div class="lab-grid two">
       <div>

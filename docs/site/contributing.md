@@ -143,6 +143,43 @@ Apply migrations to both databases before running the suites. Missing either env
 
 The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
 
+## Security browser checks and demos
+
+The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, recovery, and passkeys. The passkey recording uses Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. It does not show or test a native biometric prompt.
+
+Use a **disposable local PostgreSQL database** whose name begins with `flare_auth_demo`. The seed script resets its two public fixture accounts and security rate counters. Never use an existing application database. With the dependencies installed, create the database using your local PostgreSQL tools, then start the app from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_auth_demo'
+export NEXTAUTH_URL='http://localhost:3061'
+export NEXTAUTH_SECRET='public-disposable-security-demo-secret-2026-only'
+export METICULOUS_RECORDING_ENABLED=false
+export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
+pnpm exec prisma migrate deploy
+pnpm exec next dev --hostname 127.0.0.1 --port 3061
+```
+
+The database role, port, and authentication must match your disposable server. In another terminal with the same `DATABASE_URL`, initialize the app configuration by opening `http://localhost:3061/auth/login`, then run:
+
+```sh
+node scripts/security/seed.cjs
+node scripts/security/verify-ui.cjs
+```
+
+The fixture emails are `security-demo-alex@example.test` and `security-demo-jamie@example.test`; both use the deliberately public password `Security-demo-only-2026!`. The browser checks use real requests to enroll an authenticator, require a second factor at login, consume and reject reused recovery codes, replace codes, disable 2FA, register and use a passkey, rename/remove it, reject assertion replay and removed credentials, reject bearer/origin misuse, and invalidate old sessions. The ordinary browser run uses a 390 × 844 viewport for recovery-code replacement and disabling 2FA. Recordings keep a stable desktop viewport; separate mobile stills use the same 390px width with extra height so the complete controls remain visible. A fresh TOTP time step may require waiting up to 30 seconds. Run the seed again before repeating the suite.
+
+To refresh visual evidence, set `FLARE_SECURITY_SCREENSHOTS` to an output directory and `FLARE_SECURITY_VIDEOS` to a separate temporary directory before running the browser script. It captures screenshots as WebP and the two completed walkthroughs as `two-factor-demo.webm` and `passkey-demo.webm`. Secrets are hidden by capture-only CSS installed before application scripts: QR codes, manual keys, recovery codes, and sensitive inputs never appear in recorded frames. The capture CSS does not alter the shipped UI. Inspect every resulting image and recording before replacing the canonical sources in `docs/images/security/` and `.github/assets/security/`. Include updated written transcripts in the guide and [demos](/demos). Keep temporary browser output and failed recordings out of Git.
+
+For the separate authentication database regression suite, create and migrate a disposable database whose name starts with `flare_security_test_`, then run:
+
+```sh
+export FLARE_SECURITY_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_security_test_local'
+DATABASE_URL="$FLARE_SECURITY_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/auth/security-database.test.ts
+```
+
+Without that variable the database suite is skipped. CI supplies a dedicated database. These tests cover atomic code/challenge redemption, stale-session fences, enrollment, encrypted secret handling, and recovery. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators on supported devices.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

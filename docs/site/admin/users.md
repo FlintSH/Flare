@@ -88,3 +88,11 @@ A successful response means the account is gone and cleanup is queued. A backgro
 Deleting a large account can take longer while its files are queued in bulk. If the request times out, refresh Users to check whether the account was removed before trying again.
 
 Offer a data export or make a backup before deleting content that may need to be retained. Account deletion is not temporary suspension; restoring it requires a suitable backup. Deleting a user also removes their API tokens and webhook configurations, so automations owned by that account stop working.
+
+## Account sign-in security
+
+Users manage [authenticator apps, recovery codes, and passkeys](/guide/security) in **Profile → Account → Sign-in security**, including when their role cannot edit ordinary profile preferences. These features are opt-in per account; there is no instance-wide enforcement switch or administrator factor-reset button.
+
+Changing a user's password does not remove their authenticator, recovery codes, or passkeys. **Revoke sessions** ends browser sessions but does not remove registered sign-in methods or API credentials. When responding to a lost device or a compromised account, distinguish an existing browser session from the credentials that could create a new one. Ask the account owner to remove a lost passkey or replace recovery codes from a trusted session using the required identity proof.
+
+Keep a tested administrator recovery method outside a single phone or laptop. The last-accessible-administrator safeguard does not prove that an administrator still possesses their authenticator or passkey. [Operator precautions](/hosting/maintenance#two-factor-authentication-and-passkey-migration) cover encryption keys, backups, and hostname changes.

@@ -23,6 +23,11 @@ model User {
   avatarStoragePath           String?
   avatarStorageTarget         Json?
   password                    String?
+  totpSecret                  String?
+  totpLastCounter             Int?
+  passkeys                    Passkey[]
+  recoveryCodes               RecoveryCode[]
+  authChallenges              AuthChallenge[]
   roles                       Role[]
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
@@ -44,6 +49,52 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+}
+
+model Passkey {
+  id         String    @id
+  userId     String
+  name       String
+  publicKey  Bytes
+  counter    BigInt    @default(0)
+  transports String[]
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RecoveryCode {
+  id     String @id @default(cuid())
+  userId String
+  hash   String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthChallenge {
+  id             String   @id
+  userId         String?
+  purpose        String
+  challenge      String
+  sessionVersion Int?
+  payload        Json     @default("{}")
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
 }
 
 model Role {

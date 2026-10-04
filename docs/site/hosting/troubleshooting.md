@@ -25,7 +25,7 @@ If migrations failed, preserve the logs and take a database backup before correc
 
 Check that `NEXTAUTH_URL` exactly matches the public scheme, hostname, and port you use. Recreate the container after changing it. Your proxy must preserve the public host and protocol.
 
-All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make SMTP and webhook secrets unreadable. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
+All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make authenticator, SMTP, and webhook secrets unreadable. Authenticator encryption always depends on `NEXTAUTH_SECRET`, even when email/webhooks use a dedicated key. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
 
 ## Upload error reference
 
@@ -108,3 +108,11 @@ Expiration is a background action; an unavailable process cannot apply it on sch
 Include the installed release/channel and commit when shown, deployment method, storage backend, a brief reproduction, HTTP status, and relevant sanitized logs with timestamps. State whether the problem began after an upgrade or configuration change.
 
 Remove passwords, database URLs containing credentials, API/upload tokens, webhook secrets, private file links, and recovery links before posting. Report reproducible issues through the [Flare issue tracker](https://github.com/FlintSH/Flare/issues) or ask the community in [Discord](https://discord.gg/mwVAjKwPus).
+
+## Authenticator and passkey sign-in
+
+For rejected authenticator codes, check the device's automatic time, the account/instance entry in the authenticator, and whether the code was already used. Rate limits and expired setup/challenge state require waiting or starting the action again. Use an unused recovery code or registered passkey if available. Password recovery and `FLARE_EMAIL_ENABLED=false` do not disable two-factor authentication.
+
+For passkeys, confirm the browser is using the canonical HTTPS origin in `NEXTAUTH_URL`, and that the passkey was registered on its hostname. The proxy must preserve the public origin. A renamed hostname needs newly registered passkeys; a production credential cannot be exercised on an unrelated local restore URL. Cancelling a device prompt is recoverable by retrying or choosing another method.
+
+If a deployment made existing authenticators unreadable, restore the matching `NEXTAUTH_SECRET` rather than changing factor records ad hoc. A dedicated `FLARE_EMAIL_ENCRYPTION_KEY` does not recover authenticators encrypted under another session secret. Unused recovery codes and registered passkeys can still provide account access while the authenticator key is unavailable. A recovery-code sign-in supplies five minutes of fresh security proof, so even the last code can be used to regain access and disable the unreadable authenticator or register a passkey without needing a second code. Re-enroll the authenticator under the intended stable key. If all account recovery methods are lost, there is no dashboard factor bypass: investigate with the operator under your instance's account-recovery process. See the [user recovery guide](/guide/security#recover-when-your-authenticator-is-unavailable) and [operator migration guidance](./maintenance#two-factor-authentication-and-passkey-migration).

@@ -61,6 +61,14 @@ Precreating a local user with the same email does **not** provision an SSO ident
 
 Changing providers or issuer URLs can make previously linked identities appear new. Plan such a move as an account migration; simply preserving email addresses does not preserve the link. Flare does not expose a general unlink/relink workflow.
 
+## Two-factor authentication and passkeys
+
+SSO-only accounts use the provider's MFA policy; Flare does not offer local authenticator enrollment without an existing local password. Accounts can register [passkeys](/guide/security#add-a-passkey) after confirming their identity. Passkey sign-in requires device verification and does not perform a fresh round-trip to the SSO provider. Consider that separate sign-in method when planning provider access revocation: a provider logout or deprovisioning does not remove Flare passkeys. The owner can remove them in Sign-in security; deleting the Flare account removes its registered credentials. Revoking Flare sessions alone does not prevent a new passkey sign-in.
+
+If an account has both a local password and a provider binding and enables Flare's authenticator, OIDC sign-in is refused for that account. Use its password plus authenticator/recovery code or a registered passkey. This prevents the provider path from skipping the account's local second factor. Auto-login still has the `/auth/login?local=1` escape route for password and passkey sign-in.
+
+Keep an independently usable local administrator method and saved recovery codes before changing the provider. Password resets and the email-policy recovery override do not disable an authenticator or remove registered passkeys.
+
 ## Registration and auto-login
 
 **Allow Registrations** controls public local password-account creation. **Auto-Provision Users** independently controls new OIDC account creation. For a private team, restrict access in your identity provider and review both Flare switches.

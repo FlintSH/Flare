@@ -10,6 +10,16 @@ import {
 } from 'vitest'
 
 const authentication = vi.hoisted(() => ({ id: '' }))
+vi.mock('next-auth', async (original) => ({
+  ...(await original<object>()),
+  getServerSession: async () => ({
+    user: {
+      id: authentication.id,
+      sessionVersion: 1,
+      authMethod: 'credentials',
+    },
+  }),
+}))
 vi.mock('@/lib/auth/api-auth', () => ({
   requireAuth: async () => ({
     user: { id: authentication.id },
@@ -37,6 +47,7 @@ suite('email configuration against disposable PostgreSQL', () => {
       throw new Error('Use an explicitly named disposable local _test database')
     vi.stubEnv('DATABASE_URL', databaseUrl!)
     vi.stubEnv('NEXTAUTH_SECRET', 'public-disposable-config-test-secret-2026')
+    vi.stubEnv('NEXTAUTH_URL', 'https://flare.example.test')
     prisma = (await import('@/lib/database/prisma')).prisma
     configModule = await import('@/lib/email/config')
     appConfig = await import('@/lib/config')
@@ -219,8 +230,11 @@ suite('email configuration against disposable PostgreSQL', () => {
   function profileRequest(body: object) {
     return new Request('https://flare.example.test/api/profile', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://flare.example.test',
+      },
+      body: JSON.stringify({ currentPassword: 'old-password', ...body }),
     })
   }
 

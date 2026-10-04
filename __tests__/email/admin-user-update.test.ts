@@ -54,6 +54,8 @@ vi.mock('@/lib/storage', () => ({ getStorageProvider: vi.fn() }))
 vi.mock('@/lib/users/create-user', () => ({ createUser: mocks.createUser }))
 
 const initial: User = {
+  totpSecret: null,
+  totpLastCounter: null,
   id: 'target',
   name: 'Original name',
   email: 'old@example.com',

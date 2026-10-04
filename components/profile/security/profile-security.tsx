@@ -3,22 +3,26 @@
 import { useRef, useState } from 'react'
 
 import { ProfileSecurityProps } from '@/types/components/profile'
-import { useSession } from 'next-auth/react'
+import { signOut } from 'next-auth/react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
 export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
-  const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const { data: security, refetch: refreshSecurity } = useSecurityStatus()
+  const recentProof =
+    security?.canUseRecentPasskey || security?.canUseRecentRecovery
 
   const currentPasswordRef = useRef<HTMLInputElement>(null)
   const newPasswordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
+  const securityCodeRef = useRef<HTMLInputElement>(null)
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +45,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         body: JSON.stringify({
           currentPassword: currentPasswordRef.current?.value,
           newPassword: newPasswordRef.current?.value,
+          securityCode: securityCodeRef.current?.value || undefined,
         }),
       })
 
@@ -49,20 +54,20 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         throw new Error(data.error || 'Failed to update password')
       }
 
-      await updateSession()
-
       onUpdate()
 
       toast({
         title: 'Success',
-        description: 'Password updated successfully',
+        description: 'Password updated. Sign in again with your new password.',
       })
 
       if (currentPasswordRef.current) currentPasswordRef.current.value = ''
       if (newPasswordRef.current) newPasswordRef.current.value = ''
       if (confirmPasswordRef.current) confirmPasswordRef.current.value = ''
+      if (securityCodeRef.current) securityCodeRef.current.value = ''
+      await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch (error) {
-      console.error('Password update error:', error)
+      void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -118,6 +123,35 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               disabled={isLoading}
             />
           </div>
+          {security?.twoFactorEnabled && recentProof && (
+            <p className="text-sm text-muted-foreground">
+              Your recent{' '}
+              {security.canUseRecentPasskey ? 'passkey' : 'recovery code'}{' '}
+              sign-in confirms your second factor for this change.
+            </p>
+          )}
+          {security?.twoFactorEnabled && !recentProof && (
+            <div className="space-y-2">
+              <Label htmlFor="password-security-code">
+                Authenticator or recovery code
+              </Label>
+              <Input
+                id="password-security-code"
+                ref={securityCodeRef}
+                autoComplete="one-time-code"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={32}
+                placeholder="Enter an authenticator or recovery code"
+                required
+                disabled={isLoading}
+                data-sensitive="true"
+              />
+              <p className="text-xs text-muted-foreground">
+                Two-factor authentication also protects password changes.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end">

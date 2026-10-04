@@ -44,6 +44,7 @@ Use the builder to see how your choices change a request. It generates a command
 | Create, list, or remove short links             | [Short links API](./short-links)              |
 | Run your own automation after an upload         | [Webhooks](./webhooks)                        |
 | Start with working code                         | [Recipes](./recipes)                          |
+| Integrate with browser sign-in security         | [Session security contracts](./security)      |
 | Understand the rest of the application's routes | [Endpoint inventory](./endpoint-inventory)    |
 
 For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the uploader configuration for you in **Profile → Uploads → Screenshot tools and scripts**. Those downloads already contain your account upload credential. Named tokens are useful when building a custom connection, restricting permissions, or revoking one tool independently.

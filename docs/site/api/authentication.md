@@ -49,6 +49,7 @@ Scopes are independent. `files:upload` does not include listing, and `urls:write
 Named tokens do not authorize the following operations:
 
 - Creating or revoking tokens, managing webhooks, or retrieving the account upload token.
+- Enrolling or disabling two-factor authentication, replacing recovery codes, or registering/managing passkeys.
 - Editing accounts, server settings, branding, email policy, or users.
 - Creating or editing upload profiles, folders, or tags.
 - Deleting files or editing existing files' visibility, passwords, or expiration.
@@ -94,6 +95,12 @@ New uploads use the profile's current settings. Chunked uploads keep the option 
 Flare also has an older account upload token. Generated ShareX, iTake, Flameshot, Spectacle, and Bash configurations use it for compatibility. Regenerating it invalidates existing generated configurations, so download them again afterward.
 
 The legacy credential is accepted by the shared account authentication helper and does not have the named-token scope allowlist. Its supported route surface is therefore broader than `files:upload` on routes that use that helper, but current role permissions still restrict each request. It still does not satisfy routes that explicitly require a browser session or an administrator session. Prefer scoped named tokens for new custom integrations.
+
+## Two-factor authentication and passkeys
+
+[Account sign-in security](/guide/security) protects interactive browser sign-in. API tokens and the legacy upload credential continue working without a code or passkey ceremony; enabling two-factor authentication does not turn them into second-factor credentials or revoke them. Review existing integrations and revoke/rotate any credential you no longer trust.
+
+Security management requires a browser session and fresh identity proof. Neither named tokens nor the legacy upload credential can authorize those endpoints. The [session security contract](./security) documents their separate boundaries. The named-token OpenAPI document and request builder intentionally keep their existing supported operations.
 
 ## Rotate or revoke a token
 

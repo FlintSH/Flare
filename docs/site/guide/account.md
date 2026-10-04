@@ -13,6 +13,10 @@ Open **Profile** from the account menu to manage settings that belong to you. **
 
 Verification, recovery-address enrollment, password recovery, and confirmed email-change flows remain available under their own identity and email-policy checks, even without `profile.update`. Role restrictions on application preferences do not remove those account-security paths.
 
+## Protect your sign-in
+
+**Profile → Account → Sign-in security** contains authenticator setup, recovery codes, and passkeys. [Follow the complete security guide](./security) to enable two-factor authentication, save a recovery method, and test passkey sign-in. These controls remain available without `profile.update` and require their own identity confirmation. Adding/removing sign-in methods and replacing recovery codes end existing browser sessions, so save any newly displayed recovery codes before signing in again.
+
 ## See your roles
 
 **Profile → Account → Your roles** shows your current role badges. Everyone applies automatically. Additional roles add permissions; a role name or color alone does not describe its authority. Ask the instance administrator to review a missing capability in [Roles](/admin/roles).
@@ -29,13 +33,13 @@ Changing your username does not automatically change file URL paths. For a memor
 
 ## Change your password
 
-In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters, and confirm it. Choose **Update Password**.
+In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. Choose **Update Password**, then sign in again; registered factors remain in place.
 
 For an account managed entirely through SSO, change your identity-provider password with that provider. Flare's local password form requires an existing local password; it is not an SSO account-linking or local-password creation flow.
 
 ### Recover a forgotten password
 
-If your instance offers password recovery, use the login page's recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy.
+If your instance offers password recovery, use the login page's recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy. Resetting your password does not remove two-factor authentication or registered passkeys; you still need an available second factor or a passkey to sign in.
 
 Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again. If email recovery is unavailable, contact your instance administrator.
 
@@ -61,7 +65,7 @@ If the message does not arrive, check spam, confirm the address, and wait for th
 
 ## Change your email address
 
-When email features are disabled, edit the email field with your basic account information and save.
+When email features are disabled, edit the email field with your basic account information, confirm your current password and any **Authenticator or recovery code** requested, and save. The address change ends existing browser sessions. An SSO-only account instead needs a recent SSO or passkey sign-in.
 
 When email features are enabled:
 
@@ -93,7 +97,7 @@ The archive contains:
 - `user-data.json` with basic account details, file metadata, saved OCR text, and shortened URLs with click counts.
 - Available uploaded files under `files/`, grouped by upload date.
 
-This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, or webhook configuration. Export profile recipes separately if you want to keep those settings.
+This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, recovery codes, or passkeys. Export profile recipes separately if you want to keep those settings.
 
 Inspect the archive and open important files before deleting their originals. Files that are missing from storage or cannot be retrieved can be skipped during export. If an expected file is absent, download it individually if possible and ask the administrator to check storage.
 

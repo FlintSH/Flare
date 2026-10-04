@@ -4,7 +4,8 @@ import { z } from 'zod'
 export const UpdateProfileSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
-  currentPassword: z.string().optional(),
+  currentPassword: z.string().max(256).optional(),
+  securityCode: z.string().max(80).optional(),
   newPassword: z.string().min(8).optional(),
   image: z.string().optional(),
   randomizeFileUrls: z.boolean().optional(),

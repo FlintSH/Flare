@@ -1,7 +1,6 @@
 import NextAuth from 'next-auth/next'
 
 import { getAuthOptions } from '@/lib/auth'
-import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
 
 type Handler = ReturnType<typeof NextAuth>
 
@@ -10,10 +9,7 @@ async function handler(...args: Parameters<Handler>) {
   return NextAuth(options)(...args)
 }
 
-export { handler as GET }
-
-export async function POST(...args: Parameters<Handler>) {
-  const limited = await rateLimit(args[0] as unknown as Request, authLimiter)
-  if (limited) return limited
-  return handler(...args)
-}
+// Password and passkey authorizers own durable authentication limits. NextAuth
+// also posts session maintenance, client logs, and sign-out here; counting those
+// as login attempts can lock a user out halfway through securing their account.
+export { handler as GET, handler as POST }

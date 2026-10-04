@@ -43,6 +43,7 @@ Preview the full site with `npm ci --prefix docs/site` then
   - ShareX, Flameshot, KDE Spectacle, and Bash Script upload support
   - One-click configuration/script downloads
 - 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
+- 🔑 **[Two-factor authentication and passkeys](docs/site/guide/security.md)** - Authenticator-app codes, single-use recovery codes, and device-verified passwordless sign-in
 - 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
 - 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
 - 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
