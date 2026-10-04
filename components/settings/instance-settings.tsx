@@ -11,6 +11,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import DOMPurify from 'dompurify'
 import { deepEqual } from 'fast-equals'
 import {
+  BookOpen,
   Circle,
   Code,
   FileCode,
@@ -60,6 +61,7 @@ import { Switch } from '@/components/ui/switch'
 
 import type { FlareConfig } from '@/lib/config'
 import type { CustomizationState } from '@/lib/customization/schema'
+import { getDocumentationUrl } from '@/lib/documentation'
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
@@ -456,6 +458,19 @@ export function InstanceSettings({
       sections={sections}
       activeSection={activeSection}
       onSectionChange={setSection}
+      actions={
+        <Button variant="outline" asChild>
+          <a
+            href={getDocumentationUrl(buildInfo)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <BookOpen aria-hidden="true" />
+            Documentation
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </Button>
+      }
       asideNote="These settings apply to everyone on your instance. Personal preferences live in Profile."
     >
       {recovery && activeSection !== 'appearance' && (

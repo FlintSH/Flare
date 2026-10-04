@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   Check,
   CheckCheck,
   Cloud,
@@ -191,11 +192,13 @@ function Choice({
 }
 
 export function SetupWizard({
+  documentationUrl,
   configured = false,
   initialStep = 'appearance',
   initialEmailEnabled = false,
   initialEmailRecoveryEnabled = false,
 }: {
+  documentationUrl: string
   configured?: boolean
   initialStep?: SetupOptionalStep
   initialEmailEnabled?: boolean
@@ -377,16 +380,29 @@ export function SetupWizard({
     <div className="relative isolate min-h-screen">
       <DynamicBackground />
       <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6 sm:px-8 sm:pt-10">
-        <header className="mb-8 flex items-center justify-between gap-4 border-b pb-6 sm:mb-12">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b pb-6 sm:mb-12">
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl border bg-card">
               <Icons.logo className="h-7 w-7" />
             </span>
             <span className="flare-text text-2xl tracking-tight">Flare</span>
           </div>
-          <span className="rounded-full border bg-card/70 px-3 py-1.5 text-xs text-muted-foreground">
-            Welcome home
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="hidden rounded-full border bg-card/70 px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">
+              Welcome home
+            </span>
+            <Button variant="outline" asChild>
+              <a
+                href={documentationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <BookOpen aria-hidden="true" />
+                Setup guide
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            </Button>
+          </div>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-12">

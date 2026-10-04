@@ -20,7 +20,17 @@ Flare gives administrators control over who can join, how files are stored, what
 
 Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
 
-<Screenshot src="/screenshots/preferences-grouping/settings-general-desktop.png" alt="Flare General settings showing image search and credits controls" caption="Settings uses the same navigation and visual language as setup and Profile." />
+Choose **Documentation** in the **Settings** header to open the handbook in a new tab. The link stays available in every settings section, including on phones, so you can read a guide while keeping unsaved changes in the original tab.
+
+Stable builds open the archive for their installed release; rolling builds open the published rolling handbook. Rolling documentation follows the latest published rolling commit, so it may be ahead of an older rolling installation. An unknown or other prerelease version opens [Versions](/versions) for you to choose. Custom builds use their package version and configured release channel; see [build identity](/hosting/configuration#core-environment-variables) if those do not match your source.
+
+<Screenshot src="/screenshots/documentation-links/settings-desktop.webp" alt="Settings on desktop with a Documentation link above the General controls" caption="Open Documentation from the settings header without leaving your working form." />
+
+::: details Find the link on a phone
+<div style="max-width: 390px; margin-inline: auto">
+<Screenshot src="/screenshots/documentation-links/settings-mobile.webp" alt="Settings on a phone with the Documentation link in its header" caption="The handbook is also one tap away in mobile settings." />
+</div>
+:::
 
 ## General
 

@@ -28,10 +28,12 @@ For email, precedence is **environment or secret file → saved value → defaul
 | `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK` | Disabled                                     | Only the exact value `true` permits HTTP webhook URLs and private/reserved destination addresses                                       |
 | `FLARE_EMAIL_ENCRYPTION_KEY`          | `NEXTAUTH_SECRET`                            | Optional dedicated key for encrypted SMTP credentials, mail payloads, and webhook signing secrets; at least 32 characters              |
 | `FLARE_EMAIL_ENCRYPTION_KEY_FILE`     | Unset                                        | Read the dedicated encryption key from a file; mutually exclusive with the direct variable                                             |
-| `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update-check behavior and display; other values resolve to stable                                         |
+| `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update checks, display, and rolling documentation links; other values resolve to stable                    |
 | `FLARE_COMMIT_SHA`                    | Unset                                        | Build identity shown for rolling releases; use the actual source commit                                                                |
 
 `DATABASE_URL` and `NEXTAUTH_SECRET` do not have Flare-provided `_FILE` variants. If your host supplies these through secret files, use its supported environment injection mechanism. Never assume every environment variable in this table supports a `_FILE` suffix.
+
+The **Documentation** link in Settings and **Setup guide** link during setup use the version in the build's `package.json` and `FLARE_RELEASE_CHANNEL`. Stable versions link to their matching documentation archive; rolling builds link to the latest published rolling handbook, not an archive for the specific `FLARE_COMMIT_SHA`. Other prerelease or unknown versions link to the version selector. For a custom build, keep its package version and release channel accurate; if its source differs from a published release, the linked guide may not describe those changes. Changing Flare's saved configuration version does not change these links.
 
 Use a stable, random `NEXTAUTH_SECRET` of at least 32 characters from the beginning. Creating webhooks needs encryption even when account email is disabled. Changing the active encryption key without migrating encrypted values prevents existing secrets from being decrypted; [plan key rotation](/hosting/maintenance#secrets-and-key-rotation).
 
