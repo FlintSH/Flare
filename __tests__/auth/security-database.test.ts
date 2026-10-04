@@ -322,6 +322,171 @@ suite('account security against disposable PostgreSQL', () => {
     expect(attempts.filter(Boolean)).toHaveLength(1)
     expect(await prisma.passkeyRecoveryCode.count()).toBe(9)
   })
+  it('accepts matching and mixed-case email addresses for dedicated emergency recovery', async () => {
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { email: 'Test@Example.Invalid' },
+    })
+    const enabled = await requirePasskey()
+    const authorize = authorizeProvider('passkey-recovery')
+    for (const [index, email] of [
+      'Test@Example.Invalid',
+      'test@example.invalid',
+      '  TEST@EXAMPLE.INVALID  ',
+    ].entries()) {
+      expect(
+        await authorize({ email, code: enabled.recoveryCodes![index] })
+      ).toMatchObject({ id: 'security-owner', email: 'Test@Example.Invalid' })
+      expect(await prisma.passkeyRecoveryCode.count()).toBe(9 - index)
+    }
+  })
+  it.each([
+    ['_', 'X'],
+    ['%', 'anything'],
+    ['\\', ''],
+  ])(
+    'matches literal %s email characters without treating a different address as ambiguous',
+    async (character, replacement) => {
+      const email = `test${character}name@example.invalid`
+      await prisma.user.update({
+        where: { id: 'security-owner' },
+        data: { email },
+      })
+      await prisma.user.create({
+        data: {
+          id: 'different-account',
+          email: `test${replacement}name@example.invalid`,
+          urlId: 'different-account',
+          uploadToken: 'different-account',
+        },
+      })
+      const enabled = await requirePasskey()
+      expect(
+        await authorizeProvider('passkey-recovery')({
+          email: email.toUpperCase(),
+          code: enabled.recoveryCodes![0],
+        })
+      ).toMatchObject({ id: 'security-owner', email })
+      expect(await prisma.passkeyRecoveryCode.count()).toBe(9)
+    }
+  )
+  it('does not allow wildcard email input to substitute for the owning address', async () => {
+    const enabled = await requirePasskey()
+    const code = enabled.recoveryCodes![0]
+    const authorize = authorizeProvider('passkey-recovery')
+    for (const email of [
+      'te_t@example.invalid',
+      '%@example.invalid',
+      'test@%.invalid',
+      'te\\st@example.invalid',
+    ]) {
+      expect(await authorize({ email, code })).toBeNull()
+      expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    }
+    expect(
+      await authorize({ email: 'TEST@EXAMPLE.INVALID', code })
+    ).toMatchObject({ id: 'security-owner' })
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(9)
+  })
+  it('rejects ambiguous case-variant emails without consuming even an exact-match account code', async () => {
+    const enabled = await requirePasskey()
+    await prisma.user.create({
+      data: {
+        id: 'case-variant-account',
+        email: 'Test@Example.Invalid',
+        // Optional accounts still make the address ambiguous.
+        passkeyRequired: false,
+        urlId: 'case-variant-account',
+        uploadToken: 'case-variant-account',
+      },
+    })
+    const code = enabled.recoveryCodes![0]
+    const authorize = authorizeProvider('passkey-recovery')
+    for (const email of [
+      'test@example.invalid',
+      'Test@Example.Invalid',
+      'TEST@EXAMPLE.INVALID',
+    ]) {
+      expect(await authorize({ email, code })).toBeNull()
+      expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    }
+    await prisma.user.update({
+      where: { id: 'case-variant-account' },
+      data: { email: 'distinct@example.invalid' },
+    })
+    expect(
+      await authorize({ email: 'TEST@EXAMPLE.INVALID', code })
+    ).toMatchObject({ id: 'security-owner' })
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(9)
+  })
+  it('rechecks email ambiguity after locking without consuming a code if a collision appeared', async () => {
+    const enabled = await requirePasskey()
+    await prisma.user.create({
+      data: {
+        id: 'case-variant-account',
+        email: 'distinct@example.invalid',
+        urlId: 'case-variant-account',
+        uploadToken: 'case-variant-account',
+      },
+    })
+    const lookup = prisma.user.findMany.bind(prisma.user)
+    const spy = vi
+      .spyOn(prisma.user, 'findMany')
+      .mockImplementationOnce((async (
+        args: Parameters<typeof prisma.user.findMany>[0]
+      ) => {
+        const snapshot = await lookup(args)
+        await prisma.user.update({
+          where: { id: 'case-variant-account' },
+          data: { email: 'Test@Example.Invalid' },
+        })
+        return snapshot
+      }) as unknown as typeof prisma.user.findMany)
+    try {
+      expect(
+        await required.authenticatePasskeyRecovery(
+          'test@example.invalid',
+          enabled.recoveryCodes![0]
+        )
+      ).toBeNull()
+      expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+  it.each(['email', 'sessionVersion'] as const)(
+    'preserves dedicated codes when %s changes after the recovery lookup',
+    async (changedField) => {
+      const enabled = await requirePasskey()
+      const lookup = prisma.user.findMany.bind(prisma.user)
+      const spy = vi
+        .spyOn(prisma.user, 'findMany')
+        .mockImplementationOnce((async (
+          args: Parameters<typeof prisma.user.findMany>[0]
+        ) => {
+          const snapshot = await lookup(args)
+          await prisma.user.update({
+            where: { id: 'security-owner' },
+            data:
+              changedField === 'email'
+                ? { email: 'changed@example.invalid' }
+                : { sessionVersion: { increment: 1 } },
+          })
+          return snapshot
+        }) as unknown as typeof prisma.user.findMany)
+      try {
+        expect(
+          await required.authenticatePasskeyRecovery(
+            'TEST@EXAMPLE.INVALID',
+            enabled.recoveryCodes![0]
+          )
+        ).toBeNull()
+        expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+      } finally {
+        spy.mockRestore()
+      }
+    }
+  )
   it('requires current strong proof for all factor management while enforced', async () => {
     const totp = await enroll()
     await requirePasskey(2)

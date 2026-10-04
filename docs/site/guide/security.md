@@ -141,11 +141,13 @@ Flare refuses to turn it off if it cannot find a configured fallback: a local pa
 
 ## Recover when required passkeys are unavailable
 
-On the login page, choose **Use a passkey recovery code**. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. These codes also support SSO-only accounts. They do not require access to the email inbox, a password, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
+On the login page, choose **Use a passkey recovery code**. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. This recovery option matches the email address without regard to capitalization. These codes also support SSO-only accounts. They do not require access to the email inbox, a password, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
+
+If older accounts have addresses that differ only by capitalization, dedicated recovery refuses the ambiguous address without consuming the code. The sign-in error stays generic. Ask the operator to [resolve the address collision](/admin/users#account-sign-in-security), or use a registered passkey while that is investigated. Do not share your recovery code with the operator.
 
 If automatic SSO redirects you to the provider, open `/auth/login?local=1` on your Flare instance to reach **Use a passkey recovery code** directly. This also works for an SSO-only account during a provider outage, provided you saved a dedicated code while enabling the passkey requirement.
 
-<Screenshot src="/screenshots/security/passkey-recovery-login.webp" alt="Passkey recovery sign-in asks for an account email and dedicated passkey recovery code, without a password field" caption="Use the current account email and one unused code from the dedicated passkey recovery set." />
+<Screenshot src="/screenshots/security/passkey-recovery-login.webp" alt="Passkey recovery sign-in accepts a mixed-case account email and dedicated passkey recovery code, without a password field" caption="Capitalization does not affect this recovery lookup. Use the current account email and an unused dedicated code." />
 
 The code is consumed once and the passkey requirement stays on. The recovered session provides **five minutes** of fresh proof to add a replacement passkey, replace the dedicated recovery codes, or explicitly turn off the requirement. Even your last code can begin this repair without spending another code. Complete a recovery action promptly: once the window expires, another fresh passkey or dedicated recovery sign-in is required.
 

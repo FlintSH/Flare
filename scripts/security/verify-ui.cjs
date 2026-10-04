@@ -486,7 +486,7 @@ async function testRequiredPasskeys(browser) {
       .click()
     await page
       .getByLabel('Email', { exact: true })
-      .fill('security-demo-jamie@example.test')
+      .fill('Security-Demo-Jamie@Example.Test')
   }
 
   async function submitRecovery(code) {
@@ -674,7 +674,7 @@ async function testRequiredPasskeys(browser) {
   await profile(page)
   if (videos) await page.waitForTimeout(1500)
   results.push(
-    'Required passkeys block password login, revoke prior sessions, preserve the last passkey, allow one-use emergency recovery, invalidate replaced recovery sets, and restore password sign-in only after explicitly disabling enforcement'
+    'Required passkeys block password login, revoke prior sessions, preserve the last passkey, allow one-use emergency recovery with differently capitalized email, invalidate replaced recovery sets, and restore password sign-in only after explicitly disabling enforcement'
   )
   await finishVideo(ctx, page, 'passkey-required-demo')
 }

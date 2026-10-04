@@ -100,6 +100,8 @@ The in-account **Confirm with a passkey** flow additionally sends `expectedUserI
 
 Emergency passkey recovery uses the NextAuth `passkey-recovery` credentials provider with `email` and `code`, retaining the standard NextAuth CSRF flow. It accepts one unused dedicated passkey recovery code only while the account requires passkeys. No password or TOTP value is required; authenticator recovery codes cannot substitute. An accepted code is consumed atomically and records the `passkey-recovery` authentication method. The requirement remains enabled after sign-in.
 
+This provider looks up the current account email **case-insensitively** and requires exactly one match. If legacy accounts differ only by email capitalization, it rejects the ambiguous lookup without consuming any recovery code. The caller receives the same generic sign-in failure as other rejected credentials; it does not learn which accounts matched. The operator must resolve the collision before dedicated recovery can identify the account. This matching rule applies to the `passkey-recovery` provider; other sign-in providers retain their existing behavior.
+
 ### Errors and throttling
 
 Errors contain `{ "error": "…" }` with `Cache-Control: no-store`. Invalid proof, used/expired challenges, invalid enrollment codes, and passkey limits return `400`; missing/revoked sessions or an `Authorization` header return `401`; an incorrect or missing mutation origin returns `403`; an unknown owned passkey returns `404`; oversized requests return `413`; unsupported body content types return `415`; throttled requests return `429`; unavailable canonical-origin configuration returns `503`. A throttled response includes `Retry-After: 900`.
