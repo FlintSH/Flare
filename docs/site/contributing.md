@@ -145,7 +145,7 @@ The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-loca
 
 ## Security browser checks and demos
 
-The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, recovery, and passkeys. The passkey recording uses Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. It does not show or test a native biometric prompt.
+The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, both recovery methods, passkeys, and the optional passkey requirement. The passkey recordings use Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. They do not show or test a native biometric prompt or a live external SSO provider.
 
 Use a **disposable local PostgreSQL database named exactly `flare_auth_demo`**. The seed script accepts only `localhost` or `127.0.0.1` and rejects other database names, including `flare_auth_demo_backup`. Omit the `schema` URL parameter or set it once to `public`; other schemas, duplicate schema parameters, and all other URL query parameters are rejected. It resets its two public fixture accounts and security rate counters. Never use an existing application database. With the dependencies installed, create the database using your local PostgreSQL tools, then start the app from the repository root:
 
@@ -166,18 +166,24 @@ node scripts/security/seed.cjs
 node scripts/security/verify-ui.cjs
 ```
 
-The fixture emails are `security-demo-alex@example.test` and `security-demo-jamie@example.test`; both use the deliberately public password `Security-demo-only-2026!`. The browser checks use real requests to enroll an authenticator, require a second factor at login, consume and reject reused recovery codes, replace codes, disable 2FA, register and use a passkey, rename/remove it, reject assertion replay and removed credentials, reject bearer/origin misuse, and invalidate old sessions. The ordinary browser run uses a 390 × 844 viewport for recovery-code replacement and disabling 2FA. Recordings keep a stable desktop viewport; separate mobile stills use the same 390px width with extra height so the complete controls remain visible. A fresh TOTP time step may require waiting up to 30 seconds. Run the seed again before repeating the suite.
+The fixture emails are `security-demo-alex@example.test` and `security-demo-jamie@example.test`; both use the deliberately public password `Security-demo-only-2026!`. The browser checks use real requests to enroll an authenticator, require a second factor at login, consume and reject reused authenticator recovery codes, replace codes, disable 2FA, register and use a passkey, rename/remove it, reject assertion replay and removed credentials, reject bearer/origin misuse, and invalidate old sessions. The required-passkey flow additionally blocks the correct password, refuses last-key removal, signs in with dedicated emergency codes without a password, rejects their reuse and replaced sets, and restores password sign-in only after an explicit disable operation. The ordinary browser run uses a 390 × 844 viewport for recovery and replacement flows. Recordings keep a stable desktop viewport; separate mobile stills use the same 390px width with extra height so the complete controls remain visible. A fresh TOTP time step may require waiting up to 30 seconds. Run the seed again before repeating the suite.
 
-To refresh visual evidence, set `FLARE_SECURITY_SCREENSHOTS` to an output directory and `FLARE_SECURITY_VIDEOS` to a separate temporary directory before running the browser script. It captures screenshots as WebP and the two completed walkthroughs as `two-factor-demo.webm` and `passkey-demo.webm`. Secrets are hidden by capture-only CSS installed before application scripts: QR codes, manual keys, recovery codes, and sensitive inputs never appear in recorded frames. The capture CSS does not alter the shipped UI. Inspect every resulting image and recording before replacing the canonical sources in `docs/images/security/` and `.github/assets/security/`. Include updated written transcripts in the guide and [demos](/demos). Keep temporary browser output and failed recordings out of Git.
+To refresh visual evidence, set `FLARE_SECURITY_SCREENSHOTS` to an output directory and `FLARE_SECURITY_VIDEOS` to a separate temporary directory before running the browser script. It captures screenshots as WebP and three completed walkthroughs as `two-factor-demo.webm`, `passkey-demo.webm`, and `passkey-required-demo.webm`. Secrets are hidden by capture-only CSS installed before application scripts: QR codes, manual keys, both recovery-code sets, and sensitive inputs never appear in recorded frames. The capture CSS does not alter the shipped UI. Inspect every resulting image and recording before replacing the canonical sources in `docs/images/security/` and `.github/assets/security/`. Include updated written transcripts in the guide and [demos](/demos). Keep temporary browser output and failed recordings out of Git.
 
-To check a recent sign-in expiring while password/email edits remain open, run this separate regression after reseeding:
+To check a recent sign-in expiring while password/email edits or an **Add a passkey** dialog remain open, run this separate regression after reseeding:
 
 ```sh
 node scripts/security/seed.cjs
 node scripts/security/verify-proof-expiry.cjs
 ```
 
-This check uses the exact public demonstration secret above and an HTTP `localhost` origin. It performs real authenticator enrollment and recovery sign-in, then adjusts only the demonstration session's authentication timestamp to just beyond five minutes. Server responses are real; elapsed time is controlled. The check confirms no password/email mutation is sent before the restored confirmation fields are completed, and verifies both successful changes afterward. Optional `FLARE_SECURITY_SCREENSHOTS` output includes `proof-expired.webp` with password values masked. It changes Alex's email/password; reseed before another suite or demo run.
+This check uses the exact public demonstration secret above and an HTTP `localhost` origin. It performs real authenticator enrollment and recovery sign-in, then adjusts only the demonstration session's authentication timestamp to just beyond five minutes. Server responses are real; elapsed time is controlled. It exercises three open forms:
+
+1. Enter password changes, expire the recent recovery proof, submit, and verify the code prompt appears without a profile mutation. Complete the proof and verify the password change succeeds.
+2. Repeat for a plain email change, verifying the entered address remains and no update is sent before the restored proof fields are completed.
+3. Open **Add a passkey** and enter a name while recovery proof is fresh. Expire that proof while the dialog stays open. Verify the name remains, password/code controls appear, and no security mutation is sent. Complete the proof and the virtual authenticator's real WebAuthn registration, then verify the saved passkey retains its name.
+
+Optional `FLARE_SECURITY_SCREENSHOTS` output includes `proof-expired.webp` with password values masked. The check changes Alex's email/password and registers a passkey; reseed before another suite or demo run.
 
 For the separate authentication database regression suite, create and migrate a disposable local database named exactly `flare_security_test_local` (or `flare_security_test_ci` for CI), then run:
 
@@ -187,7 +193,7 @@ DATABASE_URL="$FLARE_SECURITY_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/auth/security-database.test.ts
 ```
 
-Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic code/challenge redemption, stale-session fences, enrollment, encrypted secret handling, and recovery. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators on supported devices.
+Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic redemption for both code sets, stale-session fences, enrollment, encrypted secret handling, required-passkey transitions and fallback guards, and recovery for local and SSO-only accounts. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators or a live identity provider.
 
 ## Local visual testing with Meticulous
 

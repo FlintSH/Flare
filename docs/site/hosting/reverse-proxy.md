@@ -89,7 +89,7 @@ Flare uses forwarded client IPs for request throttling. Keep the app port privat
 
 Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.
 
-A passkey registered at one hostname cannot sign in at a different hostname. Before moving domains, have users test their local password plus authenticator/recovery code or their SSO method. After the move they must sign in through an available method and register new passkeys. Keep the previous hostname available during a planned transition when possible, and communicate the cutover before relying on the new host. [Sign-in security](/guide/security) covers account recovery.
+A passkey registered at one hostname cannot sign in at a different hostname. Before moving domains, users who require passkeys must preserve their dedicated passkey recovery codes, or explicitly choose **Allow other sign-in methods** while a passkey still works. Password plus authenticator/recovery code or SSO is a fallback only with that requirement off. After the move, sign in through an allowed method and register new passkeys. Dedicated passkey recovery works with the account's current email and a saved code, keeps the requirement on, and provides five minutes to enroll a replacement key. Keep the previous hostname available during a planned transition when possible, and communicate the cutover before relying on the new host. [Sign-in security](/guide/security) covers account recovery.
 
 ## Verify the public origin
 

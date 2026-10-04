@@ -87,25 +87,27 @@ Email enrollment and change operations use an account session that remains avail
 | `/api/auth/email/verify`        | POST    | A valid one-time email action token.                                                    |
 | `/api/auth/email/capabilities`  | GET     | Public view of enabled email capabilities.                                              |
 
-Email session mutations validate the request origin when provided. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column.
+Email session mutations validate the request origin when provided. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
 
 ### Authenticator, recovery-code, and passkey flows
 
 Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutation origins must match `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
 
-| Path                                  | Methods       | Authentication and purpose                                                                              |
-| ------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------- |
-| `/api/auth/security`                  | GET           | Browser session; inspect authenticator status, remaining recovery codes, and registered passkeys.       |
-| `/api/auth/security/totp/setup`       | POST          | Session and identity proof; begin five-minute authenticator setup for an account with a local password. |
-| `/api/auth/security/totp/enable`      | POST          | Session and correct pending setup code; enable TOTP and return one-time recovery codes.                 |
-| `/api/auth/security/totp/disable`     | POST          | Session and identity proof; remove TOTP and recovery codes.                                             |
-| `/api/auth/security/recovery-codes`   | POST          | Session and identity proof; replace all recovery codes and return the new set once.                     |
-| `/api/auth/security/passkeys/options` | POST          | Session and identity proof; start account-bound passkey registration.                                   |
-| `/api/auth/security/passkeys/verify`  | POST          | Session and pending WebAuthn proof; register the passkey.                                               |
-| `/api/auth/security/passkeys/{id}`    | PATCH, DELETE | Session and identity proof; rename or remove an owned passkey.                                          |
-| `/api/auth/passkeys/options`          | POST          | Public, rate-limited; begin passkey sign-in with an expiring WebAuthn challenge.                        |
+| Path                                         | Methods       | Authentication and purpose                                                                                               |
+| -------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `/api/auth/security`                         | GET           | Browser session; inspect authenticator/passkey status, the passkey requirement, and both remaining recovery-code counts. |
+| `/api/auth/security/totp/setup`              | POST          | Session and identity proof; begin five-minute authenticator setup for an account with a local password.                  |
+| `/api/auth/security/totp/enable`             | POST          | Session and correct pending setup code; enable TOTP and return one-time recovery codes.                                  |
+| `/api/auth/security/totp/disable`            | POST          | Session and identity proof; remove TOTP and recovery codes.                                                              |
+| `/api/auth/security/recovery-codes`          | POST          | Session and identity proof; replace all recovery codes and return the new set once.                                      |
+| `/api/auth/security/passkeys/options`        | POST          | Session and identity proof; start account-bound passkey registration.                                                    |
+| `/api/auth/security/passkeys/verify`         | POST          | Session and pending WebAuthn proof; register the passkey.                                                                |
+| `/api/auth/security/passkeys/require`        | POST          | Session and fresh passkey proof to enable the requirement; fresh passkey or dedicated recovery proof to disable it.      |
+| `/api/auth/security/passkeys/recovery-codes` | POST          | Session and fresh passkey/dedicated recovery proof; replace the dedicated recovery set while passkeys are required.      |
+| `/api/auth/security/passkeys/{id}`           | PATCH, DELETE | Session and identity proof; rename or remove an owned passkey.                                                           |
+| `/api/auth/passkeys/options`                 | POST          | Public, rate-limited; begin passkey sign-in with an expiring WebAuthn challenge.                                         |
 
-NextAuth completes passkey sign-in through its credentials callback after validating the WebAuthn proof; obtaining public options is not authentication. Credential additions/removals and authenticator/recovery changes invalidate browser sessions; renaming a passkey preserves them. API credentials and sharing permissions keep their existing boundaries.
+NextAuth completes passkey sign-in through its credentials callback after validating the WebAuthn proof; obtaining public options is not authentication. Its separate `passkey-recovery` provider accepts email plus a dedicated single-use code while the account requires passkeys. Credential additions/removals, either recovery-set change, and toggling the requirement invalidate browser sessions; renaming a passkey preserves them. API credentials and sharing permissions keep their existing boundaries. See the [session security contract](./security).
 
 ## Dashboard routes using the shared account helper
 

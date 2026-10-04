@@ -63,6 +63,16 @@ export async function assertSecurityProof(
   session: Session
 ) {
   assertSessionVersion(user, session)
+  if (user.passkeyRequired) {
+    if (
+      recentAuthentication(session, 'passkey') ||
+      recentAuthentication(session, 'passkey-recovery')
+    )
+      return
+    throw new SecurityError(
+      'Sign in again with a passkey or a passkey recovery code, then retry within five minutes.'
+    )
+  }
   if (
     recentAuthentication(session, 'passkey') ||
     recentAuthentication(session, 'recovery')

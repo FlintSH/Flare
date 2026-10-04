@@ -253,7 +253,7 @@ test('role walkthrough links to the guide and recording loads without autoplay',
   await expect(page.locator('h1')).toContainText('Roles and permissions')
 })
 
-test('security guide is discoverable and both recordings load without autoplay', async ({
+test('security guide is discoverable and all three recordings load without autoplay', async ({
   page,
 }) => {
   await page.goto('./features.html')
@@ -268,7 +268,11 @@ test('security guide is discoverable and both recordings load without autoplay',
     'href',
     /guide\/security\.html$/
   )
-  for (const name of ['two-factor-demo.webm', 'passkey-demo.webm']) {
+  for (const name of [
+    'two-factor-demo.webm',
+    'passkey-demo.webm',
+    'passkey-required-demo.webm',
+  ]) {
     const video = page.locator(`video[src$="${name}"]`)
     await expect(video).toHaveAttribute('preload', 'none')
     expect(await video.getAttribute('autoplay')).toBeNull()
@@ -307,6 +311,9 @@ test('security guide is discoverable and both recordings load without autoplay',
   ).toBeVisible()
   await expect(
     page.getByRole('heading', { name: 'Create, use, and remove a passkey' })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Require a passkey and recover access' })
   ).toBeVisible()
 })
 

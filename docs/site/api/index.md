@@ -36,16 +36,16 @@ Use the builder to see how your choices change a request. It generates a command
 
 ## Choose the right connection
 
-| What you want to do                             | Start here                                    |
-| ----------------------------------------------- | --------------------------------------------- |
-| Give a script only the permissions it needs     | [Authentication and scopes](./authentication) |
-| Upload, list, search, or filter files           | [Files API](./files)                          |
-| Upload a large file in parts                    | [Chunked uploads](./files#chunked-uploads)    |
-| Create, list, or remove short links             | [Short links API](./short-links)              |
-| Run your own automation after an upload         | [Webhooks](./webhooks)                        |
-| Start with working code                         | [Recipes](./recipes)                          |
-| Integrate with browser sign-in security         | [Session security contracts](./security)      |
-| Understand the rest of the application's routes | [Endpoint inventory](./endpoint-inventory)    |
+| What you want to do                                                | Start here                                    |
+| ------------------------------------------------------------------ | --------------------------------------------- |
+| Give a script only the permissions it needs                        | [Authentication and scopes](./authentication) |
+| Upload, list, search, or filter files                              | [Files API](./files)                          |
+| Upload a large file in parts                                       | [Chunked uploads](./files#chunked-uploads)    |
+| Create, list, or remove short links                                | [Short links API](./short-links)              |
+| Run your own automation after an upload                            | [Webhooks](./webhooks)                        |
+| Start with working code                                            | [Recipes](./recipes)                          |
+| Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)      |
+| Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)    |
 
 For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the uploader configuration for you in **Profile → Uploads → Screenshot tools and scripts**. Those downloads already contain your account upload credential. Named tokens are useful when building a custom connection, restricting permissions, or revoking one tool independently.
 

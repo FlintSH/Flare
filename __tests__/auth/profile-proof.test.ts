@@ -11,7 +11,10 @@ const status: SecurityStatus = {
   passkeysAvailable: true,
   canUseRecentPasskey: false,
   canUseRecentRecovery: false,
+  canUseRecentPasskeyRecovery: false,
   canUseRecentSso: false,
+  passkeyRequired: false,
+  passkeyRecoveryCodesRemaining: 0,
 }
 
 describe('profile proof preflight', () => {
@@ -85,5 +88,64 @@ describe('profile proof preflight', () => {
       })
     expect(await checkProfileProof(refresh, 'email', {})).toBeNull()
     expect(await checkProfileProof(refresh, 'email', {})).toMatch(/SSO again/)
+  })
+
+  it('does not offer a password, authenticator, or old recovery proof as a fallback when passkeys are required', async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      data: {
+        ...status,
+        passkeyRequired: true,
+        canUseRecentRecovery: true,
+        canUseRecentSso: true,
+      },
+      error: null,
+    })
+    const proof = {
+      currentPassword: 'public-test-password',
+      securityCode: '123456',
+    }
+    expect(await checkProfileProof(refresh, 'password', proof)).toMatch(
+      /Confirm with a passkey/
+    )
+    expect(await checkProfileProof(refresh, 'email', proof)).toMatch(
+      /Confirm with a passkey/
+    )
+  })
+
+  it.each(['canUseRecentPasskey', 'canUseRecentPasskeyRecovery'] as const)(
+    'restores passkey confirmation when required-mode %s expires before a mutation',
+    async (method) => {
+      const refresh = vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: { ...status, passkeyRequired: true, [method]: true },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: { ...status, passkeyRequired: true },
+          error: null,
+        })
+      const proof = { currentPassword: 'public-test-password' }
+      expect(await checkProfileProof(refresh, 'password', proof)).toBeNull()
+      expect(await checkProfileProof(refresh, 'password', proof)).toMatch(
+        /Confirm with a passkey/
+      )
+    }
+  )
+
+  it('accepts dedicated recovery proof for an SSO-only required-mode email change without password fallback', async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      data: {
+        ...status,
+        passkeyRequired: true,
+        hasPassword: false,
+        canUseRecentPasskeyRecovery: true,
+      },
+      error: null,
+    })
+    expect(await checkProfileProof(refresh, 'email', {})).toBeNull()
+    expect(await checkProfileProof(refresh, 'password', {})).toMatch(
+      /identity provider/
+    )
   })
 })

@@ -4,10 +4,16 @@ import { useState } from 'react'
 
 import { signIn } from 'next-auth/react'
 
-import type { SecurityStatus } from '@/components/auth/security-api'
+import {
+  type SecurityStatus,
+  hasRecentSecurityProof,
+  recentSecurityProofName,
+} from '@/components/auth/security-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+import { PasskeyConfirmation } from './passkey-confirmation'
 
 export function readSecurityProof(form: HTMLFormElement) {
   const data = new FormData(form)
@@ -20,29 +26,43 @@ export function readSecurityProof(form: HTMLFormElement) {
 export function SecurityProof({
   status,
   busy,
+  requirePasskey = false,
+  onConfirmed,
+  onBusyChange,
 }: {
   status: SecurityStatus
   busy: boolean
+  requirePasskey?: boolean
+  onConfirmed: () => Promise<void>
+  onBusyChange: (busy: boolean) => void
 }) {
   const [useRecoveryCode, setUseRecoveryCode] = useState(false)
-  const recent =
-    status.canUseRecentPasskey ||
-    status.canUseRecentRecovery ||
-    (!status.hasPassword && status.canUseRecentSso)
+  const recent = requirePasskey
+    ? status.canUseRecentPasskey
+    : hasRecentSecurityProof(status) ||
+      (!status.passkeyRequired && !status.hasPassword && status.canUseRecentSso)
 
   if (recent) {
     return (
       <p className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
         Your recent{' '}
-        {status.canUseRecentPasskey
-          ? 'passkey'
-          : status.canUseRecentRecovery
-            ? 'recovery code'
-            : 'SSO'}{' '}
+        {hasRecentSecurityProof(status)
+          ? recentSecurityProofName(status)
+          : 'SSO'}{' '}
         sign-in confirms your identity for this change.
-        {status.canUseRecentRecovery &&
-          ' This confirmation is available for five minutes after sign-in.'}
+        {' This confirmation is available for five minutes after sign-in.'}
       </p>
+    )
+  }
+
+  if (requirePasskey || status.passkeyRequired) {
+    return (
+      <PasskeyConfirmation
+        busy={busy}
+        onConfirmed={onConfirmed}
+        onBusyChange={onBusyChange}
+        allowRecovery={!requirePasskey && status.passkeyRequired}
+      />
     )
   }
 

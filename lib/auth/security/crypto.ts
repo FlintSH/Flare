@@ -99,6 +99,21 @@ export function recoveryHash(userId: string, code: string) {
   )
 }
 
+export function newPasskeyRecoveryCodes() {
+  return Array.from({ length: 10 }, () =>
+    randomBytes(16)
+      .toString('hex')
+      .match(/.{1,8}/g)!
+      .join('-')
+  )
+}
+
+export function passkeyRecoveryHash(userId: string, code: string) {
+  return securityHash(
+    `flare-passkey-recovery-v1:${userId}:${code.replace(/[\s-]/g, '').toLowerCase()}`
+  )
+}
+
 export function webauthnUserId(userId: string) {
   return new Uint8Array(
     createHash('sha256').update(`flare-webauthn-user-v1:${userId}`).digest()

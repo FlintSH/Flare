@@ -36,12 +36,16 @@ async function main() {
   })
   const page = await context.newPage()
   const mutations = []
+  const securityMutations = []
   page.on('request', (request) => {
-    if (
-      request.method() === 'PUT' &&
-      new URL(request.url()).pathname === '/api/profile'
-    )
+    const pathname = new URL(request.url()).pathname
+    if (request.method() === 'PUT' && pathname === '/api/profile')
       mutations.push(request)
+    if (
+      !['GET', 'HEAD'].includes(request.method()) &&
+      pathname.startsWith('/api/auth/security/')
+    )
+      securityMutations.push(request)
   })
   try {
     async function api(route, body) {
@@ -238,8 +242,112 @@ async function main() {
       accountForm.getByRole('button', { name: 'Save Changes', exact: true })
     )
     assert.equal(mutations.length, 2)
+
+    await login(
+      replacementEmail,
+      replacementPassword,
+      enrollment.recoveryCodes[4]
+    )
+    const optionalSecurity = await api('/api/auth/security')
+    assert.equal(optionalSecurity.passkeyRequired, false)
+    assert.equal(optionalSecurity.passkeysAvailable, true)
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('WebAuthn.enable')
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    })
+    await profile()
+    await page
+      .locator('#sign-in-security')
+      .getByRole('button', { name: 'Add a passkey', exact: true })
+      .click()
+    const dialog = page.getByRole('dialog')
+    const passkeyName = 'Proof expiry demonstration key'
+    await expect(dialog).toContainText('Your recent recovery code sign-in')
+    await expect(
+      dialog.getByLabel('Current password', { exact: true })
+    ).toHaveCount(0)
+    await expect(
+      dialog.getByLabel('Authenticator code', { exact: true })
+    ).toHaveCount(0)
+    await dialog.getByLabel('Passkey name', { exact: true }).fill(passkeyName)
+    await expireExistingProof()
+    await dialog
+      .getByRole('button', { name: 'Create passkey', exact: true })
+      .click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Enter your current password to continue.'
+    )
+    await expect(
+      dialog.getByLabel('Current password', { exact: true })
+    ).toBeVisible()
+    await expect(
+      dialog.getByLabel('Authenticator code', { exact: true })
+    ).toBeVisible()
+    assert.equal(
+      securityMutations.length,
+      0,
+      'Expired dialog proof must restore password/code fields before any security mutation'
+    )
+    await expect(
+      dialog.getByLabel('Passkey name', { exact: true })
+    ).toHaveValue(passkeyName)
+    await dialog
+      .getByLabel('Current password', { exact: true })
+      .fill(replacementPassword)
+    await dialog
+      .getByRole('button', { name: 'Use a recovery code', exact: true })
+      .click()
+    await dialog
+      .getByLabel('Recovery code', { exact: true })
+      .fill(enrollment.recoveryCodes[5])
+    const registrationResponses = Promise.all(
+      [
+        '/api/auth/security/passkeys/options',
+        '/api/auth/security/passkeys/verify',
+      ].map((route) =>
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === 'POST' &&
+            new URL(response.url()).pathname === route
+        )
+      )
+    )
+    await dialog
+      .getByRole('button', { name: 'Create passkey', exact: true })
+      .click()
+    for (const response of await registrationResponses) {
+      assert.equal(response.status(), 200)
+    }
+    await expect(
+      dialog.getByRole('heading', {
+        name: 'Your security settings are updated',
+      })
+    ).toBeVisible()
+    assert.equal(securityMutations.length, 2)
+    await dialog
+      .getByRole('button', { name: 'Sign in again', exact: true })
+      .click()
+    await page.waitForURL('**/auth/login*')
+    await login(
+      replacementEmail,
+      replacementPassword,
+      enrollment.recoveryCodes[6]
+    )
+    const savedSecurity = await api('/api/auth/security')
+    assert.equal(savedSecurity.passkeyRequired, false)
+    assert.ok(
+      savedSecurity.passkeys.some((passkey) => passkey.name === passkeyName)
+    )
     console.log(
-      'PASS: controlled proof expiry reveals password/email proof fields before any PUT; entered changes survive and both real retries succeed.'
+      'PASS: controlled proof expiry restores password/email/dialog proof fields before mutations; entered values survive and all three real retries succeed, including WebAuthn registration.'
     )
   } finally {
     await context.close()

@@ -5,11 +5,11 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import { ArrowLeft, Fingerprint, ShieldCheck } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
-import { passkeyError, securityRequest } from '@/components/auth/security-api'
+import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
+import { passkeyError } from '@/components/auth/security-api'
 import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,7 @@ export function LoginForm({
   const [passkeysSupported, setPasskeysSupported] = useState(false)
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [useRecoveryCode, setUseRecoveryCode] = useState(false)
+  const [passkeyRecovery, setPasskeyRecovery] = useState(false)
   // Credentials stay in memory only while completing the second factor.
   const pendingCredentials = useRef<{ email: string; password: string } | null>(
     null
@@ -91,26 +92,7 @@ export function LoginForm({
     setLoading('passkey')
     setError(null)
     try {
-      const { startAuthentication } = await import('@simplewebauthn/browser')
-      const { options, challengeId } = await securityRequest<{
-        options: PublicKeyCredentialRequestOptionsJSON
-        challengeId: string
-      }>('/api/auth/passkeys/options', {})
-      const assertion = await startAuthentication({ optionsJSON: options })
-      const result = await signIn('passkey', {
-        challengeId,
-        response: JSON.stringify(assertion),
-        redirect: false,
-        callbackUrl: '/dashboard',
-      })
-      if (!result || result.error) {
-        setError(
-          result?.error === 'TooManyAttempts'
-            ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
-            : 'Unable to sign in with this passkey. Try again or use your password.'
-        )
-        return
-      }
+      await signInWithPasskey()
       finishSignIn()
     } catch (cause) {
       setError(passkeyError(cause))
@@ -125,6 +107,30 @@ export function LoginForm({
     setLoading('password')
     setError(null)
     const data = new FormData(event.currentTarget)
+    if (passkeyRecovery) {
+      try {
+        const result = await signIn('passkey-recovery', {
+          email: data.get('email'),
+          code: data.get('code'),
+          redirect: false,
+          callbackUrl: '/dashboard',
+        })
+        if (!result?.ok || result.error) {
+          setError(
+            result?.error === 'TooManyAttempts'
+              ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
+              : 'Unable to sign in. Check your email address and use an unused passkey recovery code from your latest set.'
+          )
+          return
+        }
+        finishSignIn()
+      } catch {
+        setError('An error occurred. Please try again.')
+      } finally {
+        setLoading(null)
+      }
+      return
+    }
     const credentials = twoFactorRequired
       ? pendingCredentials.current
       : {
@@ -149,6 +155,14 @@ export function LoginForm({
         setTwoFactorRequired(true)
         return
       }
+      if (result?.error === 'PasskeyRequired') {
+        pendingCredentials.current = null
+        setTwoFactorRequired(false)
+        setError(
+          'This account requires a passkey. Sign in with a registered passkey or use a dedicated passkey recovery code. Password and SSO sign-in are blocked.'
+        )
+        return
+      }
       if (!result || result.error) {
         setError(
           result?.error === 'TooManyAttempts'
@@ -170,7 +184,48 @@ export function LoginForm({
   return (
     <form onSubmit={onSubmit} aria-busy={busy}>
       <div className="space-y-4">
-        {twoFactorRequired ? (
+        {passkeyRecovery ? (
+          <>
+            <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
+              <h2 className="font-medium">Recover passkey access</h2>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Use a dedicated recovery code saved when you required passkeys.
+                Each code grants full account access once with your email
+                address alone. Authenticator recovery codes will not work here.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="passkey-recovery-email">Email</Label>
+              <Input
+                id="passkey-recovery-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                disabled={busy}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="passkey-recovery-code">
+                Passkey recovery code
+              </Label>
+              <Input
+                id="passkey-recovery-code"
+                name="code"
+                autoComplete="one-time-code"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={80}
+                required
+                disabled={busy}
+                data-sensitive="true"
+                className="font-mono"
+                placeholder="Enter an unused passkey recovery code"
+              />
+            </div>
+          </>
+        ) : twoFactorRequired ? (
           <>
             <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
               <ShieldCheck
@@ -294,6 +349,8 @@ export function LoginForm({
               />
               Signing in...
             </>
+          ) : passkeyRecovery ? (
+            'Sign in with recovery code'
           ) : twoFactorRequired ? (
             'Verify and sign in'
           ) : (
@@ -301,7 +358,7 @@ export function LoginForm({
           )}
         </Button>
       </div>
-      {twoFactorRequired && (
+      {(twoFactorRequired || passkeyRecovery) && (
         <Button
           type="button"
           variant="ghost"
@@ -311,6 +368,7 @@ export function LoginForm({
             pendingCredentials.current = null
             setTwoFactorRequired(false)
             setUseRecoveryCode(false)
+            setPasskeyRecovery(false)
             setError(null)
           }}
         >
@@ -318,62 +376,81 @@ export function LoginForm({
           Back to sign in
         </Button>
       )}
-      {!twoFactorRequired && (passkeysSupported || oidcEnabled) && (
-        <div className="pt-6 space-y-3">
-          <div className="relative mb-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
+      {!twoFactorRequired &&
+        !passkeyRecovery &&
+        (passkeysSupported || oidcEnabled) && (
+          <div className="pt-6 space-y-3">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-3 text-muted-foreground">Or</span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-3 text-muted-foreground">Or</span>
-            </div>
+            {passkeysSupported && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 font-medium"
+                disabled={busy}
+                onClick={onPasskeySignIn}
+              >
+                {loading === 'passkey' ? (
+                  <>
+                    <Icons.spinner
+                      className="mr-2 h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Waiting for your passkey…
+                  </>
+                ) : (
+                  <>
+                    <Fingerprint className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Sign in with a passkey
+                  </>
+                )}
+              </Button>
+            )}
+            {oidcEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 font-medium"
+                disabled={busy}
+                onClick={onOidcSignIn}
+              >
+                {loading === 'oidc' ? (
+                  <>
+                    <Icons.spinner
+                      className="mr-2 h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Redirecting...
+                  </>
+                ) : (
+                  oidcButtonText
+                )}
+              </Button>
+            )}
           </div>
-          {passkeysSupported && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 font-medium"
-              disabled={busy}
-              onClick={onPasskeySignIn}
-            >
-              {loading === 'passkey' ? (
-                <>
-                  <Icons.spinner
-                    className="mr-2 h-4 w-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                  Waiting for your passkey…
-                </>
-              ) : (
-                <>
-                  <Fingerprint className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Sign in with a passkey
-                </>
-              )}
-            </Button>
-          )}
-          {oidcEnabled && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 font-medium"
-              disabled={busy}
-              onClick={onOidcSignIn}
-            >
-              {loading === 'oidc' ? (
-                <>
-                  <Icons.spinner
-                    className="mr-2 h-4 w-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                  Redirecting...
-                </>
-              ) : (
-                oidcButtonText
-              )}
-            </Button>
-          )}
-        </div>
+        )}
+      {!passkeyRecovery && (
+        <Button
+          type="button"
+          variant="link"
+          className="mt-3 h-auto min-h-10 w-full whitespace-normal"
+          disabled={busy}
+          onClick={() => {
+            pendingCredentials.current = null
+            setTwoFactorRequired(false)
+            setUseRecoveryCode(false)
+            setPasskeyRecovery(true)
+            setError(null)
+          }}
+        >
+          Use a passkey recovery code
+        </Button>
       )}
       <div className="mt-6 border-t border-border/60 pt-5 text-center text-sm leading-relaxed text-muted-foreground">
         {registrationsEnabled ? (

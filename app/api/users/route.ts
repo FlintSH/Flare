@@ -388,7 +388,7 @@ export async function PUT(req: Request) {
             pendingEmail: null,
             pendingEmailOldConfirmed: false,
           }),
-          ...(latestConfig.enabled && (emailChanged || body.password)
+          ...(emailChanged || body.password
             ? { sessionVersion: { increment: 1 } }
             : {}),
           ...(latestConfig.enabled && body.password

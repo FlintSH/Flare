@@ -14,10 +14,11 @@ import {
   Smartphone,
   Trash2,
 } from 'lucide-react'
-import { signOut } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 
 import {
   type AccountPasskey,
+  hasRecentSecurityProof,
   passkeyError,
   securityRequest,
 } from '@/components/auth/security-api'
@@ -42,6 +43,7 @@ import { Label } from '@/components/ui/label'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'
 
+import { checkManagementProof } from './management-proof'
 import { RecoveryCodes } from './recovery-codes'
 import { SecurityProof, readSecurityProof } from './security-proof'
 
@@ -52,6 +54,9 @@ type Action =
   | 'add-passkey'
   | 'rename-passkey'
   | 'remove-passkey'
+  | 'require-passkey'
+  | 'allow-other-methods'
+  | 'passkey-codes'
 type Setup = { secret: string; uri: string; challengeId: string; qr?: string }
 
 const titles: Record<Action, string> = {
@@ -61,9 +66,13 @@ const titles: Record<Action, string> = {
   'add-passkey': 'Add a passkey',
   'rename-passkey': 'Rename passkey',
   'remove-passkey': 'Remove this passkey?',
+  'require-passkey': 'Require passkey to sign in',
+  'allow-other-methods': 'Allow other sign-in methods',
+  'passkey-codes': 'Replace passkey recovery codes',
 }
 
 export function SignInSecurity() {
+  const { data: session } = useSession()
   const {
     data: status,
     isPending,
@@ -77,6 +86,8 @@ export function SignInSecurity() {
   )
   const [setup, setSetup] = useState<Setup | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
+  const passkeyCodes =
+    action === 'require-passkey' || action === 'passkey-codes'
   const [complete, setComplete] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -143,6 +154,18 @@ export function SignInSecurity() {
     setBusy(true)
     setError(null)
     try {
+      // Proof can expire while a dialog remains open. Restore its controls before sending a mutation.
+      if (!setup) {
+        const requirement = await checkManagementProof(
+          refetch,
+          proof,
+          action === 'require-passkey'
+        )
+        if (requirement) {
+          setError(requirement)
+          return
+        }
+      }
       if (action === 'setup') {
         if (!setup) {
           const next = await securityRequest<Setup>(
@@ -172,6 +195,19 @@ export function SignInSecurity() {
         setCodes(result.recoveryCodes)
       } else if (action === 'disable') {
         await securityRequest('/api/auth/security/totp/disable', proof)
+        setComplete(true)
+      } else if (action === 'require-passkey' || action === 'passkey-codes') {
+        const result = await securityRequest<{ recoveryCodes: string[] }>(
+          action === 'require-passkey'
+            ? '/api/auth/security/passkeys/require'
+            : '/api/auth/security/passkeys/recovery-codes',
+          action === 'require-passkey' ? { required: true } : {}
+        )
+        setCodes(result.recoveryCodes)
+      } else if (action === 'allow-other-methods') {
+        await securityRequest('/api/auth/security/passkeys/require', {
+          required: false,
+        })
         setComplete(true)
       } else if (action === 'add-passkey') {
         const { startRegistration } = await import('@simplewebauthn/browser')
@@ -220,10 +256,15 @@ export function SignInSecurity() {
 
   const needsSso =
     status &&
+    !status.passkeyRequired &&
     !status.hasPassword &&
-    !status.canUseRecentPasskey &&
-    !status.canUseRecentRecovery &&
+    !hasRecentSecurityProof(status) &&
     !status.canUseRecentSso
+  const needsPasskey =
+    status &&
+    (action === 'require-passkey'
+      ? !status.canUseRecentPasskey
+      : status.passkeyRequired && !hasRecentSecurityProof(status))
 
   return (
     <Card id="sign-in-security" className="scroll-mt-28">
@@ -292,6 +333,13 @@ export function SignInSecurity() {
               </div>
               {status.twoFactorEnabled ? (
                 <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                  {status.passkeyRequired && (
+                    <p className="text-sm text-muted-foreground">
+                      Your authenticator is saved, but password and
+                      authenticator sign-in are blocked while a passkey is
+                      required.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <KeyRound className="h-4 w-4" aria-hidden="true" />
                     {status.recoveryCodesRemaining} recovery{' '}
@@ -398,6 +446,10 @@ export function SignInSecurity() {
                           variant="ghost"
                           size="icon"
                           aria-label={`Remove ${passkey.name}`}
+                          disabled={
+                            status.passkeyRequired &&
+                            status.passkeys.length === 1
+                          }
                           onClick={() => openAction('remove-passkey', passkey)}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -437,6 +489,89 @@ export function SignInSecurity() {
                   another.
                 </p>
               )}
+              {status.passkeyRequired && status.passkeys.length === 1 && (
+                <p className="text-xs text-muted-foreground">
+                  Add a second passkey before removing your last one, or
+                  explicitly allow other sign-in methods.
+                </p>
+              )}
+              {(status.passkeys.length > 0 || status.passkeyRequired) && (
+                <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-medium">
+                      Require passkey to sign in
+                    </h4>
+                    <span className="rounded-full border px-2.5 py-1 text-xs font-medium">
+                      {status.passkeyRequired ? 'Required' : 'Optional'}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {status.passkeyRequired
+                      ? 'Only a passkey or a dedicated passkey recovery code can sign in. Password, authenticator, and SSO sign-in are blocked until you explicitly allow them again.'
+                      : 'Require a passkey and block password, authenticator, and SSO sign-in. You will save a separate set of emergency passkey recovery codes.'}
+                  </p>
+                  {status.passkeyRequired ? (
+                    <>
+                      <p className="text-sm font-medium">
+                        {status.passkeyRecoveryCodesRemaining} passkey recovery{' '}
+                        {status.passkeyRecoveryCodesRemaining === 1
+                          ? 'code'
+                          : 'codes'}{' '}
+                        remaining
+                      </p>
+                      {status.passkeyRecoveryCodesRemaining <= 2 && (
+                        <p className="text-sm text-destructive">
+                          Replace your passkey recovery codes now to keep an
+                          emergency way back in.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-auto min-h-9 whitespace-normal"
+                          onClick={() => openAction('passkey-codes')}
+                        >
+                          Replace passkey recovery codes
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-auto min-h-9 whitespace-normal"
+                          onClick={() => openAction('allow-other-methods')}
+                        >
+                          Allow other sign-in methods
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {!session?.user.email && (
+                        <p className="text-sm text-muted-foreground">
+                          Add an email address to your account first. Your email
+                          identifies the account when using emergency recovery
+                          codes.
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-auto min-h-10 whitespace-normal"
+                        disabled={
+                          !session?.user.email ||
+                          !supported ||
+                          !status.passkeysAvailable
+                        }
+                        onClick={() => openAction('require-passkey')}
+                      >
+                        Require passkey to sign in
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </section>
           </>
         )}
@@ -459,7 +594,9 @@ export function SignInSecurity() {
           <DialogHeader>
             <DialogTitle>
               {codes
-                ? 'Save your recovery codes'
+                ? passkeyCodes
+                  ? 'Save your passkey recovery codes'
+                  : 'Save your recovery codes'
                 : complete
                   ? 'Your security settings are updated'
                   : action
@@ -471,19 +608,27 @@ export function SignInSecurity() {
                 ? 'These codes are shown only once. Save them before continuing.'
                 : complete
                   ? 'For your protection, all previous sessions have ended. Sign in again to continue.'
-                  : action === 'setup'
-                    ? setup
-                      ? 'Scan the QR code with your authenticator app, then enter the code it generates.'
-                      : 'First, confirm your identity. You will connect your app in the next step.'
-                    : action === 'codes'
-                      ? 'Your old recovery codes will stop working immediately. Save the new set before signing in again.'
-                      : action === 'disable'
-                        ? 'Your password will no longer need an authenticator code. Existing recovery codes will also stop working.'
-                        : action === 'add-passkey'
-                          ? 'Give your passkey a name you will recognize, then follow your browser’s instructions.'
-                          : action === 'remove-passkey'
-                            ? `“${selectedPasskey?.name}” will no longer sign in to Flare. This does not delete it from your device or password manager.`
-                            : 'Choose a name that helps you recognize this device or password manager.'}
+                  : action === 'require-passkey'
+                    ? 'Confirm a registered passkey, then save ten emergency passkey recovery codes. Password, authenticator, and SSO sign-in will stop. Your existing credentials stay saved, and all browser sessions will end.'
+                    : action === 'allow-other-methods'
+                      ? 'Your saved password or SSO method will be allowed again, with any existing authenticator requirement. Dedicated passkey recovery codes will stop working. Registered passkeys stay saved, and all browser sessions will end.'
+                      : action === 'passkey-codes'
+                        ? 'All previous passkey recovery codes will stop working immediately. Save the new set before signing in again. Each code grants full access with only your email address.'
+                        : action === 'setup'
+                          ? setup
+                            ? 'Scan the QR code with your authenticator app, then enter the code it generates.'
+                            : 'First, confirm your identity. You will connect your app in the next step.'
+                          : action === 'codes'
+                            ? 'Your old recovery codes will stop working immediately. Save the new set before signing in again.'
+                            : action === 'disable'
+                              ? status?.passkeyRequired
+                                ? 'Your saved authenticator and its recovery codes will be removed. Your passkey requirement stays on, so password sign-in will remain blocked.'
+                                : 'Your password will no longer need an authenticator code. Existing recovery codes will also stop working.'
+                              : action === 'add-passkey'
+                                ? 'Give your passkey a name you will recognize, then follow your browser’s instructions.'
+                                : action === 'remove-passkey'
+                                  ? `“${selectedPasskey?.name}” will no longer sign in to Flare. This does not delete it from your device or password manager.`
+                                  : 'Choose a name that helps you recognize this device or password manager.'}
             </DialogDescription>
           </DialogHeader>
           {error && (
@@ -497,6 +642,7 @@ export function SignInSecurity() {
           {codes ? (
             <RecoveryCodes
               codes={codes}
+              kind={passkeyCodes ? 'passkey' : 'authenticator'}
               onDone={() => {
                 setCodes(null)
                 setComplete(true)
@@ -581,7 +727,17 @@ export function SignInSecurity() {
                         />
                       </div>
                     )}
-                    <SecurityProof status={status} busy={busy} />
+                    <SecurityProof
+                      status={status}
+                      busy={busy}
+                      requirePasskey={action === 'require-passkey'}
+                      onBusyChange={setBusy}
+                      onConfirmed={async () => {
+                        const result = await refetch()
+                        if (result.error) throw result.error
+                        setError(null)
+                      }}
+                    />
                   </>
                 )}
                 <DialogFooter>
@@ -601,7 +757,9 @@ export function SignInSecurity() {
                         ? 'destructive'
                         : 'default'
                     }
-                    disabled={busy || (!!needsSso && !setup)}
+                    disabled={
+                      busy || ((!!needsSso || !!needsPasskey) && !setup)
+                    }
                   >
                     {busy ? (
                       <>
@@ -625,6 +783,12 @@ export function SignInSecurity() {
                       'Create passkey'
                     ) : action === 'rename-passkey' ? (
                       'Save name'
+                    ) : action === 'require-passkey' ? (
+                      'Require passkey'
+                    ) : action === 'allow-other-methods' ? (
+                      'Allow other methods'
+                    ) : action === 'passkey-codes' ? (
+                      'Replace codes'
                     ) : (
                       'Remove passkey'
                     )}

@@ -67,7 +67,13 @@ SSO-only accounts use the provider's MFA policy; Flare does not offer local auth
 
 If an account has both a local password and a provider binding and enables Flare's authenticator, OIDC sign-in is refused for that account. Use its password plus authenticator/recovery code or a registered passkey. This prevents the provider path from skipping the account's local second factor. Auto-login still has the `/auth/login?local=1` escape route for password and passkey sign-in.
 
-Keep an independently usable local administrator method and saved recovery codes before changing the provider. Password resets and the email-policy recovery override do not disable an authenticator or remove registered passkeys.
+An account can separately enable **Require passkey to sign in**, including an SSO-only account. That opt-in setting blocks OIDC and all password sign-in for the account; it does not remove the provider binding. Activation requires a registered passkey, a recent passkey confirmation, and an account email address. The ten dedicated passkey recovery codes each allow emergency sign-in with the email address alone, without a provider round-trip or password. They are separate from authenticator recovery codes and must remain private.
+
+Use `/auth/login?local=1` for **Sign in with a passkey** or **Use a passkey recovery code** when auto-login would otherwise redirect to the provider. Recovery keeps the requirement on and gives five minutes to add a key, replace the dedicated codes, or explicitly choose **Allow other sign-in methods**. Only disabling the requirement restores OIDC sign-in, subject to the normal provider and authenticator checks.
+
+An SSO-only owner cannot disable the requirement or remove the last optional passkey unless the matching provider remains enabled with an issuer, client ID, and client secret. That local configuration check does not contact the provider or prove continued provider access. If it fails, the requirement and its recovery codes remain in place; restore the provider or register a replacement key before relying on it.
+
+Keep an independently usable administrator method and saved recovery codes before changing the provider. If the administrator requires passkeys, its local password cannot serve as that fallback; keep a spare registered key and dedicated passkey recovery codes. Password resets and the email-policy recovery override do not disable an authenticator, remove registered passkeys, or turn off the requirement.
 
 ## Registration and auto-login
 
@@ -83,12 +89,13 @@ When trust is enabled, Flare accepts a verified claim tied to the current accoun
 
 ## Common sign-in messages
 
-| Message                                 | Administrator action                                                                                     |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Provider did not share an email address | Configure the email claim and requested scopes                                                           |
-| Account with this email already exists  | Ask the person to use local sign-in or their original linked identity; do not expect email-based linking |
-| Automatic sign-up is disabled           | Review whether auto-provisioning should be enabled for eligible provider users                           |
-| Provider has not verified this email    | Complete provider verification or deliberately reconsider the verified-email requirement                 |
-| Generic sign-in failure                 | Check callback URI, issuer discovery, secret, provider logs, public origin, and connectivity             |
+| Message                                 | Administrator action                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Provider did not share an email address | Configure the email claim and requested scopes                                                                            |
+| Account with this email already exists  | Ask the person to use local sign-in or their original linked identity; do not expect email-based linking                  |
+| Automatic sign-up is disabled           | Review whether auto-provisioning should be enabled for eligible provider users                                            |
+| Provider has not verified this email    | Complete provider verification or deliberately reconsider the verified-email requirement                                  |
+| Account requires a passkey              | Use local login's passkey or dedicated recovery option; resetting the provider/password does not disable the requirement. |
+| Generic sign-in failure                 | Check callback URI, issuer discovery, secret, provider logs, public origin, and connectivity                              |
 
 If auto-login prevents reaching the normal form, open `/auth/login?local=1`, sign in locally, and repair OIDC in Settings. If the local account is also gated by email verification, use the documented [email operator recovery](/admin/email#recover-from-an-email-lockout) to relax that policy while preserving authentication.

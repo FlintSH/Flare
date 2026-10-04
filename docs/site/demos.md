@@ -51,6 +51,21 @@ These are real enrollment, login, recovery, and removal operations against a dis
 
 The app and server operations are real; **Chromium's virtual authenticator simulates the device**. It performs actual WebAuthn cryptographic ceremonies but does not display a physical device's fingerprint, face, PIN, or security-key prompt. Your browser/provider supplies those prompts on your own device. This recording demonstrates server registration, passwordless sign-in, renaming, and revocation; it is not a hardware compatibility test. [Add a passkey](./guide/security#add-a-passkey).
 
+### Require a passkey and recover access
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Require a passkey and recover access: silent Flare recording with a virtual authenticator" :src="withBase('/demos/passkey-required-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Sign in to the isolated **Jamie Rivera** account, add **Required sign-in key**, and sign in again with that passkey.
+2. Open **Sign-in security → Require passkey to sign in**. Review the password/authenticator/SSO restriction, then choose **Require passkey**. The recent passkey sign-in confirms the change.
+3. In **Save your passkey recovery codes**, download the ten dedicated codes, select **I have saved my recovery codes somewhere safe.**, and choose **Done**. Values are concealed in the recording; the test deletes the downloaded fixture file. Existing browser sessions are invalidated.
+4. Choose **Sign in again** and try the correct password. Flare refuses it and explains that a passkey is required. **Sign in with a passkey** opens the account; the requirement remains **Required**.
+5. Sign out and choose **Use a passkey recovery code**. Enter the account email and one dedicated code, then choose **Sign in with recovery code**. The dashboard opens without entering a password, and the requirement stays on.
+6. Sign out and try that same code again. Flare rejects it. A different unused code restores access.
+7. Open **Replace passkey recovery codes**, use the recent dedicated recovery sign-in as proof, and choose **Replace codes**. Save the replacement set before signing in again. An unused code from the old set is now rejected; a new code works.
+8. Choose **Allow other sign-in methods → Allow other methods**. The fresh dedicated recovery sign-in confirms this explicit change. After signing in again, the password works and the dedicated recovery count is zero.
+
+This is a real local account workflow; Chromium's virtual authenticator replaces the physical device. Password rejection and dedicated recovery use the actual server, with no mocked authentication responses. The same browser checks also verify rejection of stale sessions and last-key removal while required. The recording stays at desktop width; the guide includes separate mobile captures. It does not demonstrate a live external SSO provider or native biometric prompt. [Prepare required-passkey recovery](./guide/security#require-a-passkey-for-sign-in) before enabling it on your account.
+
 ### Create and assign a role
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 17-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>

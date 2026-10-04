@@ -22,6 +22,7 @@ suite('account security against disposable PostgreSQL', () => {
   let shared: typeof import('@/lib/auth/security/shared')
   let passkeys: typeof import('@/lib/auth/security/passkeys')
   let auth: typeof import('@/lib/auth')
+  let required: typeof import('@/lib/auth/security/required-passkeys')
   let password: string
   const session = (
     version = 1,
@@ -53,9 +54,11 @@ suite('account security against disposable PostgreSQL', () => {
     shared = await import('@/lib/auth/security/shared')
     passkeys = await import('@/lib/auth/security/passkeys')
     auth = await import('@/lib/auth')
+    required = await import('@/lib/auth/security/required-passkeys')
     password = await hash('correct test password', 4)
   })
   beforeEach(async () => {
+    await prisma.config.deleteMany({ where: { key: 'flare_config' } })
     await prisma.authChallenge.deleteMany()
     await prisma.authRateLimit.deleteMany()
     await prisma.user.deleteMany()
@@ -88,6 +91,449 @@ suite('account security against disposable PostgreSQL', () => {
       await service.consumeSecondFactor(tx, user, code)
     })
   }
+
+  async function addPasskey(id = 'primary-passkey') {
+    return prisma.passkey.create({
+      data: {
+        id,
+        userId: 'security-owner',
+        name: id,
+        publicKey: new Uint8Array([1]),
+        counter: 0,
+        transports: [],
+      },
+    })
+  }
+  function authorizeProvider(id = 'credentials') {
+    const provider = auth.authOptions.providers.find((item) => {
+      const value = item as unknown as { id: string; options?: { id?: string } }
+      return (value.options?.id || value.id) === id
+    }) as unknown as {
+      options: {
+        authorize: (
+          credentials: Record<string, string>,
+          req: { headers: Record<string, string> }
+        ) => Promise<Record<string, unknown> | null>
+      }
+    }
+    return (credentials: Record<string, string>) =>
+      provider.options.authorize(credentials, { headers: {} })
+  }
+  async function requirePasskey(version = 1) {
+    await addPasskey()
+    return required.setPasskeyRequired(session(version, 'passkey'), true)
+  }
+
+  it('keeps enrollment optional until a fresh passkey explicitly enables required mode', async () => {
+    await addPasskey()
+    expect(
+      await authorizeProvider()({
+        email: 'test@example.invalid',
+        password: 'correct test password',
+      })
+    ).toMatchObject({ id: 'security-owner' })
+    for (const method of [
+      'credentials',
+      'oidc',
+      'recovery',
+      'passkey-recovery',
+    ]) {
+      await expect(
+        required.setPasskeyRequired(session(1, method), true)
+      ).rejects.toThrow('Sign in again with a passkey')
+    }
+    const result = await required.setPasskeyRequired(
+      session(1, 'passkey'),
+      true
+    )
+    expect(result.recoveryCodes).toHaveLength(10)
+    expect(
+      result.recoveryCodes!.every((code) =>
+        /^[a-f0-9]{8}(?:-[a-f0-9]{8}){3}$/.test(code)
+      )
+    ).toBe(true)
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    expect(await prisma.recoveryCode.count()).toBe(0)
+    const stored = await prisma.user.findUniqueOrThrow({
+      where: { id: 'security-owner' },
+    })
+    expect(stored).toMatchObject({ passkeyRequired: true, sessionVersion: 2 })
+    expect(
+      JSON.stringify(await prisma.passkeyRecoveryCode.findMany())
+    ).not.toContain(result.recoveryCodes![0].replaceAll('-', ''))
+  })
+  it('requires an existing key, usable email, and unexpired proof before activation', async () => {
+    await expect(
+      required.setPasskeyRequired(session(1, 'passkey'), true)
+    ).rejects.toThrow('Add and sign in')
+    await addPasskey()
+    await expect(
+      required.setPasskeyRequired(
+        session(1, 'passkey', Date.now() - 301000),
+        true
+      )
+    ).rejects.toThrow('Sign in again')
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { email: null },
+    })
+    await expect(
+      required.setPasskeyRequired(session(1, 'passkey'), true)
+    ).rejects.toThrow('Add an email')
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .passkeyRequired
+    ).toBe(false)
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(0)
+  })
+  it('blocks password, authenticator, and old recovery logins while passkeys are required', async () => {
+    const totp = await enroll()
+    await requirePasskey(2)
+    const authorize = authorizeProvider()
+    expect(
+      await authorize({ email: 'test@example.invalid', password: 'wrong' })
+    ).toBeNull()
+    for (const code of ['', totp.code, totp.recoveryCodes[0]]) {
+      await expect(
+        authorize({
+          email: 'test@example.invalid',
+          password: 'correct test password',
+          code,
+        })
+      ).rejects.toThrow('PasskeyRequired')
+    }
+    expect(await prisma.recoveryCode.count()).toBe(10)
+    expect(
+      await authorizeProvider('passkey-recovery')({
+        email: 'test@example.invalid',
+        code: totp.recoveryCodes[0],
+      })
+    ).toBeNull()
+  })
+  it('blocks OIDC and weak JWT sessions even when a session version matches', async () => {
+    const config = await (await import('@/lib/config')).getConfig()
+    const issuer = config.settings.general.oidc.issuer.replace(/\/+$/, '')
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { oidcSubject: `${issuer}|subject` },
+    })
+    await requirePasskey()
+    const signIn = auth.authOptions.callbacks!.signIn as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<unknown>
+    expect(
+      await signIn({
+        user: {},
+        account: { provider: 'oidc' },
+        profile: { sub: 'subject', email: 'test@example.invalid' },
+      })
+    ).toBe('/auth/login?local=1&error=OidcPasskeyRequired')
+    const jwt = auth.authOptions.callbacks!.jwt as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<Record<string, unknown>>
+    for (const authMethod of ['credentials', 'oidc', 'recovery', undefined]) {
+      await expect(
+        jwt({
+          token: { id: 'security-owner', sessionVersion: 2, authMethod },
+          trigger: 'update',
+          session: {
+            user: { authMethod: 'passkey-recovery', authTime: Date.now() },
+          },
+        })
+      ).rejects.toThrow('Passkey sign-in required')
+    }
+    expect(
+      await jwt({
+        token: {
+          id: 'security-owner',
+          sessionVersion: 2,
+          authMethod: 'passkey',
+        },
+      })
+    ).toMatchObject({ authMethod: 'passkey' })
+  })
+  it('supports password-free SSO-only emergency recovery and last-code repair', async () => {
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { password: null, oidcSubject: 'issuer|sso-only' },
+    })
+    const enabled = await requirePasskey()
+    const code = enabled.recoveryCodes![0]
+    await prisma.passkeyRecoveryCode.deleteMany({
+      where: {
+        userId: 'security-owner',
+        hash: { not: crypto.passkeyRecoveryHash('security-owner', code) },
+      },
+    })
+    const recovered = await authorizeProvider('passkey-recovery')({
+      email: 'test@example.invalid',
+      code: code.toUpperCase().replaceAll('-', ' '),
+    })
+    expect(recovered).toMatchObject({ id: 'security-owner', sessionVersion: 2 })
+    expect(recovered).not.toHaveProperty('password')
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(0)
+    const jwt = auth.authOptions.callbacks!.jwt as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<Record<string, unknown>>
+    const token = await jwt({
+      token: {},
+      user: recovered,
+      account: { provider: 'passkey-recovery' },
+    })
+    expect(token.authMethod).toBe('passkey-recovery')
+    const recoverySession = session(
+      2,
+      token.authMethod as string,
+      token.authTime as number
+    )
+    expect(
+      await passkeys.registrationOptions(recoverySession, {}, 'Replacement key')
+    ).toHaveProperty('challengeId')
+    expect(
+      (await required.rotatePasskeyRecoveryCodes(recoverySession)).recoveryCodes
+    ).toHaveLength(10)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .passkeyRequired
+    ).toBe(true)
+    expect(
+      await required.authenticatePasskeyRecovery('test@example.invalid', code)
+    ).toBeNull()
+  })
+  it('redeems a dedicated code atomically once and only for the owning account', async () => {
+    const enabled = await requirePasskey()
+    await prisma.user.create({
+      data: {
+        id: 'another-account',
+        email: 'other@example.invalid',
+        passkeyRequired: true,
+        urlId: 'another-account',
+        uploadToken: 'another-account',
+      },
+    })
+    const code = enabled.recoveryCodes![0]
+    expect(
+      await required.authenticatePasskeyRecovery('other@example.invalid', code)
+    ).toBeNull()
+    const attempts = await Promise.all([
+      required.authenticatePasskeyRecovery('test@example.invalid', code),
+      required.authenticatePasskeyRecovery('test@example.invalid', code),
+    ])
+    expect(attempts.filter(Boolean)).toHaveLength(1)
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(9)
+  })
+  it('requires current strong proof for all factor management while enforced', async () => {
+    const totp = await enroll()
+    await requirePasskey(2)
+    for (const method of ['credentials', 'oidc', 'recovery']) {
+      await expect(
+        service.changeTotp(
+          session(3, method),
+          { password: 'correct test password', code: totp.recoveryCodes[0] },
+          true
+        )
+      ).rejects.toThrow('Sign in again with a passkey')
+    }
+    await service.changeTotp(session(3, 'passkey-recovery'), {}, true)
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    expect(await prisma.recoveryCode.count()).toBe(0)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .passkeyRequired
+    ).toBe(true)
+  })
+  it('preserves authenticator codes when mode is disabled and invalidates dedicated codes', async () => {
+    const totp = await enroll()
+    const enabled = await requirePasskey(2)
+    await expect(
+      required.setPasskeyRequired(session(3, 'credentials'), false)
+    ).rejects.toThrow('Sign in again')
+    await expect(
+      required.setPasskeyRequired(
+        session(3, 'passkey-recovery', Date.now() - 301000),
+        false
+      )
+    ).rejects.toThrow('Sign in again')
+    await required.setPasskeyRequired(session(3, 'passkey-recovery'), false)
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(0)
+    expect(await prisma.recoveryCode.count()).toBe(10)
+    expect(
+      await required.authenticatePasskeyRecovery(
+        'test@example.invalid',
+        enabled.recoveryCodes![0]
+      )
+    ).toBeNull()
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .totpSecret
+    ).toBeTruthy()
+    await redeem(totp.recoveryCodes[0])
+    const reenabled = await required.setPasskeyRequired(
+      session(4, 'passkey'),
+      true
+    )
+    expect(reenabled.recoveryCodes).not.toContain(enabled.recoveryCodes![0])
+  })
+  it('prevents last-key deletion and concurrent deletions cannot remove every key', async () => {
+    await requirePasskey()
+    await expect(
+      passkeys.changePasskey(session(2, 'passkey'), 'primary-passkey', {})
+    ).rejects.toThrow('last passkey')
+    await addPasskey('second-passkey')
+    const results = await Promise.allSettled([
+      passkeys.changePasskey(session(2, 'passkey'), 'primary-passkey', {}),
+      passkeys.changePasskey(session(2, 'passkey'), 'second-passkey', {}),
+    ])
+    expect(
+      results.filter((result) => result.status === 'fulfilled')
+    ).toHaveLength(1)
+    expect(await prisma.passkey.count()).toBe(1)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .passkeyRequired
+    ).toBe(true)
+  })
+  it('fences expired, stale and concurrent policy mutations', async () => {
+    await addPasskey()
+    const activations = await Promise.allSettled([
+      required.setPasskeyRequired(session(1, 'passkey'), true),
+      required.setPasskeyRequired(session(1, 'passkey'), true),
+    ])
+    expect(
+      activations.filter((result) => result.status === 'fulfilled')
+    ).toHaveLength(1)
+    await expect(
+      required.rotatePasskeyRecoveryCodes(session(1, 'passkey'))
+    ).rejects.toThrow('Account security changed')
+    await expect(
+      required.rotatePasskeyRecoveryCodes(
+        session(2, 'passkey-recovery', Date.now() - 301000)
+      )
+    ).rejects.toThrow('Sign in again')
+    await required.rotatePasskeyRecoveryCodes(session(2, 'passkey'))
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+  })
+  it('allows confirmed-email identity proof for enforced SSO-only accounts without weakening it', async () => {
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { password: null, oidcSubject: 'issuer|sso-only' },
+    })
+    await requirePasskey()
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: 'security-owner' },
+    })
+    const { assertRecentIdentity } = await import('@/lib/email/account')
+    await expect(
+      assertRecentIdentity(user, undefined, session(2, 'passkey'))
+    ).resolves.toBeUndefined()
+    await expect(
+      assertRecentIdentity(user, undefined, session(2, 'passkey-recovery'))
+    ).resolves.toBeUndefined()
+    await expect(
+      assertRecentIdentity(user, undefined, session(2, 'oidc'))
+    ).rejects.toThrow('Sign in again with a passkey')
+    await expect(
+      assertRecentIdentity(
+        user,
+        undefined,
+        session(2, 'passkey', Date.now() - 301000)
+      )
+    ).rejects.toThrow('Sign in again')
+    await expect(
+      assertRecentIdentity(user, undefined, session(1, 'passkey'))
+    ).rejects.toThrow('Account security changed')
+  })
+
+  it('does not disable protection or remove the last key without a configured fallback', async () => {
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { password: null, oidcSubject: 'https://idp.example|sso-only' },
+    })
+    await requirePasskey()
+    await expect(
+      required.setPasskeyRequired(session(2, 'passkey-recovery'), false)
+    ).rejects.toThrow('restore your configured SSO')
+    expect(await prisma.passkeyRecoveryCode.count()).toBe(10)
+    const { DEFAULT_CONFIG } = await import('@/lib/config')
+    const config = structuredClone(DEFAULT_CONFIG)
+    config.settings.general.oidc = {
+      ...config.settings.general.oidc,
+      enabled: true,
+      issuer: 'https://other-idp.example',
+      clientId: 'public-test-client',
+      clientSecret: 'public-test-secret',
+    }
+    await prisma.config.create({
+      data: { key: 'flare_config', value: JSON.parse(JSON.stringify(config)) },
+    })
+    await expect(
+      required.setPasskeyRequired(session(2, 'passkey-recovery'), false)
+    ).rejects.toThrow('restore your configured SSO')
+    config.settings.general.oidc.issuer = 'https://idp.example'
+    await prisma.config.update({
+      where: { key: 'flare_config' },
+      data: { value: JSON.parse(JSON.stringify(config)) },
+    })
+    await required.setPasskeyRequired(session(2, 'passkey-recovery'), false)
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: 'security-owner' } }))
+        .passkeyRequired
+    ).toBe(false)
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { totpSecret: 'legacy-local-totp' },
+    })
+    await expect(
+      passkeys.changePasskey(session(3, 'passkey'), 'primary-passkey', {})
+    ).rejects.toThrow('Keep a passkey')
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { totpSecret: null },
+    })
+    config.settings.general.oidc.enabled = false
+    await prisma.config.update({
+      where: { key: 'flare_config' },
+      data: { value: JSON.parse(JSON.stringify(config)) },
+    })
+    await expect(
+      passkeys.changePasskey(session(3, 'passkey'), 'primary-passkey', {})
+    ).rejects.toThrow('Keep a passkey')
+    expect(await prisma.passkey.count()).toBe(1)
+  })
+
+  it('pins in-place passkey confirmation to the account originally being managed', async () => {
+    await addPasskey()
+    const options = await passkeys.authenticationOptions()
+    await expect(
+      passkeys.authenticatePasskey(
+        options.challengeId,
+        { id: 'primary-passkey', response: {} } as never,
+        options.binding,
+        'different-account'
+      )
+    ).rejects.toThrow('Choose a passkey for the account')
+    expect(
+      (
+        await prisma.passkey.findUniqueOrThrow({
+          where: { id: 'primary-passkey' },
+        })
+      ).lastUsedAt
+    ).toBeNull()
+  })
+  it('applies durable account limits to dedicated emergency recovery attempts', async () => {
+    const authorize = authorizeProvider('passkey-recovery')
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      expect(
+        await authorize({
+          email: 'test@example.invalid',
+          code: 'incorrect-code',
+        })
+      ).toBeNull()
+    }
+    await expect(
+      authorize({ email: 'test@example.invalid', code: 'incorrect-code' })
+    ).rejects.toThrow('TooManyAttempts')
+  })
 
   it('requires a second factor in the actual NextAuth credentials authorizer and never returns secrets', async () => {
     const provider = auth.authOptions.providers[0] as unknown as {

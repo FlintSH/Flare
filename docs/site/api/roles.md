@@ -76,6 +76,8 @@ The former scalar `role: "USER" | "ADMIN"` no longer exists. Use:
 
 A non-administrator also cannot manage an account whose effective permissions include grants the actor lacks, even when its role position is lower. This prevents credential-reset escalation. Account actions obey the [individual permission matrix](/admin/users#roles-and-permissions), target-account hierarchy, and last-accessible-administrator protection. A successful role-only update does not grant identity-edit authority. Assignments change server authorization on the next request, even if a browser's old session display has not refreshed.
 
+An administrator email/password change revokes the target's existing browser sessions even when account email features are disabled. It preserves authenticator enrollment, registered passkeys, both recovery-code sets, and `passkeyRequired`. User administration cannot turn off that requirement; its owner must use the [security session controls](./security) with fresh passkey or dedicated recovery proof.
+
 ## Run a request against a disposable instance
 
 This example runs in the developer console of an **already signed-in, disposable local Flare instance**. It creates a real role and then assigns it to an existing demonstration account. Replace the account ID with the real ID from that local instance. Do not run it on the documentation site or paste credentials into it. Your session needs Administrator, or `roles.manage`, `users.roles`, `users.read`, and `content.read` together and must pass the hierarchy and delegation checks. The latter two grants are needed because the example gives them to the role.

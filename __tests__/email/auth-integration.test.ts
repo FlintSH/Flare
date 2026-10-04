@@ -557,6 +557,51 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(account.email)
     })
 
+    it('preserves required passkeys and both recovery-code collections after an email password reset', async () => {
+      const account = await user({
+        passkeyRequired: true,
+        totpSecret: 'retained-authenticator',
+      })
+      await prisma.passkey.create({
+        data: {
+          id: `passkey-${account.id}`,
+          userId: account.id,
+          name: 'Account passkey',
+          publicKey: new Uint8Array([1]),
+          transports: [],
+          counter: 0,
+        },
+      })
+      await prisma.passkeyRecoveryCode.create({
+        data: { userId: account.id, hash: `passkey-recovery-${account.id}` },
+      })
+      await prisma.recoveryCode.create({
+        data: { userId: account.id, hash: `totp-recovery-${account.id}` },
+      })
+      const reset = await token(account)
+      await resetPassword(reset.token, 'new-password', config)
+      const updated = await prisma.user.findUniqueOrThrow({
+        where: { id: account.id },
+      })
+      expect(updated).toMatchObject({
+        passkeyRequired: true,
+        totpSecret: 'retained-authenticator',
+        sessionVersion: account.sessionVersion + 1,
+      })
+      expect(await compare('new-password', updated.password!)).toBe(true)
+      expect(
+        await prisma.passkey.count({ where: { userId: account.id } })
+      ).toBe(1)
+      expect(
+        await prisma.passkeyRecoveryCode.count({
+          where: { userId: account.id },
+        })
+      ).toBe(1)
+      expect(
+        await prisma.recoveryCode.count({ where: { userId: account.id } })
+      ).toBe(1)
+    })
+
     it('can rotate upload credentials and completes recovery when the notification quota is exhausted', async () => {
       config.recovery.rotateUploadToken = true
       config.limits.dailyLimit = 1

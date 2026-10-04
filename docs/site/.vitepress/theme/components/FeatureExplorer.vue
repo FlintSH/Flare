@@ -111,7 +111,7 @@ const features = [
   [
     'Personalize',
     'Passkeys',
-    'Sign in with your device or security key, and manage named passkeys from your account.',
+    'Sign in with your device or security key; optionally require a passkey and save separate emergency recovery codes.',
     '/guide/security',
   ],
   [

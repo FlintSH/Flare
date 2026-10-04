@@ -6,6 +6,10 @@ import { ProfileAccountProps } from '@/types/components/profile'
 import { signIn, signOut, useSession } from 'next-auth/react'
 
 import {
+  hasRecentSecurityProof,
+  recentSecurityProofName,
+} from '@/components/auth/security-api'
+import {
   AccountEmail,
   useAccountEmailStatus,
 } from '@/components/email/account-email'
@@ -17,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
+import { PasskeyConfirmation } from '../security/passkey-confirmation'
 import { checkProfileProof } from '../security/profile-proof'
 
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
@@ -25,8 +30,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { toast } = useToast()
   const { status: emailStatus, refresh: refreshEmail } = useAccountEmailStatus()
   const { data: security, refetch: refreshSecurity } = useSecurityStatus()
-  const recentProof =
-    security?.canUseRecentPasskey || security?.canUseRecentRecovery
+  const recentProof = security && hasRecentSecurityProof(security)
   const [emailChanged, setEmailChanged] = useState(false)
   const [proofNotice, setProofNotice] = useState<string | null>(null)
 
@@ -252,6 +256,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
               {!emailStatus?.enabled &&
                 emailChanged &&
                 !recentProof &&
+                !security?.passkeyRequired &&
                 security?.hasPassword && (
                   <>
                     <div className="space-y-2">
@@ -295,9 +300,9 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
               {!emailStatus?.enabled &&
                 emailChanged &&
                 security &&
+                !security.passkeyRequired &&
                 !security.hasPassword &&
-                !security.canUseRecentPasskey &&
-                !security.canUseRecentRecovery &&
+                !recentProof &&
                 !security.canUseRecentSso && (
                   <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
                     <p className="text-sm text-muted-foreground">
@@ -316,11 +321,24 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                     </Button>
                   </div>
                 )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                security?.passkeyRequired &&
+                !recentProof && (
+                  <PasskeyConfirmation
+                    busy={isLoading}
+                    onBusyChange={setIsLoading}
+                    onConfirmed={async () => {
+                      const result = await refreshSecurity()
+                      if (result.error) throw result.error
+                      setProofNotice(null)
+                    }}
+                  />
+                )}
               {!emailStatus?.enabled && emailChanged && recentProof && (
                 <p className="text-sm text-muted-foreground">
-                  Your recent{' '}
-                  {security?.canUseRecentPasskey ? 'passkey' : 'recovery code'}{' '}
-                  sign-in confirms your identity for this email change.
+                  Your recent {recentSecurityProofName(security)} sign-in
+                  confirms your identity for this email change.
                 </p>
               )}
             </div>

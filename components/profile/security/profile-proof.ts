@@ -1,4 +1,7 @@
-import type { SecurityStatus } from '@/components/auth/security-api'
+import {
+  type SecurityStatus,
+  hasRecentSecurityProof,
+} from '@/components/auth/security-api'
 
 type RefreshSecurity = () => Promise<{
   data?: SecurityStatus
@@ -16,7 +19,7 @@ export async function checkProfileProof(
   if (!result.data)
     throw new Error('Unable to confirm your identity. Please try again.')
   const status = result.data
-  const recent = status.canUseRecentPasskey || status.canUseRecentRecovery
+  const recent = hasRecentSecurityProof(status)
 
   if (change === 'password') {
     if (!status.hasPassword)
@@ -25,6 +28,8 @@ export async function checkProfileProof(
       return 'Enter your current password to continue.'
   }
   if (recent) return null
+  if (status.passkeyRequired)
+    return 'Confirm with a passkey again to continue. Your passkey confirmation lasts five minutes.'
   if (!status.hasPassword) {
     return status.canUseRecentSso
       ? null

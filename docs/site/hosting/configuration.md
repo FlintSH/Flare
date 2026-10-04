@@ -41,6 +41,8 @@ Use a stable, random `NEXTAUTH_SECRET` of at least 32 characters from the beginn
 
 No additional environment variable or instance switch enables these account features. Users opt in from [Sign-in security](/guide/security). Local authenticator setup requires an existing local password. Passkeys derive their allowed origin and relying-party hostname from `NEXTAUTH_URL`; set it to the canonical public HTTPS origin. HTTP localhost is available for local development. Do not change the hostname as a way to test production passkeys: credentials belong to the hostname where they were registered.
 
+**Require passkey to sign in** is a separate account choice, off by default for new and existing accounts. It is not enabled by registering a passkey or setting an environment variable. Activation requires a registered passkey, a passkey confirmation within five minutes, and an account email address. It blocks password and OIDC sign-in for that account and issues a separate set of ten emergency passkey recovery codes. Password/email resets and the email-policy override do not turn it off. [Plan recovery and hostname changes](./maintenance#required-passkey-migration) before users rely on it.
+
 All replicas must use the same stable `NEXTAUTH_SECRET`, including for decrypting authenticator secrets. A separate email encryption key does not make changing `NEXTAUTH_SECRET` safe for authenticators. Preserve the secret with your database backups and follow the [migration and key guidance](./maintenance#two-factor-authentication-and-passkey-migration).
 
 ### Webhook network access
@@ -254,7 +256,7 @@ The studio uses the same field names for `theme.light` and `theme.dark`. The leg
 | `input`                 | `#cbd5e1`    | `#1e293b`   | `217.2 32.6% 17.5%` |
 | `ring`                  | `#64748b`    | `#cbd5e1`   | `212.7 26.8% 83.9%` |
 
-Account-specific settings are stored separately from the instance configuration: personal theme preference, upload defaults and profiles, tool options, scoped tokens, webhook destinations, authenticator enrollment, and passkey public credentials are managed in **Profile**. Their values do not override operator limits or grant administrator permissions. See [the user handbook](/guide/) and [API authentication](/api/authentication).
+Account-specific settings are stored separately from the instance configuration: personal theme preference, upload defaults and profiles, tool options, scoped tokens, webhook destinations, authenticator enrollment, passkey public credentials, and the passkey requirement are managed in **Profile**. Both recovery-code sets are stored as account-bound hashes. Their values do not override operator limits or grant administrator permissions. See [the user handbook](/guide/) and [API authentication](/api/authentication).
 
 ## Test-only database variables
 

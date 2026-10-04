@@ -17,6 +17,8 @@ Verification, recovery-address enrollment, password recovery, and confirmed emai
 
 **Profile → Account → Sign-in security** contains authenticator setup, recovery codes, and passkeys. [Follow the complete security guide](./security) to enable two-factor authentication, save a recovery method, and test passkey sign-in. These controls remain available without `profile.update` and require their own identity confirmation. Adding/removing sign-in methods and replacing recovery codes end existing browser sessions, so save any newly displayed recovery codes before signing in again.
 
+**Require passkey to sign in** is a separate opt-in setting, off by default. It blocks password and SSO sign-in and gives you ten dedicated emergency codes, each capable of signing in with only your account email. Save these separately from authenticator recovery codes. Registration alone does not enable the requirement. [Enable it and prepare recovery](./security#require-a-passkey-for-sign-in).
+
 ## See your roles
 
 **Profile → Account → Your roles** shows your current role badges. Everyone applies automatically. Additional roles add permissions; a role name or color alone does not describe its authority. Ask the instance administrator to review a missing capability in [Roles](/admin/roles).
@@ -35,6 +37,8 @@ Changing your username does not automatically change file URL paths. For a memor
 
 In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. Choose **Update Password**, then sign in again; registered factors remain in place.
 
+If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
+
 If that recent sign-in expires while you fill in the form, **Update Password** first reveals the code field and asks **Enter an authenticator or recovery code to continue.** Your entered passwords stay in the form; enter a fresh code and submit again. Flare checks the current confirmation requirements before sending the password change.
 
 <Screenshot src="/screenshots/security/proof-expired.webp" alt="Change your password form preserves concealed password entries and asks for an authenticator or recovery code after recent sign-in proof expires" caption="The real form requests a fresh code before sending the change. This regression capture uses a disposable session with its sign-in time adjusted beyond five minutes; password values are masked." />
@@ -43,7 +47,7 @@ For an account managed entirely through SSO, change your identity-provider passw
 
 ### Recover a forgotten password
 
-If your instance offers password recovery, use the login page's recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy. Resetting your password does not remove two-factor authentication or registered passkeys; you still need an available second factor or a passkey to sign in.
+If your instance offers password recovery, use the login page's password-recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy. Resetting your password does not remove two-factor authentication, either recovery-code set, registered passkeys, or a passkey requirement. When passkeys are required, use a passkey or [dedicated passkey recovery code](./security#recover-when-required-passkeys-are-unavailable); resetting the password does not restore password or SSO sign-in.
 
 Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again. If email recovery is unavailable, contact your instance administrator.
 
@@ -61,6 +65,8 @@ When email features are enabled, **Profile → Account** shows your address and 
 
 For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry.
 
+If you require passkeys, starting email enrollment requires a recent passkey or dedicated passkey-recovery sign-in instead, including for SSO-only accounts. This confirmation does not waive mailbox verification.
+
 Your administrator can make verification optional, require it for new users, or require it more broadly after a grace period. Follow the deadline shown in your account. If verification is required before continuing, the verification page provides the next available steps.
 
 <Screenshot src="/screenshots/email/account.png" alt="Account email verification and address management controls" caption="Email features show their current status and the actions your instance allows." />
@@ -71,12 +77,14 @@ If the message does not arrive, check spam, confirm the address, and wait for th
 
 When email features are disabled, edit the email field with your basic account information, confirm your current password and any **Authenticator or recovery code** requested, and save. The address change ends existing browser sessions. An SSO-only account instead needs a recent SSO or passkey sign-in.
 
+With a passkey requirement enabled, both the basic and confirmed email-change flows require a passkey or dedicated passkey-recovery sign-in within five minutes. The address change keeps the requirement and both recovery-code sets; use your new email address with dedicated passkey recovery codes afterward.
+
 If a recent sign-in expires while you edit the address, saving reveals the required password/code fields before changing the email. Your edits remain available; complete the requested confirmation and save again. An SSO-only account is asked to confirm with SSO again. If Flare cannot refresh the confirmation requirements, the change stays unsent until you can retry.
 
 When email features are enabled:
 
 1. Choose **Change email address** in the email controls.
-2. Enter the new address and any requested current password.
+2. Enter the new address and complete the requested identity confirmation. An account requiring passkeys needs a recent passkey or dedicated recovery sign-in.
 3. Follow the confirmation links Flare sends.
 4. If the instance requires approval from both addresses, check both your current and new inboxes.
 
@@ -103,7 +111,7 @@ The archive contains:
 - `user-data.json` with basic account details, file metadata, saved OCR text, and shortened URLs with click counts.
 - Available uploaded files under `files/`, grouped by upload date.
 
-This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, recovery codes, or passkeys. Export profile recipes separately if you want to keep those settings.
+This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, or the passkey requirement. Export profile recipes separately if you want to keep those settings.
 
 Inspect the archive and open important files before deleting their originals. Files that are missing from storage or cannot be retrieved can be skipped during export. If an expected file is absent, download it individually if possible and ask the administrator to check storage.
 

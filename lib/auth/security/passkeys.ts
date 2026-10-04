@@ -13,6 +13,7 @@ import { randomBytes } from 'node:crypto'
 import { prisma } from '@/lib/database/prisma'
 
 import { securityHash, webauthnUserId } from './crypto'
+import { hasFallbackSignIn } from './fallback'
 import {
   type SecurityProof,
   assertSecurityProof,
@@ -136,7 +137,8 @@ export async function authenticationOptions() {
 export async function authenticatePasskey(
   challengeId: string,
   response: AuthenticationResponseJSON,
-  binding: string
+  binding: string,
+  expectedUserId?: string
 ) {
   const rp = relyingParty()
   return prisma.$transaction(async (tx) => {
@@ -152,6 +154,10 @@ export async function authenticatePasskey(
     const key = await tx.passkey.findUnique({ where: { id: response.id } })
     if (!key) throw new SecurityError('Unable to sign in with this passkey.')
     const user = await lockSecurityUser(tx, key.userId)
+    if (expectedUserId && user.id !== expectedUserId)
+      throw new SecurityError(
+        'Choose a passkey for the account you are managing.'
+      )
     // Re-read after locking the account to serialize deletion and counter updates.
     const fresh = await tx.passkey.findUnique({ where: { id: key.id } })
     if (!fresh) throw new SecurityError('Unable to sign in with this passkey.')
@@ -201,13 +207,21 @@ export async function changePasskey(
       await tx.passkey.update({ where: { id }, data: { name } })
       return { success: true }
     }
-    // Every account has its original password or OIDC method as a fallback.
     if (
-      !user.password &&
-      !user.oidcSubject &&
+      user.passkeyRequired &&
       (await tx.passkey.count({ where: { userId: user.id } })) <= 1
     )
-      throw new SecurityError('Keep at least one sign-in method.')
+      throw new SecurityError(
+        'Add another passkey or turn off required passkey sign-in before removing your last passkey.'
+      )
+
+    if (
+      (await tx.passkey.count({ where: { userId: user.id } })) <= 1 &&
+      !(await hasFallbackSignIn(tx, user))
+    )
+      throw new SecurityError(
+        'Keep a passkey until a password or your configured SSO provider is available.'
+      )
     await tx.passkey.delete({ where: { id } })
     await revokeSecuritySessions(tx, user.id)
     return { signInAgain: true }

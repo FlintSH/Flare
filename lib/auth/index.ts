@@ -15,6 +15,7 @@ import { getUserAccess } from '@/lib/permissions/server'
 
 import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
 import { authenticatePasskey, passkeyCookieName } from './security/passkeys'
+import { authenticatePasskeyRecovery } from './security/required-passkeys'
 import { consumeSecondFactor } from './security/service'
 import {
   SecurityError,
@@ -29,6 +30,7 @@ const userSelect = {
   password: true,
   image: true,
   sessionVersion: true,
+  passkeyRequired: true,
   emailVerified: true,
   emailVerifiedFor: true,
   emailVerificationSource: true,
@@ -128,6 +130,7 @@ export const authOptions: NextAuthOptions = {
               fresh.sessionVersion !== user.sessionVersion
             )
               return null
+            if (fresh.passkeyRequired) throw new Error('PasskeyRequired')
             if (fresh.totpSecret && !credentials.code)
               throw new Error('TwoFactorRequired')
             const secondFactor = await consumeSecondFactor(
@@ -147,7 +150,10 @@ export const authOptions: NextAuthOptions = {
             }
           })
         } catch (error) {
-          if (error instanceof Error && error.message === 'TwoFactorRequired')
+          if (
+            error instanceof Error &&
+            ['TwoFactorRequired', 'PasskeyRequired'].includes(error.message)
+          )
             throw error
           if (error instanceof SecurityError && error.status === 429)
             throw new Error('TooManyAttempts')
@@ -161,13 +167,15 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         challengeId: { label: 'Challenge', type: 'text' },
         response: { label: 'Passkey response', type: 'text' },
+        expectedUserId: { label: 'Account being confirmed', type: 'text' },
       },
       async authorize(credentials, req) {
         if (
           !credentials?.challengeId ||
           !credentials.response ||
           credentials.challengeId.length > 100 ||
-          credentials.response.length > 65536
+          credentials.response.length > 65536 ||
+          (credentials.expectedUserId?.length || 0) > 128
         )
           return null
         try {
@@ -184,7 +192,8 @@ export const authOptions: NextAuthOptions = {
               ?.split(';')
               .map((value: string) => value.trim())
               .find((value: string) => value.startsWith(`${cookieName}=`))
-              ?.slice(cookieName.length + 1) || ''
+              ?.slice(cookieName.length + 1) || '',
+            credentials.expectedUserId
           )
           return {
             id: user.id,
@@ -194,6 +203,50 @@ export const authOptions: NextAuthOptions = {
             sessionVersion: user.sessionVersion,
           }
         } catch {
+          return null
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'passkey-recovery',
+      name: 'Passkey recovery',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        code: { label: 'Passkey recovery code', type: 'text' },
+      },
+      async authorize(credentials, req) {
+        if (
+          !credentials?.email ||
+          !credentials.code ||
+          credentials.email.length > 320 ||
+          credentials.code.length > 80
+        )
+          return null
+        try {
+          const ip =
+            req.headers?.['x-real-ip'] ||
+            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+            'unknown'
+          await securityLimit(`passkey-recovery-ip:${ip}`, 100)
+          await securityLimit(
+            `passkey-recovery-account:${credentials.email.trim().toLowerCase()}`,
+            30
+          )
+          const user = await authenticatePasskeyRecovery(
+            credentials.email.trim(),
+            credentials.code
+          )
+          if (!user) return null
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            sessionVersion: user.sessionVersion,
+          }
+        } catch (error) {
+          if (error instanceof SecurityError && error.status === 429)
+            throw new Error('TooManyAttempts')
           return null
         }
       },
@@ -227,8 +280,10 @@ export const authOptions: NextAuthOptions = {
 
       const security = await prisma.user.findUnique({
         where: { id: result.user.id },
-        select: { totpSecret: true },
+        select: { totpSecret: true, passkeyRequired: true },
       })
+      if (security?.passkeyRequired)
+        return '/auth/login?local=1&error=OidcPasskeyRequired'
       if (security?.totpSecret)
         return '/auth/login?local=1&error=OidcTwoFactorRequired'
 
@@ -264,6 +319,13 @@ export const authOptions: NextAuthOptions = {
 
       if (token.sessionVersion !== freshUser.sessionVersion) {
         throw new Error('Session invalidated: Version mismatch')
+      }
+
+      if (
+        freshUser.passkeyRequired &&
+        !['passkey', 'passkey-recovery'].includes(token.authMethod || '')
+      ) {
+        throw new Error('Session invalidated: Passkey sign-in required')
       }
 
       // Remove obsolete authority from cookies issued before the role migration.

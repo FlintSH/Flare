@@ -8,15 +8,15 @@ datasource db {
 }
 
 model User {
-  id                          String          @id @default(cuid())
+  id                          String                @id @default(cuid())
   name                        String?
-  email                       String?         @unique
+  email                       String?               @unique
   emailVerified               DateTime?
   emailVerifiedFor            String?
   emailVerificationSource     String?
-  emailExempt                 Boolean         @default(false)
+  emailExempt                 Boolean               @default(false)
   pendingEmail                String?
-  pendingEmailOldConfirmed    Boolean         @default(false)
+  pendingEmailOldConfirmed    Boolean               @default(false)
   emailTokens                 EmailToken[]
   mailOutbox                  MailOutbox[]
   image                       String?
@@ -27,24 +27,26 @@ model User {
   totpLastCounter             Int?
   passkeys                    Passkey[]
   recoveryCodes               RecoveryCode[]
+  passkeyRequired             Boolean               @default(false)
+  passkeyRecoveryCodes        PasskeyRecoveryCode[]
   authChallenges              AuthChallenge[]
   roles                       Role[]
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
-  storageUsed                 Float           @default(0)
-  sessionVersion              Int             @default(1)
-  oidcSubject                 String?         @unique
-  vanityId                    String?         @unique
-  urlId                       String          @unique
-  uploadToken                 String          @unique
-  randomizeFileUrls           Boolean         @default(false)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  storageUsed                 Float                 @default(0)
+  sessionVersion              Int                   @default(1)
+  oidcSubject                 String?               @unique
+  vanityId                    String?               @unique
+  urlId                       String                @unique
+  uploadToken                 String                @unique
+  randomizeFileUrls           Boolean               @default(false)
   files                       File[]
   vaultFolders                VaultFolder[]
   vaultTags                   VaultTag[]
   shortenedUrls               ShortenedUrl[]
-  defaultFileExpiration       FileExpiration  @default(DISABLED)
-  defaultFileExpirationAction ExpiryAction    @default(DELETE)
-  preferences                 Json            @default("{}")
+  defaultFileExpiration       FileExpiration        @default(DISABLED)
+  defaultFileExpirationAction ExpiryAction          @default(DELETE)
+  preferences                 Json                  @default("{}")
   defaultUploadProfileId      String?
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
@@ -66,6 +68,15 @@ model Passkey {
 }
 
 model RecoveryCode {
+  id     String @id @default(cuid())
+  userId String
+  hash   String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasskeyRecoveryCode {
   id     String @id @default(cuid())
   userId String
   hash   String @unique

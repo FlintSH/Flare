@@ -12,8 +12,27 @@ export interface SecurityStatus {
   passkeys: AccountPasskey[]
   canUseRecentPasskey: boolean
   canUseRecentRecovery: boolean
+  canUseRecentPasskeyRecovery: boolean
   canUseRecentSso: boolean
   passkeysAvailable: boolean
+  passkeyRequired: boolean
+  passkeyRecoveryCodesRemaining: number
+}
+
+export function hasRecentSecurityProof(status: SecurityStatus): boolean {
+  return (
+    status.canUseRecentPasskey ||
+    status.canUseRecentPasskeyRecovery ||
+    (!status.passkeyRequired && status.canUseRecentRecovery)
+  )
+}
+
+export function recentSecurityProofName(status: SecurityStatus): string {
+  return status.canUseRecentPasskey
+    ? 'passkey'
+    : status.canUseRecentPasskeyRecovery
+      ? 'passkey recovery code'
+      : 'recovery code'
 }
 
 export async function securityRequest<T>(

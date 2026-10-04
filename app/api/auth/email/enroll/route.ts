@@ -22,6 +22,8 @@ export async function POST(req: Request) {
     await assertRecentIdentity(user, password, session)
     await prisma.$transaction(async (tx) => {
       const fresh = await lockEmailUser(tx, user.id)
+      if (fresh.passkeyRequired)
+        await assertRecentIdentity(fresh, password, session)
       if (hasVerifiedEmail(fresh, config)) return
       if (
         fresh.email !== user.email ||

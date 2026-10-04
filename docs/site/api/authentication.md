@@ -98,7 +98,7 @@ The legacy credential is accepted by the shared account authentication helper an
 
 ## Two-factor authentication and passkeys
 
-[Account sign-in security](/guide/security) protects interactive browser sign-in. API tokens and the legacy upload credential continue working without a code or passkey ceremony; enabling two-factor authentication does not turn them into second-factor credentials or revoke them. Review existing integrations and revoke/rotate any credential you no longer trust.
+[Account sign-in security](/guide/security) protects interactive browser sign-in. API tokens and the legacy upload credential continue working without a code or passkey ceremony; enabling two-factor authentication or **Require passkey to sign in** does not revoke them or add an interactive step. A passkey requirement blocks password and SSO browser sign-in but preserves integrations under their existing permissions. Review existing integrations and revoke/rotate any credential you no longer trust.
 
 Security management requires a browser session and fresh identity proof. Neither named tokens nor the legacy upload credential can authorize those endpoints. The [session security contract](./security) documents their separate boundaries. The named-token OpenAPI document and request builder intentionally keep their existing supported operations.
 

@@ -64,7 +64,14 @@ async function shot(page, name, locator) {
   // Restore the real phone viewport before continuing interaction checks.
   const expand = locator && viewport.width < 640
   if (expand)
-    await page.setViewportSize({ width: viewport.width, height: 1200 })
+    await page.setViewportSize({
+      width: viewport.width,
+      height: Math.max(
+        1200,
+        Math.ceil(await locator.evaluate((element) => element.scrollHeight)) +
+          160
+      ),
+    })
   await page.evaluate(() => document.fonts.ready)
   await mkdir(screenshots, { recursive: true })
   const bytes = locator
@@ -447,6 +454,231 @@ async function testPasskeys(browser) {
   await finishVideo(ctx, page, 'passkey-demo')
 }
 
+async function testRequiredPasskeys(browser) {
+  const { ctx, page } = await context(browser)
+  const cdp = await ctx.newCDPSession(page)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  })
+
+  async function signInWithPasskey() {
+    await page
+      .getByRole('button', { name: 'Sign in with a passkey', exact: true })
+      .click()
+    await dashboard(page)
+  }
+
+  async function openRecovery() {
+    await page.goto(origin + '/auth/login?local=1')
+    await page
+      .getByRole('button', {
+        name: 'Use a passkey recovery code',
+        exact: true,
+      })
+      .click()
+    await page
+      .getByLabel('Email', { exact: true })
+      .fill('security-demo-jamie@example.test')
+  }
+
+  async function submitRecovery(code) {
+    await page.getByLabel('Passkey recovery code', { exact: true }).fill(code)
+    await page
+      .getByRole('button', { name: 'Sign in with recovery code', exact: true })
+      .click()
+  }
+
+  async function savePasskeyCodes() {
+    const dialog = page.getByRole('dialog', {
+      name: 'Save your passkey recovery codes',
+    })
+    await expect(dialog).toBeVisible()
+    const codes = await dialog
+      .getByRole('list', { name: 'Passkey recovery codes' })
+      .locator('li')
+      .allTextContents()
+    assert.equal(codes.length, 10)
+    for (const code of codes) assert.equal(code.replace(/-/g, '').length, 32)
+    await expect(
+      dialog.getByRole('button', { name: 'Done', exact: true })
+    ).toBeDisabled()
+    await shot(
+      page,
+      page.viewportSize().width < 640
+        ? 'passkey-recovery-codes-mobile'
+        : 'passkey-recovery-codes',
+      dialog
+    )
+    assert.equal(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth + 1
+      ),
+      true,
+      'Long recovery codes must fit the dialog at its current width'
+    )
+    const downloadEvent = page.waitForEvent('download')
+    await dialog
+      .getByRole('button', { name: 'Download codes', exact: true })
+      .click()
+    const download = await downloadEvent
+    assert.equal(
+      download.suggestedFilename(),
+      'flare-passkey-recovery-codes.txt'
+    )
+    await download.delete()
+    await dialog.getByRole('checkbox').check()
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click()
+    return codes
+  }
+
+  await passwordStep(page, 'jamie')
+  await dashboard(page)
+  await profile(page)
+  await page.getByRole('button', { name: 'Add a passkey', exact: true }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog
+    .getByLabel('Passkey name', { exact: true })
+    .fill('Required sign-in key')
+  await proof(dialog)
+  await dialog
+    .getByRole('button', { name: 'Create passkey', exact: true })
+    .click()
+  await reenter(page)
+  await passwordStep(page, 'jamie')
+  await dashboard(page)
+  await profile(page)
+  const stale = await browser.newContext({
+    storageState: await ctx.storageState(),
+  })
+  await page
+    .getByRole('button', { name: 'Require passkey to sign in', exact: true })
+    .click()
+  dialog = page.getByRole('dialog')
+  await dialog
+    .getByRole('button', { name: 'Confirm with a passkey', exact: true })
+    .click()
+  await expect(
+    dialog.getByRole('button', { name: 'Require passkey', exact: true })
+  ).toBeEnabled()
+  assert.equal((await api(ctx, '/api/auth/security')).canUseRecentPasskey, true)
+  await shot(page, 'passkey-required', dialog)
+  await dialog
+    .getByRole('button', { name: 'Require passkey', exact: true })
+    .click()
+  let codes = await savePasskeyCodes()
+  await api(stale, '/api/auth/security', 'GET', undefined, 401)
+  await stale.close()
+  await reenter(page)
+
+  await passwordStep(page, 'jamie')
+  await expect(page.locator('form [role="alert"]')).toContainText(/passkey/i)
+  await api(ctx, '/api/files', 'GET', undefined, 401)
+  await shot(page, 'passkey-required-password')
+  await signInWithPasskey()
+  await profile(page)
+  let status = await api(ctx, '/api/auth/security')
+  assert.equal(status.passkeyRequired, true)
+  assert.equal(status.twoFactorEnabled, false)
+  assert.equal(status.passkeyRecoveryCodesRemaining, 10)
+  assert.equal(status.passkeys.length, 1)
+  await api(
+    ctx,
+    `/api/auth/security/passkeys/${encodeURIComponent(status.passkeys[0].id)}`,
+    'DELETE',
+    {},
+    400
+  )
+  await signOut(page)
+
+  await openRecovery()
+  await shot(page, 'passkey-recovery-login')
+  await submitRecovery(codes[0])
+  await dashboard(page)
+  status = await api(ctx, '/api/auth/security')
+  assert.equal(status.passkeyRequired, true)
+  assert.equal(status.passkeyRecoveryCodesRemaining, 9)
+  assert.equal(status.canUseRecentPasskeyRecovery, true)
+  await signOut(page)
+  await openRecovery()
+  await submitRecovery(codes[0])
+  await expect(page.locator('form [role="alert"]')).toContainText(
+    /invalid|unable/i
+  )
+  await api(ctx, '/api/files', 'GET', undefined, 401)
+  await submitRecovery(codes[1])
+  await dashboard(page)
+  await profile(page)
+  if (!videos) {
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      ),
+      true
+    )
+    await shot(
+      page,
+      'mobile-required-passkey',
+      page.locator('#sign-in-security')
+    )
+  }
+  await page
+    .getByRole('button', {
+      name: 'Replace passkey recovery codes',
+      exact: true,
+    })
+    .click()
+  dialog = page.getByRole('dialog')
+  await shot(page, 'passkey-recovery-repair', dialog)
+  await dialog
+    .getByRole('button', {
+      name: 'Replace codes',
+      exact: true,
+    })
+    .click()
+  const previousUnusedCode = codes[2]
+  codes = await savePasskeyCodes()
+  await reenter(page)
+  await openRecovery()
+  await submitRecovery(previousUnusedCode)
+  await expect(page.locator('form [role="alert"]')).toContainText(
+    /invalid|unable/i
+  )
+  await submitRecovery(codes[0])
+  await dashboard(page)
+  await profile(page)
+  await page
+    .getByRole('button', { name: 'Allow other sign-in methods', exact: true })
+    .click()
+  dialog = page.getByRole('dialog')
+  await dialog
+    .getByRole('button', {
+      name: 'Allow other methods',
+      exact: true,
+    })
+    .click()
+  await reenter(page)
+  await passwordStep(page, 'jamie')
+  await dashboard(page)
+  status = await api(ctx, '/api/auth/security')
+  assert.equal(status.passkeyRequired, false)
+  assert.equal(status.passkeyRecoveryCodesRemaining, 0)
+  await profile(page)
+  if (videos) await page.waitForTimeout(1500)
+  results.push(
+    'Required passkeys block password login, revoke prior sessions, preserve the last passkey, allow one-use emergency recovery, invalidate replaced recovery sets, and restore password sign-in only after explicitly disabling enforcement'
+  )
+  await finishVideo(ctx, page, 'passkey-required-demo')
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
@@ -455,6 +687,7 @@ async function main() {
   try {
     await testTotp(browser)
     await testPasskeys(browser)
+    await testRequiredPasskeys(browser)
     for (const result of results) console.log(`PASS: ${result}`)
   } finally {
     await browser.close()
