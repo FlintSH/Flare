@@ -6,7 +6,7 @@ description: Walk through first-run setup from administrator creation through st
 
 Open `/setup` on your new Flare instance. One guided flow takes you from an empty installation to a working workspace. Storage and registration are the essential decisions; appearance and email can be configured now or later.
 
-Choose **Setup guide** in the header on any step to open the guide in a new tab, leaving your entered values in the setup tab. Stable builds open the guide for their installed release; rolling builds open the published rolling guide, which may be ahead of an older rolling installation. Unknown or other prerelease versions open [Versions](/versions) so you can choose documentation. Custom builds use their [package version and release channel](/hosting/configuration#core-environment-variables).
+Choose **Setup guide** in the header on any step to open the guide in a new tab, leaving your entered values in the setup tab. Stable builds from 2.1.0 onward open their release's dedicated setup guide. Earlier versions open their archive homepage, where the original README provides setup instructions or links to the older onboarding guide. Rolling builds open the published rolling guide, which may be ahead of an older rolling installation. Unknown or other prerelease versions open [Versions](/versions) so you can choose documentation. Custom builds use their [package version and release channel](/hosting/configuration#core-environment-variables).
 
 ## 1. Create the administrator
 

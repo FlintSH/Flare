@@ -9,7 +9,7 @@ Flare brings uploads, previews, organization, and automation to your own server 
 
 Filter the capabilities below, or [take a guided tour](./demos). Each card leads to a complete guide with instructions and important limits.
 
-You can also open the handbook from **Documentation** in the **Settings** header, or choose **Setup guide** during first-run setup. Both open a new tab so your current form stays in place, selecting your stable release's archive or the published rolling handbook. Other prerelease or unknown versions open the version selector.
+You can also open the handbook from **Documentation** in the **Settings** header, or choose **Setup guide** during first-run setup. Both open a new tab so your current form stays in place, selecting your stable release's archive or the published rolling handbook. Setup links for versions before 2.1.0 open the archive homepage with the original setup guidance. Other prerelease or unknown versions open the version selector.
 
 Reading for a particular installation? [Browse dated documentation releases and compare changes](./versions). The public handbook defaults to the current stable release. The versions page also offers explicit access to the published rolling build's unreleased docs.
 

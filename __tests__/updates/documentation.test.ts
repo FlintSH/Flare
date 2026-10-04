@@ -28,7 +28,23 @@ describe('documentation links', () => {
     )
   })
 
-  it.each(['2.1.0', '2.2.0-rolling.1', 'unknown'])(
+  it.each([
+    ['1.0.0', 'v1.0.0'],
+    ['1.7.6', 'v1.7.6'],
+    ['2.0.0', 'v2.0.0'],
+    ['v2.0.0+custom.1', 'v2.0.0'],
+  ])(
+    'opens the original release documentation for legacy setup on %s',
+    (version, tag) => {
+      const build = { version, channel: 'stable' as const }
+      const archive = `https://flintsh.github.io/Flare/versions/${tag}/`
+
+      expect(getDocumentationUrl(build)).toBe(archive)
+      expect(getDocumentationUrl(build, 'setup')).toBe(archive)
+    }
+  )
+
+  it.each(['1.0.0', '2.0.0', '2.1.0', '2.2.0-rolling.1', 'unknown'])(
     'uses the explicit rolling channel for package version %s',
     (version) => {
       const build = { version, channel: 'rolling' as const }

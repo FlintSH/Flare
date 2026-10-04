@@ -16,7 +16,11 @@ export function getDocumentationUrl(
 
   const version = STABLE_VERSION.exec(build.version)
   if (build.channel === 'stable' && version?.[0] === build.version) {
-    return `${DOCUMENTATION_URL}versions/v${version[1]}/${suffix}`
+    const [major, minor] = version[1].split('.').map(Number)
+    // The handbook starts at 2.1.0. Earlier archives keep their setup
+    // instructions in the original README at the archive's homepage.
+    const hasHandbook = major > 2 || (major === 2 && minor >= 1)
+    return `${DOCUMENTATION_URL}versions/v${version[1]}/${hasHandbook ? suffix : ''}`
   }
 
   return `${DOCUMENTATION_URL}versions.html`
