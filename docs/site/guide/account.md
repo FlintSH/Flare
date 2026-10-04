@@ -35,6 +35,10 @@ Changing your username does not automatically change file URL paths. For a memor
 
 In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. Choose **Update Password**, then sign in again; registered factors remain in place.
 
+If that recent sign-in expires while you fill in the form, **Update Password** first reveals the code field and asks **Enter an authenticator or recovery code to continue.** Your entered passwords stay in the form; enter a fresh code and submit again. Flare checks the current confirmation requirements before sending the password change.
+
+<Screenshot src="/screenshots/security/proof-expired.webp" alt="Change your password form preserves concealed password entries and asks for an authenticator or recovery code after recent sign-in proof expires" caption="The real form requests a fresh code before sending the change. This regression capture uses a disposable session with its sign-in time adjusted beyond five minutes; password values are masked." />
+
 For an account managed entirely through SSO, change your identity-provider password with that provider. Flare's local password form requires an existing local password; it is not an SSO account-linking or local-password creation flow.
 
 ### Recover a forgotten password
@@ -66,6 +70,8 @@ If the message does not arrive, check spam, confirm the address, and wait for th
 ## Change your email address
 
 When email features are disabled, edit the email field with your basic account information, confirm your current password and any **Authenticator or recovery code** requested, and save. The address change ends existing browser sessions. An SSO-only account instead needs a recent SSO or passkey sign-in.
+
+If a recent sign-in expires while you edit the address, saving reveals the required password/code fields before changing the email. Your edits remain available; complete the requested confirmation and save again. An SSO-only account is asked to confirm with SSO again. If Flare cannot refresh the confirmation requirements, the change stays unsent until you can retry.
 
 When email features are enabled:
 

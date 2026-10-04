@@ -10,6 +10,8 @@ import {
   vi,
 } from 'vitest'
 
+import { securityTestDatabaseUrl } from './security-database-guard'
+
 const databaseUrl = process.env.FLARE_SECURITY_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
@@ -41,15 +43,7 @@ suite('account security against disposable PostgreSQL', () => {
   })
 
   beforeAll(async () => {
-    const url = new URL(databaseUrl!)
-    if (
-      !['localhost', '127.0.0.1'].includes(url.hostname) ||
-      (!/^flare_security_test_/.test(url.searchParams.get('schema') ?? '') &&
-        !/^\/flare_security_test_/.test(url.pathname))
-    )
-      throw new Error(
-        'Use a disposable local flare_security_test_ database or schema'
-      )
+    const url = securityTestDatabaseUrl(databaseUrl!)
     vi.stubEnv('DATABASE_URL', url.toString())
     vi.stubEnv('NEXTAUTH_SECRET', 'disposable-security-test-key-32-characters')
     vi.stubEnv('NEXTAUTH_URL', 'http://localhost:3000')
@@ -510,7 +504,8 @@ suite('account security against disposable PostgreSQL', () => {
         },
       ],
     })
-    await shared.securityLimit('cleanup-trigger')
+    const worker = await import('@/lib/auth/security/worker')
+    await worker.cleanupExpiredAuthLimits()
     expect(
       await prisma.authRateLimit.findUnique({ where: { key: 'old-attempt' } })
     ).toBeNull()
@@ -519,6 +514,22 @@ suite('account security against disposable PostgreSQL', () => {
         where: { key: 'active-attempt' },
       })
     ).toMatchObject({ count: 100 })
+  })
+  it('bounds expired-bucket cleanup and keeps it out of authentication attempts', async () => {
+    await prisma.authRateLimit.createMany({
+      data: Array.from({ length: 1005 }, (_, i) => ({
+        key: `expired-${i}`,
+        count: 1,
+        resetAt: new Date(Date.now() - 25 * 3600000),
+      })),
+    })
+    await shared.securityLimit('request-no-cleanup')
+    expect(await prisma.authRateLimit.count()).toBe(1006)
+    const worker = await import('@/lib/auth/security/worker')
+    expect(await worker.cleanupExpiredAuthLimits()).toBe(1000)
+    expect(await prisma.authRateLimit.count()).toBe(6)
+    expect(await worker.cleanupExpiredAuthLimits()).toBe(5)
+    expect(await prisma.authRateLimit.count()).toBe(1)
   })
   it('enforces shared durable attempt limits across concurrent requests', async () => {
     const attempts = await Promise.allSettled(

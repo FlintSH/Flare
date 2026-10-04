@@ -147,7 +147,7 @@ The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-loca
 
 The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, recovery, and passkeys. The passkey recording uses Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. It does not show or test a native biometric prompt.
 
-Use a **disposable local PostgreSQL database** whose name begins with `flare_auth_demo`. The seed script resets its two public fixture accounts and security rate counters. Never use an existing application database. With the dependencies installed, create the database using your local PostgreSQL tools, then start the app from the repository root:
+Use a **disposable local PostgreSQL database named exactly `flare_auth_demo`**. The seed script accepts only `localhost` or `127.0.0.1` and rejects other database names, including `flare_auth_demo_backup`. Omit the `schema` URL parameter or set it once to `public`; other schemas, duplicate schema parameters, and all other URL query parameters are rejected. It resets its two public fixture accounts and security rate counters. Never use an existing application database. With the dependencies installed, create the database using your local PostgreSQL tools, then start the app from the repository root:
 
 ```sh
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_auth_demo'
@@ -170,7 +170,16 @@ The fixture emails are `security-demo-alex@example.test` and `security-demo-jami
 
 To refresh visual evidence, set `FLARE_SECURITY_SCREENSHOTS` to an output directory and `FLARE_SECURITY_VIDEOS` to a separate temporary directory before running the browser script. It captures screenshots as WebP and the two completed walkthroughs as `two-factor-demo.webm` and `passkey-demo.webm`. Secrets are hidden by capture-only CSS installed before application scripts: QR codes, manual keys, recovery codes, and sensitive inputs never appear in recorded frames. The capture CSS does not alter the shipped UI. Inspect every resulting image and recording before replacing the canonical sources in `docs/images/security/` and `.github/assets/security/`. Include updated written transcripts in the guide and [demos](/demos). Keep temporary browser output and failed recordings out of Git.
 
-For the separate authentication database regression suite, create and migrate a disposable database whose name starts with `flare_security_test_`, then run:
+To check a recent sign-in expiring while password/email edits remain open, run this separate regression after reseeding:
+
+```sh
+node scripts/security/seed.cjs
+node scripts/security/verify-proof-expiry.cjs
+```
+
+This check uses the exact public demonstration secret above and an HTTP `localhost` origin. It performs real authenticator enrollment and recovery sign-in, then adjusts only the demonstration session's authentication timestamp to just beyond five minutes. Server responses are real; elapsed time is controlled. The check confirms no password/email mutation is sent before the restored confirmation fields are completed, and verifies both successful changes afterward. Optional `FLARE_SECURITY_SCREENSHOTS` output includes `proof-expired.webp` with password values masked. It changes Alex's email/password; reseed before another suite or demo run.
+
+For the separate authentication database regression suite, create and migrate a disposable local database named exactly `flare_security_test_local` (or `flare_security_test_ci` for CI), then run:
 
 ```sh
 export FLARE_SECURITY_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_security_test_local'
@@ -178,7 +187,7 @@ DATABASE_URL="$FLARE_SECURITY_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/auth/security-database.test.ts
 ```
 
-Without that variable the database suite is skipped. CI supplies a dedicated database. These tests cover atomic code/challenge redemption, stale-session fences, enrollment, encrypted secret handling, and recovery. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators on supported devices.
+Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic code/challenge redemption, stale-session fences, enrollment, encrypted secret handling, and recovery. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators on supported devices.
 
 ## Local visual testing with Meticulous
 

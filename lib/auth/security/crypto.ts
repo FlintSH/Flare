@@ -42,15 +42,17 @@ export function encryptTotp(secret: string) {
 }
 
 export function decryptTotp(value: string) {
-  const [version, iv, tag, ciphertext] = value.split('.')
-  if (version !== 'v1' || !iv || !tag || !ciphertext)
+  const [version, iv, tag, ciphertext, extra] = value.split('.')
+  if (version !== 'v1' || !iv || !tag || !ciphertext || extra !== undefined)
     throw new Error('Invalid encrypted authenticator.')
-  const decipher = createDecipheriv(
-    'aes-256-gcm',
-    encryptionKey(),
-    Buffer.from(iv, 'base64url')
-  )
-  decipher.setAuthTag(Buffer.from(tag, 'base64url'))
+  const ivBytes = Buffer.from(iv, 'base64url')
+  const tagBytes = Buffer.from(tag, 'base64url')
+  if (ivBytes.length !== 12 || tagBytes.length !== 16)
+    throw new Error('Invalid encrypted authenticator.')
+  const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), ivBytes, {
+    authTagLength: 16,
+  })
+  decipher.setAuthTag(tagBytes)
   return Buffer.concat([
     decipher.update(Buffer.from(ciphertext, 'base64url')),
     decipher.final(),

@@ -12,8 +12,11 @@ import { Label } from '@/components/ui/label'
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
+import { checkProfileProof } from './profile-proof'
+
 export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [proofNotice, setProofNotice] = useState<string | null>(null)
   const { toast } = useToast()
   const { data: security, refetch: refreshSecurity } = useSecurityStatus()
   const recentProof =
@@ -36,16 +39,31 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
     }
 
     setIsLoading(true)
+    setProofNotice(null)
+    let mutationStarted = false
     try {
+      const proof = {
+        currentPassword: currentPasswordRef.current?.value,
+        securityCode: securityCodeRef.current?.value || undefined,
+      }
+      const requirement = await checkProfileProof(
+        refreshSecurity,
+        'password',
+        proof
+      )
+      if (requirement) {
+        setProofNotice(requirement)
+        return
+      }
+      mutationStarted = true
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentPassword: currentPasswordRef.current?.value,
+          ...proof,
           newPassword: newPasswordRef.current?.value,
-          securityCode: securityCodeRef.current?.value || undefined,
         }),
       })
 
@@ -67,7 +85,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
       if (securityCodeRef.current) securityCodeRef.current.value = ''
       await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch (error) {
-      void refreshSecurity()
+      if (mutationStarted) void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -82,6 +100,11 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   return (
     <div className="space-y-6">
       <form onSubmit={handlePasswordChange} className="space-y-4">
+        {proofNotice && (
+          <p role="alert" className="rounded-xl border bg-muted/30 p-3 text-sm">
+            {proofNotice}
+          </p>
+        )}
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="current-password">Current Password</Label>

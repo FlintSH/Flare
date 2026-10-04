@@ -91,6 +91,8 @@ Errors contain `{ "error": "…" }` with `Cache-Control: no-store`. Invalid proo
 
 Management is limited to **20 attempts per account per 15 minutes**. Password sign-in is limited to **30 attempts per account** and **100 per IP** per 15 minutes. Public passkey options and passkey sign-in callbacks each have a limit of **100 per IP per 15 minutes**. The limits are shared through PostgreSQL across application replicas. Keep the [proxy's client-IP headers trustworthy](/hosting/reverse-proxy#keep-access-decisions-in-flare).
 
+Expired counter records are pruned by the [background cleanup worker](/hosting/maintenance#authentication-rate-limit-cleanup), independently of authentication requests. Pending cleanup does not extend a counter's 15-minute limit window.
+
 ## Authenticator behavior
 
 Flare uses six-digit TOTP codes with a **30-second** period and permits one adjacent time step in each direction. A successful code stores its time counter; that or an earlier counter cannot be redeemed again. Recovery-code consumption is also atomic, so concurrent attempts cannot both use the same code.

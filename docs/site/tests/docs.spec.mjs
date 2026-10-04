@@ -119,6 +119,7 @@ for (const width of [390, 1440]) {
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
+      './guide/account.html',
       './guide/security.html',
       './api/security.html',
     ]) {
@@ -170,6 +171,7 @@ for (const theme of ['dark', 'light']) {
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
+      './guide/account.html',
       './guide/security.html',
       './api/security.html',
       './hosting/docker.html',

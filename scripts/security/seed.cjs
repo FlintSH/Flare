@@ -5,10 +5,17 @@ const { hash } = require('bcryptjs')
 
 const database = new URL(process.env.DATABASE_URL)
 if (
+  !['postgresql:', 'postgres:'].includes(database.protocol) ||
   !['localhost', '127.0.0.1'].includes(database.hostname) ||
-  !database.pathname.startsWith('/flare_auth_demo')
+  database.pathname !== '/flare_auth_demo' ||
+  database.searchParams.getAll('schema').length > 1 ||
+  [...database.searchParams].some(
+    ([key, value]) => key !== 'schema' || value !== 'public'
+  )
 )
-  throw new Error('Security demos require a local flare_auth_demo database.')
+  throw new Error(
+    'Security demos require a local PostgreSQL database named exactly flare_auth_demo using its public schema.'
+  )
 
 const prisma = new PrismaClient()
 async function seed() {

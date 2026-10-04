@@ -17,6 +17,8 @@ import { Label } from '@/components/ui/label'
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
+import { checkProfileProof } from '../security/profile-proof'
+
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
@@ -26,6 +28,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const recentProof =
     security?.canUseRecentPasskey || security?.canUseRecentRecovery
   const [emailChanged, setEmailChanged] = useState(false)
+  const [proofNotice, setProofNotice] = useState<string | null>(null)
 
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -88,7 +91,26 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setProofNotice(null)
+    let mutationStarted = false
     try {
+      const changesEmail = !emailStatus?.enabled && emailChanged
+      const proof = {
+        currentPassword: emailPasswordRef.current?.value || undefined,
+        securityCode: emailSecurityCodeRef.current?.value || undefined,
+      }
+      if (changesEmail) {
+        const requirement = await checkProfileProof(
+          refreshSecurity,
+          'email',
+          proof
+        )
+        if (requirement) {
+          setProofNotice(requirement)
+          return
+        }
+      }
+      mutationStarted = true
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: {
@@ -97,12 +119,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         body: JSON.stringify({
           name: nameRef.current?.value,
           ...(emailStatus?.enabled ? {} : { email: emailRef.current?.value }),
-          ...(!emailStatus?.enabled && emailChanged
-            ? {
-                currentPassword: emailPasswordRef.current?.value || undefined,
-                securityCode: emailSecurityCodeRef.current?.value || undefined,
-              }
-            : {}),
+          ...(changesEmail ? proof : {}),
         }),
       })
 
@@ -141,7 +158,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         description: 'Profile updated successfully',
       })
     } catch (error) {
-      void refreshSecurity()
+      if (mutationStarted) void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -191,6 +208,14 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
             onSubmit={handleProfileUpdate}
             className="flex flex-col justify-center h-full space-y-4"
           >
+            {proofNotice && (
+              <p
+                role="alert"
+                className="rounded-xl border bg-muted/30 p-3 text-sm"
+              >
+                {proofNotice}
+              </p>
+            )}
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>

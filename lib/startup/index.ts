@@ -1,3 +1,4 @@
+import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 import { startMailWorker } from '@/lib/email/worker'
 import { initializeEventSystem } from '@/lib/events/init'
 import { startWebhookWorker } from '@/lib/integrations/worker'
@@ -19,6 +20,7 @@ export async function runStartupTasks() {
   try {
     logger.info('Running startup tasks...')
 
+    startSecurityCleanupWorker()
     startStorageDeletionWorker()
     await initializeEventSystem()
     startMailWorker()

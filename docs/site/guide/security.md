@@ -11,6 +11,8 @@ These controls belong to your account and remain available without the `profile.
 
 To change a local account's sign-in methods, confirm your current password and, if enabled, an unused authenticator or recovery code. A passkey or recovery-code sign-in within the last five minutes can confirm your identity instead. An SSO-only account needs a fresh SSO or passkey sign-in within five minutes.
 
+The password and basic email forms check that confirmation window again when you submit. If it has expired, the form keeps your edits and asks you to confirm your identity before sending the change. [Updating your account](./account#change-your-password) describes these prompts.
+
 <Screenshot src="/screenshots/security/security-overview.webp" alt="Sign-in security with authenticator setup and passkey registration controls, before either method is enabled" caption="Start in Profile → Account → Sign-in security. These screens use an isolated demonstration account." />
 
 [Watch the complete authenticator and recovery walkthrough](/demos#enable-use-and-recover-two-factor-authentication) or [the passkey walkthrough](/demos#create-use-and-remove-a-passkey). Both use the real application with disposable data; the passkey device is explicitly simulated.

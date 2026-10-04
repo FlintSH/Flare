@@ -63,11 +63,6 @@ export async function securityLimit(key: string, limit = 20, seconds = 900) {
       "resetAt" = CASE WHEN "AuthRateLimit"."resetAt" <= NOW() THEN NOW() + ${seconds} * INTERVAL '1 second' ELSE "AuthRateLimit"."resetAt" END
     RETURNING "count"
   `
-  // Retain only active/recent buckets; unauthenticated attempts must not grow
-  // the table indefinitely. The index keeps this bounded after normal cleanup.
-  await prisma.authRateLimit.deleteMany({
-    where: { resetAt: { lt: new Date(Date.now() - 86400000) } },
-  })
   if (rows[0].count > limit)
     throw new SecurityError(
       'Too many security attempts. Try again in 15 minutes.',

@@ -109,6 +109,12 @@ Include the new security records in future database backups. A restore also rest
 
 Before a [hostname change](./reverse-proxy#passkeys-and-hostname-changes), arrange a working password plus authenticator/recovery code or SSO method, then register new passkeys on the new hostname. Keep independent administrator recovery methods: there is no dashboard administrator bypass for a lost authenticator.
 
+#### Authentication rate-limit cleanup
+
+Each running application process checks for old authentication rate-limit counters every **60 seconds**, removing at most **1,000** records whose reset time is more than **24 hours** old per run. Database row locks let replicas clean different records without waiting on each other, and a process does not overlap its own cleanup runs. A failed cleanup is retried on the next interval. Keep at least one application process running; no separate worker service or setting is required.
+
+Cleanup runs independently of sign-in requests. An expired counter no longer blocks authentication even if its row is waiting for cleanup; the normal 15-minute limits remain unchanged. This cleanup does not remove authenticators, recovery codes, passkeys, or active limit counters.
+
 ### Upgrading to roles
 
 The role migration replaces the `User.role` enum with roles and account assignments. Every account inherits **Everyone**, whose initial permissions preserve existing personal workflows. Every former `ADMIN` account receives the new **Admin** role with all permissions. The first account on a fresh instance receives that role automatically. Existing files, SSO bindings, integrations, and account data are preserved.

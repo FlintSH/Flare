@@ -27,6 +27,28 @@ describe('account security cryptography and origin', () => {
     vi.stubEnv('NEXTAUTH_SECRET', 'b'.repeat(32))
     expect(() => decryptTotp(encrypted)).toThrow()
   })
+  it('rejects shortened authentication tags and malformed nonce lengths', () => {
+    vi.stubEnv('NEXTAUTH_SECRET', 'a'.repeat(32))
+    const encrypted = encryptTotp(createTotp().secret.base32)
+    const [version, iv, tag, ciphertext] = encrypted.split('.')
+    for (const length of [4, 8, 12, 15]) {
+      const shortenedTag = Buffer.from(tag, 'base64url')
+        .subarray(0, length)
+        .toString('base64url')
+      expect(() =>
+        decryptTotp([version, iv, shortenedTag, ciphertext].join('.'))
+      ).toThrow('Invalid encrypted authenticator')
+    }
+    const shortIv = Buffer.from(iv, 'base64url')
+      .subarray(0, 8)
+      .toString('base64url')
+    expect(() =>
+      decryptTotp([version, shortIv, tag, ciphertext].join('.'))
+    ).toThrow('Invalid encrypted authenticator')
+    expect(() => decryptTotp(`${encrypted}.extra`)).toThrow(
+      'Invalid encrypted authenticator'
+    )
+  })
   it('accepts six-digit TOTP only within one step and returns its counter', () => {
     const totp = createTotp()
     const now = 1720000000000
