@@ -18,6 +18,55 @@ async function releaseData(request) {
   return { manifest, latest, oldest: manifest.releases.at(-1) }
 }
 
+function rollingGuide(rolling) {
+  return (
+    rolling.pages.find(
+      (entry) =>
+        entry.path.startsWith('guide/') && entry.path !== 'guide/index.html'
+    ) || rolling.pages.find((entry) => entry.path !== 'index.html')
+  )
+}
+
+async function expectRollingNotice(page, rolling, baseURL) {
+  const notice = page.getByRole('note', {
+    name: 'Rolling documentation',
+    exact: true,
+  })
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText('Rolling preview · Unreleased')
+  await expect(notice).toContainText(
+    'These docs describe a rolling build, not a stable release.'
+  )
+  await expect(
+    notice.getByRole('link', { name: 'Read stable docs', exact: true })
+  ).toHaveAttribute('href', resolveSitePath(baseURL, './'))
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    'content',
+    /noindex,\s*follow/
+  )
+  await expect(page.locator('meta[name="flare:commit"]')).toHaveAttribute(
+    'content',
+    rolling.commit
+  )
+  const stamp = page.getByLabel('Documentation version and source revision')
+  await expect(stamp).toContainText('Flare rolling')
+  await expect(stamp).toContainText(`v${rolling.version}`)
+  await expect(stamp).toContainText('Updated')
+  await expect(stamp.locator('time')).toHaveAttribute(
+    'datetime',
+    rolling.updatedAt
+  )
+  await expect(stamp.locator('time')).toHaveText(rolling.updatedAt.slice(0, 10))
+  await expect(
+    stamp.getByRole('link', { name: rolling.commit.slice(0, 8), exact: true })
+  ).toHaveAttribute(
+    'href',
+    `https://github.com/FlintSH/Flare/commit/${rolling.commit}`
+  )
+  await expect(stamp).not.toContainText('Latest stable')
+  await expect(stamp).not.toContainText('Development preview')
+}
+
 const compareUrl = (from, to) =>
   `./versions.html?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
 
@@ -437,11 +486,13 @@ for (const [width, theme] of [
   [390, 'light'],
   [1440, 'dark'],
 ]) {
-  test(`release archive and comparison fit ${width}px and pass ${theme} accessibility checks`, async ({
+  test(`stable archive, rolling preview, and comparison fit ${width}px and pass ${theme} accessibility checks`, async ({
     page,
     request,
   }) => {
-    const { latest, oldest } = await releaseData(request)
+    const { manifest, latest, oldest } = await releaseData(request)
+    const rolling = manifest.rolling
+    const guide = rollingGuide(rolling)
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
     await page.setViewportSize({ width, height: 900 })
@@ -453,6 +504,8 @@ for (const [width, theme] of [
     for (const path of [
       compareUrl(oldest.tag, latest.tag),
       `./${oldest.path}`,
+      `./${rolling.path}`,
+      `./${rolling.path}${guide.path}`,
     ]) {
       await page.goto(path)
       await page.waitForLoadState('networkidle')
@@ -496,4 +549,233 @@ test('legacy commands remain horizontally scrollable by keyboard on mobile', asy
       () => document.documentElement.scrollWidth <= window.innerWidth + 1
     )
   ).toBe(true)
+})
+
+test('rolling metadata and pages match the pinned published source and discourage indexing', async ({
+  request,
+}) => {
+  const { manifest, latest } = await releaseData(request)
+  const rolling = manifest.rolling
+  expect(rolling).toMatchObject({ path: 'rolling/', kind: 'handbook' })
+  expect(rolling.commit).toMatch(/^[a-f0-9]{40}$/)
+  expect(Number.isNaN(Date.parse(rolling.updatedAt))).toBe(false)
+  expect(rolling.version).toBe(
+    JSON.parse(source(rolling.commit, 'package.json')).version
+  )
+  const sourcePages = execFileSync(
+    'git',
+    ['ls-tree', '--full-tree', '-r', '--name-only', rolling.commit],
+    { encoding: 'utf8' }
+  )
+    .trim()
+    .split('\n')
+    .filter(
+      (path) =>
+        path.startsWith('docs/site/') &&
+        path.endsWith('.md') &&
+        !path.includes('/.vitepress/') &&
+        !path.includes('/node_modules/')
+    )
+  expect(rolling.pages.map((entry) => entry.source).sort()).toEqual(
+    sourcePages.sort()
+  )
+  const build = await json(request, `${rolling.path}build-info.json`)
+  expect(build).toMatchObject({
+    channel: 'rolling',
+    version: rolling.version,
+    commit: rolling.commit,
+    shortCommit: rolling.commit.slice(0, 8),
+    dirty: false,
+    rolling: { updatedAt: rolling.updatedAt },
+  })
+  expect(build).not.toHaveProperty('release')
+  expect(build.renderer).toHaveProperty('commit')
+  for (const entry of rolling.pages) {
+    const response = await request.get(`./${rolling.path}${entry.path}`)
+    expect(response.status(), entry.path).toBe(200)
+    const html = await response.text()
+    expect(html, entry.path).toContain(rolling.commit)
+    expect(html, entry.path).toMatch(
+      /<meta[^>]+name="robots"[^>]+content="noindex,\s*follow"/
+    )
+    expect(html, entry.path).toContain(
+      'These docs describe a rolling build, not a stable release.'
+    )
+  }
+  const stable = await json(request, 'build-info.json')
+  expect(stable.commit).toBe(latest.commit)
+  expect(stable.release.tag).toBe(manifest.latest)
+  expect(stable).not.toHaveProperty('rolling')
+  expect(stable.channel).not.toBe('rolling')
+})
+
+test('rolling docs require an explicit link and clearly return readers to stable docs', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { manifest, latest } = await releaseData(request)
+  const rolling = manifest.rolling
+  const guide = rollingGuide(rolling)
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('response', (response) => {
+    if (
+      response.status() >= 400 &&
+      new URL(response.url()).origin === new URL(baseURL).origin
+    )
+      errors.push(`${response.status()} ${response.url()}`)
+  })
+  await page.goto('./versions.html')
+  await expect(
+    page.getByRole('note', { name: 'Rolling documentation', exact: true })
+  ).toHaveCount(0)
+  const link = page.getByRole('link', {
+    name: 'Open rolling docs (unreleased)',
+    exact: true,
+  })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute(
+    'href',
+    resolveSitePath(baseURL, rolling.path)
+  )
+  await expect(link).toHaveAttribute('target', '_self')
+  await page.evaluate(() => {
+    window.__rollingNavigationSentinel = true
+  })
+  await link.click()
+  await expect(page).toHaveURL(new URL(rolling.path, baseURL).href)
+  await page.waitForLoadState('networkidle')
+  expect(
+    await page.evaluate(() => window.__rollingNavigationSentinel)
+  ).toBeUndefined()
+  await expectRollingNotice(page, rolling, baseURL)
+  await page.goto(`./${rolling.path}${guide.path}`)
+  await expectRollingNotice(page, rolling, baseURL)
+  await expect(page.locator('h1')).toHaveCount(1)
+  const originalHeading = source(rolling.commit, guide.source).match(
+    /^# +(.+)$/m
+  )?.[1]
+  expect(originalHeading).toBeTruthy()
+  await expect(page.locator('h1')).toContainText(originalHeading)
+  const exit = page
+    .getByRole('note', { name: 'Rolling documentation', exact: true })
+    .getByRole('link', { name: 'Read stable docs', exact: true })
+  await expect(exit).toHaveAttribute('target', '_self')
+  await page.evaluate(() => {
+    window.__rollingNavigationSentinel = true
+  })
+  await exit.click()
+  await expect(page).toHaveURL(new URL('./', baseURL).href)
+  await page.waitForLoadState('networkidle')
+  expect(
+    await page.evaluate(() => window.__rollingNavigationSentinel)
+  ).toBeUndefined()
+  await expect(
+    page.getByRole('note', { name: 'Rolling documentation', exact: true })
+  ).toHaveCount(0)
+  await expect(
+    page.getByLabel('Documentation version and source revision')
+  ).toContainText(`Flare ${latest.tag}`)
+  await expect(
+    page.getByLabel('Documentation version and source revision')
+  ).toContainText('Latest stable')
+  expect(errors).toEqual([])
+})
+
+test('rolling is excluded from stable release pickers and comparisons', async ({
+  page,
+  request,
+}) => {
+  const { manifest } = await releaseData(request)
+  expect(
+    manifest.releases.every((release) => /^v\d+\.\d+\.\d+$/.test(release.tag))
+  ).toBe(true)
+  const snapshotRequests = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.includes('/history/'))
+      snapshotRequests.push(request.url())
+  })
+  await page.goto(compareUrl('rolling', manifest.latest))
+  await expect(
+    page.getByRole('link', {
+      name: 'Open rolling docs (unreleased)',
+      exact: true,
+    })
+  ).toBeVisible()
+  for (const name of ['From release', 'To release']) {
+    const values = await page
+      .getByRole('combobox', { name, exact: true })
+      .locator('option')
+      .evaluateAll((options) => options.map((option) => option.value))
+    expect(values).toEqual(manifest.releases.map((release) => release.tag))
+  }
+  await expect(page.locator('.comparison-status')).toHaveCount(0)
+  expect(snapshotRequests).toEqual([])
+  for (const path of ['./', `./${manifest.rolling.path}`]) {
+    await page.goto(path)
+    const values = await page
+      .getByLabel('Documentation release', { exact: true })
+      .locator('option:not([disabled])')
+      .evaluateAll((options) => options.map((option) => option.value))
+    expect(values).toEqual(manifest.releases.map((release) => release.tag))
+  }
+})
+
+test('stable and rolling search keep their documentation sources separate', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const { manifest, latest } = await releaseData(request)
+  const rolling = manifest.rolling
+  const exclusive = rolling.pages.find(
+    (entry) => !latest.pages.some((stable) => stable.path === entry.path)
+  )
+  const guide = exclusive || rollingGuide(rolling)
+  const search = async (path) => {
+    await page.goto(path)
+    await page
+      .getByRole('button', { name: /Search/ })
+      .first()
+      .click()
+    await page.locator('#localsearch-input').fill(guide.title)
+    const results = page.locator('.VPLocalSearchBox .results')
+    await expect(results.locator('a.result, .no-results').first()).toBeVisible()
+    return results
+  }
+  const stableResults = await search('./')
+  const stableLinks = await stableResults
+    .locator('a.result')
+    .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
+  expect(
+    stableLinks.every(
+      (link) => !link.startsWith(resolveSitePath(baseURL, rolling.path))
+    )
+  ).toBe(true)
+  if (exclusive)
+    expect(
+      stableLinks.every(
+        (link) =>
+          new URL(link, baseURL).pathname !==
+          resolveSitePath(baseURL, exclusive.path)
+      )
+    ).toBe(true)
+  const rollingResults = await search(`./${rolling.path}`)
+  const guideHref = resolveSitePath(baseURL, `${rolling.path}${guide.path}`)
+  await expect
+    .poll(async () =>
+      rollingResults
+        .locator('a.result')
+        .evaluateAll((links) =>
+          links.map((link) => new URL(link.href).pathname)
+        )
+    )
+    .toContain(guideHref)
+  const target = rollingResults
+    .locator(`a.result[href^="${guideHref}"]`)
+    .first()
+  await target.click()
+  await expect(page).toHaveURL((url) => url.pathname === guideHref)
+  await expectRollingNotice(page, rolling, baseURL)
 })

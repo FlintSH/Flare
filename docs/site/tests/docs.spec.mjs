@@ -257,6 +257,12 @@ test('development preview explains where dated release docs are available', asyn
   await expect(page.locator('.version-notice')).toContainText(
     'Development preview'
   )
+  await expect(
+    page.getByRole('link', {
+      name: 'Open rolling docs (unreleased)',
+      exact: true,
+    })
+  ).toHaveCount(0)
   await expect(page.locator('.version-notice')).toContainText(
     'npm run build:releases --prefix docs/site'
   )

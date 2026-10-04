@@ -26,6 +26,8 @@ async function walk(path) {
             'public',
             'dist',
             'releases',
+            'releases.staging',
+            'releases.previous',
             'cache',
             'test-results',
             'playwright-report',

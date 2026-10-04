@@ -1,5 +1,7 @@
 docs/site/.vitepress/dist/
 docs/site/.vitepress/releases/
+docs/site/.vitepress/releases.staging/
+docs/site/.vitepress/releases.previous/
 docs/site/.vitepress/cache/
 docs/site/public/screenshots/
 docs/site/public/evidence/

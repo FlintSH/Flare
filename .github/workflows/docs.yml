@@ -6,10 +6,10 @@ on:
   push:
     branches: [main]
   release:
-    types: [published]
+    types: [published, edited]
   # Releases created with GITHUB_TOKEN do not trigger release/push workflows.
   workflow_run:
-    workflows: [Release]
+    workflows: [Release, Rolling Release]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -25,27 +25,38 @@ concurrency:
 jobs:
   check:
     if: >-
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
-      (github.event_name != 'release' || !github.event.release.prerelease)
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.head_repository.full_name == github.repository &&
+         github.event.workflow_run.head_branch == 'main')) &&
+      (github.event_name != 'release' ||
+        (!github.event.release.draft &&
+         (!github.event.release.prerelease || github.event.release.tag_name == 'rolling'))) &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    outputs:
-      source_sha: ${{ steps.source.outputs.sha }}
     env:
       DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the pull request or pushed source
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Release tags can predate this publishing infrastructure.
-          ref: ${{ (github.event_name == 'workflow_run' || github.event_name == 'release') && 'main' || github.sha }}
-      - name: Pin the verified publishing source
-        id: source
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Check out trusted publishing source
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          # Release tags can predate this publishing infrastructure. A release
+          # event or completed workflow never supplies executable tooling refs.
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: docs/site/package-lock.json
+          # Do not restore or save dependency caches across publishing contexts.
       - name: Install documentation dependencies
         run: npm ci --prefix docs/site
       - name: Require documentation with code changes
@@ -71,32 +82,13 @@ jobs:
           name: docs-browser-failures
           path: docs/site/test-results
           if-no-files-found: ignore
-  release-build:
-    name: Build and test stable documentation archives
-    needs: check
-    runs-on: ubuntu-latest
-    env:
-      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.check.outputs.source_sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: docs/site/package-lock.json
-      - name: Install documentation dependencies
-        run: npm ci --prefix docs/site
-      - name: Build latest stable and all published stable archives
+      # Build the deployable site from the same checkout that passed source
+      # checks, without accepting a checkout ref or artifact from another job.
+      - name: Build stable docs, dated archives and the rolling preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build:releases --prefix docs/site
-      - name: Install browser
-        working-directory: docs/site
-        run: npx playwright install --with-deps chromium
-      - name: Test stable content, archive navigation and comparisons
+      - name: Test stable content, archives, comparisons and explicit rolling access
         run: npm run test:releases --prefix docs/site
       - name: Save archive browser failure evidence
         if: failure()
@@ -105,7 +97,7 @@ jobs:
           name: docs-release-browser-failures
           path: docs/site/test-results
           if-no-files-found: ignore
-      - name: Upload stable site and archives
+      - name: Upload stable site, archives and rolling preview
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release')
         uses: actions/upload-pages-artifact@v3
         with:
@@ -113,7 +105,7 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release') && vars.DOCS_PAGES_ENABLED == 'true'
-    needs: release-build
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       pages: write

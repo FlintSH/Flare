@@ -23,7 +23,10 @@ The deployed handbook follows the **current stable release**. [Documentation
 versions and changes](https://flintsh.github.io/Flare/versions.html) lists dated
 archives for every stable release and lets you compare the original documentation
 between releases. Releases before the handbook retain their original README and
-any guides available at the time.
+any guides available at the time. The versions page also offers **Open rolling
+docs (unreleased)** for the current published rolling build. Rolling docs require
+that explicit choice or a direct `/Flare/rolling/` URL; the homepage continues to
+open stable docs.
 
 - **Get started:** [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [First-run setup](https://flintsh.github.io/Flare/admin/setup.html)
 - **Use Flare:** [Upload and share](https://flintsh.github.io/Flare/guide/uploading.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) · [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)

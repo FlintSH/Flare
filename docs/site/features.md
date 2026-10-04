@@ -9,7 +9,7 @@ Flare brings uploads, previews, organization, and automation to your own server 
 
 Filter the capabilities below, or [take a guided tour](./demos). Each card leads to a complete guide with instructions and important limits.
 
-Reading for a particular installation? [Browse dated documentation releases and compare changes](./versions). The public handbook defaults to the current stable release.
+Reading for a particular installation? [Browse dated documentation releases and compare changes](./versions). The public handbook defaults to the current stable release. The versions page also offers explicit access to the published rolling build's unreleased docs.
 
 <FeatureExplorer />
 

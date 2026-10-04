@@ -19,9 +19,15 @@ import {
   discoverReleases,
   releaseBuildInfo,
   releaseSource,
+  rollingBuildInfo,
+  rollingSource,
   selectReleases,
 } from './release-data.mjs'
 import { prepareLegacy } from './release-render.mjs'
+import {
+  recoverDirectoryPublication,
+  replaceDirectory,
+} from './release-publish.mjs'
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repo = resolve(site, '../..')
@@ -34,6 +40,7 @@ if (args.length && (args.length !== 2 || args[0] !== '--manifest'))
   throw new Error(
     'Usage: node scripts/build-releases.mjs [--manifest fixture.json]'
   )
+await recoverDirectoryPublication(output)
 
 function token() {
   if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN)
@@ -91,13 +98,17 @@ async function overlayChrome(target, legacy) {
     )
   }
   await copy(resolve(site, 'versions.md'), resolve(target, 'versions.md'))
-  const screenshot = 'handbook/docs-versions.webp'
-  const image = resolve(repo, 'docs/images', screenshot)
-  if (await exists(image)) {
-    await copy(image, resolve(target, '../images', screenshot))
-    // Legacy archives have no asset preparation pipeline of their own.
-    if (legacy)
-      await copy(image, resolve(target, 'public/screenshots', screenshot))
+  for (const screenshot of [
+    'handbook/docs-versions.webp',
+    'handbook/docs-rolling.webp',
+  ]) {
+    const image = resolve(repo, 'docs/images', screenshot)
+    if (await exists(image)) {
+      await copy(image, resolve(target, '../images', screenshot))
+      // Legacy archives have no asset preparation pipeline of their own.
+      if (legacy)
+        await copy(image, resolve(target, 'public/screenshots', screenshot))
+    }
   }
   if (legacy) {
     await copy(
@@ -127,6 +138,12 @@ async function overlayChrome(target, legacy) {
 }
 
 async function configure(target, release, manifest, info, releaseBase, legacy) {
+  const rolling = info.channel === 'rolling'
+  const replacedMeta = [
+    'flare:version',
+    'flare:commit',
+    ...(rolling ? ['robots'] : []),
+  ]
   const historical = legacy ? '{}' : 'historical'
   const sidebar = legacy
     ? `[{ text: 'Original release documentation', items: ${JSON.stringify(release.pages.map((page) => ({ text: page.title, link: `/${page.path}` })))} }]`
@@ -136,13 +153,14 @@ async function configure(target, release, manifest, info, releaseBase, legacy) {
     `${legacy ? '' : "import historical from './release-config.mjs'\n"}const source = ${historical}\nexport default {
   ...source,
   title: 'Flare Docs',
-  titleTemplate: ${JSON.stringify(`:title | ${release.tag} | Flare Docs`)},
+  titleTemplate: ${JSON.stringify(`:title | ${rolling ? 'Rolling (unreleased)' : release.tag} | Flare Docs`)},
   description: 'Versioned Flare documentation from published releases.',
   lang: 'en-US', base: ${JSON.stringify(releaseBase)},
   appearance: source.appearance || 'dark',
   lastUpdated: false,
   outDir: ${JSON.stringify(resolve(target, '.vitepress/dist'))},
-  head: [...(source.head || []).filter(([tag, attrs]) => !(tag === 'meta' && ['flare:version', 'flare:commit'].includes(attrs?.name)) && !(tag === 'link' && attrs?.rel === 'icon')),
+  head: [...(source.head || []).filter(([tag, attrs]) => !(tag === 'meta' && ${JSON.stringify(replacedMeta)}.includes(attrs?.name)) && !(tag === 'link' && attrs?.rel === 'icon')),
+    ${rolling ? "['meta', { name: 'robots', content: 'noindex,follow' }]," : ''}
     ['link', { rel: 'icon', type: 'image/svg+xml', href: ${JSON.stringify(`${releaseBase}icon.svg`)} }],
     ['meta', { name: 'flare:version', content: ${JSON.stringify(info.version)} }],
     ['meta', { name: 'flare:commit', content: ${JSON.stringify(info.commit)} }]],
@@ -181,10 +199,12 @@ const sources = selected.map((release) =>
     latest: release.tag_name === discovered.latest.tag_name,
   })
 )
+const rolling = rollingSource(repo, discovered.rolling)
 const manifest = {
   schemaVersion: 1,
   latest: discovered.latest.tag_name,
   releases: sources.map(({ metadata }) => metadata),
+  rolling,
 }
 const renderer = getBuildInfo()
 const builtAt = new Date().toISOString()
@@ -198,16 +218,18 @@ try {
       Number(b.metadata.tag === manifest.latest) -
       Number(a.metadata.tag === manifest.latest)
   )
-  for (const { metadata: release } of ordered) {
+  ordered.push({ metadata: rolling, channel: 'rolling' })
+  for (const { metadata: release, channel = 'stable' } of ordered) {
+    const label = channel === 'rolling' ? 'rolling' : release.tag
     console.log(
-      `Building ${release.tag} (${release.kind}, ${release.publishedAt})`
+      `Building ${label} (${release.kind}, ${release.publishedAt || release.updatedAt})`
     )
-    const archive = resolve(temporary, release.tag)
+    const archive = resolve(temporary, label)
     const target = resolve(archive, 'docs/site')
     const legacy = release.kind === 'legacy'
     await mkdir(target, { recursive: true })
     if (!legacy) {
-      const tar = resolve(temporary, `${release.tag}.tar`)
+      const tar = resolve(temporary, `${label}.tar`)
       await run('git', ['archive', '-o', tar, release.commit], repo)
       await run('tar', ['-xf', tar, '-C', archive], repo)
       await rm(tar)
@@ -233,7 +255,10 @@ try {
         target
       )
     }
-    const info = releaseBuildInfo(release, manifest.latest, renderer, builtAt)
+    const info =
+      channel === 'rolling'
+        ? rollingBuildInfo(release, renderer, builtAt)
+        : releaseBuildInfo(release, manifest.latest, renderer, builtAt)
     const destinations =
       release.tag === manifest.latest
         ? [
@@ -289,11 +314,9 @@ try {
       DOCS_DIST: assembled,
     }
   )
-  // Keep the previous successful archive if any release or link check fails.
-  await rm(output, { recursive: true, force: true })
-  await cp(assembled, output, { recursive: true })
+  await replaceDirectory(assembled, output)
   console.log(
-    `Published build ready: ${output} (${sources.length} releases, stable ${manifest.latest})`
+    `Published build ready: ${output} (${sources.length} stable releases, stable ${manifest.latest}, rolling ${rolling.commit.slice(0, 8)})`
   )
 } finally {
   await rm(temporary, { recursive: true, force: true })

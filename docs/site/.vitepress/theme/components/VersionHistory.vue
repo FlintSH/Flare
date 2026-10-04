@@ -106,12 +106,18 @@ onMounted(() => {
       </p>
     </div>
     <template v-else>
+      <p v-if="theme.docsVersions.rolling" class="rolling-entry">
+        Using a rolling build?
+        <a :href="href(theme.docsVersions.rolling.path)" target="_self"
+          >Open rolling docs (unreleased)</a
+        >. The default handbook stays on the latest stable release.
+      </p>
       <section aria-labelledby="compare-documentation">
         <h2 id="compare-documentation">Compare documentation</h2>
         <p>
-          Choose two releases to see added, removed, and changed documentation.
-          Comparisons show the original source text, including examples and
-          interactive guide components.
+          Choose two stable releases to see added, removed, and changed
+          documentation. Comparisons show the original source text, including
+          examples and interactive guide components.
         </p>
         <form class="compare-controls" @submit.prevent="compare">
           <label
@@ -254,6 +260,12 @@ onMounted(() => {
 <style scoped>
 .version-history {
   margin: 24px 0;
+}
+.rolling-entry {
+  padding: 12px 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
 }
 .version-notice,
 .file-diff {

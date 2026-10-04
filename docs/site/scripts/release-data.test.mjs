@@ -10,6 +10,9 @@ import {
   discoverReleases,
   releaseBuildInfo,
   releaseSource,
+  rollingBuildInfo,
+  rollingIdentity,
+  rollingSource,
   selectReleases,
 } from './release-data.mjs'
 import { prepareLegacy, renderLegacyMarkdown } from './release-render.mjs'
@@ -22,6 +25,14 @@ const release = (tag, overrides = {}) => ({
   published_at: publishedAt,
   ...overrides,
 })
+const rollingRelease = (commit, overrides = {}) =>
+  release('rolling', {
+    prerelease: true,
+    updated_at: '2026-09-26T12:37:00Z',
+    body: `<!-- flare-commit-sha: ${commit} -->`,
+    target_commitish: commit,
+    ...overrides,
+  })
 
 test('selects only published stable semver tags and honors GitHub latest', () => {
   const latest = release('v2.1.0')
@@ -70,6 +81,7 @@ test('fails closed on missing dates, duplicate releases and discovery races', ()
 test('discovers all paginated GitHub releases without fetching docs from main', async () => {
   const requests = []
   const latest = release('v2.1.0')
+  const rolling = rollingRelease('a'.repeat(40))
   const result = await discoverReleases({
     token: 'fixture-token',
     fetchImpl: async (url, options) => {
@@ -80,25 +92,67 @@ test('discovers all paginated GitHub releases without fetching docs from main', 
         json: async () =>
           url.endsWith('/latest')
             ? latest
-            : url.endsWith('page=1')
-              ? [
-                  latest,
-                  ...Array.from({ length: 99 }, (_, i) =>
-                    release(`rolling-${i}`)
-                  ),
-                ]
-              : [release('v1.0.0')],
+            : url.endsWith('/tags/rolling')
+              ? rolling
+              : url.endsWith('page=1')
+                ? [
+                    latest,
+                    rolling,
+                    ...Array.from({ length: 98 }, (_, i) =>
+                      release(`rolling-${i}`)
+                    ),
+                  ]
+                : [release('v1.0.0')],
       }
     },
   })
-  assert.equal(requests.length, 3)
-  assert.match(requests[2], /page=2$/)
+  assert.equal(requests.length, 4)
+  assert.match(requests[3], /page=2$/)
   assert.equal(result.latest.tag_name, 'v2.1.0')
   assert.equal(result.releases.length, 2)
+  assert.equal(result.rolling, rolling)
+  assert.equal(
+    result.releases.some((item) => item.tag_name === 'rolling'),
+    false
+  )
   await assert.rejects(
     discoverReleases({ fetchImpl: async () => ({ ok: false, status: 403 }) }),
     /failed \(403\)/
   )
+})
+
+test('rolling identity uses the published marker even if target_commitish is stale', () => {
+  const commit = 'a'.repeat(40)
+  const identity = rollingIdentity(
+    rollingRelease(commit, {
+      target_commitish: 'b'.repeat(40),
+    })
+  )
+  assert.equal(identity.commit, commit)
+  assert.equal(identity.updatedAt, '2026-09-26T12:37:00.000Z')
+  for (const overrides of [
+    { tag_name: 'development' },
+    { draft: true },
+    { prerelease: false },
+  ])
+    assert.throws(
+      () => rollingIdentity(rollingRelease(commit, overrides)),
+      /published rolling prerelease/
+    )
+  assert.throws(
+    () => rollingIdentity(rollingRelease(commit, { updated_at: 'not-a-date' })),
+    /valid update date/
+  )
+  for (const body of [
+    '',
+    '<!-- flare-commit-sha: main -->',
+    '<!-- flare-commit-sha: abcdef0 -->',
+    `<!-- flare-commit-sha: ${commit} -->\n<!-- flare-commit-sha: ${commit} -->`,
+  ])
+    assert.throws(
+      () => rollingIdentity(rollingRelease(commit, { body })),
+      /one immutable commit/
+    )
 })
 
 async function fixture(t) {
@@ -151,6 +205,85 @@ test('snapshots exact tagged source, release publication dates and original page
     () => releaseSource(repo, release('v7.0.0')),
     /Missing release tag/
   )
+})
+
+test('rolling source ignores stale local tags, later commits and working changes', async (t) => {
+  const { repo, commit, write, git } = await fixture(t)
+  const stale = await commit('rolling', '1.4.2', {
+    'README.md': '# Old rolling\n',
+  })
+  const published = await commit('v2.1.0', '2.1.0', {
+    'docs/site/.vitepress/config.mjs': 'export default {}\n',
+    'docs/site/index.md': '# Published rolling handbook\n',
+  })
+  const current = await commit('development', '2.2.0', {
+    'docs/site/index.md': '# Later unpublished handbook\n',
+    'docs/site/later.md': '# Later unreleased feature\n',
+  })
+  await write('docs/site/index.md', '# Dirty working copy\n')
+  const metadata = rollingSource(
+    repo,
+    rollingRelease(published, { target_commitish: stale })
+  )
+  assert.equal(metadata.commit, published)
+  assert.equal(metadata.path, 'rolling/')
+  assert.equal(metadata.version, '2.1.0')
+  assert.equal(metadata.kind, 'handbook')
+  assert.deepEqual(metadata.pages, [
+    {
+      path: 'index.html',
+      source: 'docs/site/index.md',
+      title: 'Published rolling handbook',
+    },
+  ])
+  assert.equal(git('rev-parse', 'rolling'), stale)
+  assert.equal(git('rev-parse', 'HEAD'), current)
+  assert.equal(
+    await readFile(resolve(repo, 'docs/site/index.md'), 'utf8'),
+    '# Dirty working copy\n'
+  )
+  const info = rollingBuildInfo(
+    metadata,
+    { commit: current, dirty: true },
+    '2026-10-04T00:00:00Z'
+  )
+  assert.equal(info.channel, 'rolling')
+  assert.equal(info.dirty, false)
+  assert.equal(info.commit, published)
+  assert.equal(info.version, '2.1.0')
+  assert.equal(info.release, undefined)
+  assert.equal(info.rolling.updatedAt, metadata.updatedAt)
+  assert.deepEqual(info.renderer, { commit: current, dirty: true })
+})
+
+test('missing rolling commit is fetched exactly without moving the local rolling tag', async (t) => {
+  const { repo, commit } = await fixture(t)
+  const stale = await commit('rolling', '1.4.2', {
+    'README.md': '# Old rolling\n',
+  })
+  const clone = await mkdtemp(resolve(tmpdir(), 'flare-rolling-clone-'))
+  t.after(() => rm(clone, { recursive: true, force: true }))
+  execFileSync(
+    'git',
+    ['clone', '--no-local', '--branch', 'rolling', repo, clone],
+    { stdio: 'pipe' }
+  )
+  const published = await commit('v2.1.0', '2.1.0', {
+    'docs/site/.vitepress/config.mjs': 'export default {}\n',
+    'docs/site/index.md': '# Newly published handbook\n',
+  })
+  const localGit = (...args) =>
+    execFileSync('git', args, {
+      cwd: clone,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    }).trim()
+  assert.throws(() => localGit('cat-file', '-e', `${published}^{commit}`))
+  const metadata = rollingSource(clone, rollingRelease(published))
+  assert.equal(metadata.commit, published)
+  assert.equal(localGit('rev-parse', 'rolling'), stale)
+  assert.equal(localGit('rev-parse', 'HEAD'), stale)
+  assert.equal(localGit('tag', '--list'), 'rolling')
 })
 
 test('handbook snapshot includes historical components and public contracts', async (t) => {

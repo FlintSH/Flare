@@ -7,6 +7,7 @@ const selectorId = useId()
 const releases = computed(() => theme.value.docsVersions?.releases || [])
 const root = computed(() => theme.value.docsRoot || withBase('/'))
 const current = computed(() => theme.value.buildInfo.release)
+const rolling = computed(() => theme.value.buildInfo.channel === 'rolling')
 const destination = computed(() => {
   const release = releases.value.find((item) => item.tag === selected.value)
   if (!release) return null
@@ -23,9 +24,22 @@ const destination = computed(() => {
   >
     <span
       >Docs for
-      <b>Flare {{ current?.tag || `v${theme.buildInfo.version}` }}</b></span
+      <b
+        >Flare
+        {{
+          rolling
+            ? `rolling (v${theme.buildInfo.version})`
+            : current?.tag || `v${theme.buildInfo.version}`
+        }}</b
+      ></span
     >
-    <span v-if="current" class="release-channel">
+    <span v-if="rolling" class="release-channel">
+      Updated
+      <time :datetime="theme.buildInfo.rolling.updatedAt">{{
+        theme.buildInfo.rolling.updatedAt.slice(0, 10)
+      }}</time>
+    </span>
+    <span v-else-if="current" class="release-channel">
       {{ current.latest ? 'Latest stable' : 'Archived release' }}
       ·
       <time :datetime="current.publishedAt">{{
@@ -60,6 +74,16 @@ const destination = computed(() => {
       >Build details ↗</a
     >
     <a :href="`${root}versions.html`" target="_self">Versions &amp; changes</a>
+    <div
+      v-if="rolling"
+      class="rolling-notice"
+      role="note"
+      aria-label="Rolling documentation"
+    >
+      <strong>Rolling preview · Unreleased</strong>
+      <p>These docs describe a rolling build, not a stable release.</p>
+      <a :href="root" target="_self">Read stable docs</a>
+    </div>
     <div v-if="releases.length" class="release-picker">
       <label :for="selectorId">Documentation release</label>
       <select :id="selectorId" v-model="selected">
@@ -81,6 +105,20 @@ const destination = computed(() => {
 <style scoped>
 .release-channel {
   color: var(--vp-c-text-2);
+}
+.rolling-notice {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--vp-c-brand-1);
+  border-radius: 8px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.rolling-notice p {
+  margin: 4px 0;
 }
 .release-picker {
   display: flex;

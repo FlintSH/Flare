@@ -33,24 +33,28 @@ npm run preview --prefix docs/site
 
 The output is `docs/site/.vitepress/dist/`. `build` checks links, anchor targets, assets, and OpenAPI references after rendering. A missing guide or image should fail the build instead of becoming a broken page for readers.
 
-This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below so a push to `main` cannot publish instructions for application behavior that has not shipped.
+This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below: the homepage follows stable, and readers must explicitly open the rolling preview for development prerelease instructions.
 
 ### Build the release site
 
 From a checkout with the complete Git history and release tags:
 
 ```sh
-git fetch origin --tags
+git fetch origin main 'refs/tags/v*:refs/tags/v*'
 npm ci --prefix docs/site
 DOCS_BASE=/Flare/ npm run build:releases --prefix docs/site
 DOCS_BASE=/Flare/ npm run test:releases --prefix docs/site
 ```
 
-The release builder reads GitHub's published release metadata and resolves each release tag to its source commit. The latest stable release supplies the root handbook; every published stable release also has an archive at `/versions/TAG/` below `DOCS_BASE`. Drafts and prereleases are excluded. A release without the handbook uses the README and any earlier guides from its own tag. The builder does not fill missing historical guides with current instructions.
+The release builder reads GitHub's published release metadata and resolves each stable release tag to its source commit. The latest stable release supplies the root handbook; every published stable release also has an archive at `/versions/TAG/` below `DOCS_BASE`. A release without the handbook uses the README and any earlier guides from its own tag. The builder does not fill missing historical guides with current instructions.
 
-The output is `docs/site/.vitepress/releases/`. `build:releases` validates the assembled site; `test:releases` serves that output and checks stable content, archive navigation, dated releases, and comparisons in a browser. Install Chromium as described in [Browser checks](#browser-checks) before the first test run. Keep this generated output, intermediate checkouts, and downloaded release metadata out of Git.
+The same build adds `/rolling/` from the immutable commit recorded in the published rolling release's `flare-commit-sha` marker. The application uses this marker for rolling update checks too. The mutable local `rolling` tag and the publishing checkout are not substitutes: a local tag can be stale, and `main` can be ahead of published Docker images. The fetch command retrieves version tags without attempting to overwrite an existing local `rolling` tag. The builder fetches the published rolling commit if it is missing locally. Drafts and other prereleases are excluded; rolling is separate from the stable archive list and comparisons.
 
-The build needs GitHub API access. In CI, `GH_TOKEN` receives the read-only repository token. Locally, `GH_TOKEN` or `GITHUB_TOKEN` can supply authentication, or the builder uses your authenticated GitHub CLI. Public release metadata also works without authentication within GitHub's unauthenticated rate limit. Keep tokens in your environment; never place one in a command committed to this repository. If fetching metadata or a tagged source fails, resolve the reported access or Git error and rebuild. Do not substitute `main` for a missing stable release or reuse a partial output directory as a deployment.
+The output is `docs/site/.vitepress/releases/`. `build:releases` validates the assembled site; `test:releases` serves that output and checks stable content, archive navigation, dated releases, comparisons, and explicit rolling access in a browser. Install Chromium as described in [Browser checks](#browser-checks) before the first test run. Keep this generated output, intermediate checkouts, and downloaded release metadata out of Git.
+
+Run one release build at a time. The builder copies the verified site into a sibling staging directory before replacing the previous output, then keeps a backup until the replacement succeeds. A failed copy leaves the old site intact; a failed replacement rolls back, retaining the backup if rollback cannot finish. The output path can briefly be absent between the two directory renames. If a build is interrupted there, the next `build:releases` run restores the backup before starting its build; after a completed replacement, it removes any leftover backup. The staging and backup directories are generated files and stay out of Git.
+
+The build needs GitHub API access. In CI, `GH_TOKEN` receives the read-only repository token. Locally, `GH_TOKEN` or `GITHUB_TOKEN` can supply authentication, or the builder uses your authenticated GitHub CLI. Public release metadata also works without authentication within GitHub's unauthenticated rate limit. Keep tokens in your environment; never place one in a command committed to this repository. If fetching metadata or a source commit fails, resolve the reported access or Git error and rebuild. Do not substitute `main` for a missing stable release or rolling commit, or reuse a partial output directory as a deployment.
 
 ## What a complete update includes
 
@@ -102,7 +106,7 @@ npm test
 
 Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
 
-The separate `npm run test:releases` suite verifies the assembled stable site and release archives after `npm run build:releases`. Run both suites when changing version navigation, comparisons, or publishing. Source-preview tests cannot establish that deployment selected the correct stable revision.
+The separate `npm run test:releases` suite verifies the assembled stable site, release archives, and rolling preview after `npm run build:releases`. Run both suites when changing version navigation, comparisons, or publishing. Source-preview tests cannot establish that deployment selected the correct stable and rolling revisions.
 
 When changing links or theme components, also test a subpath build:
 
@@ -237,16 +241,18 @@ The [VitePress deployment guide](https://vitepress.dev/guide/deploy) describes t
 
 ### GitHub Pages
 
-The repository includes `.github/workflows/docs.yml`. On pull requests and pushes it checks and browser-tests the current source, then separately builds and tests the stable site with its release archives. Pull requests never upload a Pages artifact or deploy. Publishing is opt-in through the repository variable below.
+The repository includes `.github/workflows/docs.yml`. On pull requests and pushes it checks and browser-tests the current source, then builds and tests the stable site, release archives, and rolling preview from the same checkout. Pull requests never upload a Pages artifact or deploy. Publishing is opt-in through the repository variable below.
 
 1. In repository **Settings → Pages**, choose **GitHub Actions** as the source.
 2. Add the repository Actions variable `DOCS_PAGES_ENABLED` with the value `true`.
 3. The workflow defaults to the repository subpath, such as `/Flare/`. If you use a custom domain at its root, set the Actions variable `DOCS_BASE` to `/` and configure that domain in Pages settings.
 4. Run the **Documentation** workflow on `main`, or push a docs change to `main`.
 
-The deployment job uploads only `docs/site/.vitepress/releases/` and reports the actual published URL. The root content comes from GitHub's latest stable release, even when the workflow runs after a push containing unreleased application changes. The navigation and archive tooling can improve independently while historical application guidance remains tied to its release.
+The build job uploads only `docs/site/.vitepress/releases/` as the Pages artifact, and the deployment job reports the actual published URL. The root content comes from GitHub's latest stable release, even when the workflow runs after a push containing unreleased application changes. `/rolling/` comes from the published rolling commit. The navigation and archive tooling can improve independently while application guidance remains tied to its release or rolling commit.
 
-Publishing runs after a successful **Release** workflow, when a stable release is published manually, on pushes to `main`, and on manual **Documentation** runs from `main`. The `workflow_run` trigger is necessary because tags and releases created with `GITHUB_TOKEN` do not trigger another push/release workflow. Failed release workflows and prerelease publications do not publish docs. Publishing runs are serialized across trigger types so their builds and deployments cannot overtake one another. A failed build or browser check leaves the previous Pages deployment in place; fix the failure and rerun **Documentation** on `main`.
+Publishing runs after a successful **Release** or **Rolling Release** workflow from this repository's `main`, when a stable or rolling release is manually published or edited, on pushes to `main`, and on manual **Documentation** runs from `main`. The `workflow_run` trigger is necessary because tags and releases created with `GITHUB_TOKEN` do not trigger another push/release workflow. Failed release workflows, draft releases, and other prereleases do not publish docs. A push may build before rolling images are ready; the successful **Rolling Release** completion rebuilds the website with the newly published rolling commit. Publishing runs are serialized across trigger types so their builds and deployments cannot overtake one another. A failed build or browser check leaves the previous Pages deployment in place; fix the failure and rerun **Documentation** on `main`.
+
+Release events, completed release workflows, and manual publishing use the tooling checked out from `main`. Source checks and release builds share that one checkout, so an intervening commit cannot change the tooling between validation and building. No checkout reference or build artifact from a pull request or another workflow is used to publish. Git credentials are not persisted, and the workflow does not restore or save dependency caches. Only the separate deployment job receives Pages write permissions, after all checks pass.
 
 ### Any other static host
 
@@ -260,13 +266,15 @@ Use the repository as the build source, set the build root to the repository roo
 | Publish directory | `docs/site/.vitepress/releases`                                |
 | Base path         | `DOCS_BASE=/` for a domain root; otherwise the mounted subpath |
 
-The repository root, complete Git history and tags, and GitHub release API access are required during the build. Screenshots and runnable examples come from the tagged source directories. Keep `GH_TOKEN`, if needed, in the host's build environment; it must not be embedded in the site. Deploy only the output directory afterward. Ordinary `.html` URLs are intentional: deep links work on basic static hosts without a catch-all rewrite. Configure the host to serve `index.html` for directory URLs and `404.html` for missing pages.
+The repository root, complete Git history and tags, and GitHub release API access are required during the build. Screenshots and runnable examples come from the selected stable or rolling source directories. Keep `GH_TOKEN`, if needed, in the host's build environment; it must not be embedded in the site. Deploy only the output directory afterward. Ordinary `.html` URLs are intentional: deep links work on basic static hosts without a catch-all rewrite. Configure the host to serve `index.html` for directory URLs and `404.html` for missing pages.
 
 For an existing web server, build locally and copy the output into a dedicated static document root. Do not route documentation requests through the Flare application or expose the repository, `.env`, source maps containing private code, or build credentials.
 
 ## Releases and older guides
 
 The [versions and changes page](./versions) lists dated archives for every published stable release and compares their original documentation sources. Dates in the list come from the release's `published_at` metadata in UTC. They are separate from source commit dates and website build dates. A rebuild can update the website's presentation without changing the archived application documentation.
+
+The same page offers **Open rolling docs (unreleased)** as an explicit choice. Rolling pages show **Rolling preview · Unreleased**, an explanation that they describe a rolling build, and **Read stable docs** to return to the default handbook. Rolling is never selected automatically or remembered as the homepage default. Its update date uses the rolling release's `updated_at`, because `published_at` belongs to the first publication of the reused release. Its commit identifies the actual source; its build date identifies the website build. The rolling path is mutable and does not archive every development commit. Rolling pages request `noindex`; this limits search discovery and is not access control.
 
 Every page displays its Flare version and the source commit that supplied the documentation, with a link to that exact commit. **Build details** opens the corresponding `build-info.json`, including the full hash and UTC build time. Release builds identify their tagged content and publishing source separately. Local previews with modified or untracked source show **Uncommitted changes**; they must not be presented as an exact clean-commit build. Source archives without Git metadata show that the commit is unavailable (or use `GITHUB_SHA` when a CI archive provides it).
 
