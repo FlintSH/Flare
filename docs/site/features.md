@@ -9,6 +9,8 @@ Flare brings uploads, previews, organization, and automation to your own server 
 
 Filter the capabilities below, or [take a guided tour](./demos). Each card leads to a complete guide with instructions and important limits.
 
+Reading for a particular installation? [Browse dated documentation releases and compare changes](./versions). The public handbook defaults to the current stable release.
+
 <FeatureExplorer />
 
 ## Choose your starting point
@@ -28,4 +30,4 @@ Flare needs a running application server and PostgreSQL. Local storage also need
 
 Private files are restricted to their owner and accounts with permission to read other users’ content. This is a self-hosted sharing application, not an end-to-end encrypted vault. See [sharing and privacy](./guide/sharing) for the exact rules, including passwords, folder links, and storage URLs.
 
-These docs describe the source revision they are built with. If a control is missing on an older installation, check the version in **Settings → General**, review the release notes, and follow the [upgrade guide](./hosting/maintenance).
+These docs describe the source revision shown on the page. If a control is missing on an older installation, check the version in **Settings → General**, [open its documentation archive](./versions), review the release notes, and follow the [upgrade guide](./hosting/maintenance).

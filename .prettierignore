@@ -1,4 +1,5 @@
 docs/site/.vitepress/dist/
+docs/site/.vitepress/releases/
 docs/site/.vitepress/cache/
 docs/site/public/screenshots/
 docs/site/public/evidence/

@@ -5,24 +5,42 @@ on:
     branches: [main]
   push:
     branches: [main]
+  release:
+    types: [published]
+  # Releases created with GITHUB_TOKEN do not trigger release/push workflows.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.ref }}
+  # Serialize the whole publishing pipeline across pushes, releases and dispatches.
+  group: docs-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
+    if: >-
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
+      (github.event_name != 'release' || !github.event.release.prerelease)
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     env:
       DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Release tags can predate this publishing infrastructure.
+          ref: ${{ (github.event_name == 'workflow_run' || github.event_name == 'release') && 'main' || github.sha }}
+      - name: Pin the verified publishing source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -53,14 +71,49 @@ jobs:
           name: docs-browser-failures
           path: docs/site/test-results
           if-no-files-found: ignore
-      - name: Upload deployable site
+  release-build:
+    name: Build and test stable documentation archives
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.check.outputs.source_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: docs/site/package-lock.json
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs/site
+      - name: Build latest stable and all published stable archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:releases --prefix docs/site
+      - name: Install browser
+        working-directory: docs/site
+        run: npx playwright install --with-deps chromium
+      - name: Test stable content, archive navigation and comparisons
+        run: npm run test:releases --prefix docs/site
+      - name: Save archive browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-release-browser-failures
+          path: docs/site/test-results
+          if-no-files-found: ignore
+      - name: Upload stable site and archives
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release')
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/site/.vitepress/dist
+          path: docs/site/.vitepress/releases
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PAGES_ENABLED == 'true'
-    needs: check
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release') && vars.DOCS_PAGES_ENABLED == 'true'
+    needs: release-build
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -3,7 +3,7 @@ import { dirname, extname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const site = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const dist = resolve(site, '.vitepress/dist')
+const dist = resolve(site, process.env.DOCS_DIST || '.vitepress/dist')
 const base = process.env.DOCS_BASE || '/'
 async function walk(dir) {
   return (
@@ -60,13 +60,18 @@ for (const file of pages) {
     }
   }
 }
-const spec = JSON.parse(await readFile(resolve(dist, 'openapi.json'), 'utf8'))
-const refs = JSON.stringify(spec).matchAll(/"\$ref":"(#[^"]+)"/g)
-for (const [, ref] of refs) {
-  let node = spec
-  for (const part of ref.slice(2).split('/'))
-    node = node?.[part.replaceAll('~1', '/').replaceAll('~0', '~')]
-  if (node === undefined) errors.add(`OpenAPI: unresolved ${ref}`)
+const specs = [...files].filter((file) => file.endsWith('/openapi.json'))
+if (!specs.length && !files.has(resolve(dist, 'docs-versions.json')))
+  errors.add('Missing downloadable openapi.json')
+for (const specFile of specs) {
+  const spec = JSON.parse(await readFile(specFile, 'utf8'))
+  const refs = JSON.stringify(spec).matchAll(/"\$ref":"(#[^"]+)"/g)
+  for (const [, ref] of refs) {
+    let node = spec
+    for (const part of ref.slice(2).split('/'))
+      node = node?.[part.replaceAll('~1', '/').replaceAll('~0', '~')]
+    if (node === undefined) errors.add(`OpenAPI: unresolved ${ref}`)
+  }
 }
 if (errors.size) {
   console.error([...errors].join('\n'))

@@ -33,6 +33,25 @@ npm run preview --prefix docs/site
 
 The output is `docs/site/.vitepress/dist/`. `build` checks links, anchor targets, assets, and OpenAPI references after rendering. A missing guide or image should fail the build instead of becoming a broken page for readers.
 
+This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below so a push to `main` cannot publish instructions for application behavior that has not shipped.
+
+### Build the release site
+
+From a checkout with the complete Git history and release tags:
+
+```sh
+git fetch origin --tags
+npm ci --prefix docs/site
+DOCS_BASE=/Flare/ npm run build:releases --prefix docs/site
+DOCS_BASE=/Flare/ npm run test:releases --prefix docs/site
+```
+
+The release builder reads GitHub's published release metadata and resolves each release tag to its source commit. The latest stable release supplies the root handbook; every published stable release also has an archive at `/versions/TAG/` below `DOCS_BASE`. Drafts and prereleases are excluded. A release without the handbook uses the README and any earlier guides from its own tag. The builder does not fill missing historical guides with current instructions.
+
+The output is `docs/site/.vitepress/releases/`. `build:releases` validates the assembled site; `test:releases` serves that output and checks stable content, archive navigation, dated releases, and comparisons in a browser. Install Chromium as described in [Browser checks](#browser-checks) before the first test run. Keep this generated output, intermediate checkouts, and downloaded release metadata out of Git.
+
+The build needs GitHub API access. In CI, `GH_TOKEN` receives the read-only repository token. Locally, `GH_TOKEN` or `GITHUB_TOKEN` can supply authentication, or the builder uses your authenticated GitHub CLI. Public release metadata also works without authentication within GitHub's unauthenticated rate limit. Keep tokens in your environment; never place one in a command committed to this repository. If fetching metadata or a tagged source fails, resolve the reported access or Git error and rebuild. Do not substitute `main` for a missing stable release or reuse a partial output directory as a deployment.
+
 ## What a complete update includes
 
 | If you change…             | Update and verify…                                                                                                               |
@@ -82,6 +101,8 @@ npm test
 ```
 
 Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
+
+The separate `npm run test:releases` suite verifies the assembled stable site and release archives after `npm run build:releases`. Run both suites when changing version navigation, comparisons, or publishing. Source-preview tests cannot establish that deployment selected the correct stable revision.
 
 When changing links or theme components, also test a subpath build:
 
@@ -216,14 +237,16 @@ The [VitePress deployment guide](https://vitepress.dev/guide/deploy) describes t
 
 ### GitHub Pages
 
-The repository includes `.github/workflows/docs.yml`. It builds and browser-tests docs on pull requests and pushes. Publishing is opt-in so introducing documentation does not unexpectedly replace an existing Pages site.
+The repository includes `.github/workflows/docs.yml`. On pull requests and pushes it checks and browser-tests the current source, then separately builds and tests the stable site with its release archives. Pull requests never upload a Pages artifact or deploy. Publishing is opt-in through the repository variable below.
 
 1. In repository **Settings → Pages**, choose **GitHub Actions** as the source.
 2. Add the repository Actions variable `DOCS_PAGES_ENABLED` with the value `true`.
 3. The workflow defaults to the repository subpath, such as `/Flare/`. If you use a custom domain at its root, set the Actions variable `DOCS_BASE` to `/` and configure that domain in Pages settings.
 4. Run the **Documentation** workflow on `main`, or push a docs change to `main`.
 
-The deployment job reports the actual published URL. Do not advertise a public documentation URL until that deployment succeeds.
+The deployment job uploads only `docs/site/.vitepress/releases/` and reports the actual published URL. The root content comes from GitHub's latest stable release, even when the workflow runs after a push containing unreleased application changes. The navigation and archive tooling can improve independently while historical application guidance remains tied to its release.
+
+Publishing runs after a successful **Release** workflow, when a stable release is published manually, on pushes to `main`, and on manual **Documentation** runs from `main`. The `workflow_run` trigger is necessary because tags and releases created with `GITHUB_TOKEN` do not trigger another push/release workflow. Failed release workflows and prerelease publications do not publish docs. Publishing runs are serialized across trigger types so their builds and deployments cannot overtake one another. A failed build or browser check leaves the previous Pages deployment in place; fix the failure and rerun **Documentation** on `main`.
 
 ### Any other static host
 
@@ -233,19 +256,25 @@ Use the repository as the build source, set the build root to the repository roo
 | ----------------- | -------------------------------------------------------------- |
 | Node version      | `24`                                                           |
 | Install command   | `npm ci --prefix docs/site`                                    |
-| Build command     | `npm run build --prefix docs/site`                             |
-| Publish directory | `docs/site/.vitepress/dist`                                    |
+| Build command     | `npm run build:releases --prefix docs/site`                    |
+| Publish directory | `docs/site/.vitepress/releases`                                |
 | Base path         | `DOCS_BASE=/` for a domain root; otherwise the mounted subpath |
 
-The repository root is required during the build because screenshots and runnable examples are copied from shared source directories. Deploy only the output directory afterward. Ordinary `.html` URLs are intentional: deep links work on basic static hosts without a catch-all rewrite. Configure the host to serve `index.html` for directory URLs and `404.html` for missing pages.
+The repository root, complete Git history and tags, and GitHub release API access are required during the build. Screenshots and runnable examples come from the tagged source directories. Keep `GH_TOKEN`, if needed, in the host's build environment; it must not be embedded in the site. Deploy only the output directory afterward. Ordinary `.html` URLs are intentional: deep links work on basic static hosts without a catch-all rewrite. Configure the host to serve `index.html` for directory URLs and `404.html` for missing pages.
 
 For an existing web server, build locally and copy the output into a dedicated static document root. Do not route documentation requests through the Flare application or expose the repository, `.env`, source maps containing private code, or build credentials.
 
 ## Releases and older guides
 
-Every page displays the Flare version from the root `package.json` and the source commit that produced the docs, with a link to that exact commit. **Build details** opens `/build-info.json`, which also includes the full commit hash and UTC build time. Local previews with modified or untracked source show **Uncommitted changes**; they must not be presented as an exact clean-commit build. Source archives without Git metadata show that the commit is unavailable (or use `GITHUB_SHA` when a CI archive provides it).
+The [versions and changes page](./versions) lists dated archives for every published stable release and compares their original documentation sources. Dates in the list come from the release's `published_at` metadata in UTC. They are separate from source commit dates and website build dates. A rebuild can update the website's presentation without changing the archived application documentation.
 
-The stamp is regenerated by `npm run assets`, which runs before `dev` and `build`. No version string or hash needs to be edited by hand. The handbook describes that source revision. Keep release-sensitive notes in the relevant guide and tell users where to see their installed version. For a pinned older release, check the documentation in that Git tag instead of assuming the current handbook applies.
+Every page displays its Flare version and the source commit that supplied the documentation, with a link to that exact commit. **Build details** opens the corresponding `build-info.json`, including the full hash and UTC build time. Release builds identify their tagged content and publishing source separately. Local previews with modified or untracked source show **Uncommitted changes**; they must not be presented as an exact clean-commit build. Source archives without Git metadata show that the commit is unavailable (or use `GITHUB_SHA` when a CI archive provides it).
+
+The preview stamp is regenerated by `npm run assets`, which runs before `dev` and `build`; release builds generate provenance for each archived source. No release label, date, or hash needs to be maintained by hand. Keep release-sensitive notes in the relevant guide and tell users where to see their installed version. A version selector links to the matching archive; do not assume current stable instructions apply to an older installation.
+
+The handbook first shipped in 2.1.0. Version 2.0.0 has its original README and nine engineering guides; earlier stable releases have only their README. The archive presents these as legacy documentation, preserving the coverage that existed at the time. It does not claim that later handbook topics or interactive demonstrations existed in those releases. Historical examples may contain mutable `latest` image tags or external service links; archive readers should use explicit release tags when reproducing an older setup.
+
+Comparisons show added and removed source lines between the selected releases. Handbook snapshots include `docs/site/` Markdown, theme components, and downloadable JSON contracts such as OpenAPI; legacy snapshots include `README.md` and `docs/*.md`. Comparing a legacy release with a handbook release therefore shows earlier engineering guides as removed and handbook pages as added. These comparisons help locate changed instructions, but do not replace application release notes, migrations, or upgrade guidance. A moved page can appear as a removal and an addition. Preserve historical source content; update present-day explanations in the version browser or the current relevant guide.
 
 The same-commit documentation gate starts when the policy is introduced; it does not retroactively reject commits that predate the handbook.
 
