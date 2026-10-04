@@ -28,7 +28,7 @@ For email, precedence is **environment or secret file → saved value → defaul
 | `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK` | Disabled                                     | Only the exact value `true` permits HTTP webhook URLs and private/reserved destination addresses                                       |
 | `FLARE_EMAIL_ENCRYPTION_KEY`          | `NEXTAUTH_SECRET`                            | Optional dedicated key for encrypted SMTP credentials, mail payloads, and webhook signing secrets; at least 32 characters              |
 | `FLARE_EMAIL_ENCRYPTION_KEY_FILE`     | Unset                                        | Read the dedicated encryption key from a file; mutually exclusive with the direct variable                                             |
-| `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update checks, display, and rolling documentation links; other values resolve to stable                    |
+| `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update checks, display, and rolling documentation links; other values resolve to stable                   |
 | `FLARE_COMMIT_SHA`                    | Unset                                        | Build identity shown for rolling releases; use the actual source commit                                                                |
 
 `DATABASE_URL` and `NEXTAUTH_SECRET` do not have Flare-provided `_FILE` variants. If your host supplies these through secret files, use its supported environment injection mechanism. Never assume every environment variable in this table supports a `_FILE` suffix.
