@@ -3,22 +3,33 @@
 import { useRef, useState } from 'react'
 
 import { ProfileSecurityProps } from '@/types/components/profile'
-import { useSession } from 'next-auth/react'
+import { signOut } from 'next-auth/react'
 
+import {
+  hasRecentSecurityProof,
+  recentSecurityProofName,
+} from '@/components/auth/security-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
+import { PasskeyConfirmation } from './passkey-confirmation'
+import { checkProfileProof } from './profile-proof'
+
 export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
-  const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
+  const [proofNotice, setProofNotice] = useState<string | null>(null)
   const { toast } = useToast()
+  const { data: security, refetch: refreshSecurity } = useSecurityStatus()
+  const recentProof = security && hasRecentSecurityProof(security)
 
   const currentPasswordRef = useRef<HTMLInputElement>(null)
   const newPasswordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
+  const securityCodeRef = useRef<HTMLInputElement>(null)
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,14 +43,30 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
     }
 
     setIsLoading(true)
+    setProofNotice(null)
+    let mutationStarted = false
     try {
+      const proof = {
+        currentPassword: currentPasswordRef.current?.value,
+        securityCode: securityCodeRef.current?.value || undefined,
+      }
+      const requirement = await checkProfileProof(
+        refreshSecurity,
+        'password',
+        proof
+      )
+      if (requirement) {
+        setProofNotice(requirement)
+        return
+      }
+      mutationStarted = true
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          currentPassword: currentPasswordRef.current?.value,
+          ...proof,
           newPassword: newPasswordRef.current?.value,
         }),
       })
@@ -49,20 +76,22 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         throw new Error(data.error || 'Failed to update password')
       }
 
-      await updateSession()
-
       onUpdate()
 
       toast({
         title: 'Success',
-        description: 'Password updated successfully',
+        description: security?.passkeyRequired
+          ? 'Password updated. Sign in again with a passkey or a dedicated passkey recovery code.'
+          : 'Password updated. Sign in again with your new password.',
       })
 
       if (currentPasswordRef.current) currentPasswordRef.current.value = ''
       if (newPasswordRef.current) newPasswordRef.current.value = ''
       if (confirmPasswordRef.current) confirmPasswordRef.current.value = ''
+      if (securityCodeRef.current) securityCodeRef.current.value = ''
+      await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch (error) {
-      console.error('Password update error:', error)
+      if (mutationStarted) void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -77,6 +106,11 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   return (
     <div className="space-y-6">
       <form onSubmit={handlePasswordChange} className="space-y-4">
+        {proofNotice && (
+          <p role="alert" className="rounded-xl border bg-muted/30 p-3 text-sm">
+            {proofNotice}
+          </p>
+        )}
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="current-password">Current Password</Label>
@@ -118,6 +152,48 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               disabled={isLoading}
             />
           </div>
+          {(security?.twoFactorEnabled || security?.passkeyRequired) &&
+            recentProof && (
+              <p className="text-sm text-muted-foreground">
+                Your recent {recentSecurityProofName(security)} sign-in confirms
+                your second factor for this change.
+              </p>
+            )}
+          {security?.passkeyRequired && !recentProof && (
+            <PasskeyConfirmation
+              busy={isLoading}
+              onBusyChange={setIsLoading}
+              onConfirmed={async () => {
+                const result = await refreshSecurity()
+                if (result.error) throw result.error
+                setProofNotice(null)
+              }}
+            />
+          )}
+          {security?.twoFactorEnabled &&
+            !security.passkeyRequired &&
+            !recentProof && (
+              <div className="space-y-2">
+                <Label htmlFor="password-security-code">
+                  Authenticator or recovery code
+                </Label>
+                <Input
+                  id="password-security-code"
+                  ref={securityCodeRef}
+                  autoComplete="one-time-code"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={32}
+                  placeholder="Enter an authenticator or recovery code"
+                  required
+                  disabled={isLoading}
+                  data-sensitive="true"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Two-factor authentication also protects password changes.
+                </p>
+              </div>
+            )}
         </div>
 
         <div className="flex justify-end">

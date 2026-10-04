@@ -30,6 +30,8 @@ export async function POST(req: Request) {
       if (!currentConfig.enabled || !currentConfig.changes.enabled)
         throw new EmailHttpError('Email changes are disabled.')
       const fresh = await lockEmailUser(tx, user.id)
+      if (fresh.passkeyRequired)
+        await assertRecentIdentity(fresh, password, session)
       if (
         fresh.email !== user.email ||
         fresh.password !== user.password ||

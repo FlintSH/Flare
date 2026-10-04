@@ -8,42 +8,104 @@ datasource db {
 }
 
 model User {
-  id                          String          @id @default(cuid())
+  id                          String                @id @default(cuid())
   name                        String?
-  email                       String?         @unique
+  email                       String?               @unique
   emailVerified               DateTime?
   emailVerifiedFor            String?
   emailVerificationSource     String?
-  emailExempt                 Boolean         @default(false)
+  emailExempt                 Boolean               @default(false)
   pendingEmail                String?
-  pendingEmailOldConfirmed    Boolean         @default(false)
+  pendingEmailOldConfirmed    Boolean               @default(false)
   emailTokens                 EmailToken[]
   mailOutbox                  MailOutbox[]
   image                       String?
   avatarStoragePath           String?
   avatarStorageTarget         Json?
   password                    String?
+  totpSecret                  String?
+  totpLastCounter             Int?
+  passkeys                    Passkey[]
+  recoveryCodes               RecoveryCode[]
+  passkeyRequired             Boolean               @default(false)
+  passkeyRecoveryCodes        PasskeyRecoveryCode[]
+  authChallenges              AuthChallenge[]
   roles                       Role[]
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
-  storageUsed                 Float           @default(0)
-  sessionVersion              Int             @default(1)
-  oidcSubject                 String?         @unique
-  vanityId                    String?         @unique
-  urlId                       String          @unique
-  uploadToken                 String          @unique
-  randomizeFileUrls           Boolean         @default(false)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  storageUsed                 Float                 @default(0)
+  sessionVersion              Int                   @default(1)
+  oidcSubject                 String?               @unique
+  vanityId                    String?               @unique
+  urlId                       String                @unique
+  uploadToken                 String                @unique
+  randomizeFileUrls           Boolean               @default(false)
   files                       File[]
   vaultFolders                VaultFolder[]
   vaultTags                   VaultTag[]
   shortenedUrls               ShortenedUrl[]
-  defaultFileExpiration       FileExpiration  @default(DISABLED)
-  defaultFileExpirationAction ExpiryAction    @default(DELETE)
-  preferences                 Json            @default("{}")
+  defaultFileExpiration       FileExpiration        @default(DISABLED)
+  defaultFileExpirationAction ExpiryAction          @default(DELETE)
+  preferences                 Json                  @default("{}")
   defaultUploadProfileId      String?
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+}
+
+model Passkey {
+  id         String    @id
+  userId     String
+  name       String
+  publicKey  Bytes
+  counter    BigInt    @default(0)
+  transports String[]
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RecoveryCode {
+  id     String @id @default(cuid())
+  userId String
+  hash   String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasskeyRecoveryCode {
+  id     String @id @default(cuid())
+  userId String
+  hash   String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthChallenge {
+  id             String   @id
+  userId         String?
+  purpose        String
+  challenge      String
+  sessionVersion Int?
+  payload        Json     @default("{}")
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@index([resetAt])
 }
 
 model Role {

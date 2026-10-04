@@ -85,11 +85,18 @@ For S3, Flare can issue temporary signed object URLs after authorizing access. T
 
 Flare uses forwarded client IPs for request throttling. Keep the app port private to the proxy and replace untrusted headers at the edge. This also keeps many users from incorrectly sharing the proxy's IP-based limit.
 
+## Passkeys and hostname changes
+
+Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.
+
+A passkey registered at one hostname cannot sign in at a different hostname. Before moving domains, users who require passkeys must preserve their dedicated passkey recovery codes, or explicitly choose **Allow other sign-in methods** while a passkey still works. Password plus authenticator/recovery code or SSO is a fallback only with that requirement off. After the move, sign in through an allowed method and register new passkeys. Dedicated passkey recovery works with the account's current email and a saved code, keeps the requirement on, and provides five minutes to enroll a replacement key. Keep the previous hostname available during a planned transition when possible, and communicate the cutover before relying on the new host. [Sign-in security](/guide/security) covers account recovery.
+
 ## Verify the public origin
 
 After changing `NEXTAUTH_URL`, recreate the app container and use the final hostname in your browser. Verify:
 
 - Sign-in and sign-out stay on the HTTPS hostname.
+- Passkey registration and sign-in succeed on the canonical origin with a disposable account, and a signed-out private window still enforces the device prompt.
 - Saving Settings succeeds without an origin error.
 - A generated screenshot-tool configuration contains the public URL.
 - A large upload succeeds and a video can seek to a later position.

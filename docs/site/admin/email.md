@@ -58,11 +58,13 @@ An upgrade leaves email disabled and keeps existing access unchanged. Older `ema
 
 Recovery works for **local-password accounts whose current email address has verified proof**. It is disabled by default. Once enabled, an eligible user can request a reset from the sign-in flow, open the link, and submit a new password.
 
-Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. Successful reset invalidates browser sessions and obsolete recovery credentials. The legacy upload token is preserved unless **Rotate upload token** is enabled; scoped API tokens should be managed separately.
+Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload token** is enabled; scoped API tokens should be managed separately.
 
 Recovery requests do not reveal whether the submitted email belongs to an eligible account. If an old user never enrolled a recovery address, an administrator must help them regain access; the stored address alone is insufficient. An exemption from verification does not enable recovery.
 
-SSO-only accounts recover through the identity provider. OIDC auto-login's `enforceSso` setting also disables local email recovery, while preserving the explicit local password sign-in fallback. Keep a usable local administrator credential for identity-provider outages.
+A password reset does not disable [two-factor authentication](/guide/security), reset either recovery-code set, remove passkeys, or turn off **Require passkey to sign in**. With that requirement off, a user with local two-factor authentication still needs their authenticator or an unused authenticator recovery code after resetting the password. With it on, the new password cannot sign in: use a registered passkey or a dedicated passkey recovery code. Email verification remains enforced after passkey or emergency recovery sign-in when required by policy.
+
+SSO-only accounts using provider sign-in recover through that provider. An SSO-only account that explicitly requires passkeys instead uses its registered passkeys or dedicated passkey recovery codes; the code plus current account email grants emergency access without the provider. OIDC auto-login's `enforceSso` setting disables local email password recovery, while preserving the local login page for permitted sign-in methods. Keep an administrator method that remains usable under the account's own requirement.
 
 ## Email changes
 
@@ -71,6 +73,8 @@ With email enabled, confirmed changes are available by default. Users recently a
 The old address stays active until the required confirmations finish. Cancelling a change invalidates its pending links. Verification links default to **24 hours**, configurable from 1–168 hours. Link scanners opening a message do not finish the confirmation; a user must explicitly confirm.
 
 A legacy unverified address does not need to receive approval mail unless the two-address policy explicitly requires it. If you enable old-address approval while a change is already pending, that user may need to restart their change so both links can be issued.
+
+When an account requires passkeys, starting enrollment or a confirmed email change requires a passkey or dedicated passkey-recovery sign-in within five minutes, including for SSO-only accounts. Password or provider proof does not replace it. Changing the address preserves the requirement and dedicated codes; future emergency sign-in uses the new address. Other address-verification and mailbox-approval rules remain in force.
 
 ## SSO email trust
 
@@ -129,6 +133,6 @@ FLARE_EMAIL_ENABLED=false
 
 Recreate/redeploy the app with that value passed into its environment. It disables sending and local email verification enforcement, even if an old encryption key is lost. To keep sending while relaxing the access gate, use `FLARE_EMAIL_VERIFICATION_MODE=off` instead.
 
-Sign in with the existing local administrator password at `/auth/login?local=1`, repair the configuration, verify recovery access, then remove the override and redeploy. This does not reset passwords, bypass authentication, or disable SSO configuration.
+Open `/auth/login?local=1` and use an allowed administrator method: the local password and required authenticator, or a passkey. If that account requires passkeys, use a passkey or dedicated passkey recovery code instead of the password. Repair the configuration, verify recovery access, then remove the override and redeploy. This does not reset passwords, bypass authentication, disable SSO configuration, or turn off a passkey requirement.
 
 If decryption is the problem, restore the original key from your secret backup. Changing to a new key requires re-entering credentials and replacing affected queued messages; it also affects encrypted webhook secrets. [Key rotation and backups](/hosting/maintenance#secrets-and-key-rotation).

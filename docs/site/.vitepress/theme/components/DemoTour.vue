@@ -47,6 +47,13 @@ const steps = [
     link: '/admin/roles',
   },
   {
+    title: 'Protect the way you sign in',
+    label: 'Secure',
+    src: '/screenshots/security/security-overview.webp',
+    text: 'Add an authenticator or passkey in Profile → Account. Optionally require passkey sign-in to block password and SSO fallback, with dedicated emergency recovery codes.',
+    link: '/guide/security',
+  },
+  {
     title: 'Keep your tools connected',
     label: 'Automate',
     src: '/screenshots/handbook/integrations.webp',

@@ -89,6 +89,7 @@ export default defineConfig({
         ['Upload profiles', '/guide/upload-profiles'],
         ['Screenshot tools', '/guide/screenshot-tools'],
         ['Your account', '/guide/account'],
+        ['Two-factor authentication & passkeys', '/guide/security'],
         ['Personal appearance', '/guide/appearance'],
       ]),
       group('Self-host', [
@@ -118,6 +119,7 @@ export default defineConfig({
         ['Webhooks', '/api/webhooks'],
         ['Recipes & examples', '/api/recipes'],
         ['Roles & session contracts', '/api/roles'],
+        ['Sign-in security contracts', '/api/security'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
       group('Project', [

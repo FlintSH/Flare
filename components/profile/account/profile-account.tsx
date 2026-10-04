@@ -3,8 +3,12 @@
 import { useRef, useState } from 'react'
 
 import { ProfileAccountProps } from '@/types/components/profile'
-import { useSession } from 'next-auth/react'
+import { signIn, signOut, useSession } from 'next-auth/react'
 
+import {
+  hasRecentSecurityProof,
+  recentSecurityProofName,
+} from '@/components/auth/security-api'
 import {
   AccountEmail,
   useAccountEmailStatus,
@@ -14,17 +18,27 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
+
+import { PasskeyConfirmation } from '../security/passkey-confirmation'
+import { checkProfileProof } from '../security/profile-proof'
 
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
   const { status: emailStatus, refresh: refreshEmail } = useAccountEmailStatus()
+  const { data: security, refetch: refreshSecurity } = useSecurityStatus()
+  const recentProof = security && hasRecentSecurityProof(security)
+  const [emailChanged, setEmailChanged] = useState(false)
+  const [proofNotice, setProofNotice] = useState<string | null>(null)
 
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const emailPasswordRef = useRef<HTMLInputElement>(null)
+  const emailSecurityCodeRef = useRef<HTMLInputElement>(null)
 
   const triggerAvatarUpload = () => {
     fileInputRef.current?.click()
@@ -81,7 +95,26 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setProofNotice(null)
+    let mutationStarted = false
     try {
+      const changesEmail = !emailStatus?.enabled && emailChanged
+      const proof = {
+        currentPassword: emailPasswordRef.current?.value || undefined,
+        securityCode: emailSecurityCodeRef.current?.value || undefined,
+      }
+      if (changesEmail) {
+        const requirement = await checkProfileProof(
+          refreshSecurity,
+          'email',
+          proof
+        )
+        if (requirement) {
+          setProofNotice(requirement)
+          return
+        }
+      }
+      mutationStarted = true
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: {
@@ -90,6 +123,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         body: JSON.stringify({
           name: nameRef.current?.value,
           ...(emailStatus?.enabled ? {} : { email: emailRef.current?.value }),
+          ...(changesEmail ? proof : {}),
         }),
       })
 
@@ -99,6 +133,15 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
       }
 
       const { data } = await response.json()
+
+      if (!emailStatus?.enabled && emailChanged) {
+        toast({
+          title: 'Email updated',
+          description: 'Sign in again with your new email address.',
+        })
+        await signOut({ callbackUrl: '/auth/login?local=1' })
+        return
+      }
 
       await updateSession({
         user: {
@@ -110,11 +153,16 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       onUpdate()
 
+      setEmailChanged(false)
+      if (emailPasswordRef.current) emailPasswordRef.current.value = ''
+      if (emailSecurityCodeRef.current) emailSecurityCodeRef.current.value = ''
+
       toast({
         title: 'Success',
         description: 'Profile updated successfully',
       })
     } catch (error) {
+      if (mutationStarted) void refreshSecurity()
       toast({
         title: 'Error',
         description:
@@ -164,6 +212,14 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
             onSubmit={handleProfileUpdate}
             className="flex flex-col justify-center h-full space-y-4"
           >
+            {proofNotice && (
+              <p
+                role="alert"
+                className="rounded-xl border bg-muted/30 p-3 text-sm"
+              >
+                {proofNotice}
+              </p>
+            )}
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
@@ -191,8 +247,99 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                     autoComplete="email"
                     required
                     disabled={isLoading}
+                    onChange={(event) =>
+                      setEmailChanged(event.target.value !== user.email)
+                    }
                   />
                 </div>
+              )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                !recentProof &&
+                !security?.passkeyRequired &&
+                security?.hasPassword && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="email-current-password">
+                        Current password
+                      </Label>
+                      <Input
+                        id="email-current-password"
+                        ref={emailPasswordRef}
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        disabled={isLoading}
+                        data-sensitive="true"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Confirm your password to change your sign-in email
+                        address.
+                      </p>
+                    </div>
+                    {security.twoFactorEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="email-security-code">
+                          Authenticator or recovery code
+                        </Label>
+                        <Input
+                          id="email-security-code"
+                          ref={emailSecurityCodeRef}
+                          autoComplete="one-time-code"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          maxLength={32}
+                          required
+                          disabled={isLoading}
+                          data-sensitive="true"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                security &&
+                !security.passkeyRequired &&
+                !security.hasPassword &&
+                !recentProof &&
+                !security.canUseRecentSso && (
+                  <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Confirm your identity with a fresh SSO sign-in, then
+                      return here to change your email.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() =>
+                        signIn('oidc', { callbackUrl: '/dashboard/profile' })
+                      }
+                    >
+                      Confirm with SSO
+                    </Button>
+                  </div>
+                )}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                security?.passkeyRequired &&
+                !recentProof && (
+                  <PasskeyConfirmation
+                    busy={isLoading}
+                    onBusyChange={setIsLoading}
+                    onConfirmed={async () => {
+                      const result = await refreshSecurity()
+                      if (result.error) throw result.error
+                      setProofNotice(null)
+                    }}
+                  />
+                )}
+              {!emailStatus?.enabled && emailChanged && recentProof && (
+                <p className="text-sm text-muted-foreground">
+                  Your recent {recentSecurityProofName(security)} sign-in
+                  confirms your identity for this email change.
+                </p>
               )}
             </div>
 

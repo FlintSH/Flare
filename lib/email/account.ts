@@ -3,6 +3,7 @@ import { compare, hash } from 'bcryptjs'
 import type { Session } from 'next-auth'
 import { randomUUID } from 'node:crypto'
 
+import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 
@@ -38,6 +39,10 @@ export async function assertRecentIdentity(
   password: string | undefined,
   session: Session
 ) {
+  if (user.passkeyRequired) {
+    assertRecentPasskeyProof(user, session)
+    return
+  }
   if (user.password) {
     if (!password || !(await compare(password, user.password)))
       throw new Error('Confirm your current password to continue.')

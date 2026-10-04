@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { ZodError } from 'zod'
 
 import { authOptions } from '@/lib/auth'
+import { SecurityError } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { PermissionError } from '@/lib/permissions/server'
 
@@ -23,7 +24,11 @@ export async function emailRoute(action: () => Promise<unknown>) {
   try {
     return NextResponse.json(await action())
   } catch (error) {
-    if (error instanceof EmailHttpError || error instanceof PermissionError)
+    if (
+      error instanceof EmailHttpError ||
+      error instanceof PermissionError ||
+      error instanceof SecurityError
+    )
       return NextResponse.json(
         { error: error.message },
         { status: error.status }

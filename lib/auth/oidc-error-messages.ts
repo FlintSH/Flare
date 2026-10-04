@@ -1,4 +1,8 @@
 const oidcErrorMessages: Record<string, string> = {
+  OidcPasskeyRequired:
+    'This account requires passkey sign-in. Use a passkey or your dedicated passkey recovery code.',
+  OidcTwoFactorRequired:
+    'This account uses local two-factor authentication. Sign in with your password and authentication code, or use a passkey.',
   OidcNoEmail:
     "Your identity provider didn't share an email address, so we can't sign you in.",
   OidcAccountExists:

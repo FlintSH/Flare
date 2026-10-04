@@ -54,6 +54,9 @@ vi.mock('@/lib/storage', () => ({ getStorageProvider: vi.fn() }))
 vi.mock('@/lib/users/create-user', () => ({ createUser: mocks.createUser }))
 
 const initial: User = {
+  passkeyRequired: false,
+  totpSecret: null,
+  totpLastCounter: null,
   id: 'target',
   name: 'Original name',
   email: 'old@example.com',
@@ -248,14 +251,17 @@ describe('administrator account update serialization', () => {
     )
   })
 
-  it('preserves disabled-instance password behavior using the locked policy', async () => {
+  it('revokes sessions for password changes even when email is disabled', async () => {
     mocks.getEmailConfigForUpdate.mockResolvedValue(
       structuredClone(DEFAULT_EMAIL_CONFIG)
     )
     const response = await PUT(request({ password: 'a'.repeat(73) }))
     expect(response.status).toBe(200)
+    expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
+      sessionVersion: { increment: 1 },
+    })
     expect(mocks.tx.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'sessionVersion'
+      'passkeyRequired'
     )
   })
 

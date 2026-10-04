@@ -5,7 +5,7 @@ description: Session-only role management, account role assignments, settings de
 
 # Roles and session contracts
 
-The dashboard uses a **browser session** to administer roles and other accounts. These administration routes do not accept named API tokens or a legacy upload credential as a substitute for that session. The self-service profile route retains the separately documented legacy-credential compatibility path. They are listed here for contributors and existing dashboard clients; the [named-token OpenAPI document](/openapi.json) deliberately excludes them.
+The dashboard uses a **browser session** to administer roles and other accounts. These administration routes do not accept named API tokens or a legacy upload credential as a substitute for that session. The self-service profile route retains the separately documented legacy-credential compatibility path for ordinary preferences and deletion; [password/plain-email changes](./security#password-and-plain-email-changes) additionally require a browser session and security proof. They are listed here for contributors and existing dashboard clients; the [named-token OpenAPI document](/openapi.json) deliberately excludes them.
 
 Authorization uses the current account's permissions from Everyone plus all assigned roles, reloaded for authenticated requests. The server rechecks authority inside serialized role/account mutations, so a stale open editor does not preserve permission after revocation. See the [roles guide](/admin/roles) for the permission catalog and safety rules.
 
@@ -75,6 +75,8 @@ The former scalar `role: "USER" | "ADMIN"` no longer exists. Use:
 `roleIds` is a replacement set of at most 100 distinct, existing, non-Everyone role IDs. Omitting it on update preserves assignments; passing `[]` removes additional roles. Never send Everyone's ID: it applies implicitly. The old `role` field is no longer supported; update custom dashboard clients with the server migration.
 
 A non-administrator also cannot manage an account whose effective permissions include grants the actor lacks, even when its role position is lower. This prevents credential-reset escalation. Account actions obey the [individual permission matrix](/admin/users#roles-and-permissions), target-account hierarchy, and last-accessible-administrator protection. A successful role-only update does not grant identity-edit authority. Assignments change server authorization on the next request, even if a browser's old session display has not refreshed.
+
+An administrator email/password change revokes the target's existing browser sessions even when account email features are disabled. It preserves authenticator enrollment, registered passkeys, both recovery-code sets, and `passkeyRequired`. User administration cannot turn off that requirement; its owner must use the [security session controls](./security) with fresh passkey or dedicated recovery proof.
 
 ## Run a request against a disposable instance
 

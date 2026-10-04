@@ -6,9 +6,13 @@ import { useRouter } from 'next/navigation'
 
 import { signOut } from 'next-auth/react'
 
+import { hasRecentSecurityProof } from '@/components/auth/security-api'
+import { PasskeyConfirmation } from '@/components/profile/security/passkey-confirmation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+import { useSecurityStatus } from '@/hooks/use-security-status'
 
 import { AccountEmailStatus, emailPost, emailRequest } from './api'
 
@@ -47,6 +51,7 @@ export function AccountEmail({
   restricted?: boolean
 }) {
   const router = useRouter()
+  const { data: security, refetch: refreshSecurity } = useSecurityStatus()
   const [busy, setBusy] = useState(false)
   const [password, setPassword] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -56,6 +61,26 @@ export function AccountEmail({
   const [cooldown, setCooldown] = useState(0)
   const canChange =
     status.canChangeEmail && (!status.requiresOldEmail || status.verified)
+  const needsPasskey =
+    security?.passkeyRequired && !hasRecentSecurityProof(security)
+  const requiresPassword = status.requiresPassword && !security?.passkeyRequired
+
+  const passkeyConfirmation = needsPasskey ? (
+    <PasskeyConfirmation
+      busy={busy}
+      onBusyChange={setBusy}
+      onConfirmed={async () => {
+        const result = await refreshSecurity()
+        if (result.error) throw result.error
+        setError('')
+      }}
+    />
+  ) : security?.passkeyRequired ? (
+    <p className="text-sm text-muted-foreground">
+      Your recent passkey or passkey recovery sign-in confirms your identity for
+      this change.
+    </p>
+  ) : null
 
   useEffect(() => {
     if (!cooldown) return
@@ -71,6 +96,21 @@ export function AccountEmail({
     setError('')
     setMessage('')
     try {
+      if (path === 'enroll' || path === 'change') {
+        const result = await refreshSecurity()
+        if (result.error) throw result.error
+        if (!result.data)
+          throw new Error('Unable to refresh your security settings.')
+        if (
+          result.data.passkeyRequired &&
+          !hasRecentSecurityProof(result.data)
+        ) {
+          setError(
+            'Confirm with a passkey again to continue. Your passkey confirmation lasts five minutes.'
+          )
+          return
+        }
+      }
       const result = await emailPost<{ message: string }>(
         `/api/auth/email/${path}`,
         body
@@ -125,11 +165,13 @@ export function AccountEmail({
           }}
         >
           <p className="text-sm text-muted-foreground">
-            {status.requiresPassword
-              ? 'Confirm your current password. We will send a link to verify that you own this address.'
-              : 'Confirm this address with an email link. You may need to sign in with SSO again if your last sign-in was more than a few minutes ago.'}
+            {security?.passkeyRequired
+              ? 'Confirm your identity with a recent passkey or passkey recovery sign-in. We will send a link to verify that you own this address.'
+              : requiresPassword
+                ? 'Confirm your current password. We will send a link to verify that you own this address.'
+                : 'Confirm this address with an email link. You may need to sign in with SSO again if your last sign-in was more than a few minutes ago.'}
           </p>
-          {status.requiresPassword && (
+          {requiresPassword && (
             <>
               <Label htmlFor="email-enroll-password">Current password</Label>
               <Input
@@ -143,6 +185,7 @@ export function AccountEmail({
               />
             </>
           )}
+          {passkeyConfirmation}
           <Button type="submit" disabled={busy}>
             {busy ? 'Sending…' : 'Verify my email'}
           </Button>
@@ -231,7 +274,7 @@ export function AccountEmail({
               disabled={busy}
             />
           </div>
-          {status.requiresPassword && (
+          {requiresPassword && (
             <div className="space-y-2">
               <Label htmlFor="email-change-password">Current password</Label>
               <Input
@@ -245,6 +288,7 @@ export function AccountEmail({
               />
             </div>
           )}
+          {passkeyConfirmation}
           <p className="text-sm text-muted-foreground">
             {status.requiresOldEmail
               ? 'We will send approval links to your current and new addresses.'

@@ -103,6 +103,18 @@ const features = [
     '/guide/account',
   ],
   [
+    'Personalize',
+    'Two-factor authentication',
+    'Protect password sign-in with authenticator codes (2FA) and keep one-time recovery codes for a lost device.',
+    '/guide/security',
+  ],
+  [
+    'Personalize',
+    'Passkeys',
+    'Sign in with your device or security key; optionally require a passkey and save separate emergency recovery codes.',
+    '/guide/security',
+  ],
+  [
     'Automate',
     'Scoped API tokens',
     'Give each integration its own revocable permissions, expiration, and optional upload profile binding.',

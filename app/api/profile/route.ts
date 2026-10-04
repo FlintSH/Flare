@@ -4,6 +4,9 @@ import { compare, hash } from 'bcryptjs'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { requireAuth } from '@/lib/auth/api-auth'
+import { securitySession } from '@/lib/auth/security/http'
+import { assertSecurityProof } from '@/lib/auth/security/service'
+import { SecurityError } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
@@ -42,6 +45,8 @@ export async function PUT(req: Request) {
         HTTP_STATUS.BAD_REQUEST
       )
     const emailChanged = Boolean(body.email && body.email !== account.email)
+    const security =
+      emailChanged || body.newPassword ? await securitySession(req) : null
     if (emailConfig.enabled && emailChanged) {
       return apiError(
         'Use the verified email change form to change your email address.',
@@ -147,14 +152,24 @@ export async function PUT(req: Request) {
           throw new ProfileUpdateError(
             'Use the verified email change form to change your email address.'
           )
-        if (currentEmailConfig.enabled && body.newPassword) {
-          if (Buffer.byteLength(body.newPassword, 'utf8') > 72)
+        if (body.newPassword || emailChanged) {
+          if (
+            body.newPassword &&
+            Buffer.byteLength(body.newPassword, 'utf8') > 72
+          )
             throw new ProfileUpdateError('Password must use at most 72 bytes.')
           updateData.sessionVersion = { increment: 1 }
           updateData.pendingEmail = null
           updateData.pendingEmailOldConfirmed = false
         }
         const fresh = await lockEmailUser(tx, user.id)
+        if (security)
+          await assertSecurityProof(
+            tx,
+            fresh,
+            { password: body.currentPassword, code: body.securityCode },
+            security.session
+          )
         if (
           fresh.password !== account.password ||
           fresh.email !== account.email
@@ -180,6 +195,8 @@ export async function PUT(req: Request) {
 
     return apiResponse<ProfileResponse>(updatedUser)
   } catch (error) {
+    if (error instanceof SecurityError)
+      return apiError(error.message, error.status)
     if (error instanceof ProfileUpdateError)
       return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Profile update error:', error as Error)

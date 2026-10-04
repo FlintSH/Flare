@@ -47,6 +47,7 @@ import { ProfileExport } from './export'
 import { ProfileDeleteAccount } from './profile-delete-account'
 import { ProfileUploadDefaults } from './profile-upload-defaults'
 import { ProfileSecurity } from './security'
+import { SignInSecurity } from './security/sign-in-security'
 import { ProfileStorage } from './storage'
 import { ProfileTools } from './tools'
 
@@ -156,6 +157,7 @@ export function ProfileClient({
             </CardContent>
           </Card>
         </PermissionGate>
+        <SignInSecurity />
         <PermissionGate permission="profile.update">
           <Card id="password" className="scroll-mt-28">
             <CardHeader className="space-y-3">
