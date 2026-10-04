@@ -53,6 +53,7 @@ export default defineConfig({
       { text: 'Use Flare', link: '/guide/' },
       { text: 'Self-host', link: '/hosting/' },
       { text: 'API', link: '/api/' },
+      { text: 'Versions', link: '/versions' },
     ],
     search: { provider: 'local', options: { detailedView: true } },
     outline: { level: [2, 3], label: 'On this page' },
@@ -119,7 +120,10 @@ export default defineConfig({
         ['Roles & session contracts', '/api/roles'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
-      group('Project', [['Contribute to the docs', '/contributing']]),
+      group('Project', [
+        ['Versions & changes', '/versions'],
+        ['Contribute to the docs', '/contributing'],
+      ]),
     ],
   },
 })

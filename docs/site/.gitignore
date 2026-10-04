@@ -1,6 +1,9 @@
 node_modules/
 .vitepress/cache/
 .vitepress/dist/
+.vitepress/releases/
+.vitepress/releases.staging/
+.vitepress/releases.previous/
 public/screenshots/
 public/icon.svg
 public/integrations.mjs

@@ -8,9 +8,11 @@
     "dev": "npm run assets && vitepress dev --host 0.0.0.0",
     "build": "npm run assets && vitepress build && node scripts/check-build.mjs",
     "preview": "vitepress preview --host 0.0.0.0",
-    "test": "node --test scripts/checks.test.mjs && playwright test",
+    "test": "node --test scripts/*.test.mjs && playwright test",
     "check:coverage": "node scripts/check-coverage.mjs",
-    "check:changes": "node scripts/check-changes.mjs"
+    "check:changes": "node scripts/check-changes.mjs",
+    "build:releases": "node scripts/build-releases.mjs",
+    "test:releases": "playwright test --config playwright.releases.config.mjs"
   },
   "engines": {
     "node": ">=24"
@@ -18,7 +20,10 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "axe-core": "4.13.0",
+    "diff": "9.0.0",
+    "markdown-it": "14.3.2",
     "prettier": "3.9.9",
+    "sanitize-html": "2.18.0",
     "sharp": "0.35.4",
     "vitepress": "1.6.4",
     "vue": "3.5.43"

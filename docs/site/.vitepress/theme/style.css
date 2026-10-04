@@ -883,3 +883,8 @@ select:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+.release-original pre {
+  max-width: 100%;
+  overflow-x: auto;
+}

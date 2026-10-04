@@ -19,14 +19,23 @@ self-hosting, administration, the API, and webhooks. Find what you need with
 search, explore interactive examples, and follow real screenshots and recorded
 app demos.
 
+The deployed handbook follows the **current stable release**. [Documentation
+versions and changes](https://flintsh.github.io/Flare/versions.html) lists dated
+archives for every stable release and lets you compare the original documentation
+between releases. Releases before the handbook retain their original README and
+any guides available at the time. The versions page also offers **Open rolling
+docs (unreleased)** for the current published rolling build. Rolling docs require
+that explicit choice or a direct `/Flare/rolling/` URL; the homepage continues to
+open stable docs.
+
 - **Get started:** [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [First-run setup](https://flintsh.github.io/Flare/admin/setup.html)
 - **Use Flare:** [Upload and share](https://flintsh.github.io/Flare/guide/uploading.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) · [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)
-- **Run your instance:** [Roles and permissions](https://flintsh.github.io/Flare/admin/roles.html) · [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
+- **Run your instance:** [Roles and permissions (development)](docs/site/admin/roles.md) · [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
 - **Build integrations:** [API reference](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html) · [OpenAPI](https://flintsh.github.io/Flare/openapi.json)
 - **Explore:** [Feature guide](https://flintsh.github.io/Flare/features.html) · [Demos](https://flintsh.github.io/Flare/demos.html) · [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)
 
 Preview the full site with `npm ci --prefix docs/site` then
-`npm run dev --prefix docs/site`. See [building and publishing the docs](https://flintsh.github.io/Flare/contributing.html).
+`npm run dev --prefix docs/site`. See [building and publishing the docs](docs/site/contributing.md).
 
 ## ✨ Features
 

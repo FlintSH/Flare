@@ -113,6 +113,7 @@ for (const width of [390, 1440]) {
     for (const url of [
       './',
       './features.html',
+      './versions.html',
       './demos.html',
       './hosting/docker.html',
       './api/files.html',
@@ -162,6 +163,7 @@ for (const theme of ['dark', 'light']) {
     for (const path of [
       './',
       './features.html',
+      './versions.html',
       './demos.html',
       './api/files.html',
       './admin/roles.html',
@@ -243,4 +245,28 @@ test('role walkthrough links to the guide and recording loads without autoplay',
   await page.locator('.tour-description a').click()
   await expect(page).toHaveURL(/admin\/roles\.html$/)
   await expect(page.locator('h1')).toContainText('Roles and permissions')
+})
+
+test('development preview explains where dated release docs are available', async ({
+  page,
+}) => {
+  await page.goto('./versions.html')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    'Documentation versions and changes'
+  )
+  await expect(page.locator('.version-notice')).toContainText(
+    'Development preview'
+  )
+  await expect(
+    page.getByRole('link', {
+      name: 'Open rolling docs (unreleased)',
+      exact: true,
+    })
+  ).toHaveCount(0)
+  await expect(page.locator('.version-notice')).toContainText(
+    'npm run build:releases --prefix docs/site'
+  )
+  await expect(
+    page.getByLabel('Documentation version and source revision')
+  ).toContainText('Development preview')
 })

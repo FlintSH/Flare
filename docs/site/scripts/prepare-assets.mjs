@@ -21,9 +21,17 @@ async function walk(path) {
     entries
       .filter(
         (entry) =>
-          !['node_modules', 'public', 'dist', 'cache', 'test-results'].includes(
-            entry.name
-          )
+          ![
+            'node_modules',
+            'public',
+            'dist',
+            'releases',
+            'releases.staging',
+            'releases.previous',
+            'cache',
+            'test-results',
+            'playwright-report',
+          ].includes(entry.name)
       )
       .map((entry) => {
         const child = resolve(path, entry.name)

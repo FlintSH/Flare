@@ -9,6 +9,7 @@ import Home from './components/Home.vue'
 import Screenshot from './components/Screenshot.vue'
 import RoleLab from './components/RoleLab.vue'
 import UploadLab from './components/UploadLab.vue'
+import VersionHistory from './components/VersionHistory.vue'
 import './style.css'
 
 export default {
@@ -23,6 +24,7 @@ export default {
       UploadLab,
       RoleLab,
       ApiPlayground,
+      VersionHistory,
     })) {
       app.component(name, component)
     }

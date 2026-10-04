@@ -5,29 +5,58 @@ on:
     branches: [main]
   push:
     branches: [main]
+  release:
+    types: [published, edited]
+  # Releases created with GITHUB_TOKEN do not trigger release/push workflows.
+  workflow_run:
+    workflows: [Release, Rolling Release]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.ref }}
+  # Serialize the whole publishing pipeline across pushes, releases and dispatches.
+  group: docs-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
+    if: >-
+      (github.event_name != 'workflow_run' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.head_repository.full_name == github.repository &&
+         github.event.workflow_run.head_branch == 'main')) &&
+      (github.event_name != 'release' ||
+        (!github.event.release.draft &&
+         (!github.event.release.prerelease || github.event.release.tag_name == 'rolling'))) &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     env:
       DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the pull request or pushed source
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Check out trusted publishing source
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          # Release tags can predate this publishing infrastructure. A release
+          # event or completed workflow never supplies executable tooling refs.
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: docs/site/package-lock.json
+          # Do not restore or save dependency caches across publishing contexts.
       - name: Install documentation dependencies
         run: npm ci --prefix docs/site
       - name: Require documentation with code changes
@@ -53,13 +82,29 @@ jobs:
           name: docs-browser-failures
           path: docs/site/test-results
           if-no-files-found: ignore
-      - name: Upload deployable site
+      # Build the deployable site from the same checkout that passed source
+      # checks, without accepting a checkout ref or artifact from another job.
+      - name: Build stable docs, dated archives and the rolling preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:releases --prefix docs/site
+      - name: Test stable content, archives, comparisons and explicit rolling access
+        run: npm run test:releases --prefix docs/site
+      - name: Save archive browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-release-browser-failures
+          path: docs/site/test-results
+          if-no-files-found: ignore
+      - name: Upload stable site, archives and rolling preview
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release')
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/site/.vitepress/dist
+          path: docs/site/.vitepress/releases
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PAGES_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release') && vars.DOCS_PAGES_ENABLED == 'true'
     needs: check
     runs-on: ubuntu-latest
     permissions:
