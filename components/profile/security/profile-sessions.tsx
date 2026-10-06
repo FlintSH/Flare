@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { History, Laptop, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
-import { signOut } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 
 import {
   AlertDialog,
@@ -128,28 +128,65 @@ function date(value: string) {
 }
 
 export function ProfileSessions() {
+  const { data: session, status } = useSession()
+  if (status !== 'authenticated' || !session?.user?.id) return null
+  return (
+    <AccountSessions
+      key={JSON.stringify([session.user.id, session.user.sessionId])}
+      userId={session.user.id}
+      sessionId={session.user.sessionId}
+    />
+  )
+}
+
+function AccountSessions({
+  userId,
+  sessionId,
+}: {
+  userId: string
+  sessionId?: string
+}) {
   const { toast } = useToast()
   const [pending, setPending] = useState<BrowserSession | 'all' | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [outcome, setOutcome] = useState('all')
+  const lifecycle = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    lifecycle.current = controller
+    return () => {
+      controller.abort()
+      if (lifecycle.current === controller) lifecycle.current = null
+    }
+  }, [])
   const sessions = useQuery({
-    queryKey: ['profile-sessions'],
-    queryFn: () =>
-      request<{ sessions: BrowserSession[] }>('/api/profile/sessions'),
+    queryKey: ['profile-sessions', userId, sessionId],
+    queryFn: ({ signal }) =>
+      request<{ sessions: BrowserSession[] }>('/api/profile/sessions', {
+        signal,
+      }),
+    staleTime: 0,
+    gcTime: 0,
     refetchOnWindowFocus: true,
   })
   const history = useInfiniteQuery({
-    queryKey: ['profile-login-history', outcome],
+    queryKey: ['profile-login-history', userId, sessionId, outcome],
+    staleTime: 0,
+    gcTime: 0,
     initialPageParam: '',
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       request<HistoryPage>(
-        `/api/profile/login-history?outcome=${outcome}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`
+        `/api/profile/login-history?outcome=${outcome}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
+        { signal }
       ),
     getNextPageParam: (last) => last.nextCursor || undefined,
   })
   const attempts = history.data?.pages.flatMap((page) => page.attempts) || []
   async function revoke() {
-    if (!pending) return
+    const controller = lifecycle.current
+    if (!pending || revoking || !controller || controller.signal.aborted) return
+    const active = () =>
+      lifecycle.current === controller && !controller.signal.aborted
     setRevoking(true)
     try {
       const result = await request<{
@@ -159,19 +196,22 @@ export function ProfileSessions() {
         pending === 'all'
           ? '/api/profile/sessions'
           : `/api/profile/sessions/${encodeURIComponent(pending.id)}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', signal: controller.signal }
       )
+      if (!active()) return
       setPending(null)
       if (result.signedOut) {
         await signOut({ callbackUrl: '/auth/login?local=1' })
         return
       }
       await sessions.refetch()
+      if (!active()) return
       toast({
         title: 'Session revoked',
         description: 'That browser must sign in again to continue.',
       })
     } catch (error) {
+      if (!active()) return
       toast({
         title: 'Unable to revoke session',
         description:
@@ -180,7 +220,7 @@ export function ProfileSessions() {
       })
       void sessions.refetch()
     } finally {
-      setRevoking(false)
+      if (active()) setRevoking(false)
     }
   }
   return (

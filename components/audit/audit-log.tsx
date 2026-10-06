@@ -15,12 +15,14 @@ import {
   Shield,
   XCircle,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import type { AuditEventView } from '@/lib/audit/types'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
 
 type Filters = {
@@ -230,6 +232,21 @@ function EventRow({
 }
 
 export function AuditLog() {
+  const { data: session, status } = useSession()
+  if (
+    status !== 'authenticated' ||
+    !session?.user?.id ||
+    !hasPermission(session.user, 'audit.read')
+  )
+    return null
+  return (
+    <AccountAuditLog
+      key={JSON.stringify([session.user.id, session.user.sessionId])}
+    />
+  )
+}
+
+function AccountAuditLog() {
   const [draft, setDraft] = useState<Filters>(emptyFilters)
   const [active, setActive] = useState<Filters>(emptyFilters)
   const [page, setPage] = useState(1)
@@ -270,8 +287,14 @@ export function AuditLog() {
           cache: 'no-store',
         })
         const body = await response.json()
-        if (!response.ok)
+        if (!response.ok) {
+          if (
+            !controller.signal.aborted &&
+            [401, 403].includes(response.status)
+          )
+            setResult(null)
           throw new Error(body.error ?? 'Unable to load audit events')
+        }
         if (!controller.signal.aborted) setResult(body)
       } catch (cause) {
         if (!controller.signal.aborted)

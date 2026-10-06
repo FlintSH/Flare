@@ -9,6 +9,8 @@ Open **Audit log** in the dashboard navigation, or visit `/dashboard/audit`. You
 
 <Screenshot src="/screenshots/audit/audit-desktop.webp" alt="Flare Audit log on desktop showing searchable instance events with time, actor, action, target filename, and outcome" caption="Start with recent instance activity, then narrow the investigation using the filters." />
 
+The viewer resets its filters and displayed events when you switch accounts or sign in with a new browser session. When the tab detects sign-out or loss of `audit.read`, it clears the previous viewer; a refresh rejected for either reason also clears the loaded events. Sign in with an authorized account before reopening the log. These checks do not remove events from the instance’s history.
+
 ## Find an event
 
 1. Open **Audit log**. The newest events appear first.
