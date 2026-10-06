@@ -74,6 +74,13 @@ const steps = [
     text: 'Create a named API token for a custom uploader or add a signed webhook receiver. Each connection belongs to your account.',
     link: '/api/',
   },
+  {
+    title: 'Look inside before unpacking',
+    label: 'Archives',
+    src: '/screenshots/archives/share-entry.webp',
+    text: 'Browse shared archive paths and download entries. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
+    link: '/guide/archives',
+  },
 ]
 const step = computed(() => steps[current.value])
 </script>

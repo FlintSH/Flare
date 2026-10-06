@@ -135,6 +135,8 @@ Open **Profile → Your data** to see space used, your available quota when enab
 
 To free space, download anything you need and delete unwanted files. Switching files to private, moving them into folders, removing tags, or deleting short links does not reclaim uploaded-file storage.
 
+[Creating or extracting an archive](./archives) also keeps the originals and adds the new outputs to your storage usage. Archive creation is a way to package selected files; it does not replace the personal data export below or an operator's complete backup.
+
 <Screenshot src="/screenshots/workspace/profile-data.png" alt="Your data section showing storage usage, export, and account controls" caption="Review your usage and download your data before making permanent changes." />
 
 ## Export your data

@@ -61,6 +61,8 @@ The browser's profile picker offers three approaches:
 
 The summary beneath the picker shows effective visibility, expiration, and filename behavior. The upload or paste form's visibility control can then override that upload's visibility.
 
+[Creating or extracting an archive](./archives#choose-an-upload-profile-deliberately) has a separate default: **Private (no profile)** creates private files without expiration and bypasses your account's saved default profile. You can explicitly select an owned profile in either archive dialog. Its normal settings and permissions then apply to the new outputs, while **Save to** independently chooses the destination. Review a public profile carefully: it can expose extracted files or the contents of a newly packaged archive even when the source files were private.
+
 ::: details Example: make one upload public without changing your default
 Suppose your default profile is Private work. Choose it on Upload, then explicitly set the form's visibility to Public. This upload is public, but the profile still provides its one-day deletion rule and Delivery layout. Your saved default stays private. The open upload form retains your one-time choices after completion, so reset visibility to From upload profile or reopen Upload before the next private upload. To bypass all profile settings, choose Account settings only instead.
 :::
@@ -93,6 +95,8 @@ For custom integrations, a [named API token](../api/authentication) can be bound
 ## Edit or delete a profile
 
 Edits apply to future uploads. They do not change the visibility, expiration, naming, tags, or stored style of existing files. An in-progress chunked upload uses the settings captured when it started, even if you edit the profile during transfer.
+
+Archive creation and extraction also check the profile and effective settings shown in the dialog, including any inherited account or instance defaults. A relevant default or sharing permission changing can require another review even when the saved profile itself was not edited. If those settings change before submission or during processing, the operation fails without publishing outputs. Review the refreshed summary and submit again. The fixed **Private (no profile)** archive option does not inherit these defaults.
 
 If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes.
 

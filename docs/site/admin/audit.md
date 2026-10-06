@@ -35,6 +35,7 @@ The log combines application mutations, selected file-access activity, authentic
 | Area                        | Useful evidence                                                                                                                         |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Files and pastes            | Creation, updates, deletion, organization/sharing metadata, available filenames and IDs, and selected access requests.                  |
+| Archives                    | Browsing, entry reads, extraction, creation, source filenames, and selected member paths where available.                               |
 | Folders, tags, and links    | Changes to organization, rules, shares, and shortened-link records.                                                                     |
 | OCR and background work     | Processing outcomes and failures, file context where available, expiration and cleanup activity.                                        |
 | Accounts and authentication | Sign-in/session events, account changes, credential-management actions, and failed or denied operations where attribution is available. |
@@ -53,6 +54,10 @@ Successful audit-list reads do not add a new event on every refresh. Failed or d
 Search the filename or apply its **Target ID**, then review the event sequence. `ocr.started`, `ocr.completed`, and `ocr.failed` identify recognition work without storing extracted text. `file.view`, `file.read`, `file.download`, and `file.thumbnail` identify selected access paths; the recorded method/route distinguishes raw and direct responses. A later `storage.delete_failed` means a byte-removal attempt failed; successful metadata deletion does not prove the object was erased. Follow the [storage cleanup guide](/hosting/maintenance#account-storage-cleanup) and application diagnostics before reconciling remaining objects.
 
 Expiration records use `file.expiration.scheduled`, `file.expiration.cancelled`, and `file.expiration.applied`, retaining the file context and selected expiry metadata. Applied background work is attributed to the system. Scheduling success alone does not prove that the later action ran; inspect the applied event and current file state.
+
+For [archive activity](/guide/archives), filter **Category** to `archives`. `archive.browse`, `archive.entry.read`, `archive.extract`, and `archive.create` record request outcomes. `archive.source.read` identifies staged source files; `archive.member.read` identifies the selected member prepared for preview or download; `archive.member.extract` links a newly published file to its source archive and member path. Source/member read sizes are bytes, unlike file-snapshot sizes. A preview and a later download can produce separate reads. Entry contents and file passwords are excluded, and a successful response still does not prove complete delivery.
+
+<Screenshot src="/screenshots/audit/archive-events.webp" alt="Audit log filtered to archives showing real extraction and member events for Team handoff.zip alongside denied and failed archive requests" caption="Archive activity keeps source and output context alongside request outcomes. This capture comes from real operations on the disposable demonstration instance." />
 
 ## Access and privacy
 

@@ -6,6 +6,7 @@ import type { FileType, PaginationInfo } from '@/types/components/file'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
+  Archive,
   CheckSquare,
   FolderInput,
   FolderOpen,
@@ -17,6 +18,12 @@ import {
 } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 
+import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
+import {
+  type ArchiveFileRef,
+  isArchiveCandidate,
+} from '@/components/archives/archive-utils'
+import { CreateArchiveDialog } from '@/components/archives/create-archive-dialog'
 import { FileCard } from '@/components/dashboard/file-card'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
@@ -50,6 +57,12 @@ export function FileGrid() {
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
   const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
+  const [browsingArchive, setBrowsingArchive] = useState<ArchiveFileRef | null>(
+    null
+  )
+  const [creatingArchive, setCreatingArchive] = useState<FileType[] | null>(
+    null
+  )
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const { tags, reload: reloadTags } = useTags()
@@ -235,8 +248,11 @@ export function FileGrid() {
                 className="h-8 gap-1.5 px-2"
                 disabled={
                   (!selecting && !files.length) ||
-                  (!can('folders.manage') && !can('tags.manage')) ||
-                  !can('files.update')
+                  (!(can('files.read') && can('files.upload')) &&
+                    !(
+                      can('files.update') &&
+                      (can('folders.manage') || can('tags.manage'))
+                    ))
                 }
                 onClick={() => {
                   setSelecting(!selecting)
@@ -396,6 +412,21 @@ export function FileGrid() {
           <span className="text-xs text-muted-foreground" role="status">
             {selectedIds.length} selected
           </span>
+          {can('files.read') && can('files.upload') && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!selectedIds.length || isLoading}
+              onClick={() =>
+                setCreatingArchive(
+                  files.filter((file) => selectedIds.includes(file.id))
+                )
+              }
+            >
+              <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+              Create archive
+            </Button>
+          )}
           <PermissionGate permission="files.update">
             <PermissionGate permission="folders.manage">
               <Button
@@ -550,6 +581,12 @@ export function FileGrid() {
                       onDelete={refreshFiles}
                       onUpdate={refreshFiles}
                       onPreview={open}
+                      onBrowseArchive={
+                        can('files.read') &&
+                        isArchiveCandidate(file.name, file.mimeType)
+                          ? () => setBrowsingArchive(file)
+                          : undefined
+                      }
                       onEditTags={() => setTaggingFiles([file])}
                       onMove={() => setMovingFiles([file])}
                       folder={folders.find(
@@ -594,6 +631,28 @@ export function FileGrid() {
             setMovingFiles(null)
             setSelectedIds([])
           }}
+        />
+      )}
+      {browsingArchive && (
+        <ArchiveBrowserDialog
+          key={browsingArchive.id}
+          file={browsingArchive}
+          onClose={() => setBrowsingArchive(null)}
+        />
+      )}
+      {creatingArchive && (
+        <CreateArchiveDialog
+          files={creatingArchive}
+          initialFolderId={
+            filters.folder && filters.folder !== 'unfiled'
+              ? filters.folder
+              : null
+          }
+          onClose={() => {
+            setCreatingArchive(null)
+            setSelectedIds([])
+          }}
+          onOpenArchive={setBrowsingArchive}
         />
       )}
       {taggingFiles && (

@@ -111,6 +111,16 @@ Open [Audit log](/admin/audit), clear the filters, and widen the time range. His
 
 A direct S3 request, a cache hit, a provider-side sign-in rejection, or an external database change may need the corresponding infrastructure logs. Avoid sharing private filenames, actor details, and request metadata in a public report without reviewing them.
 
+## Archive operations fail or stay busy
+
+First distinguish the ordinary upload from archive processing. A successfully uploaded RAR, 7z, encrypted ZIP, damaged archive, or oversized bundle can remain downloadable while being rejected by the archive workspace. Check the [supported formats and limits](/guide/archives#supported-sizes-and-formats); unsupported or unsafe entries reject the whole operation.
+
+Check which entrypoint is in use. Owner-library browsing and extraction require the owner's browser session; a moderator permission does not replace source ownership there. Share-page browsing and entry downloads follow the file's normal visibility/password rules, including privileged owner or `content.read` access. Missing/changed passwords can return `401`; private or removed files return `404` to ineligible viewers. Named tokens do not grant access to either route set. Extraction remains in the owner's library and additionally needs upload/folder permissions, a valid owned destination, enough account quota, and output files within the instance's size limit.
+
+For `429`, honor `Retry-After`: five seconds for archive concurrency or the shared body-read pool, or 60 seconds for the shared-read IP rate limit. Each application process allows two archive operations, with one per owner account or shared source file, and separately allows 32 pending shared request bodies. Shared reads also allow 30 requests per IP per minute. Incomplete, malformed, or unauthorized shared submissions do not consume archive-processing slots.
+
+For `408`, distinguish a shared body that took more than five seconds from archive processing that exceeded 120 seconds. Retry a stalled submission on a stable connection and inspect proxy body timeouts. The processing deadline on shared routes starts only after body validation and file authorization; it is not a total HTTP-request deadline. For slow processing, inspect application/storage logs, temporary disk capacity, S3 connectivity, and proxy timeouts. Reduce the archive or selection instead of repeatedly submitting the same oversized job. The originals remain unchanged and a failed operation does not publish a partial output set. See [archive resource requirements](./storage#archive-processing).
+
 ## Collect a useful support report
 
 Include the installed release/channel and commit when shown, deployment method, storage backend, a brief reproduction, HTTP status, and relevant sanitized logs with timestamps. State whether the problem began after an upgrade or configuration change.

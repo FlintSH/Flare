@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { detectArchiveFormat } from '@/lib/archives/shared'
 import { recordAudit } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
@@ -338,6 +339,8 @@ export default async function FilePage({
         : null,
     userId: access.isOwner ? file.userId : '',
     mimeType: file.mimeType,
+    // Detect using the real name while keeping the filename presentation setting.
+    archiveFormat: detectArchiveFormat(file.name, file.mimeType),
   }
 
   return (

@@ -45,6 +45,44 @@ The recording uses real browser sign-ins and server revocations against a dispos
 
 These screens display real events produced by demonstration operations. The setup uses API requests before opening the recorded audit page; the recording shows investigation of those events. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
 
+The audit guide also includes a [separate real-server archive investigation capture](./admin/audit), produced by creating, browsing, downloading from, and extracting an archive on the disposable instance. [Reproduce the combined archive/audit check](./contributing#sessions-and-audit-browser-checks-and-demos) to verify those events; they are separate from the recorded investigation above.
+
+### Browse and extract an archive
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse and extract an archive: silent Flare recording" :src="withBase('/demos/archive-browse-extract.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In Alex Morgan's demonstration library, open the menu for **Field kit.zip** and choose **Browse archive**. Flare displays four files and four folders.
+2. Search for **README** and select **guide/README.md**. Its text appears beside the matching path, with a **Download entry** action.
+3. Search for **flare-icon** and select **images/flare-icon.png**. Flare previews the verified PNG directly from the archive.
+4. Clear the search and choose **Extract all**. Select **Campaigns** under **Save to** and enter **Field kit unpacked** as **New folder name**.
+5. Keep **Private (no profile)** and choose **Extract files**. **Archive extracted** confirms that four private files were saved and the original archive remains unchanged.
+6. Choose **Open folder**. The wrapper contains **drafts**, **empty**, **guide**, and **images**. Open **guide** to see the new **README.md** and **checklist.csv** library files.
+
+The app reads a real stored ZIP and publishes its new folder tree to the disposable database. The browser checks also verify the extracted bytes, the preserved empty directory, and the unchanged source archive. [Follow the archive guide](./guide/archives#browse-and-save-one-entry) and [reproduce the checks](./contributing#archive-browser-checks-and-demos).
+
+### Create an archive with a saved profile
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Create an archive with a saved profile: silent Flare recording" :src="withBase('/demos/archive-create.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In **Files**, choose **Select** and select **Field notes.txt** and **Launch checklist.csv**.
+2. Choose **Create archive**, enter **Launch handoff.zip**, leave **Format** on **ZIP**, and select **Campaigns** as the destination. The initial profile choice is **Private (no profile)**.
+3. Explicitly select **Public handoff** under **Upload profile**. Review the summary: public visibility, **1 week, then private**, randomized URL filenames, Delivery share page, and one tag. The form warns that public outputs expose their contents.
+4. Choose **Create archive**. **Archive created** confirms the new file without changing the originals.
+5. Choose **Open archive**. The generated ZIP contains **Field notes.txt** and **Launch checklist.csv** at its root.
+
+This is a real stored ZIP generated from two private fixture files. The explicit profile makes the result public, applies the **Approved** tag, and sets expiration to make it private after one week. The server checks the displayed profile and effective settings before publication, including inherited defaults. The same browser suite separately exercises private TAR.GZ creation and profile-based extraction. [Review profile and privacy choices](./guide/archives#choose-an-upload-profile-deliberately) before packaging your own files.
+
+### Browse and download a shared archive
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse and download a shared archive: silent Flare recording" :src="withBase('/demos/archive-share-browse.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open the public **Field kit.zip** share page while signed out. **Archive contents** shows four files and four folders inline, above the whole-file **Download** action.
+2. Open **guide** and select **README.md**. The text appears beside the folder contents.
+3. Choose **Download entry**. The browser saves the actual **README.md** bytes and keeps the share page open.
+4. Search for **flare-icon** and select **images/flare-icon.png**. The verified image appears without extracting files into an account.
+
+This recording uses an anonymous visitor and a real unprotected public archive. The browser checks verify the downloaded bytes and that no **Extract all** action appears. Separate, unrecorded checks exercise protected-file access, reject missing or incorrect passwords, and deny unrelated visitors after the source becomes private. The guide includes the [password gate, unlocked page, and mobile captures](./guide/archives#browse-an-archive-shared-with-you). Existing file visibility and password rules apply to every shared entry request.
+
 ### Enable, use, and recover two-factor authentication
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Enable, use, and recover two-factor authentication: silent Flare recording" :src="withBase('/demos/two-factor-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>

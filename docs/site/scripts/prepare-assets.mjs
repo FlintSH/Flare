@@ -131,9 +131,15 @@ for (const name of [
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }
-for (const name of ['session-management', 'audit-investigation']) {
+for (const [directory, name] of [
+  ['audit', 'session-management'],
+  ['audit', 'audit-investigation'],
+  ['archives', 'archive-browse-extract'],
+  ['archives', 'archive-create'],
+  ['archives', 'archive-share-browse'],
+]) {
   await copyFile(
-    resolve(root, '../../.github/assets/audit', `${name}.webm`),
+    resolve(root, '../../.github/assets', directory, `${name}.webm`),
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }

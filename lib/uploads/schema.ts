@@ -83,6 +83,8 @@ export type ResolvedUploadOptions = Required<UploadProfileOptions> & {
   /** Request-only destination; older in-flight uploads may omit it. */
   folderId?: string | null
   profileRevision: string | null
+  /** Internal snapshot of reviewed effective settings, including inherited defaults. */
+  profileEffectiveRevision?: string | null
   expiresAt: string | null
   password: string | null
 }

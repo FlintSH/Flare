@@ -44,7 +44,7 @@ export async function prepareUploadDestination(
   }
 }
 
-export async function finalizeUpload(input: {
+type UploadInput = {
   user: AuthenticatedUser
   storage: StorageProvider
   filePath: string
@@ -55,17 +55,34 @@ export async function finalizeUpload(input: {
   options: ResolvedUploadOptions
   passwordHash?: string | null
   isPaste?: boolean
+  signal?: AbortSignal
   /** Chunk assembly already holds an upload lock on this transaction. */
   transaction?: Prisma.TransactionClient
-}) {
-  const { user, storage, filePath, displayName, mimeType, size, options } =
-    input
-  const storageTarget = captureStorageTarget(storage)
+}
+
+const validatedUpload = Symbol('validated upload')
+type PreparedUpload = UploadInput & {
+  passwordHash: string | null
+  [validatedUpload]: true
+}
+
+/** Validate stored bytes before opening a transaction that publishes a batch. */
+export async function prepareUpload(
+  input: UploadInput
+): Promise<PreparedUpload> {
+  const { storage, filePath, mimeType, size, options } = input
   if (!Number.isSafeInteger(size) || size < 0)
     throw new UploadError('Invalid file size.')
-  const head = await storage.getFileStream(filePath, { start: 0, end: 4099 })
   const chunks: Buffer[] = []
-  for await (const chunk of head) chunks.push(Buffer.from(chunk))
+  // S3 rejects a byte-range request for an empty object with HTTP 416.
+  if (size > 0) {
+    const head = await storage.getFileStream(
+      filePath,
+      { start: 0, end: 4099 },
+      input.signal
+    )
+    for await (const chunk of head) chunks.push(Buffer.from(chunk))
+  }
   const type = await validateFileType(Buffer.concat(chunks), mimeType)
   if (!type.valid)
     throw new UploadError(
@@ -77,6 +94,16 @@ export async function finalizeUpload(input: {
       : options.password
         ? await hash(options.password, 10)
         : null
+  return { ...input, passwordHash, [validatedUpload]: true }
+}
+
+/** Prepared bytes are published under the same policy/quota locks as ordinary uploads. */
+export async function publishPreparedUpload(input: PreparedUpload) {
+  if (!input[validatedUpload]) throw new UploadError('Upload is not validated.')
+  const { user, storage, filePath, displayName, mimeType, size, options } =
+    input
+  const storageTarget = captureStorageTarget(storage)
+  const passwordHash = input.passwordHash
   const persist = async (tx: Prisma.TransactionClient) => {
     // Same order as settings/account policy updates: policy lock, then user lock.
     await lockRoleChanges(tx)
@@ -183,6 +210,7 @@ export async function finalizeUpload(input: {
     const {
       password: _password,
       folderId: _folderId,
+      profileEffectiveRevision: _profileEffectiveRevision,
       ...persistedOptions
     } = options
     const file = await tx.file.create({
@@ -245,6 +273,10 @@ export async function finalizeUpload(input: {
   setAuditTarget({ type: 'file', id: result.file.id, name: result.file.name })
   if (result.created && !input.transaction) enqueueUploadProcessing(result.file)
   return result.file
+}
+
+export async function finalizeUpload(input: UploadInput) {
+  return publishPreparedUpload(await prepareUpload(input))
 }
 
 /** Call only after the transaction that publishes this file has committed. */
