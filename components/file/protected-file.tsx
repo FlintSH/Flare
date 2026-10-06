@@ -7,19 +7,12 @@ import {
   TEXT_FILE_TYPES,
 } from '@/components/file/protected/mime-types'
 import { FileViewer } from '@/components/file/viewer'
+import type { FileViewerFile } from '@/components/file/viewer/types'
 
 import { sanitizeUrl } from '@/lib/utils/url'
 
 interface ProtectedFileProps {
-  file: {
-    id: string
-    name: string
-    urlPath: string
-    visibility: 'PUBLIC' | 'PRIVATE'
-    password: string | null
-    userId: string
-    mimeType: string
-  }
+  file: FileViewerFile
   verifiedPassword?: string
 }
 

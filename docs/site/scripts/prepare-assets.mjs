@@ -131,6 +131,16 @@ for (const name of [
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }
+for (const name of [
+  'archive-browse-extract',
+  'archive-create',
+  'archive-share-browse',
+]) {
+  await copyFile(
+    resolve(root, '../../.github/assets/archives', `${name}.webm`),
+    resolve(root, 'public/demos', `${name}.webm`)
+  )
+}
 const index = [
   '# Flare documentation',
   '',

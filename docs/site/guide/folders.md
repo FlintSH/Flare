@@ -47,6 +47,8 @@ When a folder has a share link, moving a public file into it adds that file to t
 
 The destination is chosen for the upload; it is not saved inside an upload profile. If a folder is removed while an upload is running, finalization can fail instead of quietly putting the file somewhere else. Choose a valid destination and retry.
 
+[Archive extraction](./archives#extract-into-your-library) creates a new wrapper folder inside the chosen destination and preserves the archive's subfolders. It requires `files.read`, `files.upload`, and `folders.manage`. With **Private (no profile)**, extracted files stay private even in a shared destination. Explicitly selecting an upload profile can instead publish them with that profile’s visibility and expiration; check the summary before confirming. Choosing **Unfiled** in that flow creates a top-level wrapper rather than leaving the extracted files unfiled.
+
 ## Share a folder
 
 Folders start private. To publish a collection:
@@ -71,6 +73,8 @@ The shared page uses a link under `/s/folders/…`. It lists up to 48 files per 
 There is no separate folder password. Protect individual public files with their own passwords, or keep them private. A shared folder is a collection for viewing, not a collaborative upload or editing space.
 
 The protected-file route reached through a folder also checks that the share is still enabled and that the file is still a public member of that folder. Moving the file out or disabling the share stops access through that folder route.
+
+Recipients opening a public archive can [browse and download its entries](./archives#browse-an-archive-shared-with-you) after any file-password check. This does not publish archive members as separate folder items or add them to the recipient's account. The canonical public file URL remains independent of the folder entrypoint: disabling this share or moving the archive does not revoke an already-known public file URL. Change the archive's own visibility, password, or existence to change access through that URL.
 
 ## Disable a folder link
 

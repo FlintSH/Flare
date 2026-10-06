@@ -88,7 +88,9 @@ async function copy() {
       <code>FLARE_TOKEN</code> in your terminal to a named token with the
       required scope. The token owner must also have the current role
       permission. This builder covers named-token operations; account security
-      changes use the signed-in Flare interface.
+      changes and owner-library archive operations require a browser session.
+      Shared archive browsing and entry downloads instead follow file visibility
+      and password rules; this token builder does not authorize them.
     </p>
     <div class="lab-grid two">
       <div>

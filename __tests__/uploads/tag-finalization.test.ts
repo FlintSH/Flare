@@ -101,6 +101,19 @@ beforeEach(() => {
 })
 
 describe('tags at the shared upload commit boundary', () => {
+  it('publishes empty files without issuing an invalid S3 range request', async () => {
+    const upload = input()
+    const getFileStream = vi
+      .fn()
+      .mockRejectedValue(new Error('S3 range not satisfiable'))
+    upload.size = 0
+    upload.storage.getFileStream = getFileStream
+    await finalizeUpload(upload)
+    expect(getFileStream).not.toHaveBeenCalled()
+    expect(mocks.tx.file.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ size: 0 }) })
+    )
+  })
   it('records the actual writing backend even when current configuration differs', async () => {
     const upload = input()
     upload.storage = {
