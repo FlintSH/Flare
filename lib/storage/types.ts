@@ -16,7 +16,8 @@ export interface StorageProvider {
   uploadStream(
     stream: Readable,
     path: string,
-    mimeType: string
+    mimeType: string,
+    signal?: AbortSignal
   ): Promise<{ size: number }>
   uploadChunkedFile(
     chunksDir: string,
@@ -25,7 +26,11 @@ export interface StorageProvider {
   ): Promise<void>
   createWriteStream(path: string, mimeType: string): Promise<NodeWritable>
   deleteFile(path: string): Promise<void>
-  getFileStream(path: string, range?: RangeOptions): Promise<Readable>
+  getFileStream(
+    path: string,
+    range?: RangeOptions,
+    signal?: AbortSignal
+  ): Promise<Readable>
   getFileUrl(path: string): Promise<string>
   getFileSize(path: string): Promise<number>
   renameFolder(oldPath: string, newPath: string): Promise<void>

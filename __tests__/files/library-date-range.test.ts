@@ -73,6 +73,76 @@ describe('file library date boundaries', () => {
 })
 
 describe('file library filtering and gallery order', () => {
+  it('restricts selected-ID refreshes to the account and other requested filters', async () => {
+    const query = new URLSearchParams({
+      ids: 'selected-a,selected-b',
+      folder: 'unfiled',
+      limit: '100',
+    })
+    const response = await GET(
+      new Request(`https://flare.example/api/files?${query}`)
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    const where = {
+      userId: 'library-owner',
+      AND: [{ id: { in: ['selected-a', 'selected-b'] } }, { folderId: null }],
+    }
+    expect(mocks.file.count).toHaveBeenCalledWith({ where })
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where, take: 100, skip: 0 })
+    )
+  })
+
+  it.each([
+    '',
+    'file-a,',
+    ',file-a',
+    'file-a,,file-b',
+    'file-a,file-a',
+    ' file-a',
+    'file-a\n',
+    'file-a\u0000',
+    'x'.repeat(129),
+    Array.from({ length: 101 }, (_, index) => `file-${index}`).join(','),
+  ])(
+    'rejects invalid selected-ID filters before querying files: %j',
+    async (ids) => {
+      const response = await GET(
+        new Request(
+          `https://flare.example/api/files?${new URLSearchParams({ ids })}`
+        )
+      )
+      expect(response.status).toBe(400)
+      expect(mocks.file.count).not.toHaveBeenCalled()
+      expect(mocks.file.findMany).not.toHaveBeenCalled()
+    }
+  )
+
+  it('rejects repeated ids parameters rather than ignoring a selection', async () => {
+    const response = await GET(
+      new Request('https://flare.example/api/files?ids=file-a&ids=file-b')
+    )
+    expect(response.status).toBe(400)
+    expect(mocks.file.findMany).not.toHaveBeenCalled()
+  })
+
+  it('accepts the full 100-file selection without truncation', async () => {
+    const ids = Array.from({ length: 100 }, (_, index) => `file-${index}`)
+    const response = await GET(
+      new Request(
+        `https://flare.example/api/files?${new URLSearchParams({ ids: ids.join(','), limit: '100' })}`
+      )
+    )
+    expect(response.status).toBe(200)
+    expect(mocks.file.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'library-owner', AND: [{ id: { in: ids } }] },
+        take: 100,
+      })
+    )
+  })
+
   it('combines MIME type with search, dates, and visibility in a stable page order', async () => {
     const query = new URLSearchParams({
       search: 'holiday',

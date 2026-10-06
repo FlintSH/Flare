@@ -90,6 +90,7 @@ Open the card's menu for the full action list. On a desktop, preview actions als
 - **Open file:** open its share/viewer page.
 - **Copy link:** copy its share-page URL.
 - **Download file:** save a copy to your device.
+- **Browse archive:** inspect supported archive contents, download an entry, or extract into a new folder. See [archives](./archives).
 - **Edit tags:** add or remove private organizational labels.
 - **Move to folder:** change its library location without changing the file link.
 - **Change visibility:** switch between public and private.
@@ -108,9 +109,15 @@ The card menu and the buttons shown when you hover a file follow the same permis
 
 Choose **Select**, then select individual cards or **Select visible files**. The latter selects loaded cards currently on screen, up to the selection limit; it does not select your whole library or files loaded just beyond the screen. Scroll to add files from another part of the library. Your selection stays selected as cards leave the screen, and the selection bar remains available while you scroll.
 
-You can select up to **100 files** at a time, then choose **Edit tags** or **Move**. Deselect individual files to make room, or finish the current batch before starting another. Changing the search, filters, folder, sort, or grouping clears the selection. **Done** leaves selection mode and clears it too.
+You can select up to **100 files** at a time, then choose **Edit tags**, **Move**, or **Create archive** where your permissions allow. Deselect individual files to make room, or finish the current batch before starting another.
+
+Before **Edit tags**, **Move**, or **Create archive** opens, Flare fetches current details for every selected file, including cards outside the visible window. If that check fails, retry the action. If a selected file is no longer available, choose **Done** and select the remaining files again.
+
+Changing the search, filters, folder, sort, or grouping clears the selection. **Done** leaves selection mode and clears it too.
 
 <Screenshot src="/screenshots/timeline/library-selection.webp" alt="Library selection mode with Select visible files, a selected-file count, Move, Edit tags, and Done controls" caption="Keep a selection while scrolling; bulk actions apply to the selected files, up to 100 at a time." />
+
+With `files.read` and `files.upload`, **Create archive** packages up to 100 selected owned files into a new ZIP or TAR.GZ. It defaults to private/no expiration; explicitly choosing an upload profile applies that profile’s settings. Saving into a folder also requires `folders.manage`. The originals remain unchanged; [archive limits and defaults](./archives#create-an-archive-from-selected-files) apply separately from ordinary uploads.
 
 ## Read text in images with OCR
 

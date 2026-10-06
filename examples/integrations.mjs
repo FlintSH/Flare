@@ -98,6 +98,30 @@ if (mode === 'upload') {
   if (!response.ok)
     throw new Error(`Timeline failed (${response.status}): ${body}`)
   process.stdout.write(body + '\n')
+} else if (mode === 'files') {
+  const { FLARE_URL, FLARE_TOKEN } = process.env
+  const ids = process.argv.slice(3)
+  if (
+    !FLARE_URL ||
+    !FLARE_TOKEN ||
+    !ids.length ||
+    ids.length > 100 ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => !id || id.length > 128 || /[\s,\x00-\x1f\x7f]/.test(id))
+  )
+    throw new Error(
+      'Set FLARE_URL and FLARE_TOKEN (files:read), then run: node examples/integrations.mjs files <file-id> [file-id ...], using 1 to 100 distinct IDs without whitespace, control characters, or commas.'
+    )
+  const url = new URL('/api/files', FLARE_URL)
+  url.searchParams.set('ids', ids.join(','))
+  url.searchParams.set('limit', '100')
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${FLARE_TOKEN}` },
+  })
+  const body = await response.text()
+  if (!response.ok)
+    throw new Error(`Metadata refresh failed (${response.status}): ${body}`)
+  process.stdout.write(body + '\n')
 } else if (mode === 'receive') {
   const secret = process.env.FLARE_WEBHOOK_SECRET
   if (!secret)
@@ -179,7 +203,7 @@ if (mode === 'upload') {
   )
 } else {
   console.log(
-    'Usage: node examples/integrations.mjs upload <file> [mime-type] | timeline [IANA-timezone] | receive'
+    'Usage: node examples/integrations.mjs upload <file> [mime-type] | timeline [IANA-timezone] | files <file-id> [file-id ...] | receive'
   )
   process.exitCode = 1
 }

@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 28')
+  await expect(page.getByRole('status')).toContainText('3 of 29')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -149,6 +149,16 @@ test('API builder generates valid examples without contacting an instance', asyn
   await page.getByRole('button', { name: 'JavaScript', exact: true }).click()
   await expect(page.locator('.demo-code')).toContainText("method: 'POST'")
   await page
+    .getByLabel('Operation', { exact: true })
+    .selectOption('selectedFiles')
+  await expect(page.locator('.demo-code')).toContainText(
+    '/api/files?ids=FILE_ID_1,FILE_ID_2&limit=100'
+  )
+  await expect(page.locator('.demo-code')).toContainText("method: 'GET'")
+  await expect(
+    page.getByText('Replace FILE_ID_1 and FILE_ID_2', { exact: false })
+  ).toBeVisible()
+  await page
     .getByLabel('Instance URL')
     .fill('https://user:password@example.test/path')
   await expect(page.getByRole('button', { name: 'Copy code' })).toBeDisabled()
@@ -194,6 +204,8 @@ for (const width of [390, 1440]) {
       './guide/tags.html',
       './guide/security.html',
       './api/security.html',
+      './guide/archives.html',
+      './api/archives.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -252,6 +264,8 @@ for (const theme of ['dark', 'light']) {
       './guide/tags.html',
       './guide/security.html',
       './api/security.html',
+      './guide/archives.html',
+      './api/archives.html',
       './hosting/docker.html',
       './guide/sharing.html',
     ]) {
@@ -393,6 +407,73 @@ test('security guide is discoverable and all three recordings load without autop
   await expect(
     page.getByRole('heading', { name: 'Require a passkey and recover access' })
   ).toBeVisible()
+})
+
+test('archive guide, API contracts, tour, and recordings are discoverable', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Find a capability').fill('archives')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/archives\.html$/)
+  await expect(
+    page.locator('h2#choose-an-upload-profile-deliberately')
+  ).toBeVisible()
+  await expect(
+    page.locator('h2#browse-an-archive-shared-with-you')
+  ).toBeVisible()
+  await page.getByRole('link', { name: 'archive API', exact: true }).click()
+  await expect(page).toHaveURL(/api\/archives\.html$/)
+  await expect(page.locator('.vp-doc')).toContainText('profileRevision')
+  await expect(page.locator('.vp-doc')).toContainText(
+    'profileEffectiveRevision'
+  )
+  await expect(page.locator('.vp-doc')).toContainText('/archive/share/entry')
+  await page.goto('./demos.html')
+  await page.getByRole('button', { name: '9. Archives', exact: true }).click()
+  await expect(page.locator('.tour-description a')).toHaveAttribute(
+    'href',
+    /guide\/archives\.html$/
+  )
+  for (const name of [
+    'archive-browse-extract.webm',
+    'archive-create.webm',
+    'archive-share-browse.webm',
+  ]) {
+    const video = page.locator(`video[src$="${name}"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Archive recording timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Archive recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
+  await page.locator('.tour-description a').click()
+  await expect(page).toHaveURL(/guide\/archives\.html$/)
 })
 
 test('development preview explains where dated release docs are available', async ({

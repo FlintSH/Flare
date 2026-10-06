@@ -6,6 +6,7 @@ import type { FileType, PaginationInfo } from '@/types/components/file'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
+  Archive,
   CheckSquare,
   FolderInput,
   FolderOpen,
@@ -17,6 +18,12 @@ import {
 } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 
+import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
+import {
+  type ArchiveFileRef,
+  isArchiveCandidate,
+} from '@/components/archives/archive-utils'
+import { CreateArchiveDialog } from '@/components/archives/create-archive-dialog'
 import { FileCard } from '@/components/dashboard/file-card'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
@@ -35,6 +42,7 @@ import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 import { useFileTimeline } from '@/hooks/use-file-timeline'
 import { useFolders } from '@/hooks/use-folders'
+import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useTags } from '@/hooks/use-tags'
@@ -51,6 +59,12 @@ export function FileGrid() {
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
   const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
+  const [browsingArchive, setBrowsingArchive] = useState<ArchiveFileRef | null>(
+    null
+  )
+  const [creatingArchive, setCreatingArchive] = useState<FileType[] | null>(
+    null
+  )
   const [selecting, setSelecting] = useState(false)
   const selectedIds = selectedFiles.map((file) => file.id)
   const clearSelection = () => setSelectedFiles([])
@@ -80,6 +94,24 @@ export function FileGrid() {
       setRefreshKey((value) => value + 1)
     )
   const library = useFileTimeline(filters, refreshKey)
+  const selection = useFreshFileSelection(selectedFiles, filters)
+  const openSelection = async (action: 'tags' | 'move' | 'archive') => {
+    try {
+      const fresh = await selection.refresh()
+      if (!fresh) return
+      setSelectedFiles(fresh)
+      if (action === 'tags') setTaggingFiles(fresh)
+      if (action === 'move') setMovingFiles(fresh)
+      if (action === 'archive') setCreatingArchive(fresh)
+    } catch (error) {
+      toast({
+        title: 'Couldn’t open selected files',
+        description:
+          error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
   const { timeline, isLoading, error } = library
   useEffect(() => {
     if (!timeline?.total) setFiles((current) => (current.length ? [] : current))
@@ -225,8 +257,11 @@ export function FileGrid() {
                 className="h-8 gap-1.5 px-2"
                 disabled={
                   (!selecting && !files.length) ||
-                  (!can('folders.manage') && !can('tags.manage')) ||
-                  !can('files.update')
+                  (!(can('files.read') && can('files.upload')) &&
+                    !(
+                      can('files.update') &&
+                      (can('folders.manage') || can('tags.manage'))
+                    ))
                 }
                 onClick={() => {
                   setSelecting(!selecting)
@@ -367,6 +402,7 @@ export function FileGrid() {
       {selecting && (
         <div
           ref={selectionBar}
+          aria-busy={selection.loading}
           className="sticky top-24 z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-xl"
         >
           <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -398,15 +434,27 @@ export function FileGrid() {
           </label>
           <span className="text-xs text-muted-foreground" role="status">
             {selectedIds.length} / 100 selected
+            {selection.loading && ' · Refreshing selection…'}
           </span>
+          {can('files.read') && can('files.upload') && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!selectedIds.length || isLoading || selection.loading}
+              onClick={() => void openSelection('archive')}
+            >
+              <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+              Create archive
+            </Button>
+          )}
           <PermissionGate permission="files.update">
             <PermissionGate permission="folders.manage">
               <Button
                 size="sm"
                 className="ml-auto"
                 variant="outline"
-                disabled={!selectedIds.length || isLoading}
-                onClick={() => setMovingFiles(selectedFiles)}
+                disabled={!selectedIds.length || isLoading || selection.loading}
+                onClick={() => void openSelection('move')}
               >
                 <FolderInput className="mr-2 h-4 w-4" />
                 Move
@@ -418,8 +466,8 @@ export function FileGrid() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!selectedIds.length || isLoading}
-                onClick={() => setTaggingFiles(selectedFiles)}
+                disabled={!selectedIds.length || isLoading || selection.loading}
+                onClick={() => void openSelection('tags')}
               >
                 <Tag className="mr-2 h-4 w-4" />
                 Edit tags
@@ -550,6 +598,12 @@ export function FileGrid() {
                 }}
                 onUpdate={refreshFiles}
                 onPreview={open}
+                onBrowseArchive={
+                  can('files.read') &&
+                  isArchiveCandidate(file.name, file.mimeType)
+                    ? () => setBrowsingArchive(file)
+                    : undefined
+                }
                 onEditTags={() => setTaggingFiles([file])}
                 onMove={() => setMovingFiles([file])}
                 folder={folders.find((folder) => folder.id === file.folderId)}
@@ -576,6 +630,28 @@ export function FileGrid() {
             setMovingFiles(null)
             clearSelection()
           }}
+        />
+      )}
+      {browsingArchive && (
+        <ArchiveBrowserDialog
+          key={browsingArchive.id}
+          file={browsingArchive}
+          onClose={() => setBrowsingArchive(null)}
+        />
+      )}
+      {creatingArchive && (
+        <CreateArchiveDialog
+          files={creatingArchive}
+          initialFolderId={
+            filters.folder && filters.folder !== 'unfiled'
+              ? filters.folder
+              : null
+          }
+          onClose={() => {
+            setCreatingArchive(null)
+            clearSelection()
+          }}
+          onOpenArchive={setBrowsingArchive}
         />
       )}
       {taggingFiles && (

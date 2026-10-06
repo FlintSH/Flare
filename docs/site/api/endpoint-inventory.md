@@ -15,21 +15,21 @@ Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all 
 
 All of these routes also use Flare's shared account authentication helper. A named token must have the specific scope and its owner must currently have the matching role permission. Results are limited to its owner's account. See the [scope-to-permission table](./authentication#scopes-and-account-roles).
 
-| Path                                             | Method | Scope          | Purpose                                                               |
-| ------------------------------------------------ | ------ | -------------- | --------------------------------------------------------------------- |
-| `/api/files`                                     | GET    | `files:read`   | Paginated file metadata, search, filters, and image neighbors.        |
-| `/api/files`                                     | POST   | `files:upload` | One multipart file upload.                                            |
-| `/api/files/timeline`                            | GET    | `files:read`   | Account-wide calendar bucket counts for virtual file browsing.        |
-| `/api/files/types`                               | GET    | `files:read`   | MIME types present in the account.                                    |
-| `/api/files/chunks`                              | POST   | `files:upload` | Initialize a chunk upload.                                            |
-| `/api/files/chunks`                              | GET    | `files:upload` | Obtain a part URL using `uploadId` and `partNumber` query parameters. |
-| `/api/files/chunks`                              | PUT    | `files:upload` | Complete an upload, returning a `data` wrapper.                       |
-| `/api/files/chunks/{uploadId}/part/{partNumber}` | GET    | `files:upload` | Obtain a part upload URL.                                             |
-| `/api/files/chunks/{uploadId}/part/{partNumber}` | PUT    | `files:upload` | Upload raw part bytes through Flare.                                  |
-| `/api/files/chunks/{uploadId}/complete`          | POST   | `files:upload` | Complete an upload, returning links without a wrapper.                |
-| `/api/urls`                                      | GET    | `urls:read`    | List the account's short links.                                       |
-| `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                  |
-| `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                           |
+| Path                                             | Method | Scope          | Purpose                                                                               |
+| ------------------------------------------------ | ------ | -------------- | ------------------------------------------------------------------------------------- |
+| `/api/files`                                     | GET    | `files:read`   | Paginated file metadata, selected-ID refreshes, search, filters, and image neighbors. |
+| `/api/files`                                     | POST   | `files:upload` | One multipart file upload.                                                            |
+| `/api/files/timeline`                            | GET    | `files:read`   | Account-wide calendar bucket counts for virtual file browsing.                        |
+| `/api/files/types`                               | GET    | `files:read`   | MIME types present in the account.                                                    |
+| `/api/files/chunks`                              | POST   | `files:upload` | Initialize a chunk upload.                                                            |
+| `/api/files/chunks`                              | GET    | `files:upload` | Obtain a part URL using `uploadId` and `partNumber` query parameters.                 |
+| `/api/files/chunks`                              | PUT    | `files:upload` | Complete an upload, returning a `data` wrapper.                                       |
+| `/api/files/chunks/{uploadId}/part/{partNumber}` | GET    | `files:upload` | Obtain a part upload URL.                                                             |
+| `/api/files/chunks/{uploadId}/part/{partNumber}` | PUT    | `files:upload` | Upload raw part bytes through Flare.                                                  |
+| `/api/files/chunks/{uploadId}/complete`          | POST   | `files:upload` | Complete an upload, returning links without a wrapper.                                |
+| `/api/urls`                                      | GET    | `urls:read`    | List the account's short links.                                                       |
+| `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
+| `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
 See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
 
@@ -46,6 +46,13 @@ These routes check the file's visibility, password, and an optional **browser se
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs.
 
+Archive share pages use separate read operations under the same file-access rules. Both reject `Authorization` headers, require same-origin requests, and accept file passwords only in the request body. Body reading is limited to 16 KiB, five seconds, and 32 pending reads per process; schema validation and file authorization finish before archive-processing capacity is reserved. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
+
+| Path                                  | Methods | Purpose                                                                                                      |
+| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `/api/files/{id}/archive/share`       | POST    | Read an accessible archive manifest; JSON `{password?}`. Unprotected public archives allow anonymous access. |
+| `/api/files/{id}/archive/share/entry` | POST    | Download a member; JSON or URL-encoded `{path,password?}` body, with file access checked again.              |
+
 The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access. `/{userUrlId}/{filename}/direct` is a video-only lookup that returns JSON containing a signed storage URL or raw-route fallback after checking access; it does not stream the file itself. An issued S3 URL can remain valid until its own expiry after Flare access settings change. `/{userUrlId}/{filename}` is the rendered share page. `GET /u/{shortCode}` publicly redirects a short link and increments its count.
 
 ## Dashboard account routes requiring a browser session
@@ -55,7 +62,7 @@ These routes explicitly read an interactive session. Neither a named API token n
 | Path                               | Methods       | Purpose                                                                                                                           |
 | ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests.            |
-| `/api/upload-profiles`             | GET, POST     | List profiles; create/import a profile.                                                                                           |
+| `/api/upload-profiles`             | GET, POST     | List profiles with their `updatedAt` and effective-settings `effectiveRevision`; create/import a profile.                         |
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                                          |
 | `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                                 |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                                    |
@@ -71,6 +78,17 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                                          |
 
 Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
+
+### Archive workspace
+
+The following owner-library archive operations require the owner's browser session and reject an `Authorization` header. `content.read` and administrator privileges do not substitute for source-file ownership on these routes. Share-page reads use the separate file-content routes above; creation and extraction remain owner-only. Their optional `profileRevision` and `profileEffectiveRevision` bind a selected profile and its effective inherited settings to the values returned by the profile list. See [archive API contracts](./archives) for formats, limits, request examples, and response shapes.
+
+| Path                              | Methods | Purpose and permission                                                                                                    |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `/api/files/{id}/archive`         | GET     | Inspect an owned archive's manifest; `files.read`.                                                                        |
+| `/api/files/{id}/archive/entry`   | GET     | Download one member by its `path` query value; `files.read`.                                                              |
+| `/api/files/{id}/archive/extract` | POST    | Extract into a new wrapper folder; `files.read`, `files.upload`, and `folders.manage`.                                    |
+| `/api/files/archive`              | POST    | Create ZIP or TAR.GZ from owned files; `files.read` and `files.upload`, plus `folders.manage` for a non-null destination. |
 
 ### Email account flows
 

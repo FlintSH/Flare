@@ -3,8 +3,13 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { FolderError, validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { TagError, validateOwnedTagIds } from '@/lib/tags/service'
 
+import {
+  accountUploadOptions,
+  effectiveUploadRevision,
+} from './effective-settings'
 import {
   type ResolvedUploadOptions,
   type UploadRequestOptions,
@@ -127,12 +132,7 @@ export async function resolveUploadOptions(
     ? uploadProfileOptionsSchema.parse(profile.options)
     : {}
   const config = await getConfig()
-  const defaults = {
-    shareStyle: config.settings.customization.published.sharing.defaultStyle,
-    randomizeFileUrls: account.randomizeFileUrls,
-    expiration: account.defaultFileExpiration,
-    expiryAction: account.defaultFileExpirationAction,
-  }
+  const defaults = accountUploadOptions(account, config)
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
     for (const key of Object.keys(
@@ -164,6 +164,15 @@ export async function resolveUploadOptions(
     tagIds: await validateOwnedTagIds(user.id, resolved.tagIds),
     profileId: profile?.id ?? null,
     profileRevision: profile?.updatedAt.toISOString() ?? null,
+    profileEffectiveRevision: profile
+      ? effectiveUploadRevision(
+          user.id,
+          profile.id,
+          defaults,
+          profileOptions,
+          hasPermission(user, 'files.share')
+        )
+      : null,
   }
 }
 

@@ -9,6 +9,8 @@ File listing needs both the `files:read` scope and `files.read` on the token own
 
 Use `files:upload` to add files and `files:read` to browse your account's metadata. The API uses the same storage and sharing policies as Flare's dashboard.
 
+Archive uploads use the same upload contract and remain single stored files. [Archive APIs](./archives) provide owner-session browsing/extraction/creation and separate share-page browsing/entry downloads. Share reads use the file's visibility/password rules, while extraction and creation remain owner-only. Neither `files:read` nor `files:upload` authorizes these routes; existing named-token operations and response shapes are unchanged.
+
 ## Upload one file
 
 **`POST /api/files`** · Scope: **`files:upload`** · Body: **`multipart/form-data`**
@@ -147,21 +149,22 @@ curl --fail-with-body --get \
   "$FLARE_URL/api/files"
 ```
 
-| Parameter          | Default        | Meaning                                                                                                                                                        |
-| ------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `page`             | `1`            | Positive integer, starting at 1.                                                                                                                               |
-| `limit`            | `24`           | Positive integer, capped at 100.                                                                                                                               |
-| `search`           | Empty          | Case-insensitive match against filename or stored OCR text.                                                                                                    |
-| `sortBy`           | `newest`       | `newest`, `oldest`, `largest`, `smallest`, `name`, `most-viewed`, `least-viewed`, `most-downloaded`, `least-downloaded`. Unrecognized values use newest order. |
-| `types`            | All types      | Comma-separated exact MIME types, such as `image/png,image/jpeg`.                                                                                              |
-| `dateFrom`         | No lower bound | Inclusive upload date/time lower bound. Prefer ISO 8601 timestamps with a timezone.                                                                            |
-| `dateTo`           | No upper bound | Inclusive upper bound. A date-only value includes the final day using server-local time; explicit timestamps preserve the supplied instant.                    |
-| `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together.                                                                         |
-| `folder`           | All folders    | Owned folder ID or `unfiled`. A folder filter matches that folder directly, not its descendants.                                                               |
-| `tag`              | All tags       | Owned tag ID or `untagged`. Excluded automatic tags do not count as active tags.                                                                               |
-| `snapshot`         | No ceiling     | Inclusive upload timestamp ceiling returned by the timeline endpoint; send it unchanged on each window request.                                                |
-| `galleryAnchor`    | None           | An image's file ID, used together with `galleryDirection` for neighboring images.                                                                              |
-| `galleryDirection` | None           | `next` or `previous`; requires `galleryAnchor`.                                                                                                                |
+| Parameter          | Default        | Meaning                                                                                                                                                                             |
+| ------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`             | `1`            | Positive integer, starting at 1.                                                                                                                                                    |
+| `limit`            | `24`           | Positive integer, capped at 100.                                                                                                                                                    |
+| `ids`              | All files      | One comma-separated list of 1–100 distinct file IDs, each 1–128 characters without whitespace or ASCII control characters. Combined with ownership and every other supplied filter. |
+| `search`           | Empty          | Case-insensitive match against filename or stored OCR text.                                                                                                                         |
+| `sortBy`           | `newest`       | `newest`, `oldest`, `largest`, `smallest`, `name`, `most-viewed`, `least-viewed`, `most-downloaded`, `least-downloaded`. Unrecognized values use newest order.                      |
+| `types`            | All types      | Comma-separated exact MIME types, such as `image/png,image/jpeg`.                                                                                                                   |
+| `dateFrom`         | No lower bound | Inclusive upload date/time lower bound. Prefer ISO 8601 timestamps with a timezone.                                                                                                 |
+| `dateTo`           | No upper bound | Inclusive upper bound. A date-only value includes the final day using server-local time; explicit timestamps preserve the supplied instant.                                         |
+| `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together.                                                                                              |
+| `folder`           | All folders    | Owned folder ID or `unfiled`. A folder filter matches that folder directly, not its descendants.                                                                                    |
+| `tag`              | All tags       | Owned tag ID or `untagged`. Excluded automatic tags do not count as active tags.                                                                                                    |
+| `snapshot`         | No ceiling     | Inclusive upload timestamp ceiling returned by the timeline endpoint; send it unchanged on each window request.                                                                     |
+| `galleryAnchor`    | None           | An image's file ID, used together with `galleryDirection` for neighboring images.                                                                                                   |
+| `galleryDirection` | None           | `next` or `previous`; requires `galleryAnchor`.                                                                                                                                     |
 
 Different filter categories combine with AND. For example, `types=image/png&visibility=private,hasPassword` returns PNGs that are private **or** password-protected.
 
@@ -194,6 +197,19 @@ Different filter categories combine with AND. For example, `types=image/png&visi
 The file list's `size` is in **MiB** (`bytes / 1,048,576`). Upload responses and webhook `sizeBytes` are in **bytes**. Convert explicitly when comparing them.
 :::
 
+To refresh metadata for a retained selection, send only `ids` and `limit=100`, without search, date, folder, tag, or snapshot filters. Results still use the requested sort order, not ID-input order. Match rows by `id`. Deleted files and IDs belonging to another account are omitted without revealing which case applies; compare the returned IDs with your selection before offering a bulk operation. This remains a metadata read: it does not grant file-content access or lock the files against later changes. Existing list requests without `ids` behave as before.
+
+```sh
+# Set FLARE_FILE_IDS to comma-separated IDs from your own file-list response.
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  --data-urlencode "ids=$FLARE_FILE_IDS" \
+  --data-urlencode 'limit=100' \
+  "$FLARE_URL/api/files"
+```
+
+Empty IDs, duplicate IDs, whitespace or ASCII control characters, overlong IDs, more than 100 IDs, or repeated `ids` parameters return `400`. The regular page and limit rules still apply; omitting `limit` returns at most 24 records.
+
 The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is a timestamp or `null`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
 
 Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
@@ -202,7 +218,7 @@ Normal pages use offsets, so a library changing between requests can move entrie
 
 **`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**
 
-This lightweight endpoint supplies calendar bucket counts and offsets for a virtual library or date scrollbar. It applies the same ownership, search, type, date, visibility, folder, and tag filters as `GET /api/files`, using a database-clock read and one aggregate rather than returning every file's metadata. Counts include private files owned by the authenticated account, and never another account's files.
+This lightweight endpoint supplies calendar bucket counts and offsets for a virtual library or date scrollbar. It applies the same ownership, selected-ID, search, type, date, visibility, folder, and tag filters as `GET /api/files`, using a database-clock read and one aggregate rather than returning every file's metadata. Counts include private files owned by the authenticated account, and never another account's files.
 
 ```sh
 curl --fail-with-body --get \
@@ -213,12 +229,12 @@ curl --fail-with-body --get \
   "$FLARE_URL/api/files/timeline"
 ```
 
-| Parameter                                                              | Default               | Meaning                                                                                                                            |
-| ---------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `search`, `types`, `dateFrom`, `dateTo`, `visibility`, `folder`, `tag` | Same as the file list | All filter rules above apply.                                                                                                      |
-| `sortBy`                                                               | `newest`              | Date order produces calendar buckets. Other supported sorts produce one undated bucket. Unknown values use newest.                 |
-| `groupBy`                                                              | `none`                | `none`, `month`, `week`, or `year`. `none` uses month buckets internally, without requesting visible headings. Weeks start Monday. |
-| `timezone`                                                             | `UTC`                 | IANA time zone for calendar boundaries, such as `America/Los_Angeles`. Browser clients can use their local IANA zone.              |
+| Parameter                                                                     | Default               | Meaning                                                                                                                            |
+| ----------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ids`, `search`, `types`, `dateFrom`, `dateTo`, `visibility`, `folder`, `tag` | Same as the file list | All filter rules above apply.                                                                                                      |
+| `sortBy`                                                                      | `newest`              | Date order produces calendar buckets. Other supported sorts produce one undated bucket. Unknown values use newest.                 |
+| `groupBy`                                                                     | `none`                | `none`, `month`, `week`, or `year`. `none` uses month buckets internally, without requesting visible headings. Weeks start Monday. |
+| `timezone`                                                                    | `UTC`                 | IANA time zone for calendar boundaries, such as `America/Los_Angeles`. Browser clients can use their local IANA zone.              |
 
 ```json
 {

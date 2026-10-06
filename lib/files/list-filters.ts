@@ -18,6 +18,21 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
     sqlConditions.push(sql)
   }
 
+  const idFilters = params.getAll('ids')
+  if (idFilters.length) {
+    const ids = idFilters[0].split(',')
+    if (
+      idFilters.length !== 1 ||
+      ids.length > 100 ||
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => !id || id.length > 128 || /[\s\x00-\x1f\x7f]/.test(id))
+    )
+      throw new FileListInputError(
+        'ids must contain 1 to 100 distinct file IDs, each at most 128 characters without whitespace or control characters'
+      )
+    add({ id: { in: ids } }, Prisma.sql`f.id IN (${Prisma.join(ids)})`)
+  }
+
   const folder = params.get('folder')
   if (folder) {
     if (folder === 'unfiled')

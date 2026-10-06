@@ -1,3 +1,5 @@
+import type { ArchiveFormat } from '@/lib/archives/shared'
+
 export interface FileViewerFile {
   id: string
   name: string
@@ -6,6 +8,7 @@ export interface FileViewerFile {
   visibility: 'PUBLIC' | 'PRIVATE'
   password: string | null
   userId: string
+  archiveFormat?: ArchiveFormat | null
 }
 
 export interface FileViewerUrls {

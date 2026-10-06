@@ -560,6 +560,119 @@ async function main() {
     await page.goto(origin + '/dashboard')
     await ready(page)
     await page
+      .getByRole('button', { name: 'Select files', exact: true })
+      .click()
+    await page
+      .getByRole('checkbox', { name: 'Select visible files', exact: true })
+      .check()
+    const archiveSelection = await page
+      .locator('[data-file-index] input[type="checkbox"]:checked')
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute('aria-label').slice(7))
+      )
+    await page
+      .getByRole('slider', { name: 'Browse files by date' })
+      .press('End')
+    await ready(page)
+    await page
+      .getByRole('button', { name: 'Create archive', exact: true })
+      .click()
+    const archiveDialog = page.getByRole('dialog', { name: 'Create archive' })
+    await archiveDialog
+      .getByText(`Selected files (${archiveSelection.length})`, { exact: true })
+      .click()
+    const archiveFiles = archiveDialog.getByRole('list', {
+      name: 'Selected archive files',
+    })
+    await expect(archiveFiles.locator('li')).toHaveCount(
+      archiveSelection.length
+    )
+    for (const name of archiveSelection)
+      await expect(archiveFiles).toContainText(name)
+    await archiveDialog
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click()
+    await expect(
+      page.getByText('0 / 100 selected', { exact: true })
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    passed('Create archive retains every selected file after its card unmounts')
+
+    await top(page)
+    await page
+      .getByRole('button', { name: 'Select files', exact: true })
+      .click()
+    await page
+      .getByRole('checkbox', {
+        name: 'Select Alpine morning 00001.webp',
+        exact: true,
+      })
+      .check()
+    // A real API client changes membership while the browser retains its selection.
+    const removed = await details.ctx.request.patch(
+      origin + '/api/files/tags',
+      {
+        headers: { Origin: origin },
+        data: {
+          fileIds: ['timeline-demo-file-00000'],
+          tagId: 'timeline-demo-favorites',
+          action: 'remove',
+        },
+      }
+    )
+    assert.equal(removed.status(), 200)
+    await page
+      .getByRole('button', { name: 'Refresh files', exact: true })
+      .click()
+    await ready(page)
+    await expect(
+      page
+        .locator('[data-file-index="0"]')
+        .getByRole('button', {
+          name: 'Show files tagged Favorites',
+          exact: true,
+        })
+    ).toHaveCount(0)
+    await page
+      .getByRole('slider', { name: 'Browse files by date' })
+      .press('End')
+    await ready(page)
+    await expect(page.locator('[data-file-index="0"]')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Edit tags', exact: true }).click()
+    const tagDialog = page.getByRole('dialog', {
+      name: 'Edit tags',
+      exact: true,
+    })
+    const favorite = tagDialog.getByRole('checkbox', {
+      name: 'Favorites',
+      exact: true,
+    })
+    await expect(favorite).toHaveAttribute('aria-checked', 'false')
+    await screenshot(page, 'library-refreshed-tags')
+    const tagRequest = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === '/api/files/tags' &&
+        request.method() === 'PATCH'
+    )
+    await favorite.click()
+    assert.equal((await tagRequest).postDataJSON().action, 'add')
+    await expect(favorite).toHaveAttribute('aria-checked', 'true')
+    const current = await details.ctx.request.get(
+      origin + '/api/files?ids=timeline-demo-file-00000&limit=100'
+    )
+    assert.equal(current.status(), 200)
+    assert.ok(
+      (await current.json()).data[0].tags.some(
+        (tag) => tag.id === 'timeline-demo-favorites'
+      )
+    )
+    await tagDialog.getByRole('button', { name: 'Done', exact: true }).click()
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    passed(
+      'Bulk tags refresh offscreen selections after a real external removal and submit add for the unchecked tag'
+    )
+    await top(page)
+    await page
       .getByRole('link', {
         name: 'Open Alpine morning 00001.webp',
         exact: true,

@@ -99,6 +99,66 @@ suite('file timeline against disposable PostgreSQL', () => {
     return response.json()
   }
 
+  it('refreshes selected metadata outside the viewport without exposing another account', async () => {
+    const selected = await file('2018-07-05T12:00:00.000Z')
+    const newest = await file('2025-03-05T12:00:00.000Z')
+    const other = await file('2025-03-05T12:00:00.000Z', {
+      userId: 'timeline-other',
+    })
+    const tag = await prisma.vaultTag.create({
+      data: {
+        userId: 'timeline-owner',
+        name: 'Review',
+        normalizedName: 'review',
+      },
+    })
+    await prisma.vaultFileTag.create({
+      data: { fileId: selected.id, tagId: tag.id },
+    })
+    const params = {
+      ids: [selected.id, other.id, 'missing-id'].join(','),
+      limit: '100',
+    }
+    const initial = await getFiles(params)
+    expect(initial.data.map((row: { id: string }) => row.id)).toEqual([
+      selected.id,
+    ])
+    expect(initial.data[0].tags).toEqual([{ id: tag.id, name: 'Review' }])
+    await prisma.vaultFileTag.deleteMany({ where: { fileId: selected.id } })
+    await prisma.file.update({
+      where: { id: selected.id },
+      data: { name: 'Updated selected file.png', size: 2 },
+    })
+    const refreshed = await getFiles(params)
+    expect(refreshed.pagination.total).toBe(1)
+    expect(refreshed.data[0]).toMatchObject({
+      id: selected.id,
+      name: 'Updated selected file.png',
+      size: 2,
+      tags: [],
+    })
+    expect((await getTimeline(params)).total).toBe(1)
+    expect(
+      (await getFiles({ ...params, dateFrom: newest.uploadedAt.toISOString() }))
+        .data
+    ).toEqual([])
+    expect(
+      (
+        await getTimeline({
+          ...params,
+          dateFrom: newest.uploadedAt.toISOString(),
+        })
+      ).total
+    ).toBe(0)
+    expect(
+      (
+        await timeline.GET(
+          request('/timeline', { ids: `${selected.id},${selected.id}` })
+        )
+      ).status
+    ).toBe(400)
+  })
+
   it('counts all owned files by month without leaking other accounts and preserves stable page ties', async () => {
     const uploadedAt = '2025-03-05T12:00:00.000Z'
     const rows = await Promise.all(

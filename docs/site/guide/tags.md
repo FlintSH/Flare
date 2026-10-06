@@ -23,7 +23,9 @@ Tag names can be up to 40 characters. Use short names that will make sense when 
 
 ## Tag several files together
 
-Choose **Select**, select individual files or **Select visible files**, and open **Edit tags**. A partially checked tag is assigned to some of the selected files. Selecting it adds it to all selected files while preserving their other tags.
+Choose **Select**, select individual files or **Select visible files**, and open **Edit tags**. A partially checked tag is assigned to some of the selected files. Selecting it adds it to all selected files while preserving their other tags. The bulk editor checks current tag membership for every selected file when it opens, including files that have scrolled out of view. This picks up changes made by another tab or client; a failed check leaves the editor closed so you can retry.
+
+<Screenshot src="/screenshots/timeline/library-refreshed-tags.webp" alt="Edit tags for the selected Alpine morning file showing Favorites unchecked after reloading its current tag membership" caption="After another client removes Favorites, opening Edit tags shows its current unchecked state, including when the selected card is outside the visible window." />
 
 You can keep up to 100 files selected while scrolling through the library. **Select visible files** adds loaded cards currently on screen; it does not select all matching files. Changing a filter, folder, sort, or grouping clears the selection, so finish the current batch before changing the view.
 
