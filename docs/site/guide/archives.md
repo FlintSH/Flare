@@ -149,9 +149,11 @@ Limits apply to every request, including browsing. **MiB** means 1,048,576 bytes
 | Files selected for creation                                | 100              |
 | Archive path depth                                         | 20 levels        |
 | Archive path length                                        | 1,024 characters |
-| Total request time                                         | 120 seconds      |
+| Archive processing time                                    | 120 seconds      |
 
 The instance's file-size limit and your remaining quota can impose lower limits when new files are created. Each Flare application process allows two concurrent archive operations. Owner-library work allows at most one per account; share-page work allows at most one per source file. Shared browsing and entry downloads also share a limit of 30 requests per IP per minute in each process. If the service is busy or a rate limit is reached, wait and retry.
+
+After the initial header checks, Flare allows **five seconds** to read a share page's small browsing/download request body, before authorizing file access and starting archive processing. This submission limit is separate from the 120-second processing deadline; it does not require the whole archive to transfer in five seconds. If submission times out, retry on a stable connection. Incomplete or rejected requests do not reserve archive-processing capacity.
 
 **RAR, 7z, encrypted archives, and split archives are unsupported.** Links, special filesystem entries, unsafe paths, conflicting paths, malformed contents, and archives exceeding the limits are rejected. Flare does not execute extracted programs or restore archive filesystem permissions.
 

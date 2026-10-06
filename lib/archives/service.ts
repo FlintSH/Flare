@@ -49,7 +49,7 @@ import {
   type ArchiveManifest,
   getArchiveFormat,
 } from './shared'
-import { authorizeSharedArchive, recheckSharedArchive } from './sharing'
+import { type SharedArchiveAccess, recheckSharedArchive } from './sharing'
 
 const sourceSelect = {
   id: true,
@@ -152,23 +152,19 @@ export async function downloadArchiveEntry(
 }
 
 export async function listSharedArchive(
-  id: string,
-  password: string | undefined,
+  access: SharedArchiveAccess,
   operation: ArchiveOperation
 ) {
-  const access = await authorizeSharedArchive(id, password)
   const manifest = await inspectSource(access.file, operation, false)
   await recheckSharedArchive(access, operation)
   return publicManifest(manifest)
 }
 
 export async function downloadSharedArchiveEntry(
-  id: string,
+  access: SharedArchiveAccess,
   path: string,
-  password: string | undefined,
   operation: ArchiveOperation
 ) {
-  const access = await authorizeSharedArchive(id, password)
   const manifest = await inspectSource(access.file, operation, true)
   return entryDownload(manifest, path, operation, () =>
     recheckSharedArchive(access, operation)

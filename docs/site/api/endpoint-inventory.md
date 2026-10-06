@@ -45,7 +45,7 @@ These routes check the file's visibility, password, and an optional **browser se
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs.
 
-Archive share pages use separate read operations under the same file-access rules. Both reject `Authorization` headers, require same-origin requests, and accept file passwords only in the request body. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
+Archive share pages use separate read operations under the same file-access rules. Both reject `Authorization` headers, require same-origin requests, and accept file passwords only in the request body. Body reading is limited to 16 KiB, five seconds, and 32 pending reads per process; schema validation and file authorization finish before archive-processing capacity is reserved. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
 
 | Path                                  | Methods | Purpose                                                                                                      |
 | ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |

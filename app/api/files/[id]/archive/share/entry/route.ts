@@ -1,7 +1,9 @@
-import { archiveBody, archiveRoute } from '@/lib/archives/http'
+import { archiveRoute } from '@/lib/archives/http'
 import { withArchiveOperation } from '@/lib/archives/operation'
 import { downloadSharedArchiveEntry } from '@/lib/archives/service'
 import {
+  authorizeSharedArchive,
+  sharedArchiveBody,
   sharedArchiveEntrySchema,
   sharedArchiveGuard,
 } from '@/lib/archives/sharing'
@@ -15,20 +17,12 @@ export async function POST(
     const limited = await sharedArchiveGuard(request)
     if (limited) return limited
     const { id } = await params
-    return withArchiveOperation(
-      `share:${id}`,
-      request.signal,
-      async (operation) => {
-        const input = sharedArchiveEntrySchema.parse(
-          await archiveBody(request, operation.signal, true)
-        )
-        return downloadSharedArchiveEntry(
-          id,
-          input.path,
-          input.password,
-          operation
-        )
-      }
+    const input = sharedArchiveEntrySchema.parse(
+      await sharedArchiveBody(request, true)
+    )
+    const access = await authorizeSharedArchive(id, input.password)
+    return withArchiveOperation(`share:${id}`, request.signal, (operation) =>
+      downloadSharedArchiveEntry(access, input.path, operation)
     )
   })
 }

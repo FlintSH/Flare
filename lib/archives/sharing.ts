@@ -12,6 +12,7 @@ import { rateLimit } from '@/lib/security/rate-limit'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { ArchiveError } from './errors'
+import { archiveBody } from './http'
 import type { ArchiveOperation } from './operation'
 import { ARCHIVE_LIMITS } from './shared'
 
@@ -33,6 +34,50 @@ const limiter = (processState[limiterKey] ??= new RateLimiterMemory({
   duration: 60,
   keyPrefix: 'archive-share',
 })) as RateLimiterMemory
+
+export const SHARED_ARCHIVE_BODY_TIMEOUT_MS = 5_000
+export const SHARED_ARCHIVE_PENDING_BODIES = 32
+const bodyKey = Symbol.for('flare.archive.pending-share-bodies')
+const pendingBodies = (processState[bodyKey] ??=
+  new Set<symbol>()) as Set<symbol>
+
+/** Untrusted slow bodies never reserve archive workers or staging directories. */
+export async function sharedArchiveBody(request: Request, allowForm = false) {
+  if (pendingBodies.size >= SHARED_ARCHIVE_PENDING_BODIES)
+    throw new ArchiveError(
+      'Too many pending archive requests. Try again shortly.',
+      429
+    )
+  const pending = Symbol()
+  pendingBodies.add(pending)
+  const controller = new AbortController()
+  const abort = () =>
+    controller.abort(new ArchiveError('Archive request was cancelled.', 408))
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new ArchiveError(
+          'Shared archive request body exceeded the five-second time limit.',
+          408
+        )
+      ),
+    SHARED_ARCHIVE_BODY_TIMEOUT_MS
+  )
+  timer.unref()
+  request.signal.addEventListener('abort', abort, { once: true })
+  if (request.signal.aborted) abort()
+  try {
+    controller.signal.throwIfAborted()
+    return await archiveBody(request, controller.signal, allowForm)
+  } catch (error) {
+    if (controller.signal.aborted) throw controller.signal.reason
+    throw error
+  } finally {
+    clearTimeout(timer)
+    request.signal.removeEventListener('abort', abort)
+    pendingBodies.delete(pending)
+  }
+}
 
 export async function sharedArchiveGuard(request: Request) {
   if (request.headers.has('authorization'))

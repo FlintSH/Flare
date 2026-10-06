@@ -137,7 +137,7 @@ export async function archiveBody(
       if (done) break
       bytes += value.byteLength
       if (bytes > 16384) {
-        await reader.cancel()
+        void reader.cancel().catch(() => {})
         throw new ArchiveError('Archive request is too large.', 413)
       }
       chunks.push(value)

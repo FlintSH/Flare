@@ -187,6 +187,16 @@ pnpm exec vitest run __tests__/archives/database.test.ts
 
 The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. Shared archive tests also check current visibility/password access and revalidation after staging. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility or a Meticulous zero-diff result. If Meticulous authentication or a suitable recorded session is unavailable, report that gap and use these local checks without triggering a hosted run.
 
+Shared-request admission has separate handler and body-guard regression suites:
+
+```sh
+pnpm exec vitest run \
+  __tests__/archives/handler-availability.test.ts \
+  __tests__/archives/shared-body.test.ts
+```
+
+They exercise the route handlers and body guards with streamed request bodies and controlled session/database/archive-service responses, without requiring PostgreSQL. They check that unfinished or rejected shared requests cannot occupy archive-processing slots needed by owner operations, alongside the body deadline, pending-read limit, cancellation, and capacity reuse. These request-admission checks complement the real storage/browser evidence above. Admission ordering changes errors and resource allocation without changing rendered controls or successful workflow steps, so the existing screenshots and recordings remain representative.
+
 ## Security browser checks and demos
 
 The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, both recovery methods, passkeys, and the optional passkey requirement. The passkey recordings use Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. They do not show or test a native biometric prompt or a live external SSO provider.
