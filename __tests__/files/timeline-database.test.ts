@@ -24,6 +24,7 @@ suite('file timeline against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let timeline: typeof import('@/app/api/files/timeline/route')
   let files: typeof import('@/app/api/files/route')
+  let memberships: typeof import('@/app/api/files/tags/route')
 
   beforeAll(async () => {
     const url = new URL(databaseUrl!)
@@ -46,6 +47,7 @@ suite('file timeline against disposable PostgreSQL', () => {
     prisma = (await import('@/lib/database/prisma')).prisma
     timeline = await import('@/app/api/files/timeline/route')
     files = await import('@/app/api/files/route')
+    memberships = await import('@/app/api/files/tags/route')
   })
 
   beforeEach(async () => {
@@ -157,6 +159,102 @@ suite('file timeline against disposable PostgreSQL', () => {
         )
       ).status
     ).toBe(400)
+  })
+
+  it('reads current tag memberships for the selected files after mutations, excluding removed and foreign tags', async () => {
+    const first = await file('2025-01-01T00:00:00.000Z')
+    const second = await file('2025-01-02T00:00:00.000Z')
+    await prisma.vaultTag.createMany({
+      data: [
+        {
+          id: 'alpha',
+          userId: 'timeline-owner',
+          name: 'Alpha',
+          normalizedName: 'alpha',
+        },
+        {
+          id: 'zulu',
+          userId: 'timeline-owner',
+          name: 'Zulu',
+          normalizedName: 'zulu',
+        },
+        {
+          id: 'excluded',
+          userId: 'timeline-owner',
+          name: 'Removed',
+          normalizedName: 'removed',
+        },
+        {
+          id: 'foreign',
+          userId: 'timeline-other',
+          name: 'Private tag',
+          normalizedName: 'private tag',
+        },
+      ],
+    })
+    await prisma.vaultFileTag.createMany({
+      data: [
+        { fileId: first.id, tagId: 'zulu' },
+        { fileId: first.id, tagId: 'alpha' },
+        { fileId: first.id, tagId: 'excluded', excluded: true },
+        { fileId: first.id, tagId: 'foreign' },
+      ],
+    })
+    const read = () =>
+      memberships.GET(
+        request('/tags', {
+          fileIds: `${second.id},${first.id},${first.id}`,
+        })
+      )
+    const response = await read()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect((await response.json()).data.files).toEqual([
+      { id: second.id, tags: [] },
+      {
+        id: first.id,
+        tags: [
+          { id: 'alpha', name: 'Alpha' },
+          { id: 'zulu', name: 'Zulu' },
+        ],
+      },
+    ])
+    await prisma.vaultFileTag.updateMany({
+      where: { fileId: first.id, tagId: 'alpha' },
+      data: { excluded: true },
+    })
+    await prisma.vaultFileTag.create({
+      data: { fileId: second.id, tagId: 'alpha' },
+    })
+    expect((await (await read()).json()).data.files).toEqual([
+      { id: second.id, tags: [{ id: 'alpha', name: 'Alpha' }] },
+      { id: first.id, tags: [{ id: 'zulu', name: 'Zulu' }] },
+    ])
+  })
+
+  it('rejects mixed-owner and deleted tag selections with the same unavailable response', async () => {
+    const owned = await file('2025-01-01T00:00:00.000Z')
+    const foreign = await file('2025-01-01T00:00:00.000Z', {
+      userId: 'timeline-other',
+    })
+    const responses = []
+    for (const unavailable of [foreign.id, 'missing']) {
+      const response = await memberships.GET(
+        request('/tags', {
+          fileIds: `${owned.id},${unavailable}`,
+        })
+      )
+      expect(response.status).toBe(404)
+      responses.push(await response.json())
+    }
+    expect(responses[0]).toEqual(responses[1])
+    expect(responses[0]).toMatchObject({
+      error: 'One or more files are no longer available.',
+    })
+    await prisma.file.delete({ where: { id: owned.id } })
+    expect(
+      (await memberships.GET(request('/tags', { fileIds: owned.id }))).status
+    ).toBe(404)
   })
 
   it('counts all owned files by month without leaking other accounts and preserves stable page ties', async () => {

@@ -199,8 +199,9 @@ The file list's `size` is in **MiB** (`bytes / 1,048,576`). Upload responses and
 
 To refresh metadata for a retained selection, send only `ids` and `limit=100`, without search, date, folder, tag, or snapshot filters. Results still use the requested sort order, not ID-input order. Match rows by `id`. Deleted files and IDs belonging to another account are omitted without revealing which case applies; compare the returned IDs with your selection before offering a bulk operation. This remains a metadata read: it does not grant file-content access or lock the files against later changes. Existing list requests without `ids` behave as before.
 
+Set `FLARE_FILE_IDS` to comma-separated IDs from your own file-list response.
+
 ```sh
-# Set FLARE_FILE_IDS to comma-separated IDs from your own file-list response.
 curl --fail-with-body --get \
   -H "Authorization: Bearer $FLARE_TOKEN" \
   --data-urlencode "ids=$FLARE_FILE_IDS" \
@@ -317,6 +318,45 @@ Returns the distinct MIME types currently present in your account, sorted alphab
   "data": { "types": ["application/pdf", "image/jpeg", "image/png"] }
 }
 ```
+
+## Read current tags for a selection
+
+**`GET /api/files/tags?fileIds=FILE_ID,OTHER_FILE_ID`** · Account browser session or legacy account upload credential · Permission: **`files.read`**
+
+This dashboard route supplies fresh tag membership when opening **Edit tags**, including selected files outside the visible library window. It does **not** accept named `flr_…` tokens and is excluded from the named-token request builder and OpenAPI `paths`. Existing integrations using the named-token file listing can continue reading each file's `tags` there.
+
+Send one `fileIds` parameter containing 1–100 comma-separated, nonempty IDs, each at most 128 characters after trimming. Duplicate IDs are returned once in their first-requested order; the 100-entry limit applies before deduplication. Every file must still belong to the authenticated account. Only active tag assignments are returned, sorted by normalized tag name, then ID. The read does not modify files, tag rules, or manual exclusions, and emits no webhook event.
+
+For a signed-in browser on your disposable local Flare instance, this console example reads two files already returned by its file listing:
+
+```js
+const query = new URLSearchParams({ fileIds: [fileId, otherFileId].join(',') })
+const response = await fetch(`/api/files/tags?${query}`, {
+  credentials: 'same-origin',
+  cache: 'no-store',
+})
+const result = await response.json()
+if (!response.ok) throw new Error(result.error || 'Could not read file tags')
+console.log(result.data.files)
+```
+
+Set `fileId` and `otherFileId` to owned file IDs from that disposable account. Success is **200** with `Cache-Control: private, no-store`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "files": [
+      { "id": "FILE_ID", "tags": [{ "id": "TAG_ID", "name": "Review" }] },
+      { "id": "OTHER_FILE_ID", "tags": [] }
+    ]
+  }
+}
+```
+
+Malformed or oversized selections return **400**. Missing authentication or a named token returns **401**; a missing current `files.read` grant returns **403**. If any ID is missing, deleted, or belongs to another account, the whole request returns the same generic **404**, without a partial result. Close the editor, refresh the library, and select the remaining files again. Unexpected backend failures return **500**; retry the read. A successful response reflects this read; it does not lock out later edits by another client.
+
+The [audit log](/admin/audit) records a request-level `http.get` outcome with the verified account when authentication succeeds. It does not include the queried file IDs or returned tag names. An unavailable-file `404` is recorded as a failure; the response and audit summary do not distinguish a missing file from another account’s file.
 
 ## Chunked uploads
 

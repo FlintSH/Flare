@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 
 import { cn } from '@/lib/utils'
 
+import { useFileTagMemberships } from '@/hooks/use-file-tag-memberships'
 import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
 
 /** Each change is additive/removing, so bulk edits preserve every other tag. */
@@ -31,10 +32,13 @@ export function FileTagsDialog({
   onChanged: (files: FileType[]) => void
 }) {
   const { tags, loading, error: loadError, reload, changed } = useTags()
+  const memberships = useFileTagMemberships(files.map((file) => file.id))
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [announcement, setAnnouncement] = useState('')
+  const currentFiles = memberships.files
+  const ready = !!currentFiles && !loading && !loadError
   const matching = tags.filter((tag) =>
     tag.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -42,28 +46,20 @@ export function FileTagsDialog({
     tag: Pick<TagView, 'id' | 'name'>,
     action: 'add' | 'remove'
   ) => {
-    await tagRequest('/api/files/tags', 'PATCH', {
-      fileIds: files.map((file) => file.id),
-      tagId: tag.id,
-      action,
-    })
+    const updated = await memberships.update(tag, action)
+    if (!updated) return
+    const freshTags = new Map(updated.map((file) => [file.id, file.tags]))
     onChanged(
       files.map((file) => ({
         ...file,
-        tags:
-          action === 'remove'
-            ? (file.tags ?? []).filter((item) => item.id !== tag.id)
-            : [
-                ...(file.tags ?? []).filter((item) => item.id !== tag.id),
-                { id: tag.id, name: tag.name },
-              ],
+        tags: freshTags.get(file.id) ?? [],
       }))
     )
     changed()
     setAnnouncement(`${tag.name} ${action === 'add' ? 'added' : 'removed'}.`)
   }
   const toggle = async (tag: TagView, all: boolean) => {
-    if (busy) return
+    if (busy || !ready) return
     setBusy(true)
     setError('')
     try {
@@ -75,7 +71,7 @@ export function FileTagsDialog({
     }
   }
   const create = async () => {
-    if (busy || !search.trim()) return
+    if (busy || !ready || !search.trim()) return
     setBusy(true)
     setError('')
     try {
@@ -134,7 +130,25 @@ export function FileTagsDialog({
             disabled={busy}
           />
         </form>
-        <div className="max-h-64 space-y-1 overflow-y-auto" aria-busy={busy}>
+        <div
+          className="max-h-64 space-y-1 overflow-y-auto"
+          aria-busy={busy || loading || memberships.loading}
+        >
+          {memberships.loading && (
+            <p role="status" className="p-3 text-sm text-muted-foreground">
+              Loading file tags…
+            </p>
+          )}
+          {memberships.error && (
+            <div className="space-y-2 p-2">
+              <p role="alert" className="text-sm text-destructive">
+                {memberships.error}
+              </p>
+              <Button variant="outline" onClick={memberships.reload}>
+                Retry loading file tags
+              </Button>
+            </div>
+          )}
           {loading && (
             <p className="p-3 text-sm text-muted-foreground">Loading tags…</p>
           )}
@@ -143,61 +157,59 @@ export function FileTagsDialog({
               Retry loading tags
             </Button>
           )}
-          {matching.map((tag) => {
-            const count = files.filter((file) =>
-              file.tags?.some((item) => item.id === tag.id)
-            ).length
-            const all = count === files.length
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                role="checkbox"
-                aria-checked={all ? true : count ? 'mixed' : false}
-                disabled={busy}
-                onClick={() => void toggle(tag, all)}
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              >
-                <span
-                  className={cn(
-                    'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
-                    (all || count > 0) &&
-                      'border-primary bg-primary text-primary-foreground'
-                  )}
+          {currentFiles &&
+            matching.map((tag) => {
+              const count = currentFiles.filter((file) =>
+                file.tags?.some((item) => item.id === tag.id)
+              ).length
+              const all = count === currentFiles.length
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={all ? true : count ? 'mixed' : false}
+                  disabled={busy || !ready}
+                  onClick={() => void toggle(tag, all)}
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                 >
-                  {all ? (
-                    <Check className="h-3 w-3" />
-                  ) : count > 0 ? (
-                    <Minus className="h-3 w-3" />
-                  ) : null}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{tag.name}</span>
-                {files.length > 1 && count > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {count === files.length
-                      ? 'All'
-                      : `${count} of ${files.length}`}
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      (all || count > 0) &&
+                        'border-primary bg-primary text-primary-foreground'
+                    )}
+                  >
+                    {all ? (
+                      <Check className="h-3 w-3" />
+                    ) : count > 0 ? (
+                      <Minus className="h-3 w-3" />
+                    ) : null}
                   </span>
-                )}
-              </button>
-            )
-          })}
-          {!loading && !loadError && !tags.length && !search && (
+                  <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+                  {currentFiles.length > 1 && count > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {all ? 'All' : `${count} of ${currentFiles.length}`}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          {ready && !tags.length && !search && (
             <div className="px-2 py-5 text-center text-sm text-muted-foreground">
               <Tag className="mx-auto mb-2 h-5 w-5" />
               Type a name to create your first tag.
             </div>
           )}
           {search.trim() &&
-            !loadError &&
-            !loading &&
+            ready &&
             !tags.some(
               (tag) => tag.name.toLowerCase() === search.trim().toLowerCase()
             ) && (
               <Button
                 variant="ghost"
                 className="h-auto w-full justify-start gap-2 whitespace-normal py-3 text-left"
-                disabled={busy}
+                disabled={busy || !ready}
                 onClick={() => void create()}
               >
                 <Plus className="h-4 w-4 shrink-0" />
@@ -223,7 +235,7 @@ export function FileTagsDialog({
                 Saving…
               </>
             ) : (
-              'Tags are visible only to you.'
+              'Tags are not shown on public file pages.'
             )}
           </span>
           <Button onClick={onClose} disabled={busy}>

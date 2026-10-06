@@ -145,7 +145,7 @@ beforeEach(() => {
           {
             from: new Date('2025-01-01T00:00:00.000Z'),
             to: new Date('2025-02-01T00:00:00.000Z'),
-            count: 2n,
+            count: BigInt(2),
           },
         ]
   )
