@@ -23,6 +23,7 @@ Reading for a particular installation? [Browse dated documentation releases and 
 | Run a shared instance                        | [Roles and permissions](./admin/roles) → [users](./admin/users) → [email](./admin/email) → [backups](./hosting/maintenance) |
 | Send screenshots straight to your domain     | [Screenshot tools](./guide/screenshot-tools) → [upload profiles](./guide/upload-profiles)                                   |
 | Share a collection                           | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                                         |
+| Inspect, extract, or package files           | [Archives](./guide/archives)                                                                                                |
 | Protect your sign-in                         | [Two-factor authentication and passkeys](./guide/security)                                                                  |
 | Require a passkey instead of password or SSO | [Passkey requirement and emergency recovery](./guide/security#require-a-passkey-for-sign-in)                                |
 | Match your own brand                         | [Appearance studio](./admin/appearance)                                                                                     |

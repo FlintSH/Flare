@@ -57,6 +57,20 @@ Quotas are **disabled by default**. Enabling them applies a shared per-user allo
 
 This is one default quota for accounts without bypass. Flare does not currently expose separate per-account or per-role numeric quota values, shared group quotas, or reserved disk capacity. If you lower the allowance below a user's existing usage, their files remain, but further uploads are blocked until enough space is freed or the limit is raised.
 
+## Archive processing
+
+Archive browsing, entry downloads, extraction, and creation read the stored bytes on the application server. This applies to both local and S3 storage: using S3 does not remove the application's need for temporary working disk, CPU, and time to validate or compress an archive. Keep room for the compressed source, expanded members, and generated output as well as other uploads in progress.
+
+Work is staged in a private `flare-archive-*` directory under the operating system's temporary directory. Normal completion, failure, or cancellation removes that workspace; entry downloads retain it until the response stream closes. A process crash or failed removal can leave temporary files. Inspect the warning logs and, with every process using that temporary mount stopped, remove only identified abandoned workspaces. These files are temporary processing copies, not a replacement for the stored source files.
+
+Archive reads honor a file's recorded storage target. Historical files without a recorded target use the active provider, matching the older download behavior. A recorded target that is unavailable or conflicts with the current S3 configuration causes a conflict response instead of reading another bucket. Restore matching configuration or follow the [verified storage migration procedure](#changing-backend-or-bucket); do not clear provenance metadata to bypass it.
+
+The fixed [archive limits](../guide/archives#supported-sizes-and-formats) bound individual requests. At most two archive operations run per application process and one per account within that process. These are process limits, not a distributed queue across replicas. Requests are synchronous with a 120-second deadline; a request that is too large or too slow must be split into smaller work. Ensure the reverse proxy allows the intended request duration, subject to its own limits.
+
+Extracting adds new file records and storage bytes while retaining the original archive. Creating an archive adds one new file while retaining all selected source files. Outputs default to private/no expiration, without inheriting the account’s default profile. An explicitly selected owned profile instead supplies sharing, tags, expiration, naming, and share style; its current permissions and revision are checked before publication. The normal account quota and maximum output-file size apply; quota bypass does not remove fixed archive limits. Failed operations do not publish partial output sets. Archive creation is not a backup or storage migration: preserve the database, stored files, and secrets using the [backup procedure](./maintenance).
+
+If output objects were written before a failure, their uncommitted paths are queued for the existing [storage deletion worker](./maintenance#account-storage-cleanup) using the recorded destination target. Bytes can remain until that worker succeeds. A database failure that prevents queuing is logged and requires operator reconciliation; atomic publication of file records is not a promise that every failed storage write disappears immediately.
+
 ## Changing backend or bucket
 
 ::: warning A settings change does not move your files

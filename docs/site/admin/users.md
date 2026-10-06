@@ -71,6 +71,8 @@ With `users.read` and `content.read`, choose **View Content** on a user to inspe
 
 Deletion has no recycle bin. Individual file deletion removes the database record and attempts to remove its bytes; it does not use the account-cleanup queue described below. If the storage backend is unavailable during individual file deletion, check logs for objects that may need reconciliation. Never make broad direct bucket deletions from a UI count alone.
 
+The [archive workspace](/guide/archives) is an owner-only library feature. A moderator can use existing whole-file access where their permissions allow it, but cannot invoke entry browsing, extraction, or archive creation on another account's files. Extracted files and newly created archives are ordinary file records and follow existing content-moderation rules after publication. They default to private; an explicitly selected upload profile can choose different visibility and expiration.
+
 ## Revoke browser sessions
 
 Choose **Revoke Sessions** on an account, review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. On success, the confirmation closes and **Sessions revoked** appears; the person must sign in again. The server returns an empty `204 No Content`, which is a successful result. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.

@@ -64,6 +64,7 @@ Open the card's menu for the full action list. On a desktop, preview actions als
 - **Open file:** open its share/viewer page.
 - **Copy link:** copy its share-page URL.
 - **Download file:** save a copy to your device.
+- **Browse archive:** inspect supported archive contents, download an entry, or extract into a new folder. See [archives](./archives).
 - **Edit tags:** add or remove private organizational labels.
 - **Move to folder:** change its library location without changing the file link.
 - **Change visibility:** switch between public and private.
@@ -79,6 +80,8 @@ The card menu and the buttons shown when you hover a file follow the same permis
 <Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
 
 Use **Select** to work with multiple files. Select individual items or the current page, then **Edit tags** or **Move**. Selecting a page applies to the files on that page, not every result in your library.
+
+With `files.read` and `files.upload`, **Create archive** packages up to 100 selected owned files into a new ZIP or TAR.GZ. It defaults to private/no expiration; explicitly choosing an upload profile applies that profile’s settings. Saving into a folder also requires `folders.manage`. The originals remain unchanged; [archive limits and defaults](./archives#create-an-archive-from-selected-files) apply separately from ordinary uploads.
 
 ## Read text in images with OCR
 

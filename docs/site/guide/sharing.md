@@ -45,21 +45,24 @@ If you need to stop public access while keeping your copy, set the file to **Pri
 
 ## What recipients can preview
 
-| Content       | Viewer experience                                                                    |
-| ------------- | ------------------------------------------------------------------------------------ |
-| Images        | An inline preview with an expanded viewer for zoom and pan.                          |
-| Video         | In-browser video controls when the browser supports the format and codec.            |
-| Audio         | In-browser playback controls for supported formats.                                  |
-| PDF           | A browser PDF preview when supported.                                                |
-| Text and code | A read-only, scrollable text view; supported code types receive syntax highlighting. |
-| CSV           | A scrollable table for CSV files up to 1 MiB. Larger CSV files can be downloaded.    |
-| Other formats | A download-focused fallback when an inline viewer is unavailable.                    |
+| Content       | Viewer experience                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| Images        | An inline preview with an expanded viewer for zoom and pan.                                           |
+| Video         | In-browser video controls when the browser supports the format and codec.                             |
+| Audio         | In-browser playback controls for supported formats.                                                   |
+| PDF           | A browser PDF preview when supported.                                                                 |
+| Text and code | A read-only, scrollable text view; supported code types receive syntax highlighting.                  |
+| CSV           | A scrollable table for CSV files up to 1 MiB. Larger CSV files can be downloaded.                     |
+| Archives      | Download the complete archive. Entry browsing and extraction belong to the owner's signed-in library. |
+| Other formats | A download-focused fallback when an inline viewer is unavailable.                                     |
 
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
 <Screenshot src="/screenshots/workspace/share-video.png" alt="Video share page with playback controls" caption="Recordings can play directly in the browser when their codec is supported." />
 
 Browser preview support is separate from upload support. If a preview fails, try downloading the file and opening it in an appropriate application. A share page expanded image viewer shows that shared image; it does not reveal the owner's surrounding library.
+
+A public archive contains the bytes of every member, even if those files originally had private links or Flare passwords. Downloading it lets a recipient inspect those bytes in their own archive tool. [Archive creation](./archives#create-an-archive-from-selected-files) defaults to private and does not embed source sharing controls or encrypt the result. An explicitly selected public upload profile can make the new archive public immediately; review its contents and the profile summary before confirming.
 
 ## Share pages, raw links, and downloads
 

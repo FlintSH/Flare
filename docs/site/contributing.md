@@ -143,6 +143,43 @@ Apply migrations to both databases before running the suites. Missing either env
 
 The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
 
+## Archive browser checks and demos
+
+The [archive workspace](/guide/archives) uses real uploads, sessions, storage, and database publication. Its local browser script creates ZIP, TAR.GZ, and GZIP fixtures, exercises browsing and extraction, packages selected files, and checks both private defaults and an explicitly selected public upload profile.
+
+Use a **disposable local PostgreSQL database named exactly `archive_demo`**. `scripts/archives/seed.cjs` accepts only `localhost` or `127.0.0.1` and either no query parameters or a single `schema=public`. It resets the two public fixture accounts, uses local storage, and disables OCR and OIDC in that disposable instance. Do not point it at an existing installation. Create the database with your local PostgreSQL tools, then run from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/archive_demo'
+export NEXTAUTH_URL='http://localhost:3062'
+export NEXTAUTH_SECRET="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
+export METICULOUS_RECORDING_ENABLED=false
+export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
+pnpm exec prisma migrate deploy
+pnpm exec next dev --hostname 127.0.0.1 --port 3062
+```
+
+Match the role, port, and database authentication to your disposable PostgreSQL server. In another terminal with the same `DATABASE_URL`, open `http://localhost:3062/auth/login` once to initialize configuration, then run:
+
+```sh
+node scripts/archives/seed.cjs
+node scripts/archives/verify-ui.cjs
+```
+
+The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with password `Archive-demo-only-2026!`. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. It also checks the archive dialogs at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
+
+Set `FLARE_ARCHIVE_SCREENSHOTS` and `FLARE_ARCHIVE_VIDEOS` to separate temporary output directories to capture evidence. The primary recordings are `archive-browse-extract.webm` and `archive-create.webm`; inspect generated screenshots and recordings before replacing sources in `docs/images/archives/` and `.github/assets/archives/`. Preserve written transcripts in [Demos](/demos), and keep failed or incidental recordings out of Git. `FLARE_ARCHIVE_TEST_ORIGIN` can override the default `http://localhost:3062`, but must remain a disposable HTTP `localhost` origin matching the running app's `NEXTAUTH_URL`.
+
+The separate archive database suite requires its own disposable database; do not reuse the browser fixture database:
+
+```sh
+export FLARE_ARCHIVE_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_archive_test_local'
+DATABASE_URL="$FLARE_ARCHIVE_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/archives/database.test.ts
+```
+
+The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility or a Meticulous zero-diff result. If Meticulous authentication or a suitable recorded session is unavailable, report that gap and use these local checks without triggering a hosted run.
+
 ## Security browser checks and demos
 
 The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, both recovery methods, passkeys, and the optional passkey requirement. The passkey recordings use Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. They do not show or test a native biometric prompt or a live external SSO provider.

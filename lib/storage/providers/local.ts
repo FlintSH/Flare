@@ -123,7 +123,8 @@ export class LocalStorageProvider implements StorageProvider {
   async uploadStream(
     stream: Readable,
     path: string,
-    _mimeType: string
+    _mimeType: string,
+    signal?: AbortSignal
   ): Promise<{ size: number }> {
     const validPath = validateStoragePath(path)
     const fullPath = join(process.cwd(), validPath)
@@ -138,7 +139,7 @@ export class LocalStorageProvider implements StorageProvider {
       },
     })
 
-    await pipeline(stream, counter, createWriteStream(fullPath))
+    await pipeline(stream, counter, createWriteStream(fullPath), { signal })
 
     return { size }
   }
@@ -161,7 +162,11 @@ export class LocalStorageProvider implements StorageProvider {
     await unlink(fullPath)
   }
 
-  async getFileStream(path: string, range?: RangeOptions): Promise<Readable> {
+  async getFileStream(
+    path: string,
+    range?: RangeOptions,
+    signal?: AbortSignal
+  ): Promise<Readable> {
     const validPath = validateStoragePath(path)
     const fullPath = join(process.cwd(), validPath)
     const options: { start?: number; end?: number } = {}
@@ -169,7 +174,7 @@ export class LocalStorageProvider implements StorageProvider {
       if (typeof range.start !== 'undefined') options.start = range.start
       if (typeof range.end !== 'undefined') options.end = range.end
     }
-    return createReadStream(fullPath, options)
+    return createReadStream(fullPath, { ...options, signal })
   }
 
   async getFileUrl(path: string): Promise<string> {

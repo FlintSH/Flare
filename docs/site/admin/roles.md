@@ -76,6 +76,8 @@ Scheduling expiration needs `files.update` plus `files.delete` for deletion or `
 
 Your own verification, enrollment, recovery, and confirmed email-change flows remain available under their existing identity/email checks even without `profile.update`. They preserve a way to secure or recover the account and do not grant access to role administration.
 
+[Archive tools](/guide/archives) reuse existing permissions: browsing and entry downloads need `files.read`; creating an archive also needs `files.upload`, with `folders.manage` for a folder destination; extraction needs all three. They only operate on the signed-in account's own files. `content.read` and Administrator do not grant entry browsing or extraction of somebody else's archive through these owner routes; ordinary moderation and whole-file downloads retain their existing rules.
+
 Permissions do not transfer file ownership, create per-folder membership lists, encrypt content from operators, or create separate storage pools. A role does not have its own numeric quota. Public URLs retain their sharing behavior: removing dashboard access does not revoke a previously shared public file, folder link, or short URL.
 
 ## Delegate without handing over the instance

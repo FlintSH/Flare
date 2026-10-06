@@ -21,6 +21,31 @@ Choose a step, then enlarge the screenshot to inspect the details. The screensho
 
 These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.
 
+### Browse and extract an archive
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse and extract an archive: silent Flare recording" :src="withBase('/demos/archive-browse-extract.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In Alex Morgan's demonstration library, open the menu for **Field kit.zip** and choose **Browse archive**. Flare displays four files and four folders.
+2. Search for **README** and select **guide/README.md**. Its text appears beside the matching path, with a **Download entry** action.
+3. Search for **flare-icon** and select **images/flare-icon.png**. Flare previews the verified PNG directly from the archive.
+4. Clear the search and choose **Extract all**. Select **Campaigns** under **Save to** and enter **Field kit unpacked** as **New folder name**.
+5. Keep **Private (no profile)** and choose **Extract files**. **Archive extracted** confirms that four private files were saved and the original archive remains unchanged.
+6. Choose **Open folder**. The wrapper contains **drafts**, **empty**, **guide**, and **images**. Open **guide** to see the new **README.md** and **checklist.csv** library files.
+
+The app reads a real stored ZIP and publishes its new folder tree to the disposable database. The browser checks also verify the extracted bytes, the preserved empty directory, and the unchanged source archive. [Follow the archive guide](./guide/archives#browse-and-save-one-entry) and [reproduce the checks](./contributing#archive-browser-checks-and-demos).
+
+### Create an archive with a saved profile
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Create an archive with a saved profile: silent Flare recording" :src="withBase('/demos/archive-create.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In **Files**, choose **Select** and select **Field notes.txt** and **Launch checklist.csv**.
+2. Choose **Create archive**, enter **Launch handoff.zip**, leave **Format** on **ZIP**, and select **Campaigns** as the destination. The initial profile choice is **Private (no profile)**.
+3. Explicitly select **Public handoff** under **Upload profile**. Review the summary: public visibility, one-week expiration, randomized URL filenames, Delivery share page, and one tag. The form warns that public outputs expose their contents.
+4. Choose **Create archive**. **Archive created** confirms the new file without changing the originals.
+5. Choose **Open archive**. The generated ZIP contains **Field notes.txt** and **Launch checklist.csv** at its root.
+
+This is a real stored ZIP generated from two private fixture files. The explicit profile makes the result public, applies the **Approved** tag, and sets expiration to make it private after one week. The server checks the displayed profile revision before publication. The same browser suite separately exercises private TAR.GZ creation and profile-based extraction. [Review profile and privacy choices](./guide/archives#choose-an-upload-profile-deliberately) before packaging your own files.
+
 ### Enable, use, and recover two-factor authentication
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Enable, use, and recover two-factor authentication: silent Flare recording" :src="withBase('/demos/two-factor-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>

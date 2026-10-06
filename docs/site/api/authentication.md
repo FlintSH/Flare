@@ -53,6 +53,7 @@ Named tokens do not authorize the following operations:
 - Editing accounts, server settings, branding, email policy, or users.
 - Creating or editing upload profiles, folders, or tags.
 - Deleting files or editing existing files' visibility, passwords, or expiration.
+- Browsing archive members, downloading individual entries, extracting an archive, or creating one from existing files; these require the owner's browser session.
 
 This remains true when the token's owner is an administrator. See [all route boundaries](./endpoint-inventory) if you are investigating a request used by the dashboard.
 

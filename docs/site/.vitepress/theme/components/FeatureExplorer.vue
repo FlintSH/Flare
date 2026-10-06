@@ -74,6 +74,12 @@ const features = [
   ],
   [
     'Organize',
+    'Archives',
+    'Browse archive entries, extract into folders, or create ZIP/TAR.GZ files with private defaults or an explicit profile.',
+    '/guide/archives',
+  ],
+  [
+    'Organize',
     'OCR',
     'Extract text from images in the background for searching and automatic tagging.',
     '/guide/tags',

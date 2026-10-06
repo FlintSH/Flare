@@ -47,6 +47,8 @@ When a folder has a share link, moving a public file into it adds that file to t
 
 The destination is chosen for the upload; it is not saved inside an upload profile. If a folder is removed while an upload is running, finalization can fail instead of quietly putting the file somewhere else. Choose a valid destination and retry.
 
+[Archive extraction](./archives#extract-into-your-library) creates a new wrapper folder inside the chosen destination and preserves the archive's subfolders. It requires `files.read`, `files.upload`, and `folders.manage`. With **Private (no profile)**, extracted files stay private even in a shared destination. Explicitly selecting an upload profile can instead publish them with that profile’s visibility and expiration; check the summary before confirming. Choosing **Unfiled** in that flow creates a top-level wrapper rather than leaving the extracted files unfiled.
+
 ## Share a folder
 
 Folders start private. To publish a collection:

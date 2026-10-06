@@ -103,6 +103,14 @@ Flare's application process must remain running for background work. Check start
 
 Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
 
+## Archive operations fail or stay busy
+
+First distinguish the ordinary upload from archive processing. A successfully uploaded RAR, 7z, encrypted ZIP, damaged archive, or oversized bundle can remain downloadable while being rejected by the archive workspace. Check the [supported formats and limits](/guide/archives#supported-sizes-and-formats); unsupported or unsafe entries reject the whole operation.
+
+Entry browsing and extraction require the owner's browser session. A moderator's content permission or a named token does not authorize them. Extraction additionally needs upload and folder management permission, a valid owned destination, enough account quota, and output files within the instance's size limit.
+
+For `429`, finish other archive operations and retry; each application process allows two, with one per account. For slow or interrupted processing, inspect application/storage logs, temporary disk capacity, S3 connectivity, and the proxy's request timeout. The archive request itself has a 120-second deadline. Reduce the archive or selection instead of repeatedly submitting the same oversized job. The originals remain unchanged and a failed operation does not publish a partial output set. See [archive resource requirements](./storage#archive-processing).
+
 ## Collect a useful support report
 
 Include the installed release/channel and commit when shown, deployment method, storage backend, a brief reproduction, HTTP status, and relevant sanitized logs with timestamps. State whether the problem began after an upgrade or configuration change.

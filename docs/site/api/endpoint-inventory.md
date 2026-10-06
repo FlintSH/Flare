@@ -71,6 +71,17 @@ These routes explicitly read an interactive session. Neither a named API token n
 
 Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
 
+### Archive workspace
+
+Archive operations require the owner's browser session and reject an `Authorization` header. `content.read` and administrator privileges do not substitute for source-file ownership; public archive links do not expose these operations. See [archive session contracts](./archives) for formats, limits, request examples, and response shapes.
+
+| Path                              | Methods | Purpose and permission                                                                                                    |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `/api/files/{id}/archive`         | GET     | Inspect an owned archive's manifest; `files.read`.                                                                        |
+| `/api/files/{id}/archive/entry`   | GET     | Download one member by its `path` query value; `files.read`.                                                              |
+| `/api/files/{id}/archive/extract` | POST    | Extract into a new wrapper folder; `files.read`, `files.upload`, and `folders.manage`.                                    |
+| `/api/files/archive`              | POST    | Create ZIP or TAR.GZ from owned files; `files.read` and `files.upload`, plus `folders.manage` for a non-null destination. |
+
 ### Email account flows
 
 Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions.

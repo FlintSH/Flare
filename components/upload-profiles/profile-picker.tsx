@@ -29,11 +29,13 @@ export type ProfilesData = {
   effective: Required<UploadProfileOptions>
 }
 
-export function useUploadProfiles() {
+export function useUploadProfiles(refreshKey = 0) {
   const [data, setData] = useState<ProfilesData | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     let alive = true
+    setData(null)
+    setError('')
     const load = () =>
       fetch('/api/upload-profiles')
         .then(async (res) => {
@@ -53,7 +55,7 @@ export function useUploadProfiles() {
       alive = false
       window.removeEventListener('flare:upload-profiles-changed', load)
     }
-  }, [])
+  }, [refreshKey])
   return { data, error }
 }
 
@@ -61,19 +63,37 @@ export function ProfilePicker({
   value,
   onChange,
   disabled = false,
+  mode = 'upload',
+  refreshKey = 0,
+  onSnapshotChange,
 }: {
   value?: string | null
   onChange: (value: string | null | undefined) => void
   disabled?: boolean
+  mode?: 'upload' | 'archive'
+  refreshKey?: number
+  onSnapshotChange?: (snapshot: { id: string; revision: string } | null) => void
 }) {
   const { can } = usePermissions()
-  const { data, error } = useUploadProfiles()
-  const selectedId = value === undefined ? data?.defaultProfileId : value
+  const { data, error } = useUploadProfiles(refreshKey)
+  const archiveMode = mode === 'archive'
+  const selectedId = archiveMode
+    ? (value ?? null)
+    : value === undefined
+      ? data?.defaultProfileId
+      : value
   const profile = data?.profiles.find((entry) => entry.id === selectedId)
+  useEffect(() => {
+    onSnapshotChange?.(
+      profile ? { id: profile.id, revision: profile.updatedAt } : null
+    )
+  }, [profile, onSnapshotChange])
   const effective =
-    value === undefined
-      ? data?.effective
-      : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
+    archiveMode && !selectedId
+      ? { ...UPLOAD_DEFAULTS, visibility: 'PRIVATE' as const }
+      : value === undefined
+        ? data?.effective
+        : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
   const expiry =
     effective?.expiration === 'DISABLED'
       ? 'no expiry'
@@ -95,7 +115,13 @@ export function ProfilePicker({
       </div>
       <Select
         value={
-          value === undefined ? 'default' : value === null ? 'none' : value
+          archiveMode
+            ? value || 'none'
+            : value === undefined
+              ? 'default'
+              : value === null
+                ? 'none'
+                : value
         }
         onValueChange={(next) =>
           onChange(
@@ -105,16 +131,24 @@ export function ProfilePicker({
         disabled={disabled}
       >
         <SelectTrigger id="upload-profile">
-          <SelectValue placeholder="Account default" />
+          <SelectValue
+            placeholder={
+              archiveMode ? 'Private (no profile)' : 'Account default'
+            }
+          />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="default">
-            Account default
-            {data?.defaultProfileId && profile
-              ? ` (${data.profiles.find((p) => p.id === data.defaultProfileId)?.name})`
-              : ''}
+          {!archiveMode && (
+            <SelectItem value="default">
+              Account default
+              {data?.defaultProfileId && profile
+                ? ` (${data.profiles.find((p) => p.id === data.defaultProfileId)?.name})`
+                : ''}
+            </SelectItem>
+          )}
+          <SelectItem value="none">
+            {archiveMode ? 'Private (no profile)' : 'Account settings only'}
           </SelectItem>
-          <SelectItem value="none">Account settings only</SelectItem>
           {data?.profiles.map((entry) => (
             <SelectItem key={entry.id} value={entry.id}>
               {entry.name}
@@ -128,11 +162,34 @@ export function ProfilePicker({
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        {error ||
-          (effective
-            ? `${!can('files.share') || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. Options below override this upload only.`
-            : 'Your saved default is applied by the server.')}
+        {archiveMode && !selectedId
+          ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
+          : archiveMode && selectedId && !profile
+            ? error ||
+              (data
+                ? 'This profile is no longer available. Choose another profile or private output.'
+                : 'Loading the selected upload profile…')
+            : error ||
+              (effective
+                ? `${!can('files.share') || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
+                : 'Your saved default is applied by the server.')}
       </p>
+      {archiveMode &&
+        selectedId &&
+        profile &&
+        can('files.share') &&
+        effective?.visibility === 'PUBLIC' && (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-foreground">
+            This profile makes the output public. Anyone with its link can
+            access content from your selected files, including content that was
+            private.
+          </p>
+        )}
+      {archiveMode && error && !selectedId && (
+        <p className="text-xs text-muted-foreground">
+          {error} You can still continue with private output.
+        </p>
+      )}
     </div>
   )
 }

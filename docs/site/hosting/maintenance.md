@@ -6,6 +6,8 @@ description: Back up, restore, upgrade, monitor, and move a Flare instance while
 
 A recoverable Flare instance needs its **PostgreSQL database, file bytes, deployment configuration, and encryption secrets**. The database stores settings as well as accounts, file records, and durable background jobs, including pending account storage cleanup. Exporting an appearance pack or a user's data is useful, but is not an instance backup.
 
+The [archive workspace](/guide/archives) packages or extracts account files. Its generated archives do not include database state, permissions, credentials, configuration, or encryption keys, and its extraction flow does not restore an instance. Back up generated archives and extracted files alongside the rest of the stored file bytes. Existing installations retain their current files and sharing settings; archive operations create new outputs only when a user requests them. Those outputs default to private/no expiration unless the user explicitly selects an upload profile.
+
 The commands below match the [Docker Compose guide](/hosting/docker): project name `flare`, services `db` and `flare`, and volumes `flare_postgres_data` and `flare_uploads`.
 
 ## Make a consistent local backup

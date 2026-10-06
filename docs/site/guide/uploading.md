@@ -22,6 +22,8 @@ Use **Upload** when you want to review settings before sending files. For quick 
 
 The same selected options apply to the queued files. To give different files different passwords or destinations, upload them in separate batches. The open form keeps its chosen settings after a successful batch, including the password and visibility override. Review or reset them before uploading something different.
 
+Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not automatically extract or publish its members. Open **Browse archive** from its library menu to inspect it, or [extract into a new folder](./archives#extract-into-your-library). Archive operations have additional format and resource limits; an upload succeeding does not mean the archive can be inspected.
+
 <Screenshot src="/screenshots/workspace/upload-queue.png" alt="Several selected files in the upload queue" caption="Review your queue before uploading. Each file displays its size and transfer progress." />
 
 ## Choose your upload settings
