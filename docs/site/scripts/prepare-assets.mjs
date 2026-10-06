@@ -131,6 +131,12 @@ for (const name of [
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }
+for (const name of ['timeline-scroll', 'timeline-mobile']) {
+  await copyFile(
+    resolve(root, '../../.github/assets/timeline', `${name}.mp4`),
+    resolve(root, 'public/demos', `${name}.mp4`)
+  )
+}
 for (const [directory, name] of [
   ['audit', 'session-management'],
   ['audit', 'audit-investigation'],

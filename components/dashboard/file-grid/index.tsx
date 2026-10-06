@@ -16,6 +16,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import type { DateRange } from 'react-day-picker'
 
 import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
@@ -27,8 +28,8 @@ import { CreateArchiveDialog } from '@/components/archives/create-archive-dialog
 import { FileCard } from '@/components/dashboard/file-card'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
-import { FileGridPagination } from '@/components/dashboard/file-grid/pagination'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
+import { VirtualFiles } from '@/components/dashboard/file-grid/virtual-files'
 import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
@@ -38,20 +39,51 @@ import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
-import { fileQuery, groupFiles } from '@/lib/files/gallery'
-
 import { useFileFilters } from '@/hooks/use-file-filters'
+import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
+import { useFileTimeline } from '@/hooks/use-file-timeline'
 import { useFolders } from '@/hooks/use-folders'
+import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 import { usePermissions } from '@/hooks/use-permissions'
+import {
+  RequestLifetimeProvider,
+  useRequestLifetime,
+} from '@/hooks/use-request-lifetime'
 import { useTags } from '@/hooks/use-tags'
+import { toast } from '@/hooks/use-toast'
 
 export function FileGrid() {
+  const { data: session, status } = useSession()
+  if (status === 'loading') return <p role="status">Loading files…</p>
+  if (
+    status !== 'authenticated' ||
+    !session?.user?.id ||
+    !session.user.sessionId
+  )
+    return <p role="status">Sign in to view your files.</p>
+  const scope = JSON.stringify([session.user.id, session.user.sessionId])
+  // Replacing an account or browser session discards every retained card,
+  // selection, dialog, gallery and pending action together before rendering.
+  return <AccountFileGrid key={scope} scope={scope} />
+}
+
+function AccountFileGrid({ scope }: { scope: string }) {
+  const lifetime = useRequestLifetime()
+  return (
+    <RequestLifetimeProvider lifetime={lifetime}>
+      <FileLibrary scope={scope} />
+    </RequestLifetimeProvider>
+  )
+}
+
+function FileLibrary({ scope }: { scope: string }) {
+  const lifetime = useRequestLifetime()
   const { can } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
+  const selectionBar = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<FileType[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
   const [fileTypes, setFileTypes] = useState<string[]>([])
   const [managingTags, setManagingTags] = useState(false)
@@ -64,7 +96,8 @@ export function FileGrid() {
     null
   )
   const [selecting, setSelecting] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectedIds = selectedFiles.map((file) => file.id)
+  const clearSelection = () => setSelectedFiles([])
   const { tags, reload: reloadTags } = useTags()
   const {
     folders,
@@ -72,14 +105,10 @@ export function FileGrid() {
     error: foldersError,
     reload: reloadFolders,
   } = useFolders()
-  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
-    total: 0,
-    pageCount: 0,
-    page: 1,
-    limit: 24,
-  })
   const {
     filters,
+    pathname,
+    urlQuery,
     setFolder,
     setTag,
     setSearch,
@@ -88,9 +117,74 @@ export function FileGrid() {
     setVisibility,
     setSortBy,
     setGroupBy,
-    setPage,
     resetFilters,
   } = useFileFilters()
+  const { position: anchorIndex, record: recordPosition } =
+    useFileLibraryPosition(
+      filters,
+      pathname,
+      urlQuery,
+      () => setRefreshKey((value) => value + 1),
+      scope
+    )
+  const library = useFileTimeline(filters, refreshKey, scope)
+  const selection = useFreshFileSelection(selectedFiles, [scope, filters])
+  const openSelection = async (action: 'tags' | 'move' | 'archive') => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
+    try {
+      const fresh = await selection.refresh()
+      if (!fresh || signal.aborted) return
+      setSelectedFiles(fresh)
+      if (action === 'tags') setTaggingFiles(fresh)
+      if (action === 'move') setMovingFiles(fresh)
+      if (action === 'archive') setCreatingArchive(fresh)
+    } catch (error) {
+      if (signal.aborted) return
+      toast({
+        title: 'Couldn’t open selected files',
+        description:
+          error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+  const { timeline, isLoading, error } = library
+  useEffect(() => {
+    if (!timeline?.total) setFiles((current) => (current.length ? [] : current))
+  }, [timeline])
+  const paginationInfo: PaginationInfo = {
+    total: timeline?.total ?? 0,
+    page: 1,
+    pageCount: Math.ceil((timeline?.total ?? 0) / filters.limit),
+    limit: filters.limit,
+  }
+  const onVisibleFiles = useCallback(
+    (visible: FileType[], firstIndex: number) => {
+      if (visible.length) recordPosition(firstIndex)
+      setFiles((previous) =>
+        previous.length === visible.length &&
+        previous.every((file, index) => file === visible[index])
+          ? previous
+          : visible
+      )
+    },
+    [recordPosition]
+  )
+  const toggleFile = (file: FileType) => {
+    if (!selectedIds.includes(file.id) && selectedFiles.length >= 100) {
+      toast({
+        title: 'Select up to 100 files at a time',
+        description: 'Finish this action, then select more files.',
+      })
+      return
+    }
+    setSelectedFiles((current) =>
+      current.some((entry) => entry.id === file.id)
+        ? current.filter((entry) => entry.id !== file.id)
+        : [...current, file]
+    )
+  }
   const {
     gallery,
     open,
@@ -99,10 +193,7 @@ export function FileGrid() {
     setIndex,
     navigationPending,
     navigationStale,
-  } = useImageGallery(filters, files, paginationInfo, refreshKey)
-  const imagesOnly =
-    filters.types.length > 0 &&
-    filters.types.every((type) => type.startsWith('image/'))
+  } = useImageGallery(filters, files, paginationInfo, refreshKey, true)
   const refreshFiles = useCallback(
     () => setRefreshKey((value) => value + 1),
     []
@@ -128,7 +219,7 @@ export function FileGrid() {
     !filters.dateTo
 
   useEffect(() => {
-    setSelectedIds([])
+    setSelectedFiles([])
   }, [filters])
 
   useEffect(() => {
@@ -173,51 +264,6 @@ export function FileGrid() {
     return () => controller.abort()
   }, [refreshKey])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    let changingPage = false
-    async function fetchFiles() {
-      setIsLoading(true)
-      setError(false)
-      try {
-        const params = fileQuery(filters)
-        const response = await fetch(`/api/files?${params}`, {
-          signal: controller.signal,
-        })
-        if (!response.ok) throw new Error('Failed to fetch files')
-        const result = await response.json()
-        if (controller.signal.aborted) return
-        const total = result.pagination?.total || 0
-        const pageCount = result.pagination?.pageCount || 0
-        // Deleting the last file on a page should take you to the previous page.
-        if (filters.page > Math.max(1, pageCount)) {
-          changingPage = true
-          setPage(Math.max(1, pageCount))
-          return
-        }
-        const nextFiles: FileType[] = Array.isArray(result.data)
-          ? result.data
-          : []
-        setFiles(nextFiles)
-        setSelectedIds((ids) =>
-          ids.filter((id) => nextFiles.some((file) => file.id === id))
-        )
-        setPaginationInfo({
-          total,
-          pageCount,
-          page: filters.page,
-          limit: filters.limit,
-        })
-      } catch {
-        if (!controller.signal.aborted) setError(true)
-      } finally {
-        if (!controller.signal.aborted && !changingPage) setIsLoading(false)
-      }
-    }
-    void fetchFiles()
-    return () => controller.abort()
-  }, [filters, refreshKey, setPage])
-
   const dateRangeValue =
     filters.dateFrom || filters.dateTo
       ? {
@@ -256,7 +302,7 @@ export function FileGrid() {
                 }
                 onClick={() => {
                   setSelecting(!selecting)
-                  setSelectedIds([])
+                  clearSelection()
                 }}
                 aria-pressed={selecting}
                 aria-label={
@@ -391,7 +437,11 @@ export function FileGrid() {
       </section>
 
       {selecting && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+        <div
+          ref={selectionBar}
+          aria-busy={selection.loading}
+          className="sticky top-24 z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-xl"
+        >
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -402,26 +452,33 @@ export function FileGrid() {
               }
               disabled={isLoading || !files.length}
               onChange={(event) =>
-                setSelectedIds(
-                  event.target.checked ? files.map((file) => file.id) : []
+                setSelectedFiles((current) =>
+                  event.target.checked
+                    ? [
+                        ...current,
+                        ...files.filter(
+                          (file) =>
+                            !current.some((entry) => entry.id === file.id)
+                        ),
+                      ].slice(0, 100)
+                    : current.filter(
+                        (file) => !files.some((entry) => entry.id === file.id)
+                      )
                 )
               }
             />
-            Select this page
+            Select visible files
           </label>
           <span className="text-xs text-muted-foreground" role="status">
-            {selectedIds.length} selected
+            {selectedIds.length} / 100 selected
+            {selection.loading && ' · Refreshing selection…'}
           </span>
           {can('files.read') && can('files.upload') && (
             <Button
               size="sm"
               variant="outline"
-              disabled={!selectedIds.length || isLoading}
-              onClick={() =>
-                setCreatingArchive(
-                  files.filter((file) => selectedIds.includes(file.id))
-                )
-              }
+              disabled={!selectedIds.length || isLoading || selection.loading}
+              onClick={() => void openSelection('archive')}
             >
               <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
               Create archive
@@ -433,12 +490,8 @@ export function FileGrid() {
                 size="sm"
                 className="ml-auto"
                 variant="outline"
-                disabled={!selectedIds.length || isLoading}
-                onClick={() =>
-                  setMovingFiles(
-                    files.filter((file) => selectedIds.includes(file.id))
-                  )
-                }
+                disabled={!selectedIds.length || isLoading || selection.loading}
+                onClick={() => void openSelection('move')}
               >
                 <FolderInput className="mr-2 h-4 w-4" />
                 Move
@@ -450,12 +503,8 @@ export function FileGrid() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!selectedIds.length || isLoading}
-                onClick={() =>
-                  setTaggingFiles(
-                    files.filter((file) => selectedIds.includes(file.id))
-                  )
-                }
+                disabled={!selectedIds.length || isLoading || selection.loading}
+                onClick={() => void openSelection('tags')}
               >
                 <Tag className="mr-2 h-4 w-4" />
                 Edit tags
@@ -467,7 +516,7 @@ export function FileGrid() {
             size="sm"
             onClick={() => {
               setSelecting(false)
-              setSelectedIds([])
+              clearSelection()
             }}
           >
             Done
@@ -479,7 +528,7 @@ export function FileGrid() {
         <div
           aria-busy="true"
           aria-label="Loading files"
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           {Array.from({ length: 8 }, (_, index) => (
             <FileCardSkeleton key={index} />
@@ -500,7 +549,7 @@ export function FileGrid() {
             Try again
           </Button>
         </div>
-      ) : files.length === 0 ? (
+      ) : timeline?.total === 0 ? (
         <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/70 p-6 text-center">
           <div className="mb-4 rounded-xl bg-primary/10 p-3 text-primary">
             {hasActiveFilters ? (
@@ -564,58 +613,45 @@ export function FileGrid() {
           )}
         </div>
       ) : (
-        <>
-          <div className="space-y-7">
-            {groupFiles(files, filters.groupBy).map((group) => (
-              <section key={group.label} aria-label={group.label || undefined}>
-                {group.label && (
-                  <h2 className="mb-3 text-sm font-medium text-muted-foreground">
-                    {group.label}
-                  </h2>
-                )}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {group.files.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      onDelete={refreshFiles}
-                      onUpdate={refreshFiles}
-                      onPreview={open}
-                      onBrowseArchive={
-                        can('files.read') &&
-                        isArchiveCandidate(file.name, file.mimeType)
-                          ? () => setBrowsingArchive(file)
-                          : undefined
-                      }
-                      onEditTags={() => setTaggingFiles([file])}
-                      onMove={() => setMovingFiles([file])}
-                      folder={folders.find(
-                        (folder) => folder.id === file.folderId
-                      )}
-                      onFolderSelect={setFolder}
-                      onTagSelect={setTag}
-                      selected={selectedIds.includes(file.id)}
-                      onSelect={
-                        selecting
-                          ? () =>
-                              setSelectedIds((ids) =>
-                                ids.includes(file.id)
-                                  ? ids.filter((id) => id !== file.id)
-                                  : [...ids, file.id]
-                              )
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-          <FileGridPagination
-            paginationInfo={paginationInfo}
-            setPage={setPage}
+        timeline && (
+          <VirtualFiles
+            library={library}
+            selectionBarRef={selectionBar}
+            initialIndex={anchorIndex.current}
+            chronological={
+              filters.sortBy === 'newest' || filters.sortBy === 'oldest'
+            }
+            onVisibleFiles={onVisibleFiles}
+            onRefresh={refreshFiles}
+            renderFile={(file) => (
+              <FileCard
+                key={`${file.id}:${refreshKey}`}
+                file={file}
+                onDelete={(id) => {
+                  setSelectedFiles((current) =>
+                    current.filter((entry) => entry.id !== id)
+                  )
+                  refreshFiles()
+                }}
+                onUpdate={refreshFiles}
+                onPreview={open}
+                onBrowseArchive={
+                  can('files.read') &&
+                  isArchiveCandidate(file.name, file.mimeType)
+                    ? () => setBrowsingArchive(file)
+                    : undefined
+                }
+                onEditTags={() => setTaggingFiles([file])}
+                onMove={() => setMovingFiles([file])}
+                folder={folders.find((folder) => folder.id === file.folderId)}
+                onFolderSelect={setFolder}
+                onTagSelect={setTag}
+                selected={selectedIds.includes(file.id)}
+                onSelect={selecting ? () => toggleFile(file) : undefined}
+              />
+            )}
           />
-        </>
+        )
       )}
       <TagManager
         open={managingTags}
@@ -629,7 +665,7 @@ export function FileGrid() {
           files={movingFiles}
           onClose={() => {
             setMovingFiles(null)
-            setSelectedIds([])
+            clearSelection()
           }}
         />
       )}
@@ -650,7 +686,7 @@ export function FileGrid() {
           }
           onClose={() => {
             setCreatingArchive(null)
-            setSelectedIds([])
+            clearSelection()
           }}
           onOpenArchive={setBrowsingArchive}
         />
@@ -660,15 +696,16 @@ export function FileGrid() {
           files={taggingFiles}
           onClose={() => {
             setTaggingFiles(null)
-            setSelectedIds([])
+            clearSelection()
           }}
           onChanged={(updated) => {
             setTaggingFiles(updated)
-            setFiles((current) =>
+            setSelectedFiles((current) =>
               current.map(
                 (file) => updated.find((entry) => entry.id === file.id) || file
               )
             )
+            refreshFiles()
           }}
         />
       )}
@@ -695,9 +732,9 @@ export function FileGrid() {
           }
           navigationPending={navigationPending}
           positionLabel={
-            imagesOnly || gallery.pagination.offset !== undefined
+            gallery.pagination.offset !== undefined
               ? `${(gallery.pagination.offset ?? (gallery.pagination.page - 1) * gallery.pagination.limit) + gallery.index + 1} of ${gallery.pagination.total}`
-              : `Image ${gallery.index + 1} · Page ${gallery.pagination.page}`
+              : gallery.files[gallery.index].name
           }
         />
       )}

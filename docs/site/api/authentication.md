@@ -37,7 +37,7 @@ A named `flr_` bearer token uses its own authority even if browser cookies accom
 
 | Scope          | Allowed methods and paths                                                                                                                                            |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `files:read`   | `GET /api/files`; `GET /api/files/types`                                                                                                                             |
+| `files:read`   | `GET /api/files`; `GET /api/files/types`; `GET /api/files/timeline`                                                                                                  |
 | `files:upload` | `POST /api/files`; `POST`, `GET`, `PUT /api/files/chunks`; `GET`, `PUT /api/files/chunks/{uploadId}/part/{partNumber}`; `POST /api/files/chunks/{uploadId}/complete` |
 | `urls:read`    | `GET /api/urls`                                                                                                                                                      |
 | `urls:write`   | `POST /api/urls`; `DELETE /api/urls/{id}`                                                                                                                            |
@@ -61,13 +61,13 @@ This remains true when the token's owner is an administrator. See [all route bou
 
 A scope restricts the token; it does not grant a permission missing from the owner's current [roles](/admin/roles). Every request must satisfy both checks:
 
-| Token operation                   | Named-token scope | Current account permission |
-| --------------------------------- | ----------------- | -------------------------- |
-| List files or MIME types          | `files:read`      | `files.read`               |
-| Upload, upload parts, or finalize | `files:upload`    | `files.upload`             |
-| List short links                  | `urls:read`       | `links.read`               |
-| Create a short link               | `urls:write`      | `links.create`             |
-| Delete an owned short link        | `urls:write`      | `links.delete`             |
+| Token operation                     | Named-token scope | Current account permission |
+| ----------------------------------- | ----------------- | -------------------------- |
+| List files, MIME types, or timeline | `files:read`      | `files.read`               |
+| Upload, upload parts, or finalize   | `files:upload`    | `files.upload`             |
+| List short links                    | `urls:read`       | `links.read`               |
+| Create a short link                 | `urls:write`      | `links.create`             |
+| Delete an owned short link          | `urls:write`      | `links.delete`             |
 
 `tokens.manage` controls issuing, rotating, and revoking credentials. Removing it alone does not disable already-issued named tokens or the legacy upload credential while the owner still holds the required operation permissions. Revoke/rotate the credential or remove its operation grants to stop its use.
 

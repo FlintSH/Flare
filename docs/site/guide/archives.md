@@ -106,7 +106,13 @@ Extracted files add to your storage usage while the original archive remains sto
 
 <Screenshot src="/screenshots/archives/create.webp" alt="Create archive dialog for two selected files, ZIP format, Campaigns destination, and Private no profile default" caption="Package selected files into ZIP or TAR.GZ without moving or changing the originals." />
 
-Selecting the current page includes that page's files, not all matching results. You can include up to **100 files** from your account. The result is one new library file; the selected originals keep their locations, links, permissions, and contents. Creating an archive does not reclaim storage or create an instance backup.
+**Select visible files** includes loaded cards currently on screen, not all matching results. Scroll to add files from another part of the library; selected files remain included when their cards leave the screen. Opening **Create archive** reloads the current names and sizes for the full selection. If the refresh fails, retry the action. If a selected file is no longer available, clear the selection with **Done** and choose the remaining files again.
+
+Changing filters, folders, sorting, or grouping clears the selection, as does closing the archive dialog.
+
+You can include up to **100 files** from your account. The result is one new library file; the selected originals keep their locations, links, permissions, and contents. Creating an archive does not reclaim storage or create an instance backup.
+
+<Screenshot src="/screenshots/timeline/library-archive.webp" alt="Create archive dialog listing two selected files after their cards have scrolled out of the library view, with ZIP and Private no profile defaults" caption="The archive dialog keeps the full selection, including files whose cards are no longer visible." />
 
 Selected files are placed at the archive's root rather than recreating their library folders. Names are normalized for portable archive paths: path-like names are flattened and unsafe separators or punctuation are cleaned. Conflicting filenames receive a suffix such as `report (2).pdf` so each selected file remains represented. The output receives the chosen `.zip` or `.tar.gz` extension.
 
@@ -160,6 +166,8 @@ After the initial header checks, Flare allows **five seconds** to read a share p
 **RAR, 7z, encrypted archives, and split archives are unsupported.** Links, special filesystem entries, unsafe paths, conflicting paths, malformed contents, and archives exceeding the limits are rejected. Flare does not execute extracted programs or restore archive filesystem permissions.
 
 ## Troubleshoot an operation
+
+When **Files** detects an account change or replacement sign-in, it closes the previous account's archive dialogs and clears the selection. An archive operation already accepted by the server can still finish. Sign back in to the original account and check its destination before retrying, so you do not create duplicate output.
 
 | What you see                              | What to do                                                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

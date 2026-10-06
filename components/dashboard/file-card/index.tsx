@@ -59,6 +59,7 @@ import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
 
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileCardProps {
@@ -92,6 +93,7 @@ export function FileCard({
 }: FileCardProps) {
   const { can } = usePermissions()
   const { toast } = useToast()
+  const lifetime = useRequestLifetime()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -125,15 +127,19 @@ export function FileCard({
   }
 
   const handleCopyLink = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     try {
       await navigator.clipboard.writeText(
         `${window.location.origin}${sanitizeUrl(file.urlPath)}`
       )
+      if (signal.aborted) return
       toast({
         title: 'Link copied',
         description: 'Your file is ready to share.',
       })
     } catch {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t copy the link',
         description: 'Open the file and copy its address from your browser.',
@@ -143,12 +149,15 @@ export function FileCard({
   }
 
   const handleDelete = async () => {
-    if (mutation) return
+    const { signal } = lifetime.current
+    if (mutation || signal.aborted) return
     setMutation('delete')
     try {
       const response = await fetch(`/api/files/${file.id}`, {
         method: 'DELETE',
+        signal,
       })
+      if (signal.aborted) return
       if (!response.ok) throw new Error()
       setIsDeleteDialogOpen(false)
       setIsDeleted(true)
@@ -158,25 +167,29 @@ export function FileCard({
         description: 'The file has been permanently deleted.',
       })
     } catch {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t delete this file',
         description: 'Please try again.',
         variant: 'destructive',
       })
     } finally {
-      setMutation(null)
+      if (!signal.aborted) setMutation(null)
     }
   }
 
   const handlePasswordUpdate = async () => {
-    if (mutation) return
+    const { signal } = lifetime.current
+    if (mutation || signal.aborted) return
     setMutation('password')
     try {
       const response = await fetch(`/api/files/${file.id}`, {
         method: 'PATCH',
+        signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: password || null }),
       })
+      if (signal.aborted) return
       if (!response.ok) throw new Error()
       toast({
         title: password
@@ -191,25 +204,29 @@ export function FileCard({
       setIsPasswordDialogOpen(false)
       onUpdate?.()
     } catch {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t update the password',
         description: 'Please try again.',
         variant: 'destructive',
       })
     } finally {
-      setMutation(null)
+      if (!signal.aborted) setMutation(null)
     }
   }
 
   const handleVisibilityUpdate = async () => {
-    if (mutation) return
+    const { signal } = lifetime.current
+    if (mutation || signal.aborted) return
     setMutation('visibility')
     try {
       const response = await fetch(`/api/files/${file.id}`, {
         method: 'PATCH',
+        signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visibility }),
       })
+      if (signal.aborted) return
       if (!response.ok) throw new Error()
       toast({
         title: 'Visibility updated',
@@ -219,22 +236,26 @@ export function FileCard({
       setFile((previous) => ({ ...previous, visibility }))
       onUpdate?.()
     } catch {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t update visibility',
         description: 'Please try again.',
         variant: 'destructive',
       })
     } finally {
-      setMutation(null)
+      if (!signal.aborted) setMutation(null)
     }
   }
 
   const handleFetchOcr = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     setIsLoadingOcr(true)
     setOcrError(null)
     try {
-      const response = await fetch(`/api/files/${file.id}/ocr`)
+      const response = await fetch(`/api/files/${file.id}/ocr`, { signal })
       const data = await response.json()
+      if (signal.aborted) return
       if (!response.ok) throw new Error(data.error || 'Failed to process OCR')
       if (!data.success) {
         setOcrError(data.error || 'There was an error processing the image')
@@ -246,6 +267,7 @@ export function FileCard({
       }
       setIsOcrDialogOpen(true)
     } catch (error) {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t extract text',
         description:
@@ -253,7 +275,7 @@ export function FileCard({
         variant: 'destructive',
       })
     } finally {
-      setIsLoadingOcr(false)
+      if (!signal.aborted) setIsLoadingOcr(false)
     }
   }
 
@@ -261,20 +283,24 @@ export function FileCard({
     expiresAt: Date | null,
     action?: ExpiryAction
   ) => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     try {
       const response = await fetch(
         `/api/files/${file.id}/expiry`,
         expiresAt
           ? {
               method: 'POST',
+              signal,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 expiresAt: expiresAt.toISOString(),
                 action: action || ExpiryAction.DELETE,
               }),
             }
-          : { method: 'DELETE' }
+          : { method: 'DELETE', signal }
       )
+      if (signal.aborted) return
       if (!response.ok) throw new Error('Failed to update expiration')
       toast({
         title: expiresAt ? 'Expiration scheduled' : 'Expiration removed',
@@ -289,6 +315,7 @@ export function FileCard({
       setIsExpiryModalOpen(false)
       onUpdate?.()
     } catch (error) {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t update expiration',
         description: 'Please try again.',
@@ -315,6 +342,7 @@ export function FileCard({
     >
       <div className="relative">
         <Link
+          prefetch={false}
           href={safeUrl}
           aria-label={`Open ${file.name}`}
           aria-haspopup={
@@ -371,7 +399,9 @@ export function FileCard({
             </Button>
           ) : (
             <Button variant="secondary" size="sm" asChild>
-              <Link href={safeUrl}>View</Link>
+              <Link prefetch={false} href={safeUrl}>
+                View
+              </Link>
             </Button>
           )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
@@ -497,7 +527,7 @@ export function FileCard({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem asChild>
-                <Link href={safeUrl}>
+                <Link prefetch={false} href={safeUrl}>
                   <ArrowUpRight />
                   Open file
                 </Link>
@@ -619,6 +649,7 @@ export function FileCard({
       <div className="border-t border-border/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <Link
+            prefetch={false}
             href={safeUrl}
             title={file.name}
             className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

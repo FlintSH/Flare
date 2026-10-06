@@ -44,6 +44,8 @@ Revocation affects subsequent authorization checks. It cannot recall a downloade
 
 These lists show the currently signed-in account’s activity. Signing in as another account, or signing in again with a new browser session, reloads the lists and resets the history filter and open revocation confirmations. The **This browser** marker is determined again for the new sign-in. Switching accounts cannot undo a revocation already accepted by the server; check the original account’s sessions before retrying.
 
+An open [file library](./library#change-accounts-or-sign-in-again) also reloads for the new account or session and clears its selections and dialogs, including when it detects a sign-in change made in another tab. Filters saved in the page address remain, so check them if the new account appears empty.
+
 <Screenshot src="/screenshots/audit/account-switch.webp" alt="Active sessions after a same-tab account switch and new sign-in, with This browser marking the replacement session" caption="The replacement sign-in has its own current-browser marker. This real-server regression uses deliberately supplied, reserved example IP addresses to distinguish disposable sessions." />
 
 ### Review successful and failed sign-ins

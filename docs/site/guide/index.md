@@ -9,7 +9,7 @@ Flare gives you a home for screenshots, recordings, files, text, and links on a 
 
 This guide is for people using an existing Flare instance. Everyone supplies the starting permissions; additional [roles](/admin/roles) can add capabilities, and administrators can restrict the baseline. A missing navigation item or unavailable action may reflect your current permissions. If you're installing your own, start with the [administrator guide](../admin/index).
 
-<Screenshot src="/screenshots/workspace/files-library.png" alt="Flare file library with image previews, search, and file controls" caption="Your file library is the starting point for browsing, organizing, and sharing." />
+<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare file library with image previews, search, folders, and file controls" caption="Scroll through every file and use the date rail to jump through your upload history." />
 
 ## Join your instance
 

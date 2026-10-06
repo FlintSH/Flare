@@ -15,7 +15,9 @@ import { ProfileSessions } from '@/components/profile/security/profile-sessions'
 import { SignInSecurity } from '@/components/profile/security/sign-in-security'
 import { QueryProvider } from '@/components/providers/query-provider'
 
+import { useFolders } from '@/hooks/use-folders'
 import { useSecurityStatus } from '@/hooks/use-security-status'
+import { useTags } from '@/hooks/use-tags'
 
 const auth = vi.hoisted(() => ({
   status: 'authenticated' as 'authenticated' | 'loading' | 'unauthenticated',
@@ -337,6 +339,108 @@ describe('administrator audit account boundary', () => {
       auth.data!.user.permissions = ['administrator']
       auth.status = status
       expect(render(AuditLog)).toBe('')
+    }
+  )
+})
+
+function LibraryAssociations() {
+  const { tags } = useTags()
+  const { folders } = useFolders()
+  return createElement('p', null, JSON.stringify({ tags, folders }))
+}
+
+describe('library association query ownership', () => {
+  function keys() {
+    return ['vault-tags', 'vault-folders'].map(
+      (prefix) =>
+        client
+          .getQueryCache()
+          .getAll()
+          .filter((query) => query.queryKey[0] === prefix)
+          .at(-1)!.queryKey
+    )
+  }
+  function seedAssociations(owner: string) {
+    for (const key of keys())
+      client.setQueryData(key, [
+        { id: `${owner}-private-id`, name: `${owner}-private-name` },
+      ])
+  }
+
+  it('isolates tags and folders across accounts and replacement browser sessions', () => {
+    render(LibraryAssociations)
+    const alice = keys()
+    seedAssociations('alice')
+    expect(render(LibraryAssociations)).toContain('alice-private-name')
+    authenticate('bob')
+    expect(render(LibraryAssociations)).not.toContain('alice-private')
+    const bob = keys()
+    expect(bob).not.toEqual(alice)
+    seedAssociations('bob')
+    expect(render(LibraryAssociations)).toContain('bob-private-name')
+    authenticate('bob', 'replacement-browser')
+    expect(render(LibraryAssociations)).not.toContain('bob-private')
+    expect(keys()).not.toEqual(bob)
+  })
+
+  it.each(['loading', 'unauthenticated'] as const)(
+    'hides association caches and removes query identity during %s even with stale session data',
+    (status) => {
+      render(LibraryAssociations)
+      seedAssociations('alice')
+      auth.status = status
+      expect(render(LibraryAssociations)).not.toContain('alice-private')
+      for (const key of keys()) {
+        expect(key.slice(1)).toEqual([undefined, undefined])
+        const query = client
+          .getQueryCache()
+          .find({ queryKey: key, exact: true })!
+        const observer = new QueryObserver(client, {
+          ...query.options,
+          queryKey: key,
+        })
+        expect(observer.options.enabled).toBe(false)
+      }
+    }
+  )
+
+  it.each([
+    ['vault-tags', '/api/tags'],
+    ['vault-folders', '/api/folders'],
+  ])(
+    'cancels %s reads when the old library observer unmounts',
+    async (prefix, url) => {
+      render(LibraryAssociations)
+      const query = client
+        .getQueryCache()
+        .getAll()
+        .find((entry) => entry.queryKey[0] === prefix)!
+      let signal: AbortSignal | undefined
+      vi.mocked(fetch).mockImplementation((_url, options) => {
+        signal = options?.signal ?? undefined
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          )
+        })
+      })
+      const observer = new QueryObserver(client, {
+        ...query.options,
+        queryKey: query.queryKey,
+      })
+      const unsubscribe = observer.subscribe(() => {})
+      await Promise.resolve()
+      expect(fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          cache: 'no-store',
+        })
+      )
+      expect(signal?.aborted).toBe(false)
+      expect(query.options.gcTime).toBe(0)
+      unsubscribe()
+      expect(signal?.aborted).toBe(true)
     }
   )
 })

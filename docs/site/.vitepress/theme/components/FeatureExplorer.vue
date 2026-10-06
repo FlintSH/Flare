@@ -57,13 +57,19 @@ const features = [
   [
     'Organize',
     'Tags & automatic rules',
-    'Label files, filter by a tag, and apply matching rules by filename or extracted image text.',
+    'Edit current tags across a retained selection, filter by a tag, and apply matching rules by filename or extracted image text.',
     '/guide/tags',
   ],
   [
     'Organize',
     'Search & filters',
     'Find files by name or OCR text, and narrow the library by date, type, tags, and visibility.',
+    '/guide/library',
+  ],
+  [
+    'Organize',
+    'Continuous file timeline',
+    'Scroll through every matching file and use a quiet date rail to jump into your upload history.',
     '/guide/library',
   ],
   [

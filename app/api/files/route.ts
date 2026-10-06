@@ -1,5 +1,4 @@
 import { FileMetadata } from '@/types/dto/file'
-import { Prisma } from '@prisma/client'
 
 import {
   HTTP_STATUS,
@@ -11,12 +10,13 @@ import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { getFileExpirationInfo } from '@/lib/events/handlers/file-expiry'
+import { getFilesExpirationInfo } from '@/lib/events/handlers/file-expiry'
 import {
   anchoredGalleryPage,
   fileListSelect,
   fileOrderBy,
 } from '@/lib/files/gallery-navigation'
+import { FileListInputError, fileListFilters } from '@/lib/files/list-filters'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -154,96 +154,11 @@ async function handleGET(request: Request) {
         'An image anchor and a next or previous direction are required',
         HTTP_STATUS.BAD_REQUEST
       )
-    const search = searchParams.get('search') || ''
     const sortBy = searchParams.get('sortBy') || 'newest'
-    const types = searchParams.get('types')?.split(',') || []
-    const dateFrom = searchParams.get('dateFrom')
-    const dateTo = searchParams.get('dateTo')
-    const visibilityFilters = searchParams.get('visibility')?.split(',') || []
     const offset = (page - 1) * limit
-
-    const where: Prisma.FileWhereInput = {
-      userId: user.id,
-    }
-
-    const conditions: Prisma.FileWhereInput[] = []
-
-    const folder = searchParams.get('folder')
-    if (folder) {
-      conditions.push(
-        folder === 'unfiled'
-          ? { folderId: null }
-          : { folderId: folder, folder: { userId: user.id } }
-      )
-    }
-
-    const tag = searchParams.get('tag')
-    if (tag) {
-      conditions.push({
-        tags:
-          tag === 'untagged'
-            ? { none: { excluded: false } }
-            : {
-                some: {
-                  tagId: tag,
-                  excluded: false,
-                  tag: { userId: user.id },
-                },
-              },
-      })
-    }
-
-    if (search) {
-      conditions.push({
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { ocrText: { contains: search, mode: 'insensitive' } },
-        ],
-      })
-    }
-
-    if (types.length > 0) {
-      conditions.push({ mimeType: { in: types } })
-    }
-
-    if (dateFrom || dateTo) {
-      const dateFilter: Prisma.DateTimeFilter = {}
-      if (dateFrom) {
-        const startDate = new Date(dateFrom)
-        dateFilter.gte = startDate
-      }
-      if (dateTo) {
-        // The picker supplies the end of the selected day in the user's
-        // timezone. Preserve that instant instead of shifting it to server time.
-        const endDate = new Date(dateTo)
-        // Keep date-only API requests inclusive of their final day.
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
-          endDate.setHours(23, 59, 59, 999)
-        }
-        dateFilter.lte = endDate
-      }
-      conditions.push({ uploadedAt: dateFilter })
-    }
-
-    if (visibilityFilters.length > 0) {
-      const visibilityConditions = []
-
-      for (const filter of visibilityFilters) {
-        if (filter === 'hasPassword') {
-          visibilityConditions.push({ password: { not: null } })
-        } else {
-          visibilityConditions.push({
-            visibility: filter.toUpperCase() as 'PUBLIC' | 'PRIVATE',
-          })
-        }
-      }
-
-      conditions.push({ OR: visibilityConditions })
-    }
-
-    if (conditions.length > 0) {
-      where.AND = conditions
-    }
+    if (!Number.isSafeInteger(offset))
+      return apiError('Page is too large', HTTP_STATUS.BAD_REQUEST)
+    const { where } = fileListFilters(user.id, searchParams)
 
     let resultPage
     if (galleryAnchor && galleryDirection) {
@@ -276,18 +191,18 @@ async function handleGET(request: Request) {
       }
     }
 
-    const filesList = (await Promise.all(
-      resultPage.files.map(async (file) => {
-        const expiresAt = await getFileExpirationInfo(file.id)
-        const { password, tags, ...publicFile } = file
-        return {
-          ...publicFile,
-          tags: tags.map(({ tag }) => tag),
-          hasPassword: Boolean(password),
-          expiresAt,
-        }
-      })
-    )) as (FileMetadata & { expiresAt: Date | null })[]
+    const expirations = await getFilesExpirationInfo(
+      resultPage.files.map((file) => file.id)
+    )
+    const filesList = resultPage.files.map((file) => {
+      const { password, tags, ...publicFile } = file
+      return {
+        ...publicFile,
+        tags: tags.map(({ tag }) => tag),
+        hasPassword: Boolean(password),
+        expiresAt: expirations.get(file.id) ?? null,
+      }
+    }) as (FileMetadata & { expiresAt: Date | null })[]
 
     const result = paginatedResponse<FileMetadata[]>(
       filesList,
@@ -296,6 +211,8 @@ async function handleGET(request: Request) {
     result.headers.set('Cache-Control', 'private, no-store')
     return result
   } catch (error) {
+    if (error instanceof FileListInputError)
+      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
     logger.error('Error fetching files', error as Error)
     return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

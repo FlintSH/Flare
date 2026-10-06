@@ -4,7 +4,7 @@
     "title": "Flare named-token API",
     "version": "1.0.0",
     "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
-    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths. Personal session history/revocation and instance audit queries also require a browser session; audit reads require audit.read. These routes never accept named tokens or the legacy upload credential. See the x-flare-browser-session-api extension and handbook api/activity. Revoking browser sessions does not revoke API credentials. Audit recording adds no webhook event type. Owner-library archive browsing, extraction, and creation require an owner browser session. Separate share-page manifest and entry POST routes follow file visibility/password rules, allowing anonymous reads of unprotected public archives; they accept passwords in request bodies and do not provide extraction. Shared archive body validation and file authorization complete before archive-processing capacity is reserved; body reading has a separate five-second deadline and 16 KiB limit. All archive routes reject Authorization headers, are documented at api/archives, and are excluded from named-token paths and scopes.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths. Personal session history/revocation and instance audit queries also require a browser session; audit reads require audit.read. These routes never accept named tokens or the legacy upload credential. See the x-flare-browser-session-api extension and handbook api/activity. Revoking browser sessions does not revoke API credentials. Audit recording adds no webhook event type. Owner-library archive browsing, extraction, and creation require an owner browser session. Separate share-page manifest and entry POST routes follow file visibility/password rules, allowing anonymous reads of unprotected public archives; they accept passwords in request bodies and do not provide extraction. Shared archive body validation and file authorization complete before archive-processing capacity is reserved; body reading has a separate five-second deadline and 16 KiB limit. All archive routes reject Authorization headers, are documented at api/archives, and are excluded from named-token paths and scopes. GET /api/files/tags reads current tag membership for dashboard selections; it accepts an account browser session or legacy upload credential, not named tokens, and is documented at api/files#read-current-tags-for-a-selection rather than in paths.",
     "license": {
       "name": "MIT",
       "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"
@@ -21,41 +21,28 @@
       "name": "Files",
       "description": "Own-account uploads and metadata. Named tokens do not authorize private content downloads or file deletion."
     },
-    {
-      "name": "Short links",
-      "description": "Own-account short links."
-    },
+    { "name": "Short links", "description": "Own-account short links." },
     {
       "name": "Webhooks",
       "description": "Outbound requests from Flare to a receiver you control."
     }
   ],
-  "security": [
-    {
-      "BearerAuth": []
-    }
-  ],
+  "security": [{ "BearerAuth": [] }],
   "paths": {
     "/api/files": {
       "get": {
         "operationId": "listFiles",
         "summary": "List and search your files",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits.",
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileListResponse"
-                },
+                "schema": { "$ref": "#/components/schemas/FileListResponse" },
                 "example": {
                   "success": true,
                   "data": [
@@ -70,9 +57,7 @@
                       "views": 0,
                       "downloads": 0,
                       "folderId": null,
-                      "user": {
-                        "urlId": "abc123"
-                      },
+                      "user": { "urlId": "abc123" },
                       "tags": [],
                       "hasPassword": false,
                       "expiresAt": null
@@ -89,9 +74,7 @@
             },
             "headers": {
               "Cache-Control": {
-                "schema": {
-                  "type": "string"
-                },
+                "schema": { "type": "string" },
                 "example": "private, no-store"
               }
             }
@@ -100,22 +83,16 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
           "400": {
-            "description": "Invalid request/options, part list, file type, or expiration.",
+            "description": "Invalid page, limit, gallery pair, date, snapshot, visibility, or selected-ID filter.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -123,9 +100,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -133,9 +108,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -143,9 +116,7 @@
             "description": "Authenticated account lacks the required current role permission.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
+                "schema": { "$ref": "#/components/schemas/Error" },
                 "example": {
                   "error": "You do not have permission to perform this action."
                 }
@@ -155,35 +126,46 @@
         },
         "parameters": [
           {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "description": "One comma-separated list of 1–100 distinct file IDs, each 1–128 characters without whitespace or ASCII control characters. Repeated ids parameters, duplicates, and empty members are invalid. Combined with ownership and every other filter; missing and unowned IDs are omitted. Normal sort and pagination still apply; use limit=100 to refresh a full selection.",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[^\\s,\\u0000-\\u001f\\u007f]+$"
+              }
+            },
+            "example": ["FILE_ID_1", "FILE_ID_2"]
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
             "description": "Positive page number.",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            }
+            "schema": { "type": "integer", "minimum": 1, "default": 1 }
           },
           {
             "name": "limit",
             "in": "query",
             "required": false,
             "description": "Positive integer. Values above 100 are capped at 100.",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 24
-            }
+            "schema": { "type": "integer", "minimum": 1, "default": 24 }
           },
           {
             "name": "search",
             "in": "query",
             "required": false,
             "description": "Case-insensitive filename or OCR-text match.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "sortBy",
@@ -211,73 +193,63 @@
             "in": "query",
             "required": false,
             "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "dateFrom",
             "in": "query",
             "required": false,
             "description": "Inclusive uploaded-at lower bound; use an ISO 8601 timestamp with timezone.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "dateTo",
             "in": "query",
             "required": false,
             "description": "Inclusive upper bound. A date-only value includes the final day in server-local time; explicit timestamps preserve their instant.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "visibility",
             "in": "query",
             "required": false,
             "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "folder",
             "in": "query",
             "required": false,
             "description": "Owned folder ID or unfiled. Direct folder membership, without descendants.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "tag",
             "in": "query",
             "required": false,
             "description": "Owned tag ID or untagged. Excluded tags do not count.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "galleryAnchor",
             "in": "query",
             "required": false,
             "description": "Image file ID in the current filter; requires galleryDirection. Returns adjacent images, excluding anchor.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "galleryDirection",
             "in": "query",
             "required": false,
             "description": "Requires galleryAnchor. Anchored responses include pagination.offset and only image files.",
-            "schema": {
-              "type": "string",
-              "enum": ["next", "previous"]
-            }
+            "schema": { "type": "string", "enum": ["next", "previous"] }
+          },
+          {
+            "name": "snapshot",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upload timestamp ceiling returned by GET /api/files/timeline. Reuse it unchanged across window reads; it is not a durable snapshot.",
+            "schema": { "type": "string", "format": "date-time" }
           }
         ],
         "x-flare-permissions": ["files.read"]
@@ -287,11 +259,7 @@
         "summary": "Upload one file",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; accounts with quotas.bypass or Administrator are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
@@ -301,13 +269,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/UploadLinks"
-                    },
-                    "success": {
-                      "const": true,
-                      "type": "boolean"
-                    }
+                    "data": { "$ref": "#/components/schemas/UploadLinks" },
+                    "success": { "const": true, "type": "boolean" }
                   },
                   "required": ["data", "success"]
                 },
@@ -331,12 +294,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -344,9 +303,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -354,9 +311,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -364,9 +319,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -374,9 +327,7 @@
             "description": "File size, quota, or part-size limit exceeded.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -384,9 +335,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -394,20 +343,14 @@
             "description": "Upload-start rate limit: 30 requests per minute per client IP per application process.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Too many requests"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Too many requests" }
               }
             },
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait; currently 60.",
-                "schema": {
-                  "type": "string"
-                },
+                "schema": { "type": "string" },
                 "example": "60"
               }
             }
@@ -419,36 +362,28 @@
             "in": "header",
             "required": false,
             "description": "Owned profile ID; none bypasses default. Must agree with query/body selection.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "X-Upload-Folder",
             "in": "header",
             "required": false,
             "description": "Owned destination folder ID; none means unfiled. Must agree with query/body selection.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "profileId",
             "in": "query",
             "required": false,
             "description": "Owned profile ID or none. Must agree with header.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "folderId",
             "in": "query",
             "required": false,
             "description": "Owned folder ID or none. Must agree with header.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "requestBody": {
@@ -470,25 +405,17 @@
         "summary": "List MIME types present in your account",
         "tags": ["Files"],
         "description": "Requires the files:read scope. Sorted distinct stored MIME types, not an allowlist of permitted upload types. The token owner must currently have files.read; role revocation applies on the next request.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileTypesResponse"
-                },
+                "schema": { "$ref": "#/components/schemas/FileTypesResponse" },
                 "example": {
                   "success": true,
-                  "data": {
-                    "types": ["application/pdf", "image/png"]
-                  }
+                  "data": { "types": ["application/pdf", "image/png"] }
                 }
               }
             }
@@ -497,12 +424,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -510,9 +433,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -520,9 +441,7 @@
             "description": "Authenticated account lacks the required current role permission.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
+                "schema": { "$ref": "#/components/schemas/Error" },
                 "example": {
                   "error": "You do not have permission to perform this action."
                 }
@@ -539,20 +458,14 @@
         "summary": "Initialize a chunk upload",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Records the actual storage target in server-side session metadata; clients cannot override that provenance.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChunkInitResponse"
-                },
+                "schema": { "$ref": "#/components/schemas/ChunkInitResponse" },
                 "example": {
                   "data": {
                     "uploadId": "0123456789abcdef0123456789abcdef",
@@ -566,12 +479,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -579,9 +488,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -589,9 +496,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -599,9 +504,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -609,9 +512,7 @@
             "description": "File size, quota, or part-size limit exceeded.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -619,9 +520,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -629,20 +528,14 @@
             "description": "Upload-start rate limit: 30 requests per minute per client IP per application process.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Too many requests"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Too many requests" }
               }
             },
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait; currently 60.",
-                "schema": {
-                  "type": "string"
-                },
+                "schema": { "type": "string" },
                 "example": "60"
               }
             }
@@ -654,36 +547,28 @@
             "in": "header",
             "required": false,
             "description": "Owned profile ID; none bypasses default. Must agree with query/body selection.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "X-Upload-Folder",
             "in": "header",
             "required": false,
             "description": "Owned destination folder ID; none means unfiled. Must agree with query/body selection.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "profileId",
             "in": "query",
             "required": false,
             "description": "Owned profile ID or none. Must agree with header.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "folderId",
             "in": "query",
             "required": false,
             "description": "Owned folder ID or none. Must agree with header.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "requestBody": {
@@ -691,9 +576,7 @@
           "description": "JSON request.",
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChunkInitRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/ChunkInitRequest" }
             }
           }
         },
@@ -704,11 +587,7 @@
         "summary": "Get a part upload URL (query form)",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Not an upload-status or list-parts route. Refreshes activity. Both url and presignedUrl contain the same value. Local storage returns a local:// marker; use the authenticated PUT-part route. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
@@ -725,12 +604,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -738,9 +613,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -748,9 +621,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -758,9 +629,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -768,9 +637,7 @@
             "description": "Storage configuration changed or upload already completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -778,9 +645,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           }
@@ -791,21 +656,14 @@
             "in": "query",
             "required": true,
             "description": "Upload session ID.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-z0-9]{1,100}$"
-            }
+            "schema": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" }
           },
           {
             "name": "partNumber",
             "in": "query",
             "required": true,
             "description": "Part number.",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 10000
-            }
+            "schema": { "type": "integer", "minimum": 1, "maximum": 10000 }
           }
         ],
         "x-flare-permissions": ["files.upload"]
@@ -815,11 +673,7 @@
         "summary": "Complete a chunk upload (wrapped response)",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Same finalization as the dedicated completion route but requires uploadId in JSON and wraps output in data. Completion retries return the same committed file while session metadata exists. Does not refresh the inactivity timestamp. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
@@ -829,9 +683,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/UploadLinks"
-                    }
+                    "data": { "$ref": "#/components/schemas/UploadLinks" }
                   },
                   "required": ["data"]
                 },
@@ -854,12 +706,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -867,9 +715,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -877,9 +723,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -887,9 +731,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -897,9 +739,7 @@
             "description": "Storage configuration changed or upload already completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -907,9 +747,7 @@
             "description": "File size, quota, or part-size limit exceeded.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -917,9 +755,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           }
@@ -945,21 +781,14 @@
           "in": "path",
           "required": true,
           "description": "Upload session ID. Expires after one hour of inactivity.",
-          "schema": {
-            "type": "string",
-            "pattern": "^[a-z0-9]{1,100}$"
-          }
+          "schema": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" }
         },
         {
           "name": "partNumber",
           "in": "path",
           "required": true,
           "description": "Part number.",
-          "schema": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 10000
-          }
+          "schema": { "type": "integer", "minimum": 1, "maximum": 10000 }
         }
       ],
       "get": {
@@ -967,20 +796,14 @@
         "summary": "Get a part upload URL",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. S3 URL expires after one hour. PUT bytes to it without the Flare bearer token and retain the ETag response header. Local storage returns a local:// marker; use PUT to this Flare route instead. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PartUrlResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/PartUrlResponse" }
               }
             }
           },
@@ -988,12 +811,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1001,9 +820,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1011,9 +828,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1021,9 +836,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1031,9 +844,7 @@
             "description": "Storage configuration changed or upload already completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1041,9 +852,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           }
@@ -1055,25 +864,15 @@
         "summary": "Upload raw part bytes through Flare",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Works with local and S3 storage. At most 64 MiB and no more than declared total size. Save lowercase data.etag as uppercase ETag in the completion body. Refreshes session activity. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PartUploadResponse"
-                },
-                "example": {
-                  "data": {
-                    "etag": "\"provider-etag\""
-                  }
-                }
+                "schema": { "$ref": "#/components/schemas/PartUploadResponse" },
+                "example": { "data": { "etag": "\"provider-etag\"" } }
               }
             }
           },
@@ -1081,12 +880,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1094,9 +889,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1104,9 +897,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1114,9 +905,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1124,9 +913,7 @@
             "description": "Storage configuration changed or upload already completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1134,9 +921,7 @@
             "description": "File size, quota, or part-size limit exceeded.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1144,9 +929,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           }
@@ -1173,10 +956,7 @@
           "in": "path",
           "required": true,
           "description": "Upload session ID. Expires after one hour of inactivity.",
-          "schema": {
-            "type": "string",
-            "pattern": "^[a-z0-9]{1,100}$"
-          }
+          "schema": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" }
         }
       ],
       "post": {
@@ -1184,20 +964,14 @@
         "summary": "Complete a chunk upload (unwrapped response)",
         "tags": ["Files"],
         "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
           "200": {
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadLinks"
-                },
+                "schema": { "$ref": "#/components/schemas/UploadLinks" },
                 "example": {
                   "url": "https://files.example.com/abc123/screenshot.png",
                   "pageUrl": "https://files.example.com/abc123/screenshot.png",
@@ -1215,12 +989,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1228,9 +998,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1238,9 +1006,7 @@
             "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1248,9 +1014,7 @@
             "description": "Owned resource or upload session not found.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1258,9 +1022,7 @@
             "description": "Storage configuration changed or upload already completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1268,9 +1030,7 @@
             "description": "File size, quota, or part-size limit exceeded.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           },
@@ -1278,9 +1038,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" }
               }
             }
           }
@@ -1290,9 +1048,7 @@
           "description": "JSON request.",
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChunkCompleteRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/ChunkCompleteRequest" }
             }
           }
         },
@@ -1305,11 +1061,7 @@
         "summary": "List your short links",
         "tags": ["Short links"],
         "description": "Requires the urls:read scope. Newest first; no pagination or filtering parameters. The token owner must currently have links.read; role revocation applies on the next request.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:read",
         "responses": {
           "200": {
@@ -1341,12 +1093,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1354,9 +1102,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -1364,9 +1110,7 @@
             "description": "Authenticated account lacks the required current role permission.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
+                "schema": { "$ref": "#/components/schemas/Error" },
                 "example": {
                   "error": "You do not have permission to perform this action."
                 }
@@ -1381,11 +1125,7 @@
         "summary": "Create a short link",
         "tags": ["Short links"],
         "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON currently reaches the 500 handler. The token owner must currently have links.create; role revocation applies on the next request.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:write",
         "responses": {
           "200": {
@@ -1395,13 +1135,8 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/ShortLink"
-                    },
-                    "success": {
-                      "const": true,
-                      "type": "boolean"
-                    }
+                    "data": { "$ref": "#/components/schemas/ShortLink" },
+                    "success": { "const": true, "type": "boolean" }
                   },
                   "required": ["data", "success"]
                 },
@@ -1423,12 +1158,8 @@
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1436,9 +1167,7 @@
             "description": "Invalid request/options, part list, file type, or expiration.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -1446,9 +1175,7 @@
             "description": "The operation could not be completed.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           },
@@ -1456,9 +1183,7 @@
             "description": "Authenticated account lacks the required current role permission.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
+                "schema": { "$ref": "#/components/schemas/Error" },
                 "example": {
                   "error": "You do not have permission to perform this action."
                 }
@@ -1486,11 +1211,7 @@
         "summary": "Delete your short link",
         "tags": ["Short links"],
         "description": "Requires urls:write. Use the link record ID, not its shortCode. The token owner must currently have links.delete; role revocation applies on the next request.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:write",
         "parameters": [
           {
@@ -1498,25 +1219,17 @@
             "in": "path",
             "required": true,
             "description": "Short-link record ID.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           }
         ],
         "responses": {
-          "204": {
-            "description": "Deleted. No response body."
-          },
+          "204": { "description": "Deleted. No response body." },
           "401": {
             "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
               }
             }
           },
@@ -1524,13 +1237,8 @@
             "description": "Required current role permission is missing. Link belongs to another account.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "success": false,
-                  "error": "Unauthorized"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" },
+                "example": { "success": false, "error": "Unauthorized" }
               }
             }
           },
@@ -1538,13 +1246,8 @@
             "description": "Link does not exist.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "success": false,
-                  "error": "URL not found"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" },
+                "example": { "success": false, "error": "URL not found" }
               }
             }
           },
@@ -1552,14 +1255,210 @@
             "description": "Internal server error.",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
+                "schema": { "$ref": "#/components/schemas/ApiError" }
               }
             }
           }
         },
         "x-flare-permissions": ["links.delete"]
+      }
+    },
+    "/api/files/timeline": {
+      "get": {
+        "operationId": "getFileTimeline",
+        "summary": "Count file timeline buckets across your account",
+        "tags": ["Files"],
+        "description": "Database-aggregated counts only; no file metadata. Uses the same account-scoped filters as GET /api/files. Returns a fresh upload-time snapshot ceiling and nonempty calendar buckets, ordered newest or oldest. For non-date sorts returns one undated bucket. Fetch each visible window through GET /api/files with the same filters, snapshot, and date range intersected with the bucket. The snapshot does not freeze edits, deletions, or backdated inserts.",
+        "security": [{ "BearerAuth": [] }],
+        "x-flare-scope": "files:read",
+        "x-flare-permissions": ["files.read"],
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "description": "One comma-separated list of 1–100 distinct file IDs, each 1–128 characters without whitespace or ASCII control characters. Repeated ids parameters, duplicates, and empty members are invalid. Combined with ownership and every other filter; missing and unowned IDs are omitted. Normal sort and pagination still apply; use limit=100 to refresh a full selection.",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[^\\s,\\u0000-\\u001f\\u007f]+$"
+              }
+            },
+            "example": ["FILE_ID_1", "FILE_ID_2"]
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive filename or OCR-text match.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort order; unknown values fall back to newest.",
+            "schema": {
+              "type": "string",
+              "default": "newest",
+              "enum": [
+                "newest",
+                "oldest",
+                "largest",
+                "smallest",
+                "name",
+                "most-viewed",
+                "least-viewed",
+                "most-downloaded",
+                "least-downloaded"
+              ]
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive uploaded-at lower bound; use an ISO 8601 timestamp with timezone.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper bound. A date-only value includes the final day in server-local time; explicit timestamps preserve their instant.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "visibility",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "description": "Owned folder ID or unfiled. Direct folder membership, without descendants.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Owned tag ID or untagged. Excluded tags do not count.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "description": "Calendar grouping. none still aggregates by month but preserves groupBy=none in the response. Weeks start Monday. Non-date sorts always return one undated bucket.",
+            "schema": {
+              "type": "string",
+              "enum": ["none", "month", "week", "year"],
+              "default": "none"
+            }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "description": "IANA time zone used for calendar boundaries, including daylight-saving transitions.",
+            "schema": {
+              "type": "string",
+              "default": "UTC",
+              "example": "America/Los_Angeles"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTimelineResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "total": 100,
+                    "snapshot": "2026-10-06T12:00:00.000Z",
+                    "groupBy": "none",
+                    "timezone": "UTC",
+                    "buckets": [
+                      {
+                        "key": "2026-10-01T00:00:00.000Z",
+                        "from": "2026-10-01T00:00:00.000Z",
+                        "to": "2026-11-01T00:00:00.000Z",
+                        "count": 100,
+                        "offset": 0
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string" },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid groupBy, timezone, date, or visibility filter.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1577,29 +1476,21 @@
             "in": "header",
             "required": true,
             "description": "Stable event ID; must equal body.id.",
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "X-Flare-Timestamp",
             "in": "header",
             "required": true,
             "description": "Unix seconds for this attempt. Reject stale/future requests outside your accepted clock window.",
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            }
+            "schema": { "type": "string", "pattern": "^[0-9]+$" }
           },
           {
             "name": "X-Flare-Signature",
             "in": "header",
             "required": true,
             "description": "v1= plus lowercase hex HMAC-SHA256. Compare in constant time against the original body bytes.",
-            "schema": {
-              "type": "string",
-              "pattern": "^v1=[0-9a-f]{64}$"
-            }
+            "schema": { "type": "string", "pattern": "^v1=[0-9a-f]{64}$" }
           }
         ],
         "requestBody": {
@@ -1607,9 +1498,7 @@
           "description": "At most 64 KiB. Tests add test: true and use test: event IDs; they do not create a file.",
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FileReadyEvent"
-              }
+              "schema": { "$ref": "#/components/schemas/FileReadyEvent" }
             }
           }
         },
@@ -1617,15 +1506,9 @@
           "2XX": {
             "description": "Event durably accepted (for example 204). Duplicate accepted events should also return 2xx."
           },
-          "408": {
-            "description": "Timeout; retry eligible."
-          },
-          "429": {
-            "description": "Throttled; retry on Flare fixed schedule."
-          },
-          "5XX": {
-            "description": "Receiver failure; retry eligible."
-          },
+          "408": { "description": "Timeout; retry eligible." },
+          "429": { "description": "Throttled; retry on Flare fixed schedule." },
+          "5XX": { "description": "Receiver failure; retry eligible." },
           "default": {
             "description": "Other 3xx/4xx permanently fail this automatic cycle. Redirects are not followed."
           }
@@ -1645,61 +1528,29 @@
     "schemas": {
       "Error": {
         "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          }
-        },
+        "properties": { "error": { "type": "string" } },
         "required": ["error"],
         "description": "Upload/authentication failures use this shape; no success property is required."
       },
       "ApiError": {
         "type": "object",
         "properties": {
-          "error": {
-            "type": "string"
-          },
-          "success": {
-            "type": "boolean",
-            "const": false
-          }
+          "error": { "type": "string" },
+          "success": { "type": "boolean", "const": false }
         },
         "required": ["error", "success"]
       },
       "UploadLinks": {
         "type": "object",
         "properties": {
-          "url": {
-            "type": "string",
-            "format": "uri"
-          },
-          "pageUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "rawUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "downloadUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "copyText": {
-            "type": "string",
-            "format": "uri"
-          },
-          "name": {
-            "type": "string"
-          },
-          "size": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Bytes."
-          },
-          "type": {
-            "type": "string"
-          }
+          "url": { "type": "string", "format": "uri" },
+          "pageUrl": { "type": "string", "format": "uri" },
+          "rawUrl": { "type": "string", "format": "uri" },
+          "downloadUrl": { "type": "string", "format": "uri" },
+          "copyText": { "type": "string", "format": "uri" },
+          "name": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0, "description": "Bytes." },
+          "type": { "type": "string" }
         },
         "required": [
           "url",
@@ -1751,11 +1602,7 @@
           },
           "tagIds": {
             "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
+            "items": { "type": "string", "minLength": 1, "maxLength": 100 },
             "maxItems": 20,
             "description": "Owned tag IDs. Omission inherits selected profile tags."
           },
@@ -1873,11 +1720,7 @@
           },
           "tagIds": {
             "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
+            "items": { "type": "string", "minLength": 1, "maxLength": 100 },
             "maxItems": 20,
             "description": "Owned tag IDs. Omission inherits selected profile tags."
           },
@@ -1903,16 +1746,8 @@
             "format": "date-time",
             "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token."
           },
-          "filename": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255
-          },
-          "mimeType": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255
-          },
+          "filename": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "mimeType": { "type": "string", "minLength": 1, "maxLength": 255 },
           "size": {
             "type": "integer",
             "minimum": 1,
@@ -1932,10 +1767,7 @@
           "data": {
             "type": "object",
             "properties": {
-              "uploadId": {
-                "type": "string",
-                "pattern": "^[a-z0-9]{1,100}$"
-              },
+              "uploadId": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" },
               "fileKey": {
                 "type": "string",
                 "description": "Opaque internal storage key, not a public URL."
@@ -1974,11 +1806,7 @@
           },
           "tagIds": {
             "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
+            "items": { "type": "string", "minLength": 1, "maxLength": 100 },
             "maxItems": 20,
             "description": "Owned tag IDs. Omission inherits selected profile tags."
           },
@@ -2068,11 +1896,7 @@
           },
           "tagIds": {
             "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
+            "items": { "type": "string", "minLength": 1, "maxLength": 100 },
             "maxItems": 20,
             "description": "Owned tag IDs. Omission inherits selected profile tags."
           },
@@ -2156,9 +1980,7 @@
           "data": {
             "type": "object",
             "properties": {
-              "url": {
-                "type": "string"
-              },
+              "url": { "type": "string" },
               "presignedUrl": {
                 "type": "string",
                 "description": "Alias of url."
@@ -2188,50 +2010,26 @@
       "FileMetadata": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
+          "id": { "type": "string" },
+          "name": { "type": "string" },
           "urlPath": {
             "type": "string",
             "description": "Relative URL path based on the account URL ID."
           },
-          "mimeType": {
-            "type": "string"
-          },
+          "mimeType": { "type": "string" },
           "size": {
             "type": "number",
             "minimum": 0,
             "description": "Size in MiB (bytes divided by 1,048,576). UploadLinks.size uses bytes."
           },
-          "uploadedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "visibility": {
-            "type": "string",
-            "enum": ["PUBLIC", "PRIVATE"]
-          },
-          "views": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "downloads": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "folderId": {
-            "type": ["string", "null"]
-          },
+          "uploadedAt": { "type": "string", "format": "date-time" },
+          "visibility": { "type": "string", "enum": ["PUBLIC", "PRIVATE"] },
+          "views": { "type": "integer", "minimum": 0 },
+          "downloads": { "type": "integer", "minimum": 0 },
+          "folderId": { "type": ["string", "null"] },
           "user": {
             "type": "object",
-            "properties": {
-              "urlId": {
-                "type": "string"
-              }
-            },
+            "properties": { "urlId": { "type": "string" } },
             "required": ["urlId"]
           },
           "tags": {
@@ -2239,23 +2037,14 @@
             "items": {
               "type": "object",
               "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                }
+                "id": { "type": "string" },
+                "name": { "type": "string" }
               },
               "required": ["id", "name"]
             }
           },
-          "hasPassword": {
-            "type": "boolean"
-          },
-          "expiresAt": {
-            "type": ["string", "null"],
-            "format": "date-time"
-          }
+          "hasPassword": { "type": "boolean" },
+          "expiresAt": { "type": ["string", "null"], "format": "date-time" }
         },
         "required": [
           "id",
@@ -2285,9 +2074,7 @@
           "views": 0,
           "downloads": 0,
           "folderId": null,
-          "user": {
-            "urlId": "abc123"
-          },
+          "user": { "urlId": "abc123" },
           "tags": [],
           "hasPassword": false,
           "expiresAt": null
@@ -2296,23 +2083,10 @@
       "Pagination": {
         "type": "object",
         "properties": {
-          "total": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "pageCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "page": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
+          "total": { "type": "integer", "minimum": 0 },
+          "pageCount": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
           "offset": {
             "type": "integer",
             "minimum": 0,
@@ -2324,19 +2098,12 @@
       "FileListResponse": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean",
-            "const": true
-          },
+          "success": { "type": "boolean", "const": true },
           "data": {
             "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FileMetadata"
-            }
+            "items": { "$ref": "#/components/schemas/FileMetadata" }
           },
-          "pagination": {
-            "$ref": "#/components/schemas/Pagination"
-          }
+          "pagination": { "$ref": "#/components/schemas/Pagination" }
         },
         "required": ["success", "data", "pagination"]
       },
@@ -2346,49 +2113,28 @@
           "data": {
             "type": "object",
             "properties": {
-              "types": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
+              "types": { "type": "array", "items": { "type": "string" } }
             },
             "required": ["types"]
           },
-          "success": {
-            "const": true,
-            "type": "boolean"
-          }
+          "success": { "const": true, "type": "boolean" }
         },
         "required": ["data", "success"]
       },
       "ShortLink": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
+          "id": { "type": "string" },
           "shortCode": {
             "type": "string",
             "minLength": 6,
             "maxLength": 6,
             "description": "The public link is instance-origin + /u/ + shortCode."
           },
-          "targetUrl": {
-            "type": "string",
-            "format": "uri"
-          },
-          "clicks": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "userId": {
-            "type": "string"
-          }
+          "targetUrl": { "type": "string", "format": "uri" },
+          "clicks": { "type": "integer", "minimum": 0 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "userId": { "type": "string" }
         },
         "required": [
           "id",
@@ -2427,17 +2173,12 @@
             "properties": {
               "urls": {
                 "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ShortLink"
-                }
+                "items": { "$ref": "#/components/schemas/ShortLink" }
               }
             },
             "required": ["urls"]
           },
-          "success": {
-            "const": true,
-            "type": "boolean"
-          }
+          "success": { "const": true, "type": "boolean" }
         },
         "required": ["data", "success"]
       },
@@ -2448,23 +2189,11 @@
         "additionalProperties": false,
         "required": ["version", "id", "type", "occurredAt", "data"],
         "properties": {
-          "version": {
-            "const": 1
-          },
-          "id": {
-            "type": "string",
-            "pattern": "^(file\\.ready:|test:).+"
-          },
-          "type": {
-            "const": "file.ready"
-          },
-          "occurredAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "test": {
-            "const": true
-          },
+          "version": { "const": 1 },
+          "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
+          "type": { "const": "file.ready" },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "test": { "const": true },
           "data": {
             "type": "object",
             "additionalProperties": false,
@@ -2477,25 +2206,65 @@
               "passwordProtected"
             ],
             "properties": {
-              "id": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string" },
+              "mimeType": { "type": "string" },
+              "sizeBytes": { "type": "integer", "minimum": 0 },
+              "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
+              "passwordProtected": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "FileTimelineBucket": {
+        "type": "object",
+        "required": ["key", "from", "to", "count", "offset"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Bucket start ISO instant, or all for a non-date sort."
+          },
+          "from": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Inclusive calendar start in UTC; null for an undated bucket."
+          },
+          "to": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Exclusive calendar end in UTC; subtract 1 ms for the inclusive GET /api/files dateTo parameter. Null for an undated bucket."
+          },
+          "count": { "type": "integer", "minimum": 1 },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of matching files preceding this bucket in the requested order."
+          }
+        }
+      },
+      "FileTimelineResponse": {
+        "type": "object",
+        "required": ["success", "data"],
+        "properties": {
+          "success": { "type": "boolean", "enum": [true] },
+          "data": {
+            "type": "object",
+            "required": ["total", "snapshot", "groupBy", "timezone", "buckets"],
+            "properties": {
+              "total": { "type": "integer", "minimum": 0 },
+              "snapshot": {
                 "type": "string",
-                "minLength": 1
+                "format": "date-time",
+                "description": "Inclusive upload-time ceiling for subsequent file windows; not a durable database snapshot."
               },
-              "name": {
-                "type": "string"
+              "groupBy": {
+                "type": "string",
+                "enum": ["none", "month", "week", "year"]
               },
-              "mimeType": {
-                "type": "string"
-              },
-              "sizeBytes": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "visibility": {
-                "enum": ["PUBLIC", "PRIVATE"]
-              },
-              "passwordProtected": {
-                "type": "boolean"
+              "timezone": { "type": "string" },
+              "buckets": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/FileTimelineBucket" }
               }
             }
           }

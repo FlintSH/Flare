@@ -7,8 +7,8 @@ const steps = [
   {
     title: 'A home for every file',
     label: 'Browse',
-    src: '/screenshots/image-gallery/files-by-month.png',
-    text: 'Filter your library to images and choose Group files → By month in Upload date. Open an image for a closer look, then move through the filtered gallery.',
+    src: '/screenshots/timeline/library-desktop.webp',
+    text: 'Scroll through every matching file without changing pages. The slim date rail lets you jump into your upload history; search, folders, and filters keep the view focused.',
     link: '/guide/library',
   },
   {

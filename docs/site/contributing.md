@@ -143,6 +143,85 @@ Apply migrations to both databases before running the suites. Missing either env
 
 The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
 
+## Continuous library browser checks and demos
+
+The [library guide](/guide/library#scroll-through-your-library) and [recorded walkthrough](/demos#browse-a-large-library) use a disposable account with 12,000 files dated from July 2018 to October 2026. The uploaded landscape illustrations and dates are demonstration fixtures. Captures render the actual application and use its real database and file requests.
+
+Create a **disposable local PostgreSQL database named exactly `flare_timeline_test_local`**. The seed accepts only `localhost` or `127.0.0.1` with the public schema and refuses a database containing accounts other than its two fixtures. It resets those fixture accounts and writes their local file objects beneath `uploads/timeline-demo/`; do not point it at an existing application installation. Install the root dependencies and the separate handbook dependencies first; the scripts use the handbook's Playwright and Sharp packages. Install Chromium as described in [Browser checks](#browser-checks) before the first run.
+
+From the repository root, use your disposable database role and authentication:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_timeline_test_local'
+export NEXTAUTH_URL='http://localhost:3064'
+export NEXTAUTH_SECRET='public-disposable-timeline-demo-secret-2026-only'
+export METICULOUS_RECORDING_ENABLED=false
+export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
+pnpm exec prisma migrate deploy
+node scripts/migrate-config.js
+node scripts/timeline/seed.cjs
+pnpm exec next dev --hostname 127.0.0.1 --port 3064
+```
+
+In another terminal, run the real browser checks:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-ui.cjs
+```
+
+The demonstration account is `timeline-demo-alex@example.test` with the deliberately public password `Timeline-demo-only-2026!`. The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a hosted Meticulous run or a benchmark of production storage.
+
+The browser checks cover direct date jumps, bounded mounted cards and file requests, selection and archive inputs across scrolling, fresh bulk-tag membership after a real external API change, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure and the separate archive-input and current-tag membership regressions. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
+
+At desktop and mobile widths, the checks also open **Create archive** after selected cards have scrolled out of the rendered window, verify the selected filenames and private defaults, and cancel without creating an archive. Closing that dialog clears the selection. With screenshot output enabled, the desktop check captures `library-archive.webp` with the selected-file list expanded. These unrecorded checks complement the separate archive suite’s real creation and extraction operations below.
+
+Separate unrecorded checks create and revoke disposable named tokens, verify selected-ID listing and timeline counts stay within the token owner's account, reject an upload-only token on those reads, and run `examples/integrations.mjs files` against the real local server. They verify request-level audit attribution to the owner and token ID, including denied reads, without retaining token secrets in audit details or captures.
+
+The retained-selection tagging regression has a separate check against the same disposable server:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-tag-refresh.cjs
+```
+
+It selects a tagged file, removes the tag through another authenticated client, refreshes, and verifies that **Edit tags** reads current membership and sends an addition when the unchecked tag is clicked. It also checks selected files that have scrolled off screen, mixed membership, recovery from a failed membership request, and cancellation when a loading dialog closes. The failed and delayed requests are simulations; successful reads and tag changes use the real local application. The check restores its fixture tag assignments afterward.
+
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-tags.webp` during the successful membership read, before the simulated request failure. Inspect it before replacing `docs/images/timeline/library-tags.webp`. This separate tagging image supplements the seven library screenshots captured by `verify-ui.cjs`.
+
+### Account changes in an open library
+
+With the same disposable timeline database and server running, check an account change while the original library tab stays open:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-account-switch.cjs
+```
+
+Keep `DATABASE_URL` set to the same disposable database. The check accepts only the two seed accounts, adds 96 Jamie demonstration file records using existing fixture image bytes, and removes those added records afterward. It retains Alex's selection and an open **Create archive** dialog, signs in as Jamie through a real form in a second tab, and reloads only that second tab to trigger normal session synchronization. The original document stays open. It verifies that the old files and dialog disappear, Jamie's library loads, and date navigation cannot bring Alex's cards back. It also checks a replacement session for the same account and sign-out from the other tab.
+
+Separate scenarios **simulate delayed network delivery** by holding completed, real timeline or file-list responses until after the account changes. They check that an old response cannot repopulate the new library; they do not fabricate a successful API response. These checks are separate from the ordinary scrolling recordings.
+
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-account-switch.webp` after the new account loads and passes date-navigation checks. Inspect it before replacing `docs/images/timeline/library-account-switch.webp`; the image should contain only the current demonstration account's files, with no old selection or dialog.
+
+Set `FLARE_TIMELINE_SCHEMA_EVIDENCE` to a temporary JSON path to capture actual dated and undated timeline responses for two known fixture IDs. `scripts/checks.test.mjs` checks the published OpenAPI boundary types against the captured examples in `scripts/fixtures/timeline-responses.json`, including JSON null for non-date sorts. This is a focused contract regression, not validation of every OpenAPI operation.
+
+### Timeline API and capture output
+
+The timeline API regression suite needs a **separate disposable database**, because it clears users and events between cases. For example:
+
+```sh
+export FLARE_TIMELINE_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_timeline_test_api'
+DATABASE_URL="$FLARE_TIMELINE_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/files/timeline-database.test.ts
+```
+
+Create that database first and keep it separate from `flare_timeline_test_local`. The API suite accepts only PostgreSQL on `localhost` or `127.0.0.1`, with the exact database name `flare_timeline_test_api` or `flare_timeline_test_ci`. Omit the query string or use a single `schema=public`; other query parameters and URL fragments are rejected. Omitting `FLARE_TIMELINE_DATABASE_URL` skips the database suite; a skipped run is not database coverage. The code-quality CI workflow supplies and migrates its separate `flare_timeline_test_ci` database before running the suite.
+
+To refresh the screenshots and silent recordings, set `FLARE_TIMELINE_SCREENSHOTS` to a temporary screenshot directory and `FLARE_TIMELINE_VIDEOS` to a separate temporary recording directory before running the browser script. Recording requires `ffmpeg` on your `PATH` with its `libx264` H.264 encoder; ordinary browser checks and screenshots do not require it. The script converts the browser recordings to MP4 for playback in the handbook and PR links. Inspect every capture before replacing the nine canonical WebP sources in `docs/images/timeline/` and `timeline-scroll.mp4` / `timeline-mobile.mp4` in `.github/assets/timeline/`. The main suite captures seven screenshots; the tag-refresh and account-switch checks each capture one more. Keep one source for each asset; the handbook build prepares its own copies. Update the written transcripts in [demos](/demos#browse-a-large-library) if the recorded actions change. The mobile recording uses Chromium at a narrow viewport, not a physical phone. Keep temporary output, failed recordings, and fixture uploads out of Git.
+
+Run these tools from a source checkout. The timeline fixture/capture scripts, their evidence directories, and the handbook tooling are excluded from Flare's Docker build context and application image.
+
 ## Archive browser checks and demos
 
 The [archive workspace](/guide/archives) uses real uploads, sessions, storage, and database publication. Its local browser script creates ZIP, TAR.GZ, and GZIP fixtures, exercises owner-library browsing and extraction, packages selected files, and checks both private defaults and an explicitly selected public upload profile. It also tests anonymous share-page browsing, file-password protection, and individual entry downloads without offering extraction to recipients.

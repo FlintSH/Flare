@@ -33,7 +33,7 @@ function validDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-function readFilters(
+export function readFileFilters(
   params: URLSearchParams,
   defaultLimit: number
 ): FileFilterOptions {
@@ -99,14 +99,14 @@ export function useFileFilters(
   )
   const query = searchParams.toString()
   const [filters, setFilters] = useState(() =>
-    readFilters(new URLSearchParams(query), defaultLimit)
+    readFileFilters(new URLSearchParams(query), defaultLimit)
   )
   const currentFilters = useRef(filters)
 
   // Browser back/forward and links to a filtered library restore the controls
   // along with the results. URL writes happen only in explicit user actions.
   useEffect(() => {
-    const restored = readFilters(new URLSearchParams(query), defaultLimit)
+    const restored = readFileFilters(new URLSearchParams(query), defaultLimit)
     if (
       writeFilters(currentFilters.current, defaultLimit) !==
       writeFilters(restored, defaultLimit)
@@ -214,6 +214,8 @@ export function useFileFilters(
 
   return {
     filters,
+    urlQuery: query,
+    pathname,
     setFolder,
     setTag,
     setSearch,

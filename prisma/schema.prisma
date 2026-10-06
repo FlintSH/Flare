@@ -233,6 +233,7 @@ model File {
 
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
+  @@index([userId, uploadedAt(sort: Desc), id])
 }
 
 // Independent of retired Folder tables: folders organize existing files without

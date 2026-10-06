@@ -11,7 +11,8 @@ html {
 
 body {
   font-family: var(--font-inter);
-  overflow-x: hidden;
+  /* Keep horizontal clipping without creating a scroll ancestor for sticky UI. */
+  overflow-x: clip;
   width: 100vw;
   max-width: 100%;
 }

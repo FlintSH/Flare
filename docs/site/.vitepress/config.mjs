@@ -80,7 +80,7 @@ export default defineConfig({
       group('Use Flare', [
         ['Your first steps', '/guide/'],
         ['Upload files', '/guide/uploading'],
-        ['Browse & search', '/guide/library'],
+        ['File library & timeline', '/guide/library'],
         ['Archives', '/guide/archives'],
         ['Sharing & privacy', '/guide/sharing'],
         ['Folders', '/guide/folders'],

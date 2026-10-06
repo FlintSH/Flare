@@ -235,8 +235,8 @@ async function demoContext(
   page.setDefaultTimeout(45000)
   await page.goto(origin + '/dashboard')
   await expect(
-    page.getByRole('button', { name: 'Manage Field kit.zip', exact: true })
-  ).toBeVisible()
+    page.getByRole('list', { name: 'Your files', exact: true })
+  ).toHaveAttribute('aria-busy', 'false')
   return {
     ctx,
     page,
@@ -252,10 +252,20 @@ async function demoContext(
   }
 }
 
+async function findFile(page, name) {
+  const menu = page.getByRole('button', { name: `Manage ${name}`, exact: true })
+  // Virtual rows outside the current window are not mounted. Search the library
+  // before opening a file that is beyond the visible cards, including on mobile.
+  if (!(await menu.count()))
+    await page
+      .getByRole('searchbox', { name: 'Search files by name' })
+      .fill(name)
+  await expect(menu).toBeVisible()
+  return menu
+}
+
 async function browse(page, name) {
-  await page
-    .getByRole('button', { name: `Manage ${name}`, exact: true })
-    .click()
+  await (await findFile(page, name)).click()
   await page
     .getByRole('menuitem', { name: 'Browse archive', exact: true })
     .click()
@@ -326,13 +336,13 @@ async function browseAndExtract(browser, state, fixture) {
   )
   assert.ok((await content.text()).includes('A small project handoff'))
   await page.getByRole('link', { name: 'Open folder', exact: true }).click()
-  await expect(
-    page.getByRole('button', { name: /guide/ }).first()
-  ).toBeVisible()
-  await shot(page, 'extracted-folder')
-  await page
+  await page.waitForURL((url) => url.searchParams.get('folder') === root.id)
+  const guide = page
+    .getByRole('region', { name: 'Subfolders', exact: true })
     .getByRole('button', { name: 'Open folder guide', exact: true })
-    .click()
+  await expect(guide).toBeVisible()
+  await shot(page, 'extracted-folder')
+  await guide.click()
   await expect(
     page.getByRole('button', { name: 'Manage README.md', exact: true })
   ).toBeVisible()
@@ -608,9 +618,7 @@ async function additionalChecks(browser, state, fixture) {
   await mobile.close()
 
   const errorDemo = await demoContext(browser, state, 'errors', false, true)
-  await errorDemo.page
-    .getByRole('button', { name: 'Manage Damaged bundle.zip', exact: true })
-    .click()
+  await (await findFile(errorDemo.page, 'Damaged bundle.zip')).click()
   await errorDemo.page
     .getByRole('menuitem', { name: 'Browse archive', exact: true })
     .click()

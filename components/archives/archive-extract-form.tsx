@@ -29,6 +29,7 @@ import { formatBytes } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 
 import { ArchiveDestination } from './archive-destination'
 import {
@@ -54,6 +55,7 @@ export function ArchiveExtractForm({
   onBusyChange: (busy: boolean) => void
 }) {
   const { can } = usePermissions()
+  const lifetime = useRequestLifetime()
   const {
     folders,
     loading,
@@ -89,7 +91,15 @@ export function ArchiveExtractForm({
 
   async function extract(event: React.FormEvent) {
     event.preventDefault()
-    if (busy || !profileReady || !allowed || destinationUnavailable) return
+    const { signal } = lifetime.current
+    if (
+      signal.aborted ||
+      busy ||
+      !profileReady ||
+      !allowed ||
+      destinationUnavailable
+    )
+      return
     setBusy(true)
     onBusyChange(true)
     setError('')
@@ -98,14 +108,20 @@ export function ArchiveExtractForm({
         folderId: string
         fileCount: number
         totalBytes: number
-      }>(`/api/files/${encodeURIComponent(file.id)}/archive/extract`, {
-        folderId,
-        name: name.trim(),
-        ...archiveProfileRequest(profileId, profileSnapshot),
-      })
+      }>(
+        `/api/files/${encodeURIComponent(file.id)}/archive/extract`,
+        {
+          folderId,
+          name: name.trim(),
+          ...archiveProfileRequest(profileId, profileSnapshot),
+        },
+        signal
+      )
+      if (signal.aborted) return
       changed()
       setResult(next)
     } catch (cause) {
+      if (signal.aborted) return
       setError(archiveErrorMessage(cause))
       if (
         profileId &&
@@ -117,8 +133,10 @@ export function ArchiveExtractForm({
       }
       void reload()
     } finally {
-      setBusy(false)
-      onBusyChange(false)
+      if (!signal.aborted) {
+        setBusy(false)
+        onBusyChange(false)
+      }
     }
   }
 

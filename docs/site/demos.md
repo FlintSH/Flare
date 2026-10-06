@@ -21,6 +21,30 @@ Choose a step, then enlarge the screenshot to inspect the details. The screensho
 
 These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.
 
+### Browse a large library
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open **Files** in the isolated demonstration account. The library shows **12,000 files** and its newest uploads from October 2026.
+2. Scroll down through the file cards. More files appear in the same continuous list, and the slim rail at the right shows the current upload period.
+3. Drag the date rail to the middle of the upload history, then press End to jump to the oldest uploads, from July 2018. Each destination loads directly without stepping through intervening pages.
+4. Return to the beginning, choose **Select**, and select visible files. Scroll until those cards leave the view; the selected count stays available in the selection bar. Return to the beginning and confirm the original cards remain selected.
+5. Finish the selection with **Done** and search for **Northern lights**. The count becomes **1,000 files**. Clear the search to restore the full library.
+
+This recording uses real application requests and a disposable account seeded with 12,000 demonstration files across several years. The upload dates and file contents are fixtures; the scrolling, date jumps, selection, and filtering are actual browser interactions. It does not measure the performance of your server or storage provider. [Follow the library guide](./guide/library#scroll-through-your-library) for keyboard controls, selection limits, and retry behavior.
+
+### Browse the same library on a phone
+
+<div style="max-width: 390px; margin-inline: auto">
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+</div>
+
+1. Open the same demonstration library at a 390px viewport. The single-column cards and date label fit beside the narrow rail.
+2. Scroll down through the newest uploads.
+3. Focus the rail and press End to reach July 2018, then Home to return to the newest uploads.
+
+This is Chromium rendering the real application at mobile width, using the same local database as the desktop recording. It demonstrates the narrow layout and full-library date navigation; it is not a physical-phone or touch-gesture recording.
+
 ### Review and revoke browser sessions
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Review and revoke browser sessions: silent Flare recording" :src="withBase('/demos/session-management.webm')">Your browser does not support this video. Follow the transcript below.</video>

@@ -101,6 +101,12 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### File library timeline index
+
+Migration `20261006000000_file_library_timeline` adds an index on the file owner's ID, descending upload time, and file ID. The homepage uses it to read small chronological windows and aggregate calendar counts across the account. It preserves file records, links, folders, tags, sharing rules, and existing paginated API clients. No new setting, environment variable, worker, or data backfill is needed.
+
+The official image applies this migration during normal startup. The index build reads existing file rows and can hold up writes while it runs; allow a maintenance window and additional database disk space for a large library. Take the normal backup before upgrading and check migration logs before restarting uploads. Source deployments should apply `npx prisma migrate deploy` with their usual database configuration before starting the updated app. Test scrolling to old files, a filtered folder, and an upload after the upgrade. The index is additive, so retaining it does not change the old paginated API's behavior.
+
 ### Sessions and audit log migration
 
 Migrations `20261006000200_instance_audit` and `20261006010000_browser_sessions` add persistent instance audit events, server-side browser-session records, and account login history. Normal image startup applies the database migration. Back up PostgreSQL first, deploy all application replicas together, and verify the new tables are present before accepting sign-ins. There is no new environment switch or background service to enable.

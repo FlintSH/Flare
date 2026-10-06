@@ -23,6 +23,20 @@ const operations = {
     scope: 'files:read',
     permission: 'files.read',
   },
+  timeline: {
+    label: 'Browse your file timeline',
+    method: 'GET',
+    path: '/api/files/timeline?groupBy=month&timezone=UTC',
+    scope: 'files:read',
+    permission: 'files.read',
+  },
+  selectedFiles: {
+    label: 'Refresh selected file metadata',
+    method: 'GET',
+    path: '/api/files?ids=FILE_ID_1,FILE_ID_2&limit=100',
+    scope: 'files:read',
+    permission: 'files.read',
+  },
   urls: {
     label: 'List short links',
     method: 'GET',
@@ -89,8 +103,9 @@ async function copy() {
       required scope. The token owner must also have the current role
       permission. This builder covers named-token operations; account security
       changes and owner-library archive operations require a browser session.
-      Shared archive browsing and entry downloads instead follow file visibility
-      and password rules; this token builder does not authorize them.
+      Use the signed-in Flare interface for bulk tag editing. Shared archive
+      browsing and entry downloads instead follow file visibility and password
+      rules; this token builder does not authorize them.
     </p>
     <div class="lab-grid two">
       <div>
@@ -123,6 +138,12 @@ async function copy() {
         >Account permission: <code>{{ selected.permission }}</code></span
       >
     </div>
+    <p v-if="operation === 'selectedFiles'" class="lab-note">
+      Replace FILE_ID_1 and FILE_ID_2 with IDs from your file list. Supply up to
+      100 distinct IDs without whitespace or ASCII control characters. Missing
+      or unowned files are omitted; compare returned IDs before using the
+      selection.
+    </p>
     <div class="code-toolbar">
       <div class="filter-pills">
         <button

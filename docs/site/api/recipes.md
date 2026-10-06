@@ -53,6 +53,34 @@ It builds a `FormData` body with the `file` field, infers a MIME type for common
 
 The client reads the file into memory, making it convenient for screenshots and small artifacts. For larger files, use the chunked recipe below or cURL's file upload.
 
+## Read your library timeline
+
+**Scope:** `files:read` · Account permission: **`files.read`**
+
+The downloadable example client can return account-wide calendar counts without loading all file metadata:
+
+```sh
+node examples/integrations.mjs timeline America/Los_Angeles
+# If you downloaded the example directly:
+node integrations.mjs timeline UTC
+```
+
+It uses `FLARE_URL` and `FLARE_TOKEN`, defaults to UTC, and prints the timeline JSON. Use the [timeline window example](./files#browse-the-whole-file-timeline) to fetch a small page from a particular calendar bucket with the returned upload-time ceiling. Existing page-based integrations continue to work.
+
+## Refresh a selected set of files
+
+**Scope:** `files:read` · Account permission: **`files.read`**
+
+Pass IDs from a previous file-list response to refresh their metadata, including files outside your current library viewport:
+
+```sh
+node examples/integrations.mjs files "$FLARE_FILE_ID_1" "$FLARE_FILE_ID_2"
+# If you downloaded the example directly:
+node integrations.mjs files "$FLARE_FILE_ID_1" "$FLARE_FILE_ID_2"
+```
+
+The client accepts 1–100 distinct IDs and requests `limit=100` without search, folder, tag, or snapshot filters. Match the returned rows by ID; their order follows the API's normal sort. Deleted and unowned files are omitted. Confirm that every expected ID is present before acting on the selection, and handle later operation failures because this read does not lock files. [Selected-ID filter contract](./files#list-and-search-files).
+
 ## Page through your library
 
 **Scope:** `files:read`

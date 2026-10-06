@@ -11,25 +11,35 @@ Tags let a file belong to several topics without duplicating or moving it. A scr
 
 Tags, automatic matching rules, and tag names belong to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs. People with `audit.read` can see recorded tag names, IDs, and change metadata in the [instance audit log](/admin/audit); account organization is not hidden from that administrative history.
 
-<Screenshot src="/evidence/vault-tags/files.jpg" alt="File library with tags shown beneath individual files" caption="Labels add context to your library without changing where a file lives." />
+<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="The continuous file library with tags shown beneath individual file previews" caption="Labels add context to your library without changing where a file lives." />
 
 ## Add a tag to a file
 
 1. In **Files**, open the file menu and choose **Edit tags**.
 2. Search for an existing tag, or type a name to create one.
-3. Select the tags you want. Changes save as you make them.
+3. Wait for the current assignments to load, then select the tags you want. Changes save as you make them.
 
 Tag names can be up to 40 characters. Use short names that will make sense when you see them on a file card, such as **Invoices**, **Design**, or **Reference**.
 
+<Screenshot src="/screenshots/timeline/library-tags.webp" alt="Edit tags showing Favorites unchecked after another client removed it from a selected file and the library was refreshed" caption="The editor reads current assignments before showing checked, unchecked, or mixed tags." />
+
 ## Tag several files together
 
-Choose **Select**, select files or the current page, and open **Edit tags**. A partially checked tag is assigned to some of the selected files. Selecting it adds it to all selected files while preserving their other tags.
+Choose **Select**, select individual files or **Select visible files**, and open **Edit tags**. Flare first refreshes the selected files’ details, including files outside the visible window. If that check fails, the editor stays closed; retry the action, or choose **Done** and select again if a file is no longer available.
+
+<Screenshot src="/screenshots/timeline/library-refreshed-tags.webp" alt="Edit tags for the selected Alpine morning file showing Favorites unchecked after reloading its current tag membership" caption="After another client removes Favorites, opening Edit tags shows its current unchecked state, including when the selected card is outside the visible window." />
+
+You can keep up to 100 files selected while scrolling through the library. **Select visible files** adds loaded cards currently on screen; it does not select all matching files. Changing a filter, folder, sort, or grouping clears the selection, so finish the current batch before changing the view.
+
+Opening **Edit tags** reads the current assignments for every selected file, including files that have scrolled off screen. If another tab or client changed a tag after you selected a file, the editor reflects that change before enabling edits. A checked tag belongs to every selected file; clicking it removes the tag from the selection. An unchecked or partially checked tag is added to all selected files when clicked.
+
+While assignments load, wait for the tag choices to appear. If loading fails, choose **Retry loading file tags**. If a selected file was deleted or is no longer available, close the editor, refresh the library, and select the remaining files again. Closing the editor clears the selection. Other clients can still change tags while the editor is open; close it, reselect the files, and reopen **Edit tags** to read their latest changes.
 
 This works well after a one-off upload batch. For a recurring source, let an upload profile or an automatic rule do the labeling.
 
 ## Find files by tag
 
-Choose **Tags** beside the library filters, or click a tag on a file. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection.
+Choose **Tags** beside the library filters, or click a tag on a file. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.

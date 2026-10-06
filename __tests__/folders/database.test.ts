@@ -18,7 +18,7 @@ vi.mock('@/lib/auth/api-auth', () => ({
   }),
 }))
 vi.mock('@/lib/events/handlers/file-expiry', () => ({
-  getFileExpirationInfo: async () => null,
+  getFilesExpirationInfo: async () => new Map(),
 }))
 
 const databaseUrl = process.env.FLARE_FOLDERS_DATABASE_URL
