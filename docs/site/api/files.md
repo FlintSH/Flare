@@ -300,6 +300,43 @@ Returns the distinct MIME types currently present in your account, sorted alphab
 }
 ```
 
+## Read current tags for a selection
+
+**`GET /api/files/tags?fileIds=FILE_ID,OTHER_FILE_ID`** · Account browser session or legacy account upload credential · Permission: **`files.read`**
+
+This dashboard route supplies fresh tag membership when opening **Edit tags**, including selected files outside the visible library window. It does **not** accept named `flr_…` tokens and is excluded from the named-token request builder and OpenAPI `paths`. Existing integrations using the named-token file listing can continue reading each file's `tags` there.
+
+Send one `fileIds` parameter containing 1–100 comma-separated, nonempty IDs, each at most 128 characters after trimming. Duplicate IDs are returned once in their first-requested order; the 100-entry limit applies before deduplication. Every file must still belong to the authenticated account. Only active tag assignments are returned, sorted by normalized tag name, then ID. The read does not modify files, tag rules, or manual exclusions, and emits no webhook event.
+
+For a signed-in browser on your disposable local Flare instance, this console example reads two files already returned by its file listing:
+
+```js
+const query = new URLSearchParams({ fileIds: [fileId, otherFileId].join(',') })
+const response = await fetch(`/api/files/tags?${query}`, {
+  credentials: 'same-origin',
+  cache: 'no-store',
+})
+const result = await response.json()
+if (!response.ok) throw new Error(result.error || 'Could not read file tags')
+console.log(result.data.files)
+```
+
+Set `fileId` and `otherFileId` to owned file IDs from that disposable account. Success is **200** with `Cache-Control: private, no-store`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "files": [
+      { "id": "FILE_ID", "tags": [{ "id": "TAG_ID", "name": "Review" }] },
+      { "id": "OTHER_FILE_ID", "tags": [] }
+    ]
+  }
+}
+```
+
+Malformed or oversized selections return **400**. Missing authentication or a named token returns **401**; a missing current `files.read` grant returns **403**. If any ID is missing, deleted, or belongs to another account, the whole request returns the same generic **404**, without a partial result. Close the editor, refresh the library, and select the remaining files again. A successful response reflects this read; it does not lock out later edits by another client.
+
 ## Chunked uploads
 
 Chunked uploads let a client transfer parts before finalizing one file. Both local and S3 storage support Flare's authenticated part-upload route. S3 can additionally provide direct presigned part URLs.

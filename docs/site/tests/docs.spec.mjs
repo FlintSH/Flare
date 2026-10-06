@@ -130,6 +130,15 @@ test('continuous library guide and its real recording are discoverable', async (
       .toBeGreaterThan(0)
     await video.evaluate((element) => element.pause())
   }
+  await page.goto('./guide/tags.html#tag-several-files-together')
+  const tagScreenshot = page.locator(
+    '.screenshot-button img[src$="library-tags.webp"]'
+  )
+  await tagScreenshot.scrollIntoViewIfNeeded()
+  await expect(tagScreenshot).toBeVisible()
+  await expect
+    .poll(() => tagScreenshot.evaluate((image) => image.naturalWidth))
+    .toBeGreaterThan(0)
 })
 
 test('API builder generates valid examples without contacting an instance', async ({

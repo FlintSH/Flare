@@ -27,6 +27,12 @@ Choose **Select**, select individual files or **Select visible files**, and open
 
 You can keep up to 100 files selected while scrolling through the library. **Select visible files** adds loaded cards currently on screen; it does not select all matching files. Changing a filter, folder, sort, or grouping clears the selection, so finish the current batch before changing the view.
 
+Opening **Edit tags** reads the current assignments for every selected file, including files that have scrolled off screen. If another tab or client changed a tag after you selected a file, the editor reflects that change before enabling edits. A checked tag belongs to every selected file; clicking it removes the tag from the selection. An unchecked or partially checked tag is added to all selected files when clicked.
+
+While assignments load, wait for the tag choices to appear. If loading fails, choose **Retry loading file tags**. If a selected file was deleted or is no longer available, close the editor, refresh the library, and select the remaining files again. Closing the editor clears the selection. Other clients can still change tags while the editor is open; close it, reselect the files, and reopen **Edit tags** to read their latest changes.
+
+<Screenshot src="/screenshots/timeline/library-tags.webp" alt="Edit tags showing Favorites unchecked after another client removed it from a selected file and the library was refreshed" caption="The editor reads current assignments before showing checked, unchecked, or mixed tags." />
+
 This works well after a one-off upload batch. For a recurring source, let an upload profile or an automatic rule do the labeling.
 
 ## Find files by tag

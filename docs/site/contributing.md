@@ -174,6 +174,17 @@ The demonstration account is `timeline-demo-alex@example.test` with the delibera
 
 The browser checks cover direct date jumps, bounded mounted cards and file requests, selection across scrolling, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
 
+The retained-selection tagging regression has a separate check against the same disposable server:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-tag-refresh.cjs
+```
+
+It selects a tagged file, removes the tag through another authenticated client, refreshes, and verifies that **Edit tags** reads current membership and sends an addition when the unchecked tag is clicked. It also checks selected files that have scrolled off screen, mixed membership, and recovery from an intentionally failed membership request. The request failure is a simulation; successful reads and tag changes use the real local application. The check restores its fixture tag assignments afterward.
+
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-tags.webp` during the successful membership read, before the simulated request failure. Inspect it before replacing `docs/images/timeline/library-tags.webp`. This separate tagging image supplements the five library screenshots captured by `verify-ui.cjs` below.
+
 The timeline API regression suite needs a **separate disposable database**, because it clears users and events between cases. For example:
 
 ```sh

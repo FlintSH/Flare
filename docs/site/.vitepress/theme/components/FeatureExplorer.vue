@@ -57,7 +57,7 @@ const features = [
   [
     'Organize',
     'Tags & automatic rules',
-    'Label files, filter by a tag, and apply matching rules by filename or extracted image text.',
+    'Edit current tags across a retained selection, filter by a tag, and apply matching rules by filename or extracted image text.',
     '/guide/tags',
   ],
   [

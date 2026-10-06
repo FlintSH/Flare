@@ -7,7 +7,7 @@ description: Every Flare HTTP API route, its purpose, and its authentication bou
 
 Flare's dashboard also talks to HTTP routes. Their existence does not make all of them part of the named-token API. This inventory distinguishes the supported automation surface from session-based account/admin actions and public content routes.
 
-Use the [OpenAPI document](/openapi.json) for custom clients using `flr_…` tokens. It describes the **12 supported method/path combinations** across seven paths. The rest of this page is a map for operators and contributors, not a promise of a general administrator REST API.
+Use the [OpenAPI document](/openapi.json) for custom clients using `flr_…` tokens. It describes the **13 supported method/path combinations** across eight paths. The rest of this page is a map for operators and contributors, not a promise of a general administrator REST API.
 
 Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all path segments. Methods listed here are the implemented handlers; do not assume another method is supported because the path exists.
 
@@ -126,7 +126,7 @@ These routes use `requireAuth`, whose compatibility path accepts a browser sessi
 | `/api/tags`                 | GET, POST         | List or create tags and their rules.                                                                                                                                                                                          |
 | `/api/tags/{id}`            | PATCH, DELETE     | Edit or delete an owned tag.                                                                                                                                                                                                  |
 | `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                                                                                                                                                                         |
-| `/api/files/tags`           | PATCH             | Change tag associations for selected owned files.                                                                                                                                                                             |
+| `/api/files/tags`           | GET, PATCH        | GET reads current tag assignments for 1–100 owned file IDs with `files.read`; PATCH changes assignments with `files.update` and `tags.manage`. See the [selection contract](./files#read-current-tags-for-a-selection).       |
 
 Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 

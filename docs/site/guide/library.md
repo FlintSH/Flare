@@ -110,6 +110,8 @@ Choose **Select**, then select individual cards or **Select visible files**. The
 
 You can select up to **100 files** at a time, then choose **Edit tags** or **Move**. Deselect individual files to make room, or finish the current batch before starting another. Changing the search, filters, folder, sort, or grouping clears the selection. **Done** leaves selection mode and clears it too.
 
+**Edit tags** reloads current tag assignments for the whole selection before enabling edits, including selected files outside the visible window. See [bulk tagging](./tags#tag-several-files-together) for checkbox meanings and loading recovery.
+
 <Screenshot src="/screenshots/timeline/library-selection.webp" alt="Library selection mode with Select visible files, a selected-file count, Move, Edit tags, and Done controls" caption="Keep a selection while scrolling; bulk actions apply to the selected files, up to 100 at a time." />
 
 ## Read text in images with OCR

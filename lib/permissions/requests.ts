@@ -22,7 +22,9 @@ export function requestPermissions(
   )
     return ['files.upload']
   if (
-    ['/api/files/types', '/api/files/timeline'].includes(pathname) &&
+    ['/api/files/types', '/api/files/timeline', '/api/files/tags'].includes(
+      pathname
+    ) &&
     method === 'GET'
   )
     return ['files.read']

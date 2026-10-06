@@ -52,6 +52,7 @@ describe('scoped API tokens', () => {
       '/api/users',
       '/api/integrations',
       '/api/files/a/password',
+      '/api/files/tags',
       '/api/files/chunks/a%2fb/complete',
       '/api/files/',
     ]) {
