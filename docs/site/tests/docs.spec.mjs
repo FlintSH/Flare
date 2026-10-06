@@ -436,6 +436,14 @@ test('archive guide, API contracts, tour, and recordings are discoverable', asyn
   await expect(
     page.locator('h2#browse-an-archive-shared-with-you')
   ).toBeVisible()
+  const retainedSelection = page.locator(
+    '.screenshot-button img[src$="library-archive.webp"]'
+  )
+  await retainedSelection.scrollIntoViewIfNeeded()
+  await expect(retainedSelection).toBeVisible()
+  await expect
+    .poll(() => retainedSelection.evaluate((image) => image.naturalWidth))
+    .toBeGreaterThan(0)
   await page.getByRole('link', { name: 'archive API', exact: true }).click()
   await expect(page).toHaveURL(/api\/archives\.html$/)
   await expect(page.locator('.vp-doc')).toContainText('profileRevision')
