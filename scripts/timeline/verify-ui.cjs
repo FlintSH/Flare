@@ -29,6 +29,7 @@ const evidence = {
   browser: 'Chromium',
   timezone: 'UTC',
   samples: [],
+  archiveSelections: [],
 }
 
 async function context(browser, storageState, mobile = false, record = false) {
@@ -85,6 +86,104 @@ async function top(page) {
   await ready(page)
   await expect(page.locator('[data-file-index="0"]')).toBeAttached()
   await page.evaluate(() => window.scrollTo(0, 0))
+}
+
+async function verifyArchiveSelection(page) {
+  const selectedNames = [
+    'Alpine morning 00001.webp',
+    'Pacific coast 00002.webp',
+  ]
+  const archiveRequests = []
+  const onRequest = (request) => {
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/files/archive'
+    ) {
+      archiveRequests.push(request.postDataJSON())
+    }
+  }
+  page.on('request', onRequest)
+  try {
+    await top(page)
+    await page
+      .getByRole('button', { name: 'Select files', exact: true })
+      .click()
+    for (const name of selectedNames) {
+      await page
+        .getByRole('checkbox', { name: `Select ${name}`, exact: true })
+        .check()
+    }
+    // A date-rail seek releases the row retained for keyboard focus.
+    await top(page)
+    const selectedCards = page.locator(
+      '[data-file-index="0"], [data-file-index="1"]'
+    )
+    for (let step = 0; step < 10; step++) {
+      await page.mouse.wheel(0, 600)
+      await page.waitForTimeout(200)
+      if ((await selectedCards.count()) === 0) break
+    }
+    await ready(page)
+    await expect(selectedCards).toHaveCount(0, { timeout: 15_000 })
+    await expect(
+      page.getByText('2 / 100 selected', { exact: true })
+    ).toBeInViewport()
+    await page
+      .getByRole('button', { name: 'Create archive', exact: true })
+      .click()
+    const dialog = page.getByRole('dialog', {
+      name: 'Create archive',
+      exact: true,
+    })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Save 2 selected files')
+    await dialog.getByText('Selected files (2)', { exact: true }).click()
+    const members = dialog.getByRole('list', {
+      name: 'Selected archive files',
+      exact: true,
+    })
+    await expect(members.getByRole('listitem')).toHaveCount(2)
+    assert.deepEqual(
+      await members.locator('li > span:first-child').allTextContents(),
+      selectedNames
+    )
+    await expect(
+      dialog.getByRole('textbox', { name: 'Archive name', exact: true })
+    ).toHaveValue('Archive.zip')
+    await expect(
+      dialog.getByRole('combobox', { name: 'Format', exact: true })
+    ).toHaveText('ZIP')
+    await expect(
+      dialog.getByRole('combobox', { name: 'Upload profile', exact: true })
+    ).toHaveText('Private (no profile)')
+    await expect(
+      dialog.getByRole('button', { name: 'Create archive', exact: true })
+    ).toBeEnabled()
+    if (page.viewportSize().width > 1000)
+      await screenshot(page, 'library-archive')
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await expect(
+      page.getByText('0 / 100 selected', { exact: true })
+    ).toBeInViewport()
+    assert.deepEqual(
+      archiveRequests,
+      [],
+      'Opening and canceling the dialog must not create an archive'
+    )
+    evidence.archiveSelections.push({
+      viewport: page.viewportSize(),
+      selectedNames,
+      submitted: false,
+    })
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await top(page)
+    passed(
+      `Create archive retains both unmounted selections at ${page.viewportSize().width}px; Cancel clears selection without creating a file`
+    )
+  } finally {
+    page.off('request', onRequest)
+  }
 }
 
 async function settledBox(locator) {
@@ -578,6 +677,8 @@ async function main() {
       'Image preview opens from the virtual grid, navigates to the next image, and closes normally'
     )
 
+    await verifyArchiveSelection(page)
+
     await page.getByRole('button', { name: 'Upload date', exact: true }).click()
     await page
       .getByRole('combobox', { name: 'Group files by upload date' })
@@ -771,6 +872,7 @@ async function main() {
     )
     await page.setViewportSize({ width: 390, height: 844 })
     await ready(page)
+    await verifyArchiveSelection(page)
     await page.getByRole('slider', { name: 'Browse files by date' }).focus()
     const mobileAccessibility = await page.evaluate(async () => {
       const result = await window.axe.run(document, {

@@ -45,6 +45,12 @@ No additional environment variable or instance switch enables these account feat
 
 All replicas must use the same stable `NEXTAUTH_SECRET`, including for decrypting authenticator secrets. A separate email encryption key does not make changing `NEXTAUTH_SECRET` safe for authenticators. Preserve the secret with your database backups and follow the [migration and key guidance](./maintenance#two-factor-authentication-and-passkey-migration).
 
+### Archive limits
+
+[Archive browsing, extraction, and creation](/guide/archives) use fixed limits rather than new environment variables or instance switches: 256 MiB per input/output archive or member, 512 MiB expanded/selected total, 1,000 entries, 100 selected files, 20 path levels, and 1,024 path characters. Archive processing has a 120-second deadline. Each process allows two concurrent operations: owner-library work is limited to one per account, and shared reads to one per source file. Shared requests first complete a separately limited body read (16 KiB, five seconds, 32 pending reads per process), schema validation, and file authorization; only then do they reserve archive capacity and start the processing deadline. Share-page manifest and entry requests also share a 30-per-IP-per-minute process-local limit. Busy/rate-limited requests return `429`; expired deadlines return `408`. Upload-size and account-quota settings still apply when publishing new outputs and can impose lower limits. Review [archive resource requirements](./storage#archive-processing).
+
+Creation and extraction default to private/no expiration, bypassing the account's default upload profile. Users can explicitly select an owned profile for its visibility, tags, expiration, naming, and share style; this may make outputs public. Existing upload permissions and profile revision checks apply. The destination folder is chosen separately.
+
 ### Webhook network access
 
 The default webhook policy accepts public HTTPS destinations only. Flare resolves and validates the destination at delivery time. Setting `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK=true` lets instance users configure receivers on networks reachable by the server, including HTTP services. Enable it only when that access matches your deployment's intended users and network boundaries. There is no environment-configured per-host allowlist in this release.

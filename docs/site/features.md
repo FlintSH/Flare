@@ -17,17 +17,18 @@ Reading for a particular installation? [Browse dated documentation releases and 
 
 ## Choose your starting point
 
-| You want to…                                 | Start here                                                                                                                                     |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Set up a personal file host                  | [Docker Compose](./hosting/docker) → [first-run setup](./admin/setup)                                                                          |
-| Run a shared instance                        | [Roles and permissions](./admin/roles) → [users](./admin/users) → [email](./admin/email) → [backups](./hosting/maintenance)                    |
-| Send screenshots straight to your domain     | [Screenshot tools](./guide/screenshot-tools) → [upload profiles](./guide/upload-profiles)                                                      |
-| Share a collection                           | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                                                            |
-| Find an older upload in a large library      | [Continuous scrolling and the date rail](./guide/library#scroll-through-your-library) → [recorded walkthrough](./demos#browse-a-large-library) |
-| Protect your sign-in                         | [Two-factor authentication and passkeys](./guide/security)                                                                                     |
-| Require a passkey instead of password or SSO | [Passkey requirement and emergency recovery](./guide/security#require-a-passkey-for-sign-in)                                                   |
-| Match your own brand                         | [Appearance studio](./admin/appearance)                                                                                                        |
-| Connect your own software                    | [API](./api/) → [signed webhooks](./api/webhooks)                                                                                              |
+| You want to…                                      | Start here                                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Set up a personal file host                       | [Docker Compose](./hosting/docker) → [first-run setup](./admin/setup)                                                                          |
+| Run a shared instance                             | [Roles and permissions](./admin/roles) → [users](./admin/users) → [email](./admin/email) → [backups](./hosting/maintenance)                    |
+| Send screenshots straight to your domain          | [Screenshot tools](./guide/screenshot-tools) → [upload profiles](./guide/upload-profiles)                                                      |
+| Browse shared archives, extract, or package files | [Archives](./guide/archives)                                                                                                                   |
+| Share a collection                                | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                                                            |
+| Find an older upload in a large library           | [Continuous scrolling and the date rail](./guide/library#scroll-through-your-library) → [recorded walkthrough](./demos#browse-a-large-library) |
+| Protect your sign-in                              | [Two-factor authentication and passkeys](./guide/security)                                                                                     |
+| Require a passkey instead of password or SSO      | [Passkey requirement and emergency recovery](./guide/security#require-a-passkey-for-sign-in)                                                   |
+| Match your own brand                              | [Appearance studio](./admin/appearance)                                                                                                        |
+| Connect your own software                         | [API](./api/) → [signed webhooks](./api/webhooks)                                                                                              |
 
 ## Know what you are choosing
 

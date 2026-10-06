@@ -9,6 +9,7 @@ import { FileType } from '@/types/components/file'
 import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
+  Archive,
   ArrowUpRight,
   Clock,
   Download,
@@ -65,6 +66,7 @@ interface FileCardProps {
   onDelete?: (id: string) => void
   onUpdate?: () => void
   onPreview?: (file: FileType) => void
+  onBrowseArchive?: () => void
   onEditTags?: () => void
   onTagSelect?: (id: string) => void
   onMove?: () => void
@@ -79,6 +81,7 @@ export function FileCard({
   onDelete,
   onUpdate,
   onPreview,
+  onBrowseArchive,
   onEditTags,
   onTagSelect,
   onMove,
@@ -315,18 +318,20 @@ export function FileCard({
           prefetch={false}
           href={safeUrl}
           aria-label={`Open ${file.name}`}
-          aria-haspopup={isImage && onPreview ? 'dialog' : undefined}
+          aria-haspopup={
+            onBrowseArchive || (isImage && onPreview) ? 'dialog' : undefined
+          }
           onClick={(event) => {
             if (
-              isImage &&
-              onPreview &&
+              (onBrowseArchive || (isImage && onPreview)) &&
               !event.metaKey &&
               !event.ctrlKey &&
               !event.shiftKey &&
               !event.altKey
             ) {
               event.preventDefault()
-              onPreview(file)
+              if (onBrowseArchive) onBrowseArchive()
+              else onPreview?.(file)
             }
           }}
           className="relative block aspect-square overflow-hidden bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -353,7 +358,11 @@ export function FileCard({
           )}
         </Link>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 opacity-0 transition-opacity group-focus-within:[&>*]:pointer-events-auto group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
-          {isImage && onPreview ? (
+          {onBrowseArchive ? (
+            <Button variant="secondary" size="sm" onClick={onBrowseArchive}>
+              Browse archive
+            </Button>
+          ) : isImage && onPreview ? (
             <Button
               variant="secondary"
               size="sm"
@@ -484,6 +493,12 @@ export function FileCard({
             <DropdownMenuContent align="end" className="w-56 bg-popover">
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {onBrowseArchive && (
+                <DropdownMenuItem onSelect={onBrowseArchive}>
+                  <Archive />
+                  Browse archive
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link prefetch={false} href={safeUrl}>
                   <ArrowUpRight />

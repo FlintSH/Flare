@@ -12,8 +12,9 @@ import {
   UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { Transform } from 'node:stream'
+import { Transform, addAbortSignal } from 'node:stream'
 import type { Writable as NodeWritable, Readable } from 'node:stream'
+import { setTimeout as delay } from 'node:timers/promises'
 
 import { loggers } from '@/lib/logger'
 
@@ -81,9 +82,9 @@ export class S3StorageProvider implements StorageProvider {
   async uploadStream(
     stream: Readable,
     path: string,
-    mimeType: string
+    mimeType: string,
+    signal?: AbortSignal
   ): Promise<{ size: number }> {
-    const { Upload } = await import('@aws-sdk/lib-storage')
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     let size = 0
@@ -94,7 +95,20 @@ export class S3StorageProvider implements StorageProvider {
       },
     })
 
-    stream.on('error', (error) => counter.destroy(error as Error))
+    // Sources can fail or be cancelled while the SDK is loading.
+    let sourceError: Error | undefined
+    counter.on('error', () => {})
+    stream.on('error', (error) => {
+      sourceError = error as Error
+      counter.destroy(sourceError)
+    })
+    const { Upload } = await import('@aws-sdk/lib-storage')
+    if (sourceError) throw sourceError
+    if (signal?.aborted) {
+      stream.destroy()
+      counter.destroy()
+      signal.throwIfAborted()
+    }
 
     const upload = new Upload({
       client: this.client,
@@ -109,7 +123,21 @@ export class S3StorageProvider implements StorageProvider {
       partSize: 5 * 1024 * 1024,
     })
 
-    await upload.done()
+    const abort = () => {
+      stream.destroy(
+        signal?.reason instanceof Error
+          ? signal.reason
+          : new Error('Upload cancelled')
+      )
+      void upload.abort().catch(() => {})
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) abort()
+    try {
+      await upload.done()
+    } finally {
+      signal?.removeEventListener('abort', abort)
+    }
 
     return { size }
   }
@@ -125,7 +153,11 @@ export class S3StorageProvider implements StorageProvider {
     )
   }
 
-  async getFileStream(path: string, range?: RangeOptions): Promise<Readable> {
+  async getFileStream(
+    path: string,
+    range?: RangeOptions,
+    signal?: AbortSignal
+  ): Promise<Readable> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     const options: { Range?: string } = {}
@@ -137,13 +169,15 @@ export class S3StorageProvider implements StorageProvider {
     let lastError: Error | null = null
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      signal?.throwIfAborted()
       try {
         const response = await this.client.send(
           new GetObjectCommand({
             Bucket: this.bucket,
             Key: key,
             ...options,
-          })
+          }),
+          { abortSignal: signal }
         )
 
         if (!response.Body) {
@@ -162,8 +196,9 @@ export class S3StorageProvider implements StorageProvider {
           stream.resume()
         })
 
-        return stream
+        return signal ? addAbortSignal(signal, stream) : stream
       } catch (error) {
+        signal?.throwIfAborted()
         lastError = error as Error
         logger.warn(`S3 getFileStream attempt ${attempt} failed`, {
           error,
@@ -176,9 +211,7 @@ export class S3StorageProvider implements StorageProvider {
           throw lastError
         }
 
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt) * 1000)
-        )
+        await delay(Math.pow(2, attempt) * 1000, undefined, { signal })
       }
     }
 

@@ -107,8 +107,10 @@
     "react-hook-form": "^7.88.0",
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
+    "tar-stream": "^3.2.2",
     "tesseract.js": "^6.0.1",
     "uuid": "^14.0.2",
+    "yauzl": "^3.4.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -121,6 +123,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "@types/yauzl": "^3.4.0",
     "aws-sdk-client-mock": "^4.1.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.39.5",

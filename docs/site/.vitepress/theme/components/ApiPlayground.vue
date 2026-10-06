@@ -96,6 +96,9 @@ async function copy() {
       required scope. The token owner must also have the current role
       permission. This builder covers named-token operations; account security
       changes and bulk tag editing use the signed-in Flare interface.
+      Owner-library archive operations require a browser session. Shared archive
+      browsing and entry downloads follow file visibility and password rules;
+      this token builder does not authorize them.
     </p>
     <div class="lab-grid two">
       <div>

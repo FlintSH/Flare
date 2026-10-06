@@ -57,6 +57,26 @@ Quotas are **disabled by default**. Enabling them applies a shared per-user allo
 
 This is one default quota for accounts without bypass. Flare does not currently expose separate per-account or per-role numeric quota values, shared group quotas, or reserved disk capacity. If you lower the allowance below a user's existing usage, their files remain, but further uploads are blocked until enough space is freed or the limit is raised.
 
+## Archive processing
+
+Archive browsing, entry downloads, extraction, and creation read the stored bytes on the application server. This applies to both local and S3 storage: using S3 does not remove the application's need for temporary working disk, CPU, and time to validate or compress an archive. Keep room for the compressed source, expanded members, and generated output as well as other uploads in progress.
+
+Work is staged in a private `flare-archive-*` directory under the operating system's temporary directory. Normal completion, failure, or cancellation removes that workspace; entry downloads retain it until the response stream closes. A process crash or failed removal can leave temporary files. Inspect the warning logs and, with every process using that temporary mount stopped, remove only identified abandoned workspaces. These files are temporary processing copies, not a replacement for the stored source files.
+
+Archive reads honor a file's recorded storage target. Historical files without a recorded target use the active provider, matching the older download behavior. A recorded target that is unavailable or conflicts with the current S3 configuration causes a conflict response instead of reading another bucket. Restore matching configuration or follow the [verified storage migration procedure](#changing-backend-or-bucket); do not clear provenance metadata to bypass it.
+
+The fixed [archive limits](../guide/archives#supported-sizes-and-formats) bound processing, including anonymous public share-page reads. At most two archive operations run per application process. Owner-library work is limited to one per account, while shared reads are limited to one per source file. Shared manifest and entry routes also share 30 requests per IP per minute per process. These are process limits, not a distributed queue or rate budget across replicas.
+
+Shared requests read at most 16 KiB under a separate five-second deadline, with up to 32 pending body reads per process. Header/origin and IP-rate checks run first; strict body validation and file authorization finish before archive slots or temporary workspaces are reserved. Slow, malformed, or unauthorized submissions cannot hold the two processing slots. Body capacity is released on completion, failure, or cancellation. A full body-read pool returns `429` with `Retry-After: 5`; a stalled body returns `408`.
+
+Archive processing is synchronous and has a 120-second deadline. Shared routes start that deadline after admission, excluding the earlier body read and authorization time. Owner-library operations still start it before reading their bodies. Do not treat 120 seconds as a total shared HTTP-request timeout. Configure the proxy's request/header/body timeouts independently; keep them consistent with the intended processing duration. Work that exceeds processing limits must be split into smaller requests.
+
+The shared-read rate budget resets when the process restarts. Client identification uses the first `X-Forwarded-For` address, then `X-Real-IP`, falling back to `127.0.0.1` when neither is present. Keep the application behind a trusted proxy that replaces incoming client-IP headers, as described in the [reverse-proxy guide](./reverse-proxy#keep-access-decisions-in-flare).
+
+Extracting adds new file records and storage bytes while retaining the original archive. Creating an archive adds one new file while retaining all selected source files. Outputs default to private/no expiration, without inheriting the account’s default profile. An explicitly selected owned profile instead supplies sharing, tags, expiration, naming, and share style; its current permissions, revision, and effective inherited settings are checked before publication. Changing an inherited account or instance default can return `409` and require the user to review the refreshed profile summary. The normal account quota and maximum output-file size apply; quota bypass does not remove fixed archive limits. Failed operations do not publish partial output sets. Archive creation is not a backup or storage migration: preserve the database, stored files, and secrets using the [backup procedure](./maintenance).
+
+If output objects were written before a failure, their uncommitted paths are queued for the existing [storage deletion worker](./maintenance#account-storage-cleanup) using the recorded destination target. Bytes can remain until that worker succeeds. A database failure that prevents queuing is logged and requires operator reconciliation; atomic publication of file records is not a promise that every failed storage write disappears immediately.
+
 ## Changing backend or bucket
 
 ::: warning A settings change does not move your files
