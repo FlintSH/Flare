@@ -40,6 +40,12 @@ Sessions expire after 30 days. **Last active** reflects authenticated server act
 
 Revocation affects subsequent authorization checks. It cannot recall a downloaded file, stop an already authorized response, or revoke an existing signed storage URL. Named API tokens and the legacy upload credential are separate: [revoke or rotate them](/api/authentication) as well when responding to a suspected compromise. Changing a password or sign-in security method can also invalidate sessions as described above and in the [security guide](./security).
 
+### Switch accounts in the same tab
+
+These lists show the currently signed-in account’s activity. Signing in as another account, or signing in again with a new browser session, reloads the lists and resets the history filter and open revocation confirmations. The **This browser** marker is determined again for the new sign-in. Switching accounts cannot undo a revocation already accepted by the server; check the original account’s sessions before retrying.
+
+<Screenshot src="/screenshots/audit/account-switch.webp" alt="Active sessions after a same-tab account switch and new sign-in, with This browser marking the replacement session" caption="The replacement sign-in has its own current-browser marker. This real-server regression uses deliberately supplied, reserved example IP addresses to distinguish disposable sessions." />
+
 ### Review successful and failed sign-ins
 
 **Login history** shows completed sign-in successes and recorded failures attributed to your account, with time, sign-in method, and available client details. Choose **All attempts**, **Successful**, or **Failed**, then **Load more attempts** for older entries. The list covers the last 90 days in pages of 25. History starts when this feature is installed; earlier logins cannot be reconstructed. Some failed sign-ins cannot be associated with an account and therefore do not appear in a personal history. The intermediate authenticator prompt is not a failed login. Rate-limited attempts and failures handled only by an external SSO provider may not appear. A failed attempt is not an active session.

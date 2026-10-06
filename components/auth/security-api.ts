@@ -38,10 +38,12 @@ export function recentSecurityProofName(status: SecurityStatus): string {
 export async function securityRequest<T>(
   path: string,
   data?: unknown,
-  method = data === undefined ? 'GET' : 'POST'
+  method = data === undefined ? 'GET' : 'POST',
+  signal?: AbortSignal
 ): Promise<T> {
   const response = await fetch(path, {
     method,
+    signal,
     cache: 'no-store',
     headers:
       data === undefined ? undefined : { 'Content-Type': 'application/json' },
