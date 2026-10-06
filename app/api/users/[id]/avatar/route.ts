@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { Prisma } from '@prisma/client'
 
+import { withAuditRoute } from '@/lib/audit'
 import { loggers } from '@/lib/logger'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
@@ -11,7 +12,7 @@ import { queueAvatarStorageDeletion } from '@/lib/storage/deletion'
 
 const logger = loggers.users
 
-export async function DELETE(
+async function handleDELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -49,4 +50,13 @@ export async function DELETE(
     logger.error('Error removing avatar', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleDELETE(req, { params }), {
+    route: '/api/users/[id]/avatar',
+  })(req)
 }

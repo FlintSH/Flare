@@ -42,7 +42,9 @@ describe('authentication retention worker', () => {
     expect(mocks.execute).toHaveBeenCalledTimes(1)
     finish(0)
     await vi.advanceTimersByTimeAsync(60000)
-    expect(mocks.execute).toHaveBeenCalledTimes(2)
+    expect(mocks.execute).toHaveBeenCalledTimes(6)
+    expect(mocks.execute.mock.calls[1][0].join('')).toContain('LoginAttempt')
+    expect(mocks.execute.mock.calls[2][0].join('')).toContain('BrowserSession')
   })
   it('retries a failed cleanup on the next poll without exposing its error', async () => {
     mocks.execute.mockRejectedValueOnce(new Error('private database details'))
@@ -52,6 +54,6 @@ describe('authentication retention worker', () => {
       'Security cleanup unavailable; retrying on the next poll.'
     )
     await vi.advanceTimersByTimeAsync(60000)
-    expect(mocks.execute).toHaveBeenCalledTimes(2)
+    expect(mocks.execute).toHaveBeenCalledTimes(4)
   })
 })

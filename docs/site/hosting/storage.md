@@ -8,6 +8,8 @@ Choose a storage backend during setup or under **Settings → Storage**. Changin
 
 <Screenshot src="/screenshots/preferences/settings-storage.png" alt="Flare Storage settings showing the storage provider and upload limits" caption="Storage and quota controls live together in Settings." />
 
+Session records, login history, and [audit events](/admin/audit) are stored in PostgreSQL, independently of local/S3 file bytes. They do not count toward a user's uploaded-file quota. Monitor database growth and preserve these records in [backups](./maintenance#sessions-and-audit-log-migration); deleting an uploaded object does not remove its historical audit metadata.
+
 ## Local storage
 
 Local storage writes beneath the application's `uploads` directory: **`/app/uploads` in the official container**. Mount a persistent volume there. The app runs as UID/GID `1001`; its entrypoint prepares upload-directory ownership on startup.

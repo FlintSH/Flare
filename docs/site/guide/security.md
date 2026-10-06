@@ -19,6 +19,10 @@ For example, if recent recovery proof expires while **Add a passkey** is open, i
 
 [Watch the complete authenticator and recovery walkthrough](/demos#enable-use-and-recover-two-factor-authentication) or [the passkey walkthrough](/demos#create-use-and-remove-a-passkey). Both use the real application with disposable data; the passkey device is explicitly simulated.
 
+## Check where your account is signed in
+
+Use **Profile → Account → Active sessions** to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
+
 ## Choose your sign-in method
 
 | Method                                 | What you need                                                                    | When to use it                                                                                                  |

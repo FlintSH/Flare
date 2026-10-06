@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { loggers } from '@/lib/logger'
 import { PermissionError, requirePermission } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
@@ -7,7 +8,7 @@ import { uploadAvatar } from '@/lib/storage/avatar'
 
 const logger = loggers.users
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('profile.update')
@@ -62,4 +63,10 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/profile/avatar',
+  })(req)
 }

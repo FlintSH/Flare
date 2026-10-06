@@ -1,5 +1,8 @@
+import { auditContext } from '@/lib/audit/context'
 import { prisma } from '@/lib/database/prisma'
 import { createLogger } from '@/lib/logger'
+
+import { cleanupSessionHistory } from '../sessions'
 
 const logger = createLogger('security-cleanup')
 const state = globalThis as typeof globalThis & {
@@ -23,19 +26,26 @@ export async function cleanupExpiredAuthLimits(): Promise<number> {
 
 export function startSecurityCleanupWorker(): void {
   if (state.flareSecurityCleanup) return
-  const timer = setInterval(async () => {
-    const worker = state.flareSecurityCleanup
-    if (!worker || worker.busy) return
-    worker.busy = true
-    try {
-      await cleanupExpiredAuthLimits()
-    } catch {
-      // Keep database connection details and bucket identifiers out of logs.
-      logger.warn('Security cleanup unavailable; retrying on the next poll.')
-    } finally {
-      worker.busy = false
-    }
-  }, 60_000)
+  const timer = setInterval(
+    () =>
+      auditContext.run({ actorId: null, actorName: 'System' }, async () => {
+        const worker = state.flareSecurityCleanup
+        if (!worker || worker.busy) return
+        worker.busy = true
+        try {
+          await cleanupExpiredAuthLimits()
+          await cleanupSessionHistory()
+        } catch {
+          // Keep database connection details and bucket identifiers out of logs.
+          logger.warn(
+            'Security cleanup unavailable; retrying on the next poll.'
+          )
+        } finally {
+          worker.busy = false
+        }
+      }),
+    60_000
+  )
   timer.unref()
   state.flareSecurityCleanup = { timer, busy: false }
 }

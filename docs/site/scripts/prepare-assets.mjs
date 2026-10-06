@@ -131,6 +131,12 @@ for (const name of [
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }
+for (const name of ['session-management', 'audit-investigation']) {
+  await copyFile(
+    resolve(root, '../../.github/assets/audit', `${name}.webm`),
+    resolve(root, 'public/demos', `${name}.webm`)
+  )
+}
 const index = [
   '# Flare documentation',
   '',

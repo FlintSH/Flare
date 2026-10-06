@@ -68,6 +68,7 @@ These are the keys used in role records and the session permission list. The int
 | Accounts            | `users.read`, `users.create`, `users.update`, `users.delete`, `users.sessions`, `users.email`, `users.roles` | List, create, edit, delete accounts; invalidate sessions; manage email access; assign roles. These are independent permissions and obey hierarchy.     |
 | Content moderation  | `content.read`, `content.update`, `content.delete`                                                           | Inspect other accounts' files/links, change their file settings, or delete their content. Reading includes private and password-protected file access. |
 | Role administration | `roles.manage`                                                                                               | Create and maintain roles within the delegation rules below.                                                                                           |
+| Audit history       | `audit.read`                                                                                                 | Read instance-wide audit events, including actors and private filenames. Does not grant content access or event deletion.                              |
 | Instance settings   | `settings.read`, `settings.general`, `settings.security`, `settings.storage`, `settings.email`               | Inspect instance settings, change General, change registration/SSO, change storage/limits, or manage email configuration and delivery.                 |
 | Instance appearance | `appearance.manage`                                                                                          | Manage the appearance studio, branding, assets, and favicon. Executable custom CSS/head HTML requires Administrator.                                   |
 | Storage allowance   | `quotas.bypass`                                                                                              | Bypass the shared per-account storage quota, while retaining maximum file-size limits.                                                                 |
@@ -96,6 +97,8 @@ Example responsibilities:
 | Contributors         | `files.upload`, `pastes.create`                                  | Restore upload/paste capabilities after those permissions are removed from Everyone.      |
 
 Custom CSS/head HTML requires Administrator because it can execute code in other people’s browser sessions; a delegated designer cannot use those advanced editors.
+
+`audit.read` is a separate instance-wide permission. Administrator includes it; Everyone does not receive it by default. Delegating it exposes retained activity across all accounts, including filenames and actor identities for private content and accounts above the reader’s role. It does not confer `content.read`, `users.sessions`, or a way to edit/delete audit events. Review the [audit privacy and retention boundaries](./audit#access-and-privacy) before granting it.
 
 Content moderation is instance-wide and does not use the account-management hierarchy: these grants can apply to content owned by higher-ranked accounts. Content reading is sensitive: a moderator with `content.read` can see private content and bypass file passwords. Explain this access to the people using your instance. [Sharing and privacy](/guide/sharing) describes the reader-facing boundaries.
 

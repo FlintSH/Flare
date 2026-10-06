@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.users
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
@@ -35,4 +36,13 @@ export async function POST(
     logger.error('Error getting user:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  return withAuditRoute(async () => handlePOST(request, { params }), {
+    route: '/api/users/[id]/login',
+  })(request)
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ shortCode: string }> }
 ) {
@@ -27,4 +28,13 @@ export async function GET(
     console.error('URL redirect error:', error)
     return new NextResponse(null, { status: 500 })
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ shortCode: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    route: '/u/[shortCode]',
+  })(req)
 }

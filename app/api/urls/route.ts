@@ -6,6 +6,7 @@ import {
 import { nanoid } from 'nanoid'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -16,7 +17,7 @@ function generateShortCode() {
   return nanoid(6)
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -77,4 +78,14 @@ export async function GET(req: Request) {
     logger.error('URL list error', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), { route: '/api/urls' })(
+    req
+  )
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), { route: '/api/urls' })(req)
 }

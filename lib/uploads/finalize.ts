@@ -3,6 +3,7 @@ import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { basename, extname } from 'node:path'
 
+import { recordAudit, setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
@@ -33,6 +34,7 @@ export async function prepareUploadDestination(
   )
   if (!urlSafeName || urlSafeName.includes('/') || urlSafeName.includes('\\'))
     throw new UploadError('Invalid filename.')
+  setAuditTarget({ type: 'file', name: displayName })
   // Independent object keys prevent simultaneous same-name uploads overwriting bytes.
   return {
     filePath: `uploads/${user.urlId}/${randomUUID()}/${urlSafeName}`,
@@ -207,7 +209,7 @@ export async function finalizeUpload(input: {
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },
     })
-    if (options.expiresAt)
+    if (options.expiresAt) {
       await tx.event.create({
         data: {
           type: 'file.schedule-expiration',
@@ -222,12 +224,25 @@ export async function finalizeUpload(input: {
           },
         },
       })
+      await recordAudit({
+        action: 'file.expiration.scheduled',
+        category: 'files',
+        targetType: 'file',
+        targetId: file.id,
+        targetName: file.name,
+        details: {
+          expiresAt: options.expiresAt,
+          expiryAction: options.expiryAction,
+        },
+      })
+    }
     await enqueueFileReady(tx, file)
     return { file, created: true }
   }
   const result = input.transaction
     ? await persist(input.transaction)
     : await prisma.$transaction(persist)
+  setAuditTarget({ type: 'file', id: result.file.id, name: result.file.name })
   if (result.created && !input.transaction) enqueueUploadProcessing(result.file)
   return result.file
 }

@@ -7,6 +7,8 @@ description: Browser-session contracts for authenticator enrollment, WebAuthn pa
 
 These routes support Flare's interactive [sign-in security controls](/guide/security). Security management requires a **browser session** with a current session version; sensitive changes also require fresh identity proof. Neither named API tokens nor the legacy upload credential can authorize these routes. They are deliberately excluded from the named-token [OpenAPI document](/openapi.json) and request builder.
 
+A valid browser session is backed by a server-side session record as well as the current session version. Expired or revoked records and pre-migration cookies are rejected on the next protected request. [Session history and revocation contracts](./activity) describe the new records and their self-service API.
+
 Security features are available independently of `profile.update`. They do not grant application permissions or bypass email verification. The normal account/role/email checks continue after sign-in.
 
 ## Origin and credential boundaries

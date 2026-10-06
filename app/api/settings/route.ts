@@ -1,6 +1,7 @@
 import { PublicSettings, SettingsUpdateResponse } from '@/types/dto/settings'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requireAuth, requirePermission } from '@/lib/auth/api-auth'
 import { FlareConfig, getConfig, updateConfig } from '@/lib/config'
@@ -20,7 +21,7 @@ import { invalidateStorageProvider } from '@/lib/storage'
 
 const logger = loggers.config
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) {
@@ -105,7 +106,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const session = await getAccessSession()
   if (!session?.user) return apiError('Unauthorized', 401)
   if (!isSameOriginRequest(request))
@@ -161,7 +162,7 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { user, response } = await requirePermission('administrator')
     if (response) return response
@@ -212,4 +213,22 @@ export async function POST(req: Request) {
     logger.error('Error updating settings', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), { route: '/api/settings' })(
+    req
+  )
+}
+
+export async function PATCH(request: Request) {
+  return withAuditRoute(async () => handlePATCH(request), {
+    route: '/api/settings',
+  })(request)
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/settings',
+  })(req)
 }

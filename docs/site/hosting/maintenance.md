@@ -97,6 +97,22 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Sessions and audit log migration
+
+Migrations `20261006000200_instance_audit` and `20261006010000_browser_sessions` add persistent instance audit events, server-side browser-session records, and account login history. Normal image startup applies the database migration. Back up PostgreSQL first, deploy all application replicas together, and verify the new tables are present before accepting sign-ins. There is no new environment switch or background service to enable.
+
+**Everyone must sign in again after this upgrade.** Older cookies do not identify a server-side session record and are rejected rather than silently trusted. Existing accounts, passwords, passkeys, authenticator/recovery methods, role assignments, files, and integration credentials remain in place. Named API tokens and the legacy upload credential do not become browser sessions and are not revoked by this migration. Update any custom dashboard client to handle a new sign-in prompt and the [session API](../api/activity).
+
+Audit/login history begins when the feature runs; previous activity is not backfilled. Administrator can open **Audit log**; grant `audit.read` only to trusted reviewers who should see activity across all accounts, including private filenames. Verify a fresh sign-in appears in **Profile → Account → Active sessions**, create and revoke a second disposable browser session, and confirm that the revoked browser is refused on its next protected request. Then create, edit, and remove a disposable file and inspect the resulting [audit events](../admin/audit).
+
+Personal login history covers 90 days. The security worker removes older attempts and session rows whose fixed expiry is more than 90 days old in bounded batches. Revoking a session removes its access immediately on the next request; waiting for physical row cleanup is unnecessary. This automatic cleanup does not purge audit events.
+
+Audit records live in PostgreSQL, survive account/file deletion, and have **no automatic retention cutoff**. There is no built-in audit purge control. Include their growth in database capacity planning and define retention with your own operator policy. Backups contain this sensitive history too. Deleting the corresponding application object does not remove the historical metadata from the live audit table or a backup.
+
+Restoring a database restores session revocation and audit history to its backup point. A previously revoked session whose cookie and fixed expiry are still valid can become usable again if its record is restored. After a disaster recovery, revoke affected users' sessions through **Users → Revoke Sessions** and review credentials changed since the backup. A restore also loses events recorded after that snapshot unless separately preserved; the audit log is not an independent or tamper-evident archive.
+
+Most audit writes are best effort. Account deletion’s per-file audit records are inserted in the deletion transaction: an audit insert failure rolls back account removal and queued cleanup rather than allowing the file evidence to be lost. Monitor application diagnostics for audit-write errors and verify events are arriving after a database outage or upgrade. Absence of an event is not proof that an operation did not occur. Direct database/storage edits and requests served by object storage or caches need separate infrastructure logs. [Review client-IP trust](./reverse-proxy#client-addresses-in-session-history) before using session metadata to investigate access.
+
 ### Two-factor authentication and passkey migration
 
 Migration `20261004010000_account_security` adds account authenticator state, hashed one-time recovery codes, public passkey credentials, short-lived verification challenges, and shared rate-limit counters. Normal image startup applies it. Existing accounts retain their passwords, SSO bindings, roles, integrations, and content; two-factor authentication stays off and passkeys stay empty until each account enrolls. No additional environment variable is required.

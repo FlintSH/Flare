@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { Readable } from 'stream'
 
+import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
@@ -69,7 +70,7 @@ function createRobustStream(nodeStream: Readable): ReadableStream {
   })
 }
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ userUrlId: string; filename: string }> }
 ) {
@@ -93,8 +94,11 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
+
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return new Response(null, { status: access.status })
     }
 
@@ -152,4 +156,15 @@ export async function GET(
     }
     return new Response(null, { status: 500 })
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    action: 'file.read',
+    category: 'files',
+    route: '/[userUrlId]/[filename]/raw',
+  })(req)
 }

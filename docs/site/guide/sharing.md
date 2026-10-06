@@ -22,6 +22,10 @@ Private files deliberately return a not-found response to people without access.
 
 Flare is operated by your instance administrator. Private files and file passwords are access controls in the application; they do not provide end-to-end encryption from the server operator.
 
+## Activity visible to administrators
+
+Flare records [instance audit events](/admin/audit) for application activity, including file operations and background processing. People with `audit.read` can inspect recorded filenames, account attribution, outcomes, and selected metadata, including activity involving private files. This permission does not itself grant file-content access. Deleting a file or account does not erase the retained audit record; ask your operator about retention and backups. Downloaded copies and direct object-storage requests are outside Flare's application audit boundary.
+
 ## Share a public file
 
 1. Set its visibility to **Public** while uploading, or choose **Change visibility** from its library menu.

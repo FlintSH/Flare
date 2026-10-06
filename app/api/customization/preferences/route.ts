@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import type { InputJsonValue } from '@prisma/client/runtime/library'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { appearanceMutationGuard } from '@/lib/customization/http'
 import {
@@ -11,7 +12,7 @@ import {
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 
-export async function GET() {
+async function handleGET() {
   const session = await getAccessSession()
   if (!session?.user)
     return NextResponse.json(
@@ -28,7 +29,7 @@ export async function GET() {
   )
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const { session, response: permissionDenied } = await requirePermission(
     'appearance.personal'
   )
@@ -82,4 +83,16 @@ export async function PATCH(request: Request) {
       { status: 400 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/customization/preferences',
+  })()
+}
+
+export async function PATCH(request: Request) {
+  return withAuditRoute(async () => handlePATCH(request), {
+    route: '/api/customization/preferences',
+  })(request)
 }

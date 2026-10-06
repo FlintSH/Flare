@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { ZodError } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { appearanceMutationGuard } from '@/lib/customization/http'
@@ -11,7 +12,7 @@ import { saveAppearance } from '@/lib/customization/store'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { requirePermission } from '@/lib/permissions/server'
 
-export async function GET() {
+async function handleGET() {
   const session = await getAccessSession()
   if (!session?.user)
     return NextResponse.json(
@@ -29,7 +30,7 @@ export async function GET() {
   )
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const { session, response: permissionDenied } =
     await requirePermission('appearance.manage')
   if (permissionDenied) return permissionDenied
@@ -78,4 +79,16 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/customization',
+  })()
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/customization',
+  })(request)
 }

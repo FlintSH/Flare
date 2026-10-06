@@ -1,3 +1,4 @@
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import {
@@ -9,7 +10,7 @@ import {
 } from '@/lib/uploads/chunks'
 import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const limited = await rateLimit(req, uploadLimiter)
   if (limited) return limited
   try {
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -36,7 +37,7 @@ export async function PUT(req: Request) {
   }
 }
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -58,4 +59,22 @@ export async function GET(req: Request) {
   } catch (error) {
     return uploadErrorResponse(error)
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/files/chunks',
+  })(req)
+}
+
+export async function PUT(req: Request) {
+  return withAuditRoute(async () => handlePUT(req), {
+    route: '/api/files/chunks',
+  })(req)
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), {
+    route: '/api/files/chunks',
+  })(req)
 }

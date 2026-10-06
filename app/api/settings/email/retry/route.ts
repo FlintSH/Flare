@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { emailAdminAccess, emailSettingsError } from '@/lib/email/admin'
 import { retryMail } from '@/lib/email/outbox'
 import { startMailWorker } from '@/lib/email/worker'
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -23,8 +24,16 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     startMailWorker()
-    return NextResponse.json({ data: { message: 'Message queued for retry' } })
+    return NextResponse.json({
+      data: { message: 'Message queued for retry' },
+    })
   } catch (error) {
     return emailSettingsError(error)
   }
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/settings/email/retry',
+  })(request)
 }

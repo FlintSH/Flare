@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -8,7 +9,7 @@ import { generatorProfile } from '@/lib/uploads/profiles'
 
 const logger = loggers.users
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('tokens.manage')
@@ -192,4 +193,10 @@ echo "File uploaded successfully!"
 echo "URL: $URL"
 echo "URL has been copied to clipboard (if a clipboard tool was available)"
 exit 0`
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), {
+    route: '/api/profile/bash',
+  })(req)
 }

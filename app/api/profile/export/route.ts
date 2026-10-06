@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -47,7 +48,7 @@ type UserData = {
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   let exportDir: string | null = null
   let totalFiles = 0
   let successfulFiles = 0
@@ -333,4 +334,10 @@ async function getFileContentFromStorage(
     )
     throw error
   }
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), {
+    route: '/api/profile/export',
+  })(req)
 }

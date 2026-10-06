@@ -45,6 +45,7 @@ Use the builder to see how your choices change a request. It generates a command
 | Run your own automation after an upload                            | [Webhooks](./webhooks)                        |
 | Start with working code                                            | [Recipes](./recipes)                          |
 | Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)      |
+| Build browser session history or audit views                       | [Sessions and audit contracts](./activity)    |
 | Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)    |
 
 For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the uploader configuration for you in **Profile → Uploads → Screenshot tools and scripts**. Those downloads already contain your account upload credential. Named tokens are useful when building a custom connection, restricting permissions, or revoking one tool independently.
@@ -77,5 +78,7 @@ Errors contain an `error` string. Some include `success: false`; others do not. 
 Uploads follow the same maximum file size, storage quotas, file checks, upload profiles, and expiration rules as the dashboard. There is no separate API storage pool. A named token owned by an administrator still has only its selected API scopes. Every token request also requires the owner's current role permission; role revocation applies on the next request.
 
 The API paths currently have no version prefix. These references describe the implementation shipped with the documentation. Webhook payloads do carry an explicit `version: 1`; check that field when processing events. Use the documentation from your Flare release when maintaining an older instance.
+
+The [sessions and audit routes](./activity) require an interactive browser session. The request builder deliberately offers no token-authenticated session-revocation or audit operation. Audit events do not add a webhook type; `file.ready` and its schema/signing/retry behavior are unchanged.
 
 Named tokens currently cover file listing/uploads and short links. Account administration, token/webhook management, file deletion, changing an existing file's settings, and organization management are dashboard operations. The [endpoint inventory](./endpoint-inventory) identifies their authentication boundaries without implying that they are additional bearer-token APIs.

@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 27')
+  await expect(page.getByRole('status')).toContainText('3 of 29')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -122,6 +122,8 @@ for (const width of [390, 1440]) {
       './guide/account.html',
       './guide/security.html',
       './api/security.html',
+      './admin/audit.html',
+      './api/activity.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -174,6 +176,8 @@ for (const theme of ['dark', 'light']) {
       './guide/account.html',
       './guide/security.html',
       './api/security.html',
+      './admin/audit.html',
+      './api/activity.html',
       './hosting/docker.html',
       './guide/sharing.html',
     ]) {
@@ -339,4 +343,62 @@ test('development preview explains where dated release docs are available', asyn
   await expect(
     page.getByLabel('Documentation version and source revision')
   ).toContainText('Development preview')
+})
+
+test('sessions and audit guides, walkthroughs, and recordings are discoverable', async ({
+  page,
+}) => {
+  for (const [query, target] of [
+    ['active sessions', /guide\/account\.html$/],
+    ['audit log', /admin\/audit\.html$/],
+  ]) {
+    await page.goto('./features.html')
+    await page.getByLabel('Find a capability').fill(query)
+    await expect(page.locator('.feature-card')).toHaveCount(1)
+    await page.locator('.feature-card').click()
+    await expect(page).toHaveURL(target)
+  }
+  await page.goto('./demos.html')
+  for (const [label, target] of [
+    ['8. Sessions', /guide\/account\.html$/],
+    ['9. Audit', /admin\/audit\.html$/],
+  ]) {
+    await page.getByRole('button', { name: label, exact: true }).click()
+    await expect(page.locator('.tour-description a')).toHaveAttribute(
+      'href',
+      target
+    )
+  }
+  for (const name of ['session-management.webm', 'audit-investigation.webm']) {
+    const video = page.locator(`video[src$="${name}"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Recording metadata timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Activity recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
 })

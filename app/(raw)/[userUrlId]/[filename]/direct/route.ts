@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { getStorageProvider } from '@/lib/storage'
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ userUrlId: string; filename: string }> }
 ) {
@@ -30,14 +31,20 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
+
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return new Response(null, { status: access.status })
     }
 
     const isVideo = file.mimeType.startsWith('video/')
     if (!isVideo) {
-      return new Response(null, { status: 400, statusText: 'Not a video file' })
+      return new Response(null, {
+        status: 400,
+        statusText: 'Not a video file',
+      })
     }
 
     const storageProvider = await getStorageProvider()
@@ -53,4 +60,15 @@ export async function GET(
     console.error('Direct URL error:', error)
     return new Response(null, { status: 500 })
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    action: 'file.read',
+    category: 'files',
+    route: '/[userUrlId]/[filename]/direct',
+  })(req)
 }

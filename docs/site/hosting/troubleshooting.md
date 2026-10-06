@@ -101,7 +101,15 @@ Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WE
 
 Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General and may be opted out for an upload. Processing an image takes time and does not guarantee useful extracted text.
 
+With `audit.read`, filter [Audit log](/admin/audit) for the relevant file and processing outcomes, then compare the timestamps with worker diagnostics. Recorded OCR events retain outcomes rather than extracted text.
+
 Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
+
+## Audit activity is missing
+
+Open [Audit log](/admin/audit), clear the filters, and widen the time range. History starts with the session/audit migration; earlier activity is not backfilled. Confirm the caller has `audit.read`, then check PostgreSQL availability, migration status, disk space, and application diagnostics for audit-write failures. Create one disposable file and refresh the log to test current ingestion. Most audit writes are best effort, so a missing event is not proof that an operation failed or never happened. Account deletion’s per-file evidence is transactional and rolls back deletion if the insert fails.
+
+A direct S3 request, a cache hit, a provider-side sign-in rejection, or an external database change may need the corresponding infrastructure logs. Avoid sharing private filenames, actor details, and request metadata in a public report without reviewing them.
 
 ## Collect a useful support report
 

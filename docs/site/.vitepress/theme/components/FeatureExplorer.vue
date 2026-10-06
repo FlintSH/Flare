@@ -115,6 +115,18 @@ const features = [
     '/guide/security',
   ],
   [
+    'Personalize',
+    'Login history & active sessions',
+    'Review recent sign-ins and their device details, then revoke one browser session or every session on your account.',
+    '/guide/account',
+  ],
+  [
+    'Host & administer',
+    'Instance audit log',
+    'Investigate file activity, background processing, access failures, role changes, and settings with searchable audit events.',
+    '/admin/audit',
+  ],
+  [
     'Automate',
     'Scoped API tokens',
     'Give each integration its own revocable permissions, expiration, and optional upload profile binding.',

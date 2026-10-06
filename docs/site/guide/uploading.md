@@ -90,4 +90,6 @@ File types may be restricted by the administrator, and the server checks file co
 | Progress reaches 100% but no link appears  | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                                      |
 | Small files work, large files fail         | Give your administrator the approximate size and error message so they can check storage, proxy limits, and chunked uploads.                                            |
 
+An administrator with `audit.read` can investigate [Audit log](/admin/audit) using the filename, account, time, and available request context. Upload/finalization records retain the file ID and name when the server can identify them, including useful context for some failures; they do not contain file bytes or submitted passwords. An early proxy rejection or interrupted request may not reach Flare at all, so provide the visible error and approximate time rather than assuming every failed transfer has an audit event. OCR and later background work have separate outcomes after upload acceptance.
+
 For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).

@@ -1,6 +1,8 @@
 import type { BaseEvent, EventWorkerOptions } from '@/types/events'
 import { EventStatus } from '@/types/events'
 
+import { recordAudit } from '@/lib/audit'
+import { auditContext } from '@/lib/audit/context'
 import { loggers } from '@/lib/logger'
 
 import { eventConsumer } from './consumer'
@@ -70,17 +72,21 @@ export class EventWorker {
       enableScheduledEvents,
     })
 
-    this.intervalId = setInterval(async () => {
-      try {
-        await this.processEvents(batchSize, maxConcurrency)
+    this.intervalId = setInterval(
+      () =>
+        auditContext.run({ actorId: null, actorName: 'System' }, async () => {
+          try {
+            await this.processEvents(batchSize, maxConcurrency)
 
-        if (enableScheduledEvents) {
-          await this.activateScheduledEvents()
-        }
-      } catch (error) {
-        logger.error('Error in event worker', error as Error)
-      }
-    }, pollInterval)
+            if (enableScheduledEvents) {
+              await this.activateScheduledEvents()
+            }
+          } catch (error) {
+            logger.error('Error in event worker', error as Error)
+          }
+        }),
+      pollInterval
+    )
 
     logger.info('Event worker started successfully')
   }
@@ -137,6 +143,15 @@ export class EventWorker {
 
     try {
       const result = await eventConsumer.processEvent(event)
+      await recordAudit({
+        action: result.success ? 'event.completed' : 'event.failed',
+        category: 'system',
+        outcome: result.success ? 'success' : 'failure',
+        actorName: 'System',
+        targetType: 'Event',
+        targetId: event.id,
+        details: { eventType: event.type, retry: result.shouldRetry },
+      })
       const processingTime = Date.now() - startTime
 
       this.updateProcessingTime(processingTime)
@@ -157,6 +172,15 @@ export class EventWorker {
       }
     } catch (error) {
       logger.error(`Failed to process event ${event.id}`, error as Error)
+      await recordAudit({
+        action: 'event.failed',
+        category: 'system',
+        outcome: 'failure',
+        actorName: 'System',
+        targetType: 'Event',
+        targetId: event.id,
+        details: { reason: 'Event processing failed' },
+      })
       this.stats.eventsFailed++
     }
   }

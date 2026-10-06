@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { loggers } from '@/lib/logger'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
@@ -8,7 +9,7 @@ import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 const logger = loggers.users
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -43,4 +44,13 @@ export async function DELETE(
     logger.error('Error invalidating sessions:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleDELETE(request, { params }), {
+    route: '/api/users/[id]/sessions',
+  })(request)
 }

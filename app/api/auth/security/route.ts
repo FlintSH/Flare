@@ -1,9 +1,10 @@
+import { withAuditRoute } from '@/lib/audit'
 import { securityRoute, securitySession } from '@/lib/auth/security/http'
 import { recentAuthentication } from '@/lib/auth/security/service'
 import { relyingParty } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   return securityRoute(async () => {
     const { session, user } = await securitySession(req, false)
     const [passkeys, recoveryCodesRemaining, passkeyRecoveryCodesRemaining] =
@@ -39,4 +40,10 @@ export async function GET(req: Request) {
       canUseRecentSso: !user.password && recentAuthentication(session, 'oidc'),
     }
   })
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), {
+    route: '/api/auth/security',
+  })(req)
 }

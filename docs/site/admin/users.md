@@ -75,19 +75,23 @@ Deletion has no recycle bin. Individual file deletion removes the database recor
 
 Choose **Revoke Sessions** on an account, review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. On success, the confirmation closes and **Sessions revoked** appears; the person must sign in again. The server returns an empty `204 No Content`, which is a successful result. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.
 
-If the request fails, the confirmation stays open and shows an error so you can address the cause and retry.
+If the request fails, the confirmation stays open and shows an error so you can address the cause and retry. Owners can also review their own [active sessions and login history](/guide/account#login-history-and-active-sessions) and revoke one session at a time from Profile. Their self-service controls do not require `users.sessions`.
+
+The [audit log](./audit) records account/session, role, and moderation activity. Reading it requires the separate `audit.read` permission; account-management access alone does not expose the instance-wide history.
 
 <Screenshot src="/screenshots/roles/sessions-revoked.webp" alt="Users list with a Sessions revoked notification saying Morgan Lee will need to sign in again" caption="Successful session revocation closes the confirmation and reports that the account must sign in again." />
 
 ## Delete an account
 
-With `users.delete` and authority above the target account, read the confirmation carefully: deleting an account removes its account data and associated content, including file records, profiles, integrations, and short links. Account removal and durable cleanup jobs for stored files and the uploaded avatar commit together. A permission or last-administrator refusal leaves both the account and its stored bytes untouched. Once deletion succeeds, the removed account can no longer authenticate; no separate session-revocation permission is required.
+With `users.delete` and authority above the target account, read the confirmation carefully: deleting an account removes its account data and associated content, including file records, profiles, integrations, and short links. Per-file deletion audit evidence, account removal, and durable cleanup jobs for stored files and the uploaded avatar commit together. A failure to write that audit evidence rolls back the deletion and cleanup queue; resolve the database error before retrying. A permission or last-administrator refusal leaves both the account and its stored bytes untouched. Once deletion succeeds, the removed account can no longer authenticate; no separate session-revocation permission is required.
 
 A successful response means the account is gone and cleanup is queued. A background worker removes the bytes after commit and retries failures automatically, including after a restart. Storage downtime or unverified historical storage locations can delay that cleanup; already-issued S3 links or public avatar URLs can remain usable until the objects are deleted or links expire. For pending work, ask the operator to follow [account storage cleanup](/hosting/maintenance#account-storage-cleanup). External avatar URLs, backups, and external caches are outside that cleanup.
 
 Deleting a large account can take longer while its files are queued in bulk. If the request times out, refresh Users to check whether the account was removed before trying again.
 
-Offer a data export or make a backup before deleting content that may need to be retained. Account deletion is not temporary suspension; restoring it requires a suitable backup. Deleting a user also removes their API tokens and webhook configurations, so automations owned by that account stop working.
+Offer a data export or make a backup before deleting content that may need to be retained. Account deletion is not temporary suspension; restoring it requires a suitable backup. Retained audit events keep their recorded actor and target metadata after account deletion; account deletion is not audit-history erasure. [Retention and backup handling](./audit#retention-and-operational-limits) are operator responsibilities.
+
+Deleting a user also removes their API tokens and webhook configurations, so automations owned by that account stop working.
 
 ## Account sign-in security
 

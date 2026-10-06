@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requestPasswordReset } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
 import { emailRoute } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const started = Date.now()
   const response = await emailRoute(async () => {
     const { email } = z
@@ -28,4 +29,10 @@ export async function POST(req: Request) {
   const wait = 350 + Math.floor(Math.random() * 100) - (Date.now() - started)
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
   return response
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/email/request-reset',
+  })(req)
 }
