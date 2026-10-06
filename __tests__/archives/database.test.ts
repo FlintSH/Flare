@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -24,10 +26,17 @@ const state = vi.hoisted(() => ({
   ocr: vi.fn(),
 }))
 vi.mock('@/lib/auth', () => ({
-  getAccessSession: async () =>
-    state.userId
-      ? { user: { id: state.userId, sessionVersion: state.version } }
-      : null,
+  getAccessSession: async () => {
+    if (!state.userId) return null
+    const { getUserAccess } = await import('@/lib/permissions/server')
+    return {
+      user: {
+        id: state.userId,
+        sessionVersion: state.version,
+        ...(await getUserAccess(state.userId)),
+      },
+    }
+  },
 }))
 vi.mock('@/lib/ocr', () => ({ ocrQueue: { add: state.ocr } }))
 vi.mock('@/lib/storage', () => ({ getStorageProvider: async () => storage }))
@@ -81,6 +90,10 @@ suite('archive publication against disposable PostgreSQL', () => {
   let extraction: typeof import('@/app/api/files/[id]/archive/extract/route')
   let creation: typeof import('@/app/api/files/archive/route')
   let download: typeof import('@/app/api/files/[id]/archive/entry/route')
+  let sharedListing: typeof import('@/app/api/files/[id]/archive/share/route')
+  let sharedDownload: typeof import('@/app/api/files/[id]/archive/share/entry/route')
+  let profileListing: typeof import('@/app/api/upload-profiles/route')
+  let shareIp: string
   let defaultConfig: typeof import('@/lib/config').DEFAULT_CONFIG
   let defaultPermissions: string[]
 
@@ -106,6 +119,10 @@ suite('archive publication against disposable PostgreSQL', () => {
     extraction = await import('@/app/api/files/[id]/archive/extract/route')
     creation = await import('@/app/api/files/archive/route')
     download = await import('@/app/api/files/[id]/archive/entry/route')
+    sharedListing = await import('@/app/api/files/[id]/archive/share/route')
+    sharedDownload =
+      await import('@/app/api/files/[id]/archive/share/entry/route')
+    profileListing = await import('@/app/api/upload-profiles/route')
     defaultConfig = (await import('@/lib/config')).DEFAULT_CONFIG
     defaultPermissions = [
       ...(await import('@/lib/permissions/catalog')).DEFAULT_PERMISSIONS,
@@ -114,6 +131,7 @@ suite('archive publication against disposable PostgreSQL', () => {
   beforeEach(async () => {
     state.userId = 'archive-owner'
     state.version = 1
+    shareIp = `archive-test-${randomUUID()}`
     state.objects.clear()
     state.targets = []
     state.targetChanged = false
@@ -231,6 +249,526 @@ suite('archive publication against disposable PostgreSQL', () => {
       context(id)
     )
   }
+
+  function sharedRequest(
+    id: string,
+    data: unknown = {},
+    entry = false,
+    headers: Record<string, string> = {}
+  ) {
+    return request(
+      `/api/files/${id}/archive/share${entry ? '/entry' : ''}`,
+      data,
+      {
+        'X-Forwarded-For': shareIp,
+        ...headers,
+      }
+    )
+  }
+
+  async function publicArchive(password: string | null = null) {
+    const file = await archive()
+    return prisma.file.update({
+      where: { id: file.id },
+      data: {
+        visibility: 'PUBLIC',
+        password: password ? await hash(password, 4) : null,
+      },
+    })
+  }
+
+  it('lets anonymous share visitors browse and download JSON or form entries without exposing credentials or changing account data', async () => {
+    const file = await publicArchive('sender secret')
+    state.userId = ''
+    const response = await sharedListing.POST(
+      sharedRequest(file.id, { password: 'sender secret' }),
+      context(file.id)
+    )
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.data).toMatchObject({
+      format: 'zip',
+      fileCount: 2,
+      totalBytes: 13,
+    })
+    for (const value of [
+      'diskPath',
+      'storageTarget',
+      'sender secret',
+      file.password!,
+      file.userId,
+    ])
+      expect(JSON.stringify(body)).not.toContain(value)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    for (const form of [false, true]) {
+      const data = { path: 'notes/readme.txt', password: 'sender secret' }
+      const request = form
+        ? new Request(
+            `http://localhost/api/files/${file.id}/archive/share/entry`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Origin: 'http://localhost',
+                'X-Forwarded-For': shareIp,
+              },
+              body: new URLSearchParams(data),
+            }
+          )
+        : sharedRequest(file.id, data, true)
+      const entry = await sharedDownload.POST(request, context(file.id))
+      expect(entry.status).toBe(200)
+      expect(entry.headers.get('content-disposition')).toContain('attachment')
+      expect(entry.headers.get('content-type')).toBe('application/octet-stream')
+      expect(entry.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(entry.headers.get('content-security-policy')).toContain('sandbox')
+      expect(await entry.text()).toBe('Hello archive')
+      // The response stream owns its slot until filesystem cleanup finishes.
+      await vi.waitFor(async () => {
+        const { ArchiveOperation } = await import('@/lib/archives/operation')
+        const operation = new ArchiveOperation(
+          `share:${file.id}`,
+          new AbortController().signal
+        )
+        await operation.release()
+      })
+    }
+    expect(await prisma.file.count()).toBe(1)
+    expect(await prisma.vaultFolder.count()).toBe(0)
+    expect(await prisma.event.count()).toBe(0)
+  })
+
+  it('applies live share owner/moderator access while keeping private files private and owner archive APIs owner-only', async () => {
+    const file = await archive()
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+    state.userId = 'archive-other'
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'irrelevant' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    await prisma.role.update({
+      where: { systemKey: 'everyone' },
+      data: { permissions: ['content.read'] },
+    })
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+    expect(
+      (
+        await listing.GET(
+          request(`/api/files/${file.id}/archive`),
+          context(file.id)
+        )
+      ).status
+    ).toBe(403)
+    await prisma.role.update({
+      where: { systemKey: 'everyone' },
+      data: { permissions: [] },
+    })
+    state.userId = 'archive-owner'
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(404)
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { visibility: 'PUBLIC', password: null },
+    })
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+    state.userId = ''
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+  })
+
+  it('rejects missing/wrong passwords, private visibility, stale privileged sessions, bearer headers, and cross-origin requests before reading storage', async () => {
+    const file = await publicArchive('correct')
+    state.userId = ''
+    state.onRead = vi.fn()
+    for (const data of [{}, { password: 'wrong' }])
+      expect(
+        (
+          await sharedListing.POST(
+            sharedRequest(file.id, data),
+            context(file.id)
+          )
+        ).status
+      ).toBe(401)
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { visibility: 'PRIVATE' },
+    })
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'correct' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    state.userId = 'archive-owner'
+    state.version = 0
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(404)
+    state.version = 1
+    for (const authorization of ['Bearer named', 'Bearer legacy', ''])
+      expect(
+        (
+          await sharedListing.POST(
+            sharedRequest(file.id, {}, false, { Authorization: authorization }),
+            context(file.id)
+          )
+        ).status
+      ).toBe(401)
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, {}, false, { Origin: 'https://other.test' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(403)
+    expect(
+      (
+        await sharedDownload.POST(
+          sharedRequest(file.id, { path: 'notes/readme.txt' }, true, {
+            'Sec-Fetch-Site': 'cross-site',
+          }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(403)
+    expect(state.onRead).not.toHaveBeenCalled()
+  })
+
+  it('bounds shared bodies and rejects unknown/duplicate form fields and invalid members', async () => {
+    const file = await publicArchive()
+    state.userId = ''
+    for (const data of [
+      { password: null },
+      { password: 'x'.repeat(1025) },
+      { unknown: true },
+    ])
+      expect(
+        (
+          await sharedListing.POST(
+            sharedRequest(file.id, data),
+            context(file.id)
+          )
+        ).status
+      ).toBe(400)
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'x'.repeat(16384) }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(413)
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, {}, false, { 'Content-Type': 'text/plain' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(415)
+    for (const body of [
+      'path=a&path=b',
+      'path=a&unexpected=true',
+      'password=a',
+    ]) {
+      const request = new Request(
+        `http://localhost/api/files/${file.id}/archive/share/entry`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-Forwarded-For': shareIp,
+          },
+          body,
+        }
+      )
+      expect(
+        (await sharedDownload.POST(request, context(file.id))).status
+      ).toBe(400)
+    }
+    expect(
+      (
+        await sharedDownload.POST(
+          sharedRequest(file.id, { path: '../outside' }, true),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    expect(
+      (
+        await sharedDownload.POST(
+          sharedRequest(file.id, { path: 'notes' }, true),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    expect(await prisma.file.count()).toBe(1)
+  })
+
+  it.each([
+    'private',
+    'password',
+    'deleted',
+    'path',
+    'target',
+    'session',
+    'role',
+  ] as const)(
+    'rechecks shared archive access after staging when %s changes',
+    async (change) => {
+      const file = await publicArchive('correct')
+      const privileged = ['session', 'role'].includes(change)
+      if (privileged)
+        await prisma.file.update({
+          where: { id: file.id },
+          data: { visibility: 'PRIVATE' },
+        })
+      else state.userId = ''
+      state.onRead = async () => {
+        state.onRead = undefined
+        if (change === 'private')
+          await prisma.file.update({
+            where: { id: file.id },
+            data: { visibility: 'PRIVATE' },
+          })
+        if (change === 'password')
+          await prisma.file.update({
+            where: { id: file.id },
+            data: { password: await hash('replacement', 4) },
+          })
+        if (change === 'deleted')
+          await prisma.file.delete({ where: { id: file.id } })
+        if (change === 'path')
+          await prisma.file.update({
+            where: { id: file.id },
+            data: { path: 'changed/path' },
+          })
+        if (change === 'target')
+          await prisma.file.update({
+            where: { id: file.id },
+            data: { storageTarget: { provider: 's3', bucket: 'changed' } },
+          })
+        if (change === 'session')
+          await prisma.user.update({
+            where: { id: 'archive-owner' },
+            data: { sessionVersion: { increment: 1 } },
+          })
+        if (change === 'role')
+          await prisma.role.update({
+            where: { systemKey: 'everyone' },
+            data: { permissions: [] },
+          })
+      }
+      const response = await sharedDownload.POST(
+        sharedRequest(
+          file.id,
+          { path: 'notes/readme.txt', password: 'correct' },
+          true
+        ),
+        context(file.id)
+      )
+      expect(response.status).toBe(
+        {
+          private: 404,
+          password: 401,
+          deleted: 404,
+          path: 409,
+          target: 409,
+          session: 404,
+          role: 404,
+        }[change]
+      )
+      expect(response.headers.get('content-disposition')).toBeNull()
+      expect(await prisma.vaultFolder.count()).toBe(0)
+    }
+  )
+
+  it('uses worker-applied expiration and canonical sharing independently of folder discovery', async () => {
+    const file = await publicArchive()
+    const folder = await prisma.vaultFolder.create({
+      data: {
+        userId: 'archive-owner',
+        name: 'Collection',
+        normalizedName: 'collection',
+        shareToken: 'public_collection_token_1234',
+      },
+    })
+    await prisma.file.update({
+      where: { id: file.id },
+      data: {
+        folderId: folder.id,
+        uploadOptions: {
+          expiresAt: '2020-01-01T00:00:00.000Z',
+          expiryAction: 'SET_PRIVATE',
+        },
+      },
+    })
+    state.userId = ''
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+    await prisma.vaultFolder.update({
+      where: { id: folder.id },
+      data: { shareToken: null },
+    })
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { folderId: null },
+    })
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+    // This is the state change performed by the expiration worker.
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { visibility: 'PRIVATE' },
+    })
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(404)
+  })
+
+  it('finishes concurrent source deletion without a reader/quota lock-order deadlock', async () => {
+    const file = await archive()
+    let releaseDeletion!: () => void
+    let deleted!: () => void
+    let deletingPid = 0
+    const gate = new Promise<void>((resolve) => {
+      releaseDeletion = resolve
+    })
+    const deleteStarted = new Promise<void>((resolve) => {
+      deleted = resolve
+    })
+    let deletion: Promise<unknown> | undefined
+    state.onRead = async () => {
+      state.onRead = undefined
+      deletion = prisma.$transaction(
+        async (tx) => {
+          const [row] = await tx.$queryRaw<
+            { pid: number }[]
+          >`SELECT pg_backend_pid() AS pid`
+          deletingPid = row.pid
+          // Existing file DELETE locks its file before decrementing account quota.
+          await tx.file.delete({ where: { id: file.id } })
+          deleted()
+          await gate
+          await tx.user.update({
+            where: { id: file.userId },
+            data: { storageUsed: { decrement: file.size } },
+          })
+        },
+        { timeout: 10000 }
+      )
+      await deleteStarted
+    }
+    const response = sharedListing.POST(
+      sharedRequest(file.id),
+      context(file.id)
+    )
+    await deleteStarted
+    try {
+      // Synchronize on a real lock wait, not a delay or an internal function spy.
+      await vi.waitFor(async () => {
+        const [row] = await prisma.$queryRaw<{ blocked: boolean }[]>`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_stat_activity
+            WHERE ${deletingPid} = ANY(pg_blocking_pids(pid))
+          ) AS blocked
+        `
+        expect(row.blocked).toBe(true)
+      })
+    } finally {
+      releaseDeletion()
+    }
+    await deletion
+    expect((await response).status).toBe(404)
+    expect(await prisma.file.findUnique({ where: { id: file.id } })).toBeNull()
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: file.userId } }))
+        .storageUsed
+    ).toBe(0)
+  })
+
+  it('shares the 30-per-IP minute budget across manifest and entry endpoints before archive I/O', async () => {
+    state.userId = ''
+    state.onRead = vi.fn()
+    for (let index = 0; index < 30; index++) {
+      const response =
+        index % 2
+          ? await sharedDownload.POST(
+              sharedRequest('absent', { path: 'a' }, true),
+              context('absent')
+            )
+          : await sharedListing.POST(sharedRequest('absent'), context('absent'))
+      expect(response.status).toBe(404)
+    }
+    const blocked = await sharedListing.POST(
+      sharedRequest('absent'),
+      context('absent')
+    )
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers.get('retry-after')).toBe('60')
+    expect(state.onRead).not.toHaveBeenCalled()
+  })
+
+  it('serializes shared work by source file and releases its slot after completion', async () => {
+    const file = await publicArchive()
+    state.userId = ''
+    let unblock!: () => void
+    let started!: () => void
+    const staged = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve
+    })
+    state.onRead = async () => {
+      started()
+      await gate
+    }
+    const first = sharedListing.POST(sharedRequest(file.id), context(file.id))
+    await staged
+    try {
+      const second = await sharedDownload.POST(
+        sharedRequest(file.id, { path: 'empty.bin' }, true),
+        context(file.id)
+      )
+      expect(second.status).toBe(429)
+      expect(second.headers.get('retry-after')).toBe('5')
+    } finally {
+      unblock()
+    }
+    expect((await first).status).toBe(200)
+    state.onRead = undefined
+    expect(
+      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
+        .status
+    ).toBe(200)
+  })
 
   it('lists and downloads owned entries without exposing temporary paths or modifying the account', async () => {
     const file = await archive()
@@ -595,6 +1133,241 @@ suite('archive publication against disposable PostgreSQL', () => {
         )
       ).status
     ).toBe(400)
+  })
+
+  async function reviewedProfile(
+    options: Prisma.InputJsonObject = { visibility: 'PRIVATE' }
+  ) {
+    const profile = await prisma.uploadProfile.create({
+      data: { userId: 'archive-owner', name: 'Reviewed profile', options },
+    })
+    const response = await profileListing.GET()
+    expect(response.status).toBe(200)
+    const data = (await response.json()).data
+    const snapshot = data.profiles.find(
+      (entry: { id: string }) => entry.id === profile.id
+    )
+    expect(snapshot.effectiveRevision).toMatch(/^[a-f0-9]{64}$/)
+    return { profile, data, snapshot }
+  }
+
+  async function changeEffectiveSettings(
+    change: 'expiration' | 'action' | 'naming' | 'style' | 'sharing'
+  ) {
+    if (change === 'expiration')
+      await prisma.user.update({
+        where: { id: 'archive-owner' },
+        data: { defaultFileExpiration: 'HOUR' },
+      })
+    if (change === 'action')
+      await prisma.user.update({
+        where: { id: 'archive-owner' },
+        data: { defaultFileExpirationAction: 'SET_PRIVATE' },
+      })
+    if (change === 'naming')
+      await prisma.user.update({
+        where: { id: 'archive-owner' },
+        data: { randomizeFileUrls: true },
+      })
+    if (change === 'style')
+      await setConfig((config) => {
+        config.settings.customization.published.sharing.defaultStyle =
+          'delivery'
+      })
+    if (change === 'sharing')
+      await prisma.role.update({
+        where: { systemKey: 'everyone' },
+        data: { permissions: defaultPermissions },
+      })
+  }
+
+  it.each(['expiration', 'action', 'naming', 'style', 'sharing'] as const)(
+    'rejects reviewed effective %s changes before archive creation or extraction reads storage',
+    async (change) => {
+      const file = await archive()
+      if (change === 'sharing')
+        await prisma.role.update({
+          where: { systemKey: 'everyone' },
+          data: {
+            permissions: defaultPermissions.filter(
+              (permission) => permission !== 'files.share'
+            ),
+          },
+        })
+      const { profile, data, snapshot } = await reviewedProfile({
+        visibility: 'PUBLIC',
+      })
+      expect(data.canShare).toBe(change !== 'sharing')
+      await changeEffectiveSettings(change)
+      state.onRead = vi.fn()
+      state.onUpload = vi.fn()
+      const selection = {
+        profileId: profile.id,
+        profileRevision: snapshot.updatedAt,
+        profileEffectiveRevision: snapshot.effectiveRevision,
+      }
+      const created = await creation.POST(
+        request('/api/files/archive', {
+          fileIds: [file.id],
+          name: 'Not published',
+          format: 'zip',
+          folderId: null,
+          ...selection,
+        })
+      )
+      const extracted = await extraction.POST(
+        request(`/api/files/${file.id}/archive/extract`, {
+          name: 'Not published',
+          folderId: null,
+          ...selection,
+        }),
+        context(file.id)
+      )
+      for (const response of [created, extracted]) {
+        expect(response.status).toBe(409)
+        expect((await response.json()).error).toContain(
+          'effective settings changed'
+        )
+      }
+      expect(state.onRead).not.toHaveBeenCalled()
+      expect(state.onUpload).not.toHaveBeenCalled()
+      expect(await prisma.file.count()).toBe(1)
+      expect(await prisma.event.count()).toBe(0)
+      expect(await prisma.vaultFolder.count()).toBe(0)
+    }
+  )
+
+  it.each(['expiration', 'action', 'naming', 'style', 'sharing'] as const)(
+    'rechecks effective %s at publication even when the API caller omitted review revisions',
+    async (change) => {
+      const file = await archive()
+      if (change === 'sharing')
+        await prisma.role.update({
+          where: { systemKey: 'everyone' },
+          data: {
+            permissions: defaultPermissions.filter(
+              (permission) => permission !== 'files.share'
+            ),
+          },
+        })
+      const { profile } = await reviewedProfile({ visibility: 'PUBLIC' })
+      state.onUpload = async () => {
+        state.onUpload = undefined
+        await changeEffectiveSettings(change)
+      }
+      const response = await extraction.POST(
+        request(`/api/files/${file.id}/archive/extract`, {
+          name: 'Not published',
+          folderId: null,
+          profileId: profile.id,
+        }),
+        context(file.id)
+      )
+      expect(response.status).toBe(409)
+      expect(await prisma.file.count()).toBe(1)
+      expect(await prisma.event.count()).toBe(0)
+      expect(await prisma.vaultFolder.count()).toBe(0)
+      expect(await prisma.storageDeletion.count()).toBe(2)
+    }
+  )
+
+  it('rechecks inherited expiration at archive creation publication and queues its uncommitted output', async () => {
+    const file = await archive()
+    const { profile } = await reviewedProfile()
+    state.onUpload = async () => {
+      state.onUpload = undefined
+      await changeEffectiveSettings('expiration')
+    }
+    const response = await creation.POST(
+      request('/api/files/archive', {
+        fileIds: [file.id],
+        name: 'Not published',
+        format: 'zip',
+        folderId: null,
+        profileId: profile.id,
+      })
+    )
+    expect(response.status).toBe(409)
+    expect(await prisma.file.count()).toBe(1)
+    expect(await prisma.event.count()).toBe(0)
+    expect(await prisma.storageDeletion.count()).toBe(1)
+  })
+
+  it('keeps the effective revision stable across unrelated account changes and overridden defaults', async () => {
+    const file = await archive()
+    const { profile, snapshot } = await reviewedProfile({
+      visibility: 'PRIVATE',
+      expiration: 'DISABLED',
+      expiryAction: 'DELETE',
+      randomizeFileUrls: false,
+      shareStyle: 'minimal',
+    })
+    await prisma.user.update({
+      where: { id: 'archive-owner' },
+      data: {
+        name: 'Renamed account',
+        defaultFileExpiration: 'HOUR',
+        defaultFileExpirationAction: 'SET_PRIVATE',
+        randomizeFileUrls: true,
+      },
+    })
+    await changeEffectiveSettings('style')
+    const data = (await (await profileListing.GET()).json()).data
+    const refreshed = data.profiles.find(
+      (entry: { id: string }) => entry.id === profile.id
+    )
+    expect(refreshed.effectiveRevision).toBe(snapshot.effectiveRevision)
+    const response = await extraction.POST(
+      request(`/api/files/${file.id}/archive/extract`, {
+        name: 'Reviewed output',
+        folderId: null,
+        profileId: profile.id,
+        profileRevision: snapshot.updatedAt,
+        profileEffectiveRevision: snapshot.effectiveRevision,
+      }),
+      context(file.id)
+    )
+    expect(response.status).toBe(200)
+    const outputs = await prisma.file.findMany({
+      where: { id: { not: file.id } },
+    })
+    expect(outputs).toHaveLength(2)
+    for (const output of outputs) {
+      expect(output.visibility).toBe('PRIVATE')
+      expect(output.uploadOptions).toMatchObject({
+        expiration: 'DISABLED',
+        expiresAt: null,
+        shareStyle: 'minimal',
+        randomizeFileUrls: false,
+      })
+      expect(output.uploadOptions).not.toHaveProperty(
+        'profileEffectiveRevision'
+      )
+    }
+    expect(
+      await prisma.event.count({ where: { type: 'file.schedule-expiration' } })
+    ).toBe(0)
+  })
+
+  it('requires a selected profile for effective revisions and maps a deleted reviewed profile to conflict', async () => {
+    const file = await archive()
+    const { profile, snapshot } = await reviewedProfile()
+    await prisma.uploadProfile.delete({ where: { id: profile.id } })
+    for (const profileId of [null, profile.id]) {
+      const response = await creation.POST(
+        request('/api/files/archive', {
+          fileIds: [file.id],
+          name: 'Not published',
+          format: 'zip',
+          folderId: null,
+          profileId,
+          profileEffectiveRevision: snapshot.effectiveRevision,
+        })
+      )
+      expect(response.status).toBe(profileId ? 409 : 400)
+    }
+    expect(state.targets).toHaveLength(0)
+    expect(await prisma.file.count()).toBe(1)
   })
   it('reports a deleted displayed profile as stale before archive IO while unversioned requests retain 404', async () => {
     const file = await archive()

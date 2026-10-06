@@ -43,10 +43,16 @@ export const createArchiveSchema = z
     folderId: folderIdSchema.nullable(),
     profileId: z.string().min(1).max(100).nullable().optional(),
     profileRevision: z.string().datetime({ offset: true }).optional(),
+    profileEffectiveRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .strict()
   .refine(
-    (input) => !input.profileRevision || !!input.profileId,
+    (input) =>
+      (!input.profileRevision && !input.profileEffectiveRevision) ||
+      !!input.profileId,
     'Choose a profile when supplying its revision.'
   )
 export const extractArchiveSchema = z
@@ -55,10 +61,16 @@ export const extractArchiveSchema = z
     name: folderNameSchema,
     profileId: z.string().min(1).max(100).nullable().optional(),
     profileRevision: z.string().datetime({ offset: true }).optional(),
+    profileEffectiveRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .strict()
   .refine(
-    (input) => !input.profileRevision || !!input.profileId,
+    (input) =>
+      (!input.profileRevision && !input.profileEffectiveRevision) ||
+      !!input.profileId,
     'Choose a profile when supplying its revision.'
   )
 
@@ -94,12 +106,22 @@ export async function archiveActor(
   }
 }
 
-export async function archiveBody(request: Request, signal?: AbortSignal) {
-  if (
-    request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !==
-    'application/json'
-  )
-    throw new ArchiveError('Use application/json.', 415)
+export async function archiveBody(
+  request: Request,
+  signal?: AbortSignal,
+  allowForm = false
+) {
+  const contentType = request.headers
+    .get('content-type')
+    ?.split(';')[0]
+    .trim()
+    .toLowerCase()
+  const form = allowForm && contentType === 'application/x-www-form-urlencoded'
+  if (contentType !== 'application/json' && !form)
+    throw new ArchiveError(
+      allowForm ? 'Use JSON or a URL-encoded form.' : 'Use application/json.',
+      415
+    )
   const reader = request.body?.getReader()
   if (!reader) throw new ArchiveError('Invalid archive request.', 400)
   const chunks: Uint8Array[] = []
@@ -121,7 +143,12 @@ export async function archiveBody(request: Request, signal?: AbortSignal) {
       chunks.push(value)
     }
     signal?.throwIfAborted()
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    const text = Buffer.concat(chunks).toString('utf8')
+    if (!form) return JSON.parse(text)
+    const fields = new URLSearchParams(text)
+    if ([...fields.keys()].some((key) => fields.getAll(key).length !== 1))
+      throw new ArchiveError('Use each archive field only once.', 400)
+    return Object.fromEntries(fields)
   } finally {
     signal?.removeEventListener('abort', abort)
     reader.releaseLock()

@@ -96,7 +96,7 @@ For custom integrations, a [named API token](../api/authentication) can be bound
 
 Edits apply to future uploads. They do not change the visibility, expiration, naming, tags, or stored style of existing files. An in-progress chunked upload uses the settings captured when it started, even if you edit the profile during transfer.
 
-Archive creation and extraction also check the revision shown in the dialog. If the selected profile changes before submission or while the archive is being processed, the operation fails without publishing outputs. Refresh the profile, review its current settings, and submit again.
+Archive creation and extraction also check the profile and effective settings shown in the dialog, including any inherited account or instance defaults. A relevant default or sharing permission changing can require another review even when the saved profile itself was not edited. If those settings change before submission or during processing, the operation fails without publishing outputs. Review the refreshed summary and submit again. The fixed **Private (no profile)** archive option does not inherit these defaults.
 
 If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes.
 

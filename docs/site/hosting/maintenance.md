@@ -8,6 +8,8 @@ A recoverable Flare instance needs its **PostgreSQL database, file bytes, deploy
 
 The [archive workspace](/guide/archives) packages or extracts account files. Its generated archives do not include database state, permissions, credentials, configuration, or encryption keys, and its extraction flow does not restore an instance. Back up generated archives and extracted files alongside the rest of the stored file bytes. Existing installations retain their current files and sharing settings; archive operations create new outputs only when a user requests them. Those outputs default to private/no expiration unless the user explicitly selects an upload profile.
 
+Existing accessible archive links also gain share-page entry browsing and downloads. Their current visibility and password still control access, including private-file and moderator rules. Share pages do not extract into an account; owner-library extraction and creation retain their existing permissions. Review [public archive processing limits](./storage#archive-processing) when planning application resources.
+
 The commands below match the [Docker Compose guide](/hosting/docker): project name `flare`, services `db` and `flare`, and volumes `flare_postgres_data` and `flare_uploads`.
 
 ## Make a consistent local backup

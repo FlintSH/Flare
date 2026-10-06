@@ -74,6 +74,8 @@ There is no separate folder password. Protect individual public files with their
 
 The protected-file route reached through a folder also checks that the share is still enabled and that the file is still a public member of that folder. Moving the file out or disabling the share stops access through that folder route.
 
+Recipients opening a public archive can [browse and download its entries](./archives#browse-an-archive-shared-with-you) after any file-password check. This does not publish archive members as separate folder items or add them to the recipient's account. The canonical public file URL remains independent of the folder entrypoint: disabling this share or moving the archive does not revoke an already-known public file URL. Change the archive's own visibility, password, or existence to change access through that URL.
+
 ## Disable a folder link
 
 Choose **Share → Disable link**. This stops new requests to that folder share. If you enable sharing again, Flare generates a new link; distribute the new URL to recipients.

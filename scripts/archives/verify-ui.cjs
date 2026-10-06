@@ -175,14 +175,17 @@ async function fixtures(ctx) {
     )
   ).data
   const files = (await api(ctx, '/api/files?limit=100')).data
-  return { files, folder, profile, tag, png }
+  const reviewedProfile = (
+    await api(ctx, '/api/upload-profiles')
+  ).data.profiles.find((entry) => entry.id === profile.id)
+  return { files, folder, profile: reviewedProfile, tag, png }
 }
 
-async function shot(page, name) {
+async function shot(page, name, fullPage = false) {
   if (!screenshots) return
   await mkdir(screenshots, { recursive: true })
   await page.evaluate(() => document.fonts.ready)
-  const bytes = await page.screenshot({ animations: 'disabled' })
+  const bytes = await page.screenshot({ animations: 'disabled', fullPage })
   await sharp(bytes)
     .webp({ quality: 88 })
     .toFile(path.join(screenshots, `${name}.webp`))
@@ -371,6 +374,10 @@ async function createSelected(browser, state, fixture) {
   const submitted = (await submission).postDataJSON()
   assert.equal(submitted.profileId, fixture.profile.id)
   assert.equal(submitted.profileRevision, fixture.profile.updatedAt)
+  assert.equal(
+    submitted.profileEffectiveRevision,
+    fixture.profile.effectiveRevision
+  )
   await expect(
     page.getByRole('heading', { name: 'Archive created', exact: true })
   ).toBeVisible()
@@ -396,6 +403,82 @@ async function createSelected(browser, state, fixture) {
     'Selected files become a stored ZIP; explicit upload profile applies public visibility, Approved tag, expiry, and chosen destination'
   )
   await demo.close()
+}
+
+async function reviewedProfileChecks(browser, state) {
+  const ctx = await browser.newContext({
+    storageState: state,
+    viewport: { width: 1440, height: 1000 },
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+  })
+  await api(ctx, '/api/profile', 'PUT', {
+    defaultFileExpiration: 'DISABLED',
+    defaultFileExpirationAction: 'DELETE',
+  })
+  await api(
+    ctx,
+    '/api/upload-profiles',
+    'POST',
+    {
+      name: 'Inherited settings',
+      options: {},
+    },
+    201
+  )
+  const originalIds = (await api(ctx, '/api/files?limit=100')).data
+    .map((file) => file.id)
+    .sort()
+  const page = await ctx.newPage()
+  try {
+    await page.goto(origin + '/dashboard')
+    await page
+      .getByRole('button', { name: 'Select files', exact: true })
+      .click()
+    await page.getByLabel('Select Field notes.txt', { exact: true }).check()
+    await page
+      .getByRole('button', { name: 'Create archive', exact: true })
+      .click()
+    await page
+      .getByLabel('Archive name', { exact: true })
+      .fill('Review inherited settings.zip')
+    await page.getByLabel('Upload profile', { exact: true }).click()
+    await page
+      .getByRole('option', { name: 'Inherited settings', exact: true })
+      .click()
+    await expect(page.getByRole('dialog')).toContainText('no expiry')
+    // Emulate a settings update in another tab after this dialog was reviewed.
+    await api(ctx, '/api/profile', 'PUT', {
+      defaultFileExpiration: 'HOUR',
+      defaultFileExpirationAction: 'DELETE',
+    })
+    const submitted = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/files/archive' &&
+        response.request().method() === 'POST'
+    )
+    await page
+      .getByRole('button', { name: 'Create archive', exact: true })
+      .click()
+    assert.equal((await submitted).status(), 409)
+    await expect(page.getByRole('alert')).toContainText(/changed|review/i)
+    await expect(page.getByRole('dialog')).toContainText('then deleted')
+    assert.deepEqual(
+      (await api(ctx, '/api/files?limit=100')).data
+        .map((file) => file.id)
+        .sort(),
+      originalIds
+    )
+    results.push(
+      'Reviewed upload-profile snapshot rejects inherited account expiration changes with409, refreshes the visible deletion policy, and creates no output'
+    )
+  } finally {
+    await api(ctx, '/api/profile', 'PUT', {
+      defaultFileExpiration: 'DISABLED',
+      defaultFileExpirationAction: 'DELETE',
+    })
+    await ctx.close()
+  }
 }
 
 async function additionalChecks(browser, state, fixture) {
@@ -539,6 +622,241 @@ async function additionalChecks(browser, state, fixture) {
   )
 }
 
+async function sharedArchiveChecks(browser, state, fixture) {
+  const owner = await browser.newContext({ storageState: state })
+  const originalFileIds = (await api(owner, '/api/files?limit=100')).data
+    .map((file) => file.id)
+    .sort()
+  const zip = fixture.files.find((file) => file.name === 'Field kit.zip')
+  const sharedPath = `/api/files/${zip.id}/archive/share`
+  const shareUrl = origin + zip.urlPath
+  await api(owner, `/api/files/${zip.id}`, 'PATCH', { visibility: 'PUBLIC' })
+  const anonymous = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+    ...(videos
+      ? { recordVideo: { dir: videos, size: { width: 1440, height: 1000 } } }
+      : {}),
+  })
+  const page = await anonymous.newPage()
+  const pageErrors = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto(shareUrl)
+  await expect(page.getByLabel('Search archive', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Extract all', exact: true })
+  ).toHaveCount(0)
+  await shot(page, 'share-browse')
+  await page
+    .getByRole('button', { name: 'Open folder guide', exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: 'Preview guide/README.md', exact: true })
+    .click()
+  await expect(page.getByLabel('Entry text', { exact: true })).toContainText(
+    'A small project handoff'
+  )
+  await shot(page, 'share-entry')
+  const downloadReady = page.waitForEvent('download')
+  await page
+    .getByRole('button', { name: 'Download entry', exact: true })
+    .click()
+  const download = await downloadReady
+  assert.equal(download.suggestedFilename(), 'README.md')
+  assert.ok(
+    (await readFile(await download.path(), 'utf8')).includes(
+      'A small project handoff'
+    )
+  )
+  await page.getByLabel('Search archive', { exact: true }).fill('flare-icon')
+  await page
+    .getByRole('button', { name: 'Preview images/flare-icon.png', exact: true })
+    .click()
+  await expect(page.getByRole('img', { name: /flare-icon/ })).toHaveJSProperty(
+    'naturalWidth',
+    480
+  )
+  await shot(page, 'share-image')
+  await page.addScriptTag({ content: axe.source })
+  assert.deepEqual(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run({
+          runOnly: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'],
+        })
+      ).violations.map(({ id, nodes }) => ({
+        id,
+        targets: nodes.map(({ target }) => target),
+      }))
+    ),
+    [],
+    'Shared archive accessibility violations'
+  )
+  assert.deepEqual(pageErrors, [])
+  const video = page.video()
+  await anonymous.close()
+  if (video && videos) {
+    await video.saveAs(path.join(videos, 'archive-share-browse.webm'))
+    await video.delete()
+  }
+
+  const publicClient = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+  })
+  assert.equal(
+    (await api(publicClient, sharedPath, 'POST', {})).data.fileCount,
+    4
+  )
+  const binary = await publicClient.request.post(
+    origin + sharedPath + '/entry',
+    {
+      headers: { Origin: origin },
+      data: { path: 'images/flare-icon.png' },
+    }
+  )
+  assert.equal(binary.status(), 200)
+  assert.deepEqual(await binary.body(), fixture.png)
+  assert.equal(binary.headers()['cache-control'], 'private, no-store')
+  assert.equal(binary.headers()['x-content-type-options'], 'nosniff')
+  await api(publicClient, sharedPath, 'POST', {}, 403, {
+    Origin: 'https://untrusted.example',
+  })
+  await api(publicClient, sharedPath, 'POST', {}, 401, {
+    Authorization: 'Bearer disposable-test-token',
+  })
+  const mobile = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+  })
+  const mobilePage = await mobile.newPage()
+  await mobilePage.goto(shareUrl)
+  await expect(
+    mobilePage.getByLabel('Search archive', { exact: true })
+  ).toBeVisible()
+  await mobilePage.getByLabel('Search archive', { exact: true }).fill('README')
+  await mobilePage
+    .getByRole('button', { name: 'Preview guide/README.md', exact: true })
+    .click()
+  await expect(
+    mobilePage.getByLabel('Entry text', { exact: true })
+  ).toContainText('A small project handoff')
+  assert.equal(
+    await mobilePage.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth
+    ),
+    false
+  )
+  await shot(mobilePage, 'share-mobile', true)
+  await mobile.close()
+
+  // This public fixture password is never recorded in the walkthrough. The
+  // existing share-page form unlocks the page; new archive requests use bodies.
+  const fixturePassword = 'Public-archive-demo-password'
+  await api(owner, `/api/files/${zip.id}`, 'PATCH', {
+    password: fixturePassword,
+  })
+  await api(publicClient, sharedPath, 'POST', {}, 401)
+  await api(publicClient, sharedPath, 'POST', { password: 'incorrect' }, 401)
+  await api(
+    publicClient,
+    sharedPath + '/entry',
+    'POST',
+    { path: 'guide/README.md' },
+    401
+  )
+  const protectedPage = await publicClient.newPage()
+  await protectedPage.goto(shareUrl)
+  await expect(
+    protectedPage.getByLabel('File password', { exact: true })
+  ).toBeVisible()
+  await expect(
+    protectedPage.getByLabel('Search archive', { exact: true })
+  ).toHaveCount(0)
+  await expect(
+    protectedPage.getByText('Field kit.zip', { exact: true })
+  ).toHaveCount(0)
+  await shot(protectedPage, 'share-password')
+  await protectedPage
+    .getByLabel('File password', { exact: true })
+    .fill(fixturePassword)
+  const archiveRequest = protectedPage.waitForRequest(
+    (request) => new URL(request.url()).pathname === sharedPath
+  )
+  await protectedPage
+    .getByRole('button', { name: 'Access File', exact: true })
+    .click()
+  await expect(
+    protectedPage.getByLabel('Search archive', { exact: true })
+  ).toBeVisible()
+  const unlockRequest = await archiveRequest
+  assert.equal(unlockRequest.method(), 'POST')
+  assert.equal(new URL(unlockRequest.url()).search, '')
+  assert.equal(unlockRequest.postDataJSON().password, fixturePassword)
+  await protectedPage
+    .getByLabel('Search archive', { exact: true })
+    .fill('README')
+  await protectedPage
+    .getByRole('button', { name: 'Preview guide/README.md', exact: true })
+    .click()
+  await expect(
+    protectedPage.getByLabel('Entry text', { exact: true })
+  ).toContainText('A small project handoff')
+  await shot(protectedPage, 'share-unlocked')
+  const protectedDownloadReady = protectedPage.waitForEvent('download')
+  await protectedPage
+    .getByRole('button', { name: 'Download entry', exact: true })
+    .click()
+  const protectedDownload = await protectedDownloadReady
+  assert.equal(protectedDownload.suggestedFilename(), 'README.md')
+  assert.ok(
+    (await readFile(await protectedDownload.path(), 'utf8')).includes(
+      'A small project handoff'
+    )
+  )
+  await api(owner, `/api/files/${zip.id}`, 'PATCH', { visibility: 'PRIVATE' })
+  await api(
+    publicClient,
+    sharedPath,
+    'POST',
+    { password: fixturePassword },
+    404
+  )
+  await api(
+    publicClient,
+    sharedPath + '/entry',
+    'POST',
+    { path: 'guide/README.md', password: fixturePassword },
+    404
+  )
+  const ownerPage = await owner.newPage()
+  await ownerPage.goto(shareUrl)
+  await expect(
+    ownerPage.getByLabel('Search archive', { exact: true })
+  ).toBeVisible()
+  await expect(
+    ownerPage.getByRole('button', { name: 'Extract all', exact: true })
+  ).toHaveCount(0)
+  const foreign = await login(browser, 'jamie')
+  await api(foreign, sharedPath, 'POST', { password: fixturePassword }, 404)
+  await foreign.close()
+  await publicClient.close()
+  assert.deepEqual(
+    (await api(owner, '/api/files?limit=100')).data
+      .map((file) => file.id)
+      .sort(),
+    originalFileIds,
+    'Browsing and downloading shared archives must not create library files'
+  )
+  await owner.close()
+  results.push(
+    'Shared archive inline browse, text/image previews, exact public/protected downloads, mobile layout, password-body transport, no extraction controls, and live visibility/origin/bearer boundaries'
+  )
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
@@ -549,9 +867,13 @@ async function main() {
     const fixture = await fixtures(authenticated)
     const state = await authenticated.storageState()
     await authenticated.close()
-    await browseAndExtract(browser, state, fixture)
-    await createSelected(browser, state, fixture)
-    await additionalChecks(browser, state, fixture)
+    if (process.env.FLARE_ARCHIVE_SHARE_ONLY !== 'true') {
+      await browseAndExtract(browser, state, fixture)
+      await createSelected(browser, state, fixture)
+      await reviewedProfileChecks(browser, state)
+      await additionalChecks(browser, state, fixture)
+    }
+    await sharedArchiveChecks(browser, state, fixture)
     console.log(JSON.stringify({ passed: results }, null, 2))
   } catch (error) {
     const pages = browser.contexts().flatMap((context) => context.pages())

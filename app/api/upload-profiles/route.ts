@@ -1,7 +1,12 @@
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { requirePermission } from '@/lib/permissions/server'
 import { validateOwnedTagIds } from '@/lib/tags/service'
+import {
+  accountUploadOptions,
+  effectiveUploadRevision,
+} from '@/lib/uploads/effective-settings'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
 import { profileError, profileView } from '@/lib/uploads/profiles'
 import {
@@ -33,12 +38,8 @@ export async function GET() {
     if (!account)
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     const config = await getConfig()
-    const accountOptions = {
-      shareStyle: config.settings.customization.published.sharing.defaultStyle,
-      randomizeFileUrls: account.randomizeFileUrls,
-      expiration: account.defaultFileExpiration,
-      expiryAction: account.defaultFileExpirationAction,
-    }
+    const accountOptions = accountUploadOptions(account, config)
+    const canShare = hasPermission(user, 'files.share')
     const selected = profiles.find(
       (profile) => profile.id === account.defaultUploadProfileId
     )
@@ -49,9 +50,22 @@ export async function GET() {
     )
     return Response.json({
       data: {
-        profiles: profiles.map(profileView),
+        profiles: profiles.map((profile) => {
+          const view = profileView(profile)
+          return {
+            ...view,
+            effectiveRevision: effectiveUploadRevision(
+              user.id,
+              profile.id,
+              accountOptions,
+              view.options,
+              canShare
+            ),
+          }
+        }),
         defaultProfileId: account.defaultUploadProfileId,
         accountOptions,
+        canShare,
         effective,
       },
     })

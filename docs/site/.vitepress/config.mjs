@@ -116,7 +116,7 @@ export default defineConfig({
         ['API overview', '/api/'],
         ['Authentication & scopes', '/api/authentication'],
         ['Files & chunked uploads', '/api/files'],
-        ['Archive session contracts', '/api/archives'],
+        ['Archive API contracts', '/api/archives'],
         ['Short-link API', '/api/short-links'],
         ['Webhooks', '/api/webhooks'],
         ['Recipes & examples', '/api/recipes'],

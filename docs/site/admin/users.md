@@ -71,7 +71,7 @@ With `users.read` and `content.read`, choose **View Content** on a user to inspe
 
 Deletion has no recycle bin. Individual file deletion removes the database record and attempts to remove its bytes; it does not use the account-cleanup queue described below. If the storage backend is unavailable during individual file deletion, check logs for objects that may need reconciliation. Never make broad direct bucket deletions from a UI count alone.
 
-The [archive workspace](/guide/archives) is an owner-only library feature. A moderator can use existing whole-file access where their permissions allow it, but cannot invoke entry browsing, extraction, or archive creation on another account's files. Extracted files and newly created archives are ordinary file records and follow existing content-moderation rules after publication. They default to private; an explicitly selected upload profile can choose different visibility and expiration.
+The [archive workspace](/guide/archives) separates owner-library mutations from share-page reads. A moderator with `content.read` can browse and download archive entries through the share viewer under the ordinary file-access rules, but cannot extract or create archives from another account's files using owner-library routes. Public visitors can browse accessible shared archives, subject to file passwords. Extracted files and newly created archives remain ordinary file records and follow existing content-moderation rules after publication. They default to private; an explicitly selected upload profile can choose different visibility and expiration.
 
 ## Revoke browser sessions
 

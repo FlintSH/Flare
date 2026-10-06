@@ -1,5 +1,7 @@
 'use client'
 
+import { isArchiveCandidate } from '@/components/archives/archive-utils'
+
 import {
   AUDIO_FILE_TYPES,
   CODE_FILE_TYPES,
@@ -9,6 +11,7 @@ import {
 import { ErrorState } from './components/error-state'
 import { UnsupportedState } from './components/unsupported-state'
 import { useFileViewer } from './context'
+import { ArchiveViewer } from './viewers/archive-viewer'
 import { AudioViewer } from './viewers/audio-viewer'
 import { CodeViewer } from './viewers/code-viewer'
 import { CsvViewer } from './viewers/csv-viewer'
@@ -22,6 +25,10 @@ export function FileViewerContent() {
 
   if (state.error) {
     return <ErrorState error={state.error} />
+  }
+
+  if (file.archiveFormat || isArchiveCandidate(file.name, file.mimeType)) {
+    return <ArchiveViewer />
   }
 
   if (file.mimeType.startsWith('image/')) {

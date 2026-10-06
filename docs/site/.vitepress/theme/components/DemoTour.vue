@@ -63,8 +63,8 @@ const steps = [
   {
     title: 'Look inside before unpacking',
     label: 'Archives',
-    src: '/screenshots/archives/entry-preview.webp',
-    text: 'Search archive paths, preview an entry, and extract into a new folder. Package selected files as ZIP or TAR.GZ with private defaults or an explicitly reviewed upload profile.',
+    src: '/screenshots/archives/share-entry.webp',
+    text: 'Browse shared archive paths and download entries. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
     link: '/guide/archives',
   },
 ]

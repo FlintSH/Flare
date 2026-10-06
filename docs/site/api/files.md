@@ -9,7 +9,7 @@ File listing needs both the `files:read` scope and `files.read` on the token own
 
 Use `files:upload` to add files and `files:read` to browse your account's metadata. The API uses the same storage and sharing policies as Flare's dashboard.
 
-Archive uploads use the same upload contract and remain single stored files. [Inspecting, extracting, or creating archives](./archives) uses separate owner-session routes; neither `files:read` nor `files:upload` authorizes them. Existing named-token routes and response shapes are unchanged.
+Archive uploads use the same upload contract and remain single stored files. [Archive APIs](./archives) provide owner-session browsing/extraction/creation and separate share-page browsing/entry downloads. Share reads use the file's visibility/password rules, while extraction and creation remain owner-only. Neither `files:read` nor `files:upload` authorizes these routes; existing named-token operations and response shapes are unchanged.
 
 ## Upload one file
 

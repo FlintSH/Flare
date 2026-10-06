@@ -20,6 +20,10 @@ import { queueStorageDeletion } from '@/lib/storage/deletion'
 import { getStorageProviderForTarget } from '@/lib/storage/target-provider'
 import { captureStorageTarget, parseStorageTarget } from '@/lib/storage/targets'
 import {
+  accountUploadOptions,
+  effectiveUploadRevision,
+} from '@/lib/uploads/effective-settings'
+import {
   enqueueUploadProcessing,
   prepareUpload,
   prepareUploadDestination,
@@ -29,6 +33,7 @@ import { UploadError, resolveUploadOptions } from '@/lib/uploads/options'
 import {
   type ResolvedUploadOptions,
   mergeUploadOptions,
+  uploadProfileOptionsSchema,
 } from '@/lib/uploads/schema'
 
 import { createArchive, readArchive } from './codec'
@@ -44,6 +49,7 @@ import {
   type ArchiveManifest,
   getArchiveFormat,
 } from './shared'
+import { authorizeSharedArchive, recheckSharedArchive } from './sharing'
 
 const sourceSelect = {
   id: true,
@@ -85,6 +91,14 @@ async function inspect(
   extract: boolean
 ) {
   const [file] = await ownedFiles(actor, [id])
+  return { file, manifest: await inspectSource(file, operation, extract) }
+}
+
+async function inspectSource(
+  file: SourceFile,
+  operation: ArchiveOperation,
+  extract: boolean
+) {
   const format = getArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
@@ -96,11 +110,10 @@ async function inspect(
   const codecName = getArchiveFormat(file.name)
     ? file.name
     : `${file.name}.${format === 'gzip' ? 'gz' : format}`
-  const manifest = await readArchive(source.diskPath, codecName, {
+  return readArchive(source.diskPath, codecName, {
     signal: operation.signal,
     ...(extract ? { directory: operation.directory } : {}),
   })
-  return { file, manifest }
 }
 
 function publicManifest(manifest: ArchiveManifest) {
@@ -133,6 +146,41 @@ export async function downloadArchiveEntry(
   if (!path || path.length > ARCHIVE_LIMITS.pathLength)
     throw new ArchiveError('Choose a valid archive entry.', 400)
   const { file, manifest } = await inspect(actor, id, operation, true)
+  return entryDownload(manifest, path, operation, () =>
+    recheckRead(actor, file, operation)
+  )
+}
+
+export async function listSharedArchive(
+  id: string,
+  password: string | undefined,
+  operation: ArchiveOperation
+) {
+  const access = await authorizeSharedArchive(id, password)
+  const manifest = await inspectSource(access.file, operation, false)
+  await recheckSharedArchive(access, operation)
+  return publicManifest(manifest)
+}
+
+export async function downloadSharedArchiveEntry(
+  id: string,
+  path: string,
+  password: string | undefined,
+  operation: ArchiveOperation
+) {
+  const access = await authorizeSharedArchive(id, password)
+  const manifest = await inspectSource(access.file, operation, true)
+  return entryDownload(manifest, path, operation, () =>
+    recheckSharedArchive(access, operation)
+  )
+}
+
+async function entryDownload(
+  manifest: ArchiveManifest,
+  path: string,
+  operation: ArchiveOperation,
+  recheck: () => Promise<void>
+) {
   const entry = manifest.entries.find(
     (entry) => entry.path === path && entry.type === 'file'
   )
@@ -148,7 +196,7 @@ export async function downloadArchiveEntry(
   ].includes(detected)
     ? detected
     : 'application/octet-stream'
-  await recheckRead(actor, file, operation)
+  await recheck()
   return operation.download(
     entry.diskPath,
     basename(entry.path),
@@ -174,18 +222,37 @@ async function lockPublication(
     )
   const user = await tx.user.findUnique({
     where: { id: actor.user.id },
-    select: { sessionVersion: true },
+    select: {
+      sessionVersion: true,
+      randomizeFileUrls: true,
+      defaultFileExpiration: true,
+      defaultFileExpirationAction: true,
+    },
   })
   if (!user || user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
   if (options.profileId) {
     const profile = await tx.uploadProfile.findFirst({
       where: { id: options.profileId, userId: actor.user.id },
-      select: { updatedAt: true },
+      select: { updatedAt: true, options: true },
     })
     if (!profile || profile.updatedAt.toISOString() !== options.profileRevision)
       throw new ArchiveError(
         'The selected upload profile changed or was removed. Refresh and try again.',
+        409
+      )
+    const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
+    const config = configSchema.parse(row?.value ?? DEFAULT_CONFIG)
+    const revision = effectiveUploadRevision(
+      actor.user.id,
+      options.profileId,
+      accountUploadOptions(user, config),
+      uploadProfileOptionsSchema.parse(profile.options),
+      hasPermission(access, 'files.share')
+    )
+    if (revision !== options.profileEffectiveRevision)
+      throw new ArchiveError(
+        'The selected profile’s effective settings changed. Review the refreshed settings and try again.',
         409
       )
   }
@@ -290,6 +357,7 @@ async function archiveOptions(
     folderId: string | null
     profileId?: string | null
     profileRevision?: string
+    profileEffectiveRevision?: string
   }
 ) {
   let options: ResolvedUploadOptions
@@ -302,7 +370,7 @@ async function archiveOptions(
       : privateOptions(input.folderId)
   } catch (error) {
     if (
-      input.profileRevision &&
+      (input.profileRevision || input.profileEffectiveRevision) &&
       error instanceof UploadError &&
       error.status === 404 &&
       error.message === 'Upload profile not found.'
@@ -319,6 +387,14 @@ async function archiveOptions(
   )
     throw new ArchiveError(
       'The selected upload profile changed or was removed. Refresh and try again.',
+      409
+    )
+  if (
+    input.profileEffectiveRevision &&
+    options.profileEffectiveRevision !== input.profileEffectiveRevision
+  )
+    throw new ArchiveError(
+      'The selected profile’s effective settings changed. Review the refreshed settings and try again.',
       409
     )
   return options

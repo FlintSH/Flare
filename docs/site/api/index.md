@@ -41,7 +41,7 @@ Use the builder to see how your choices change a request. It generates a command
 | Give a script only the permissions it needs                        | [Authentication and scopes](./authentication) |
 | Upload, list, search, or filter files                              | [Files API](./files)                          |
 | Upload a large file in parts                                       | [Chunked uploads](./files#chunked-uploads)    |
-| Browse, extract, or create archives in a browser session           | [Archive session contracts](./archives)       |
+| Browse shared archives or manage archives in your library          | [Archive API contracts](./archives)           |
 | Create, list, or remove short links                                | [Short links API](./short-links)              |
 | Run your own automation after an upload                            | [Webhooks](./webhooks)                        |
 | Start with working code                                            | [Recipes](./recipes)                          |

@@ -23,10 +23,11 @@ import {
 import { usePermissions } from '@/hooks/use-permissions'
 
 export type ProfilesData = {
-  profiles: UploadProfileView[]
+  profiles: (UploadProfileView & { effectiveRevision?: string })[]
   defaultProfileId: string | null
   accountOptions: UploadProfileOptions
   effective: Required<UploadProfileOptions>
+  canShare: boolean
 }
 
 export function useUploadProfiles(refreshKey = 0) {
@@ -37,7 +38,7 @@ export function useUploadProfiles(refreshKey = 0) {
     setData(null)
     setError('')
     const load = () =>
-      fetch('/api/upload-profiles')
+      fetch('/api/upload-profiles', { cache: 'no-store' })
         .then(async (res) => {
           if (!res.ok) throw new Error('Could not load upload profiles.')
           const result = await res.json()
@@ -72,11 +73,19 @@ export function ProfilePicker({
   disabled?: boolean
   mode?: 'upload' | 'archive'
   refreshKey?: number
-  onSnapshotChange?: (snapshot: { id: string; revision: string } | null) => void
+  onSnapshotChange?: (
+    snapshot: {
+      id: string
+      revision: string
+      effectiveRevision: string
+    } | null
+  ) => void
 }) {
   const { can } = usePermissions()
   const { data, error } = useUploadProfiles(refreshKey)
   const archiveMode = mode === 'archive'
+  // Archive summaries and their revision must use the same authority snapshot.
+  const canShare = archiveMode ? data?.canShare === true : can('files.share')
   const selectedId = archiveMode
     ? (value ?? null)
     : value === undefined
@@ -85,9 +94,15 @@ export function ProfilePicker({
   const profile = data?.profiles.find((entry) => entry.id === selectedId)
   useEffect(() => {
     onSnapshotChange?.(
-      profile ? { id: profile.id, revision: profile.updatedAt } : null
+      profile?.effectiveRevision && typeof data?.canShare === 'boolean'
+        ? {
+            id: profile.id,
+            revision: profile.updatedAt,
+            effectiveRevision: profile.effectiveRevision,
+          }
+        : null
     )
-  }, [profile, onSnapshotChange])
+  }, [profile, data?.canShare, onSnapshotChange])
   const effective =
     archiveMode && !selectedId
       ? { ...UPLOAD_DEFAULTS, visibility: 'PRIVATE' as const }
@@ -100,6 +115,10 @@ export function ProfilePicker({
       : { HOUR: '1 hour', DAY: '1 day', WEEK: '1 week', MONTH: '1 month' }[
           effective?.expiration as 'HOUR'
         ]
+  const archiveExpiry =
+    effective?.expiration === 'DISABLED'
+      ? expiry
+      : `${expiry}, then ${effective?.expiryAction === 'SET_PRIVATE' ? 'private' : 'deleted'}`
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -156,7 +175,7 @@ export function ProfilePicker({
           ))}
         </SelectContent>
       </Select>
-      {!can('files.share') && (
+      {(archiveMode ? data && !canShare : !canShare) && (
         <p className="text-xs text-muted-foreground">
           Your uploads are private because your roles do not allow sharing.
         </p>
@@ -171,13 +190,13 @@ export function ProfilePicker({
                 : 'Loading the selected upload profile…')
             : error ||
               (effective
-                ? `${!can('files.share') || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
+                ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveMode ? archiveExpiry : expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
                 : 'Your saved default is applied by the server.')}
       </p>
       {archiveMode &&
         selectedId &&
         profile &&
-        can('files.share') &&
+        canShare &&
         effective?.visibility === 'PUBLIC' && (
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-foreground">
             This profile makes the output public. Anyone with its link can

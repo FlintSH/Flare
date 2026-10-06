@@ -321,7 +321,7 @@ test('security guide is discoverable and all three recordings load without autop
   ).toBeVisible()
 })
 
-test('archive guide, session contract, tour, and recordings are discoverable', async ({
+test('archive guide, API contracts, tour, and recordings are discoverable', async ({
   page,
 }) => {
   await page.goto('./features.html')
@@ -332,18 +332,27 @@ test('archive guide, session contract, tour, and recordings are discoverable', a
   await expect(
     page.locator('h2#choose-an-upload-profile-deliberately')
   ).toBeVisible()
-  await page
-    .getByRole('link', { name: 'archive session API', exact: true })
-    .click()
+  await expect(
+    page.locator('h2#browse-an-archive-shared-with-you')
+  ).toBeVisible()
+  await page.getByRole('link', { name: 'archive API', exact: true }).click()
   await expect(page).toHaveURL(/api\/archives\.html$/)
   await expect(page.locator('.vp-doc')).toContainText('profileRevision')
+  await expect(page.locator('.vp-doc')).toContainText(
+    'profileEffectiveRevision'
+  )
+  await expect(page.locator('.vp-doc')).toContainText('/archive/share/entry')
   await page.goto('./demos.html')
   await page.getByRole('button', { name: '9. Archives', exact: true }).click()
   await expect(page.locator('.tour-description a')).toHaveAttribute(
     'href',
     /guide\/archives\.html$/
   )
-  for (const name of ['archive-browse-extract.webm', 'archive-create.webm']) {
+  for (const name of [
+    'archive-browse-extract.webm',
+    'archive-create.webm',
+    'archive-share-browse.webm',
+  ]) {
     const video = page.locator(`video[src$="${name}"]`)
     await expect(video).toHaveAttribute('preload', 'none')
     expect(await video.getAttribute('autoplay')).toBeNull()

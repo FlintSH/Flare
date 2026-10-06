@@ -208,6 +208,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     const {
       password: _password,
       folderId: _folderId,
+      profileEffectiveRevision: _profileEffectiveRevision,
       ...persistedOptions
     } = options
     const file = await tx.file.create({

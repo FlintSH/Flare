@@ -45,16 +45,16 @@ If you need to stop public access while keeping your copy, set the file to **Pri
 
 ## What recipients can preview
 
-| Content       | Viewer experience                                                                                     |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| Images        | An inline preview with an expanded viewer for zoom and pan.                                           |
-| Video         | In-browser video controls when the browser supports the format and codec.                             |
-| Audio         | In-browser playback controls for supported formats.                                                   |
-| PDF           | A browser PDF preview when supported.                                                                 |
-| Text and code | A read-only, scrollable text view; supported code types receive syntax highlighting.                  |
-| CSV           | A scrollable table for CSV files up to 1 MiB. Larger CSV files can be downloaded.                     |
-| Archives      | Download the complete archive. Entry browsing and extraction belong to the owner's signed-in library. |
-| Other formats | A download-focused fallback when an inline viewer is unavailable.                                     |
+| Content       | Viewer experience                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Images        | An inline preview with an expanded viewer for zoom and pan.                                                                                  |
+| Video         | In-browser video controls when the browser supports the format and codec.                                                                    |
+| Audio         | In-browser playback controls for supported formats.                                                                                          |
+| PDF           | A browser PDF preview when supported.                                                                                                        |
+| Text and code | A read-only, scrollable text view; supported code types receive syntax highlighting.                                                         |
+| CSV           | A scrollable table for CSV files up to 1 MiB. Larger CSV files can be downloaded.                                                            |
+| Archives      | Browse folders and paths, preview supported entries, and download an entry or the complete archive. Extraction stays in the owner's library. |
+| Other formats | A download-focused fallback when an inline viewer is unavailable.                                                                            |
 
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
@@ -62,7 +62,7 @@ If you need to stop public access while keeping your copy, set the file to **Pri
 
 Browser preview support is separate from upload support. If a preview fails, try downloading the file and opening it in an appropriate application. A share page expanded image viewer shows that shared image; it does not reveal the owner's surrounding library.
 
-A public archive contains the bytes of every member, even if those files originally had private links or Flare passwords. Downloading it lets a recipient inspect those bytes in their own archive tool. [Archive creation](./archives#create-an-archive-from-selected-files) defaults to private and does not embed source sharing controls or encrypt the result. An explicitly selected public upload profile can make the new archive public immediately; review its contents and the profile summary before confirming.
+A public archive exposes its member paths and bytes to authorized recipients through the [archive browser](./archives#browse-an-archive-shared-with-you), even if those files originally had private links or Flare passwords. Protected public archives require the file password before browsing or entry downloads; a private archive remains unavailable to other ordinary users even if they know its password. Share-page browsing does not add files to an account or offer extraction. [Archive creation](./archives#create-an-archive-from-selected-files) defaults to private and does not embed source sharing controls or encrypt the result. An explicitly selected public upload profile can make the new archive public immediately; review its contents and the profile summary before confirming.
 
 ## Share pages, raw links, and downloads
 
@@ -91,7 +91,7 @@ The instance administrator can select **Minimal**, **Framed**, or **Delivery** s
 
 <Screenshot src="/screenshots/customization/share-minimal.png" alt="Minimal Flare share layout centered on the uploaded content" caption="Minimal keeps the focus on the content. Framed and Delivery offer different presentation choices." />
 
-Uploader attribution, filename, size, footer, image fit, and social preview text are presentation choices. Hiding the filename on a page does not rename the downloaded file or remove a filename already present in its URL. Hidden details are also omitted from generated social text, but content already fetched by an external service may remain cached there.
+Uploader attribution, filename, size, footer, image fit, and social preview text are presentation choices. Hiding the filename on a page does not rename the downloaded file or remove a filename already present in its URL. For archives, the outer label can be **Shared file**, while authorized viewers can still see member paths and names inside the archive. Hidden details are also omitted from generated social text, but content already fetched by an external service may remain cached there.
 
 See [appearance](./appearance) for personal settings and [upload profiles](./upload-profiles) for selecting a style per workflow.
 

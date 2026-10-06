@@ -23,18 +23,31 @@ export const IMAGE_PREVIEW_BYTES = 10 * 1024 * 1024
 export const ARCHIVE_FORM_DIALOG_CLASS =
   'max-h-[calc(100dvh-2rem)] overflow-hidden [&>div:first-child]:flex [&>div:first-child]:max-h-[calc(100dvh-7rem)] [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
 
-export type ArchiveProfileSnapshot = { id: string; revision: string }
+export type ArchiveProfileSnapshot = {
+  id: string
+  revision: string
+  effectiveRevision: string
+}
 
 export function archiveProfileRequest(
   profileId: string | null,
   snapshot: ArchiveProfileSnapshot | null
 ) {
   if (!profileId) return { profileId: null }
-  if (!snapshot || snapshot.id !== profileId)
+  if (
+    !snapshot ||
+    snapshot.id !== profileId ||
+    !snapshot.revision ||
+    !snapshot.effectiveRevision
+  )
     throw new Error(
       'Wait for the selected upload profile to load, or choose private output.'
     )
-  return { profileId, profileRevision: snapshot.revision }
+  return {
+    profileId,
+    profileRevision: snapshot.revision,
+    profileEffectiveRevision: snapshot.effectiveRevision,
+  }
 }
 
 export function archiveFolderCount(entries: ArchiveEntry[]) {
@@ -76,6 +89,31 @@ export interface ArchiveFileRef {
   name: string
   urlPath?: string
   folderId?: string | null
+}
+
+export type ArchiveSource =
+  { kind: 'owner' } | { kind: 'share'; password?: string }
+
+export const OWNER_ARCHIVE_SOURCE: ArchiveSource = { kind: 'owner' }
+
+/** Shared passwords and entry paths travel in the body, never in a URL. */
+export function archiveReadRequest(
+  id: string,
+  source: ArchiveSource,
+  path?: string
+): { url: string; body?: { password?: string; path?: string } } {
+  const base = `/api/files/${encodeURIComponent(id)}/archive`
+  if (source.kind === 'share')
+    return {
+      url: `${base}/share${path === undefined ? '' : '/entry'}`,
+      body: {
+        ...(source.password ? { password: source.password } : {}),
+        ...(path === undefined ? {} : { path }),
+      },
+    }
+  return {
+    url: path === undefined ? base : archiveEntryUrl(id, path),
+  }
 }
 
 export function archiveEntryName(path: string) {
@@ -189,7 +227,23 @@ export async function archiveRequest<T>(
   body?: unknown,
   signal?: AbortSignal
 ): Promise<T> {
-  const response = await fetch(url, {
+  const response = await archiveFetch(url, body, signal)
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok)
+    throw new ArchiveRequestError(
+      result.error ||
+        'The archive request could not be completed. Please try again.',
+      response.status
+    )
+  return result.data as T
+}
+
+export function archiveFetch(
+  url: string,
+  body?: unknown,
+  signal?: AbortSignal
+) {
+  return fetch(url, {
     method: body === undefined ? 'GET' : 'POST',
     cache: 'no-store',
     signal,
@@ -200,14 +254,6 @@ export async function archiveRequest<T>(
           body: JSON.stringify(body),
         }),
   })
-  const result = await response.json().catch(() => ({}))
-  if (!response.ok)
-    throw new ArchiveRequestError(
-      result.error ||
-        'The archive request could not be completed. Please try again.',
-      response.status
-    )
-  return result.data as T
 }
 
 export function archiveErrorMessage(error: unknown) {

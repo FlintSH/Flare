@@ -45,6 +45,13 @@ These routes check the file's visibility, password, and an optional **browser se
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs.
 
+Archive share pages use separate read operations under the same file-access rules. Both reject `Authorization` headers, require same-origin requests, and accept file passwords only in the request body. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
+
+| Path                                  | Methods | Purpose                                                                                                      |
+| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `/api/files/{id}/archive/share`       | POST    | Read an accessible archive manifest; JSON `{password?}`. Unprotected public archives allow anonymous access. |
+| `/api/files/{id}/archive/share/entry` | POST    | Download a member; JSON or URL-encoded `{path,password?}` body, with file access checked again.              |
+
 The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access. `/{userUrlId}/{filename}/direct` is a video-only lookup that returns JSON containing a signed storage URL or raw-route fallback after checking access; it does not stream the file itself. An issued S3 URL can remain valid until its own expiry after Flare access settings change. `/{userUrlId}/{filename}` is the rendered share page. `GET /u/{shortCode}` publicly redirects a short link and increments its count.
 
 ## Dashboard account routes requiring a browser session
@@ -54,7 +61,7 @@ These routes explicitly read an interactive session. Neither a named API token n
 | Path                               | Methods       | Purpose                                                                                                                           |
 | ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests.            |
-| `/api/upload-profiles`             | GET, POST     | List profiles; create/import a profile.                                                                                           |
+| `/api/upload-profiles`             | GET, POST     | List profiles with their `updatedAt` and effective-settings `effectiveRevision`; create/import a profile.                         |
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                                          |
 | `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                                 |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                                    |
@@ -73,7 +80,7 @@ Profile and appearance mutations have explicit origin/content-type guards. Integ
 
 ### Archive workspace
 
-Archive operations require the owner's browser session and reject an `Authorization` header. `content.read` and administrator privileges do not substitute for source-file ownership; public archive links do not expose these operations. See [archive session contracts](./archives) for formats, limits, request examples, and response shapes.
+The following owner-library archive operations require the owner's browser session and reject an `Authorization` header. `content.read` and administrator privileges do not substitute for source-file ownership on these routes. Share-page reads use the separate file-content routes above; creation and extraction remain owner-only. Their optional `profileRevision` and `profileEffectiveRevision` bind a selected profile and its effective inherited settings to the values returned by the profile list. See [archive API contracts](./archives) for formats, limits, request examples, and response shapes.
 
 | Path                              | Methods | Purpose and permission                                                                                                    |
 | --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |

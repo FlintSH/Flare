@@ -74,7 +74,9 @@ export function CreateArchiveDialog({
   const [profileSnapshot, setProfileSnapshot] =
     useState<ArchiveProfileSnapshot | null>(null)
   const [profileRefreshKey, setProfileRefreshKey] = useState(0)
-  const profileReady = !profileId || profileSnapshot?.id === profileId
+  const profileReady =
+    !profileId ||
+    (profileSnapshot?.id === profileId && !!profileSnapshot.effectiveRevision)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{

@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   archiveEntriesAt,
   archiveEntryUrl,
+  archiveFetch,
   archiveFolderCount,
   archiveOutputName,
   archivePreviewKind,
   archiveProfileRequest,
+  archiveReadRequest,
   archiveSelectionSize,
   isArchiveCandidate,
   isSafeArchiveImage,
@@ -68,15 +70,61 @@ describe('archive browser navigation', () => {
   })
 })
 
+describe('shared archive request transport', () => {
+  it('keeps protected-share credentials and arbitrary entry paths out of request URLs', async () => {
+    const source = { kind: 'share' as const, password: 'demo-only &?+#' }
+    const entryPath = 'folder/a #?&ü.txt'
+    const controller = new AbortController()
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('entry'))
+    try {
+      for (const path of [undefined, entryPath]) {
+        const request = archiveReadRequest('id/1', source, path)
+        await archiveFetch(request.url, request.body, controller.signal)
+        const [url, options] = fetchSpy.mock.calls.at(-1)!
+        expect(url).toBe(
+          `/api/files/id%2F1/archive/share${path ? '/entry' : ''}`
+        )
+        expect(options?.method).toBe('POST')
+        expect(options?.headers).toEqual({ 'Content-Type': 'application/json' })
+        expect(options?.cache).toBe('no-store')
+        expect(options?.signal).toBe(controller.signal)
+        expect(JSON.parse(options?.body as string)).toEqual({
+          password: source.password,
+          ...(path ? { path } : {}),
+        })
+      }
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('uses the shared route without credentials and keeps library reads on owner routes', () => {
+    expect(archiveReadRequest('file', { kind: 'share' })).toEqual({
+      url: '/api/files/file/archive/share',
+      body: {},
+    })
+    expect(archiveReadRequest('file', { kind: 'owner' })).toEqual({
+      url: '/api/files/file/archive',
+    })
+    expect(archiveReadRequest('file', { kind: 'owner' }, 'a b.txt')).toEqual({
+      url: '/api/files/file/archive/entry?path=a%20b.txt',
+    })
+  })
+})
+
 describe('archive profile snapshots', () => {
   it('pins explicit output settings to the displayed profile and refuses loading or stale selections', () => {
     const snapshot = {
       id: 'private-profile',
       revision: '2026-10-06T00:00:00.000Z',
+      effectiveRevision: 'a'.repeat(64),
     }
     expect(archiveProfileRequest('private-profile', snapshot)).toEqual({
       profileId: 'private-profile',
       profileRevision: snapshot.revision,
+      profileEffectiveRevision: snapshot.effectiveRevision,
     })
     expect(() => archiveProfileRequest('private-profile', null)).toThrow(
       'Wait for'
@@ -84,6 +132,12 @@ describe('archive profile snapshots', () => {
     expect(() => archiveProfileRequest('different-profile', snapshot)).toThrow(
       'Wait for'
     )
+    expect(() =>
+      archiveProfileRequest('private-profile', {
+        ...snapshot,
+        effectiveRevision: '',
+      })
+    ).toThrow('Wait for')
     expect(archiveProfileRequest(null, snapshot)).toEqual({ profileId: null })
   })
 })

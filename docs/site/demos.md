@@ -40,11 +40,22 @@ The app reads a real stored ZIP and publishes its new folder tree to the disposa
 
 1. In **Files**, choose **Select** and select **Field notes.txt** and **Launch checklist.csv**.
 2. Choose **Create archive**, enter **Launch handoff.zip**, leave **Format** on **ZIP**, and select **Campaigns** as the destination. The initial profile choice is **Private (no profile)**.
-3. Explicitly select **Public handoff** under **Upload profile**. Review the summary: public visibility, one-week expiration, randomized URL filenames, Delivery share page, and one tag. The form warns that public outputs expose their contents.
+3. Explicitly select **Public handoff** under **Upload profile**. Review the summary: public visibility, **1 week, then private**, randomized URL filenames, Delivery share page, and one tag. The form warns that public outputs expose their contents.
 4. Choose **Create archive**. **Archive created** confirms the new file without changing the originals.
 5. Choose **Open archive**. The generated ZIP contains **Field notes.txt** and **Launch checklist.csv** at its root.
 
-This is a real stored ZIP generated from two private fixture files. The explicit profile makes the result public, applies the **Approved** tag, and sets expiration to make it private after one week. The server checks the displayed profile revision before publication. The same browser suite separately exercises private TAR.GZ creation and profile-based extraction. [Review profile and privacy choices](./guide/archives#choose-an-upload-profile-deliberately) before packaging your own files.
+This is a real stored ZIP generated from two private fixture files. The explicit profile makes the result public, applies the **Approved** tag, and sets expiration to make it private after one week. The server checks the displayed profile and effective settings before publication, including inherited defaults. The same browser suite separately exercises private TAR.GZ creation and profile-based extraction. [Review profile and privacy choices](./guide/archives#choose-an-upload-profile-deliberately) before packaging your own files.
+
+### Browse and download a shared archive
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse and download a shared archive: silent Flare recording" :src="withBase('/demos/archive-share-browse.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open the public **Field kit.zip** share page while signed out. **Archive contents** shows four files and four folders inline, above the whole-file **Download** action.
+2. Open **guide** and select **README.md**. The text appears beside the folder contents.
+3. Choose **Download entry**. The browser saves the actual **README.md** bytes and keeps the share page open.
+4. Search for **flare-icon** and select **images/flare-icon.png**. The verified image appears without extracting files into an account.
+
+This recording uses an anonymous visitor and a real unprotected public archive. The browser checks verify the downloaded bytes and that no **Extract all** action appears. Separate, unrecorded checks exercise protected-file access, reject missing or incorrect passwords, and deny unrelated visitors after the source becomes private. The guide includes the [password gate, unlocked page, and mobile captures](./guide/archives#browse-an-archive-shared-with-you). Existing file visibility and password rules apply to every shared entry request.
 
 ### Enable, use, and recover two-factor authentication
 

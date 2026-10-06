@@ -5,19 +5,22 @@ description: Browse archive contents, save individual entries, extract into a ne
 
 # Work with archives
 
-Open an archive from **Files → file menu → Browse archive**. Flare can inspect **ZIP, TAR, TAR.GZ/TGZ, and GZIP** files without first adding their contents to your library. You can download an individual entry, extract the contents into a new folder, or create a ZIP or TAR.GZ from files you already own.
+Open an archive from **Files → file menu → Browse archive**, or browse an accessible archive on its share page. Flare can inspect **ZIP, TAR, TAR.GZ/TGZ, and GZIP** files without first adding their contents to a library. Share-page visitors can preview and download individual entries. In your own library, you can also extract contents into a new folder or create a ZIP or TAR.GZ from files you own.
 
-These tools require your signed-in browser and operate on **your own files**. They are unavailable to public-link visitors, named API tokens, and moderators inspecting somebody else's files. A public archive can still be downloaded as a whole through its normal share link; making it public exposes the bytes inside it to recipients who open that downloaded copy.
+Share-page browsing follows the archive file's [visibility and password rules](./sharing#choose-who-can-open-a-file). An unprotected public archive can be browsed while signed out. A protected public archive requires its file password; knowing a private file's password does not make it public. Owners with `files.read` and accounts with `content.read` retain their usual privileged file access. Named API tokens do not grant archive access.
 
-| Action                                       | Required permissions                                                             |
-| -------------------------------------------- | -------------------------------------------------------------------------------- |
-| Browse an owned archive or download an entry | `files.read`                                                                     |
-| Create an archive from owned files           | `files.read` and `files.upload`; also `folders.manage` when saving into a folder |
-| Extract into a new folder                    | `files.read`, `files.upload`, and `folders.manage`                               |
+Creation and extraction remain **owner-only library operations** requiring a signed-in browser. Share pages provide browsing and downloads, including for signed-in recipients; they do not extract another person's archive into your account.
+
+| Action                                   | Required permissions                                                             |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| Browse a share page or download an entry | Access to the file under its visibility/password rules                           |
+| Browse an archive in your own library    | `files.read`                                                                     |
+| Create an archive from owned files       | `files.read` and `files.upload`; also `folders.manage` when saving into a folder |
+| Extract into a new folder                | `files.read`, `files.upload`, and `folders.manage`                               |
 
 Existing files and links stay unchanged. **Private (no profile)** is the default for extraction and creation: new files are private, with no file password or expiration. Your account's default upload profile is not selected automatically. You can explicitly choose an owned **Upload profile** to apply its sharing, tags, expiration, naming, and share-page settings. Review the summary before confirming: a public profile can make new outputs public. Original files' Flare passwords and visibility are not copied into the result.
 
-The screenshots below show real operations with disposable demonstration files. [Watch the recorded browse/extract and create workflows](../demos#browse-and-extract-an-archive), or [reproduce them locally](../contributing#archive-browser-checks-and-demos).
+The screenshots below show real operations with disposable demonstration files. Watch the recorded [library workflows](../demos#browse-and-extract-an-archive) and [shared browsing](../demos#browse-and-download-a-shared-archive), or [reproduce them locally](../contributing#archive-browser-checks-and-demos).
 
 ## Browse and save one entry
 
@@ -32,15 +35,44 @@ The screenshots below show real operations with disposable demonstration files. 
 
 Browsing and downloading an entry do not create new library files or folders. Text previews are limited to **256 KiB**, and image previews to **10 MiB**; use the download action for larger entries or unsupported preview types. HTML and SVG are displayed as text rather than active documents. An archive is inspected as a whole before it is accepted: Flare does not silently skip an unsafe entry and show a partial archive.
 
+In both library and share-page browsers, **Download entry** waits while a supported preview loads or retries, so the two requests do not overlap. Entries without a supported preview can be downloaded immediately.
+
 ::: details See an image entry preview
 <Screenshot src="/screenshots/archives/image-preview.webp" alt="Verified PNG image preview of the Flare icon inside Field kit.zip" caption="Supported raster images can be previewed without extracting the archive." />
 :::
 
-Flare file passwords and archive encryption are different. An owner can browse an otherwise supported archive protected by a normal Flare file password. ZIP/TAR encryption and password-protected archive contents are not supported; remove that encryption in an appropriate local tool before uploading a copy you intend to inspect.
+Flare file passwords and archive encryption are different. A normal Flare file password controls access to the share page and entries. Encrypted archive contents remain unsupported after unlocking that page; remove the archive's encryption in an appropriate local tool before uploading a copy you intend to inspect.
+
+## Browse an archive shared with you
+
+1. Open the normal Flare share link. If the public archive is protected, enter **File password** and choose **Access File**.
+2. Under **Archive contents**, open folders or use **Search archive** to find member paths. **Archive root** returns to the top level.
+3. Select an entry to preview supported text or an image, then choose **Download entry** to save that file. The share page remains open.
+4. Use the ordinary **Download** action below the viewer if you want the complete archive.
+
+<Screenshot src="/screenshots/archives/share-browse.webp" alt="Public Field kit.zip share page with inline Archive contents, four folders, and the whole-file Download action" caption="An anonymous visitor can browse an unprotected public archive without signing in." />
+
+These actions do not add files to an account or expose other files in the owner's library. Share-page browsing is inline; it has no **Extract all** action, including when the owner is signed in. To extract into Flare, the owner uses **Files → Browse archive → Extract all** in their own library. Entry paths and filenames remain visible to authorized viewers even when the outer share-page filename is hidden by a presentation setting.
+
+::: details See shared text and image previews
+<Screenshot src="/screenshots/archives/share-entry.webp" alt="Shared archive with the guide folder open, README.md text preview, and Download entry beside the member name" caption="Download entry saves the selected file; the ordinary Download action below saves the whole archive." />
+
+<Screenshot src="/screenshots/archives/share-image.webp" alt="Public archive search for flare-icon showing the verified images/flare-icon.png preview and its download action" caption="Path search also finds image entries elsewhere in the shared archive." />
+:::
+
+Each shared archive request checks the current file access rules. Making the archive private, changing its password, or deleting it affects subsequent requests; content already previewed or downloaded cannot be recalled. Expiration follows the normal [scheduled expiry processing](./sharing#give-a-file-a-lifetime).
+
+::: details See the password gate and unlocked archive
+<Screenshot src="/screenshots/archives/share-password.webp" alt="Password Protected File page with an empty File password field and Access File button; archive contents are hidden" caption="A protected public archive requires its file password before a visitor can browse." />
+
+<Screenshot src="/screenshots/archives/share-unlocked.webp" alt="Previously protected archive after successful access, showing README search results, text preview, and Download entry" caption="After the real password check succeeds, the visitor can browse and download entries. No password value is shown." />
+:::
+
+If you arrived through a [shared folder](./folders#share-a-folder), that folder's link controls discovery of the file. Disabling the folder share or moving the file out blocks that entrypoint. An already-known canonical public file URL and its archive contents remain accessible under the file's own visibility/password rules. Change the file itself when you need to stop that public access.
 
 ## Extract into your library
 
-1. In the archive browser, choose **Extract all**.
+1. In your own **Files** library, open **Browse archive** and choose **Extract all**. Share-page browsers do not offer extraction.
 2. Under **Save to**, choose an existing folder or **Unfiled** for the top level.
 3. Set **New folder name** for the wrapper that will contain the extracted items.
 4. Keep **Private (no profile)**, or explicitly choose an **Upload profile** and review its visibility and expiration.
@@ -90,7 +122,7 @@ An explicitly selected profile applies to every new extracted file, or to the si
 
 <Screenshot src="/screenshots/archives/create-profile.webp" alt="Public handoff selected in Create archive with public visibility, one-week expiration, randomized filenames, Delivery share page, and one tag" caption="This explicit profile replaces the private default. Review the public-content notice and effective settings before confirming." />
 
-The normal [upload-profile permission rules](./upload-profiles) still apply. Without `files.share`, outputs stay private. Applying profile tags needs `tags.manage`; an expiration that deletes files needs `files.delete`, and an expiration that makes them private needs `files.share`. A profile contains no file password. Flare checks that the profile still matches the settings shown in the dialog. If it changes or is deleted before submission or while processing, publication fails without adding outputs; refresh the choice, review its current settings, and retry.
+The normal [upload-profile permission rules](./upload-profiles) still apply. Without `files.share`, outputs stay private. Applying profile tags needs `tags.manage`; an expiration that deletes files needs `files.delete`, and an expiration that makes them private needs `files.share`. A profile contains no file password. Flare checks that the profile and its inherited account/instance defaults still match the settings shown in the dialog. A profile edit, deletion, or relevant inherited-default or sharing-permission change before submission or during processing stops publication without adding outputs. The dialog refreshes the settings while retaining your choices; review them and submit again. **Private (no profile)** keeps its fixed defaults regardless of account changes.
 
 ## Use archives on a phone
 
@@ -99,6 +131,10 @@ The same archive tools work in the mobile library. Scroll the dialog's fields wh
 <Screenshot src="/screenshots/archives/mobile-browse.webp" alt="Archive browser at 390 pixels wide showing Field kit.zip folders, search, and Extract all" caption="Real mobile browser capture at 390px wide." />
 
 <Screenshot src="/screenshots/archives/mobile-extract.webp" alt="Mobile Extract archive dialog with destination choices and extraction actions" caption="The extraction form scrolls within the dialog so its actions remain reachable on a phone." />
+
+On a share page, the entry list and preview stack vertically. Scroll to **Download entry** for the selected member or the ordinary **Download** action for the whole archive.
+
+<Screenshot src="/screenshots/archives/share-mobile.webp" alt="Shared archive at 390 pixels wide with README search result, text preview, Download entry, and whole-archive Download below" caption="Real shared-page browsing at 390px wide; the full-page capture shows both download actions." />
 
 ## Supported sizes and formats
 
@@ -115,7 +151,7 @@ Limits apply to every request, including browsing. **MiB** means 1,048,576 bytes
 | Archive path length                                        | 1,024 characters |
 | Total request time                                         | 120 seconds      |
 
-The instance's file-size limit and your remaining quota can impose lower limits when new files are created. Each Flare application process allows two concurrent archive operations, with at most one per account. If the service is busy, wait for the current operation to finish and retry.
+The instance's file-size limit and your remaining quota can impose lower limits when new files are created. Each Flare application process allows two concurrent archive operations. Owner-library work allows at most one per account; share-page work allows at most one per source file. Shared browsing and entry downloads also share a limit of 30 requests per IP per minute in each process. If the service is busy or a rate limit is reached, wait and retry.
 
 **RAR, 7z, encrypted archives, and split archives are unsupported.** Links, special filesystem entries, unsafe paths, conflicting paths, malformed contents, and archives exceeding the limits are rejected. Flare does not execute extracted programs or restore archive filesystem permissions.
 
@@ -123,14 +159,14 @@ The instance's file-size limit and your remaining quota can impose lower limits 
 
 | What you see                              | What to do                                                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No archive action                         | Check the file format and your `files.read` permission; archive tools are for your own library.                                                                          |
+| No archive action                         | Check the format and entrypoint. Library tools require `files.read`; share-page browsing requires access to the file.                                                    |
 | Unsupported, unsafe, or malformed archive | Recreate it as a regular ZIP, TAR, TAR.GZ/TGZ, or GZIP with ordinary files and directories. Remove encryption, links, and conflicting paths first.                       |
 | An entry has no preview                   | Download it and open it locally; preview limits and browser format support are separate from archive support.                                                            |
-| Extraction or creation is unavailable     | Ask an administrator to review the required upload/folder permissions. A named token cannot supply a browser session.                                                    |
+| Extraction or creation is unavailable     | These are owner-library operations; share pages offer browsing and downloads only. Check upload/folder permissions for your own files.                                   |
 | Destination or wrapper name rejected      | Pick an existing folder you own and a distinct new wrapper name, then retry.                                                                                             |
 | Size, quota, or time limit reached        | Split the work into smaller archives or selections, or extract locally and upload the files you need. Raising an upload setting does not raise the fixed archive limits. |
 | Another operation is running              | Finish the current archive request before starting another; the server also limits concurrent operations across accounts.                                                |
 
 <Screenshot src="/screenshots/archives/invalid-archive.webp" alt="Archive browser rejecting Damaged bundle.zip with an integrity error in the light theme" caption="A real damaged ZIP is rejected. An invalid archive does not produce a partial listing or extracted files." />
 
-For contributors, the [archive session API](../api/archives) describes exact requests and responses. Operators can review [archive resource requirements](../hosting/storage#archive-processing).
+For contributors, the [archive API](../api/archives) describes exact requests and responses. Operators can review [archive resource requirements](../hosting/storage#archive-processing).
