@@ -23,6 +23,13 @@ const operations = {
     scope: 'files:read',
     permission: 'files.read',
   },
+  timeline: {
+    label: 'Browse your file timeline',
+    method: 'GET',
+    path: '/api/files/timeline?groupBy=month&timezone=UTC',
+    scope: 'files:read',
+    permission: 'files.read',
+  },
   urls: {
     label: 'List short links',
     method: 'GET',

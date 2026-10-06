@@ -82,6 +82,22 @@ if (mode === 'upload') {
           : '')
     )
   process.stdout.write(body + '\n')
+} else if (mode === 'timeline') {
+  const { FLARE_URL, FLARE_TOKEN } = process.env
+  if (!FLARE_URL || !FLARE_TOKEN)
+    throw new Error(
+      'Set FLARE_URL and FLARE_TOKEN; this command needs files:read and the owner files.read permission.'
+    )
+  const url = new URL('/api/files/timeline', FLARE_URL)
+  url.searchParams.set('timezone', process.argv[3] || 'UTC')
+  url.searchParams.set('groupBy', 'month')
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${FLARE_TOKEN}` },
+  })
+  const body = await response.text()
+  if (!response.ok)
+    throw new Error(`Timeline failed (${response.status}): ${body}`)
+  process.stdout.write(body + '\n')
 } else if (mode === 'receive') {
   const secret = process.env.FLARE_WEBHOOK_SECRET
   if (!secret)
@@ -163,7 +179,7 @@ if (mode === 'upload') {
   )
 } else {
   console.log(
-    'Usage: node examples/integrations.mjs upload <file> [mime-type] | receive'
+    'Usage: node examples/integrations.mjs upload <file> [mime-type] | timeline [IANA-timezone] | receive'
   )
   process.exitCode = 1
 }

@@ -159,6 +159,7 @@ curl --fail-with-body --get \
 | `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together.                                                                         |
 | `folder`           | All folders    | Owned folder ID or `unfiled`. A folder filter matches that folder directly, not its descendants.                                                               |
 | `tag`              | All tags       | Owned tag ID or `untagged`. Excluded automatic tags do not count as active tags.                                                                               |
+| `snapshot`         | No ceiling     | Inclusive upload timestamp ceiling returned by the timeline endpoint; send it unchanged on each window request.                                                |
 | `galleryAnchor`    | None           | An image's file ID, used together with `galleryDirection` for neighboring images.                                                                              |
 | `galleryDirection` | None           | `next` or `previous`; requires `galleryAnchor`.                                                                                                                |
 
@@ -195,7 +196,96 @@ The file list's `size` is in **MiB** (`bytes / 1,048,576`). Upload responses and
 
 The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is a timestamp or `null`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
 
-Normal pages use offsets, so a library changing between requests can move entries between pages. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
+Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
+
+## Browse the whole file timeline
+
+**`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**
+
+This lightweight endpoint supplies calendar bucket counts and offsets for a virtual library or date scrollbar. It applies the same ownership, search, type, date, visibility, folder, and tag filters as `GET /api/files`, using a database-clock read and one aggregate rather than returning every file's metadata. Counts include private files owned by the authenticated account, and never another account's files.
+
+```sh
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  --data-urlencode 'sortBy=newest' \
+  --data-urlencode 'groupBy=month' \
+  --data-urlencode 'timezone=America/Los_Angeles' \
+  "$FLARE_URL/api/files/timeline"
+```
+
+| Parameter                                                              | Default               | Meaning                                                                                                                            |
+| ---------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `search`, `types`, `dateFrom`, `dateTo`, `visibility`, `folder`, `tag` | Same as the file list | All filter rules above apply.                                                                                                      |
+| `sortBy`                                                               | `newest`              | Date order produces calendar buckets. Other supported sorts produce one undated bucket. Unknown values use newest.                 |
+| `groupBy`                                                              | `none`                | `none`, `month`, `week`, or `year`. `none` uses month buckets internally, without requesting visible headings. Weeks start Monday. |
+| `timezone`                                                             | `UTC`                 | IANA time zone for calendar boundaries, such as `America/Los_Angeles`. Browser clients can use their local IANA zone.              |
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 124,
+    "snapshot": "2026-10-06T12:00:00.000Z",
+    "groupBy": "month",
+    "timezone": "America/Los_Angeles",
+    "buckets": [
+      {
+        "key": "2026-10-01T07:00:00.000Z",
+        "from": "2026-10-01T07:00:00.000Z",
+        "to": "2026-11-01T07:00:00.000Z",
+        "count": 24,
+        "offset": 0
+      },
+      {
+        "key": "2026-09-01T07:00:00.000Z",
+        "from": "2026-09-01T07:00:00.000Z",
+        "to": "2026-10-01T07:00:00.000Z",
+        "count": 100,
+        "offset": 24
+      }
+    ]
+  }
+}
+```
+
+`from` is inclusive and `to` exclusive. Both are ISO UTC instants for local calendar boundaries; daylight-saving changes can make a week or month shorter or longer. `offset` is the number of matching files before this bucket in the selected order. Empty periods are omitted. `newest` returns newest buckets first; `oldest` returns oldest first. `key` equals `from`. Non-date sorts return `groupBy: "none"` and one bucket with `key: "all"`, null boundaries, and the total count. An empty result returns `total: 0` and `buckets: []`. `groupBy` otherwise preserves the requested value, including `none`.
+
+To load a visible window, request `GET /api/files` with the same filters and sort, the returned `snapshot`, and a bounded `limit` (maximum 100). Within a dated bucket, set `dateFrom` to the later of the original lower bound and `bucket.from`; set `dateTo` to the earlier of the original upper bound and **one millisecond before `bucket.to`**. Page numbers start at 1 **inside that filtered bucket**, not at the bucket's global `offset`. With the undated bucket, keep the original date filters. Never replace a user's narrower date range with the whole bucket.
+
+This executable Node.js example loads the first window of the oldest populated month. It uses a named token from the environment and does not put credentials in a URL:
+
+```js
+const origin = process.env.FLARE_URL.replace(/\/$/, '')
+const headers = { Authorization: `Bearer ${process.env.FLARE_TOKEN}` }
+const filters = new URLSearchParams({ sortBy: 'oldest' })
+const timelineQuery = new URLSearchParams(filters)
+timelineQuery.set('timezone', 'UTC')
+const summaryResponse = await fetch(
+  `${origin}/api/files/timeline?${timelineQuery}`,
+  { headers }
+)
+if (!summaryResponse.ok) throw new Error(await summaryResponse.text())
+const { data: timeline } = await summaryResponse.json()
+const bucket = timeline.buckets[0]
+if (bucket) {
+  const windowQuery = new URLSearchParams(filters)
+  windowQuery.set('snapshot', timeline.snapshot)
+  windowQuery.set('limit', '48')
+  windowQuery.set('page', '1')
+  if (bucket.from) windowQuery.set('dateFrom', bucket.from)
+  if (bucket.to)
+    windowQuery.set('dateTo', new Date(Date.parse(bucket.to) - 1).toISOString())
+  const windowResponse = await fetch(`${origin}/api/files?${windowQuery}`, {
+    headers,
+  })
+  if (!windowResponse.ok) throw new Error(await windowResponse.text())
+  console.log(await windowResponse.json())
+}
+```
+
+The timeline creates a new `snapshot` ceiling from PostgreSQL’s clock on every request, matching the clock used for upload timestamps even when the application host’s clock differs. It is an upload-time boundary, **not a durable database snapshot or continuation token**. Files uploaded later are excluded from subsequent windows that retain that ceiling. Deletions, backdated inserts, sharing/folder/tag changes, and changes to size/name/view/download sorts can still move results; fetch a fresh timeline and clear cached windows after a mutation or when refreshing. Offset reads within a very large bucket or a non-date sort can still cost more than early pages. Ordinary page clients and anchored image navigation remain supported unchanged.
+
+Timeline responses use `Cache-Control: private, no-store`. Invalid groupings, time zones, dates, or visibility filters return `400`; auth and current-role failures use the same `401`/`403` behavior as listing. Pagination and gallery parameters do not apply to timeline summaries.
 
 ## Discover file types
 

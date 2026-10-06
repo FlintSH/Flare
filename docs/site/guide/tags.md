@@ -11,7 +11,7 @@ Tags let a file belong to several topics without duplicating or moving it. A scr
 
 Tags, automatic matching rules, and tag names are private to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs.
 
-<Screenshot src="/evidence/vault-tags/files.jpg" alt="File library with tags shown beneath individual files" caption="Labels add context to your library without changing where a file lives." />
+<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="The continuous file library with tags shown beneath individual file previews" caption="Labels add context to your library without changing where a file lives." />
 
 ## Add a tag to a file
 
@@ -23,13 +23,15 @@ Tag names can be up to 40 characters. Use short names that will make sense when 
 
 ## Tag several files together
 
-Choose **Select**, select files or the current page, and open **Edit tags**. A partially checked tag is assigned to some of the selected files. Selecting it adds it to all selected files while preserving their other tags.
+Choose **Select**, select individual files or **Select visible files**, and open **Edit tags**. A partially checked tag is assigned to some of the selected files. Selecting it adds it to all selected files while preserving their other tags.
+
+You can keep up to 100 files selected while scrolling through the library. **Select visible files** adds loaded cards currently on screen; it does not select all matching files. Changing a filter, folder, sort, or grouping clears the selection, so finish the current batch before changing the view.
 
 This works well after a one-off upload batch. For a recurring source, let an upload profile or an automatic rule do the labeling.
 
 ## Find files by tag
 
-Choose **Tags** beside the library filters, or click a tag on a file. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection.
+Choose **Tags** beside the library filters, or click a tag on a file. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.

@@ -21,7 +21,11 @@ export function requestPermissions(
       method === 'POST')
   )
     return ['files.upload']
-  if (pathname === '/api/files/types' && method === 'GET') return ['files.read']
+  if (
+    ['/api/files/types', '/api/files/timeline'].includes(pathname) &&
+    method === 'GET'
+  )
+    return ['files.read']
   if (pathname === '/api/files/folders' && method === 'POST')
     return ['files.update', 'folders.manage']
   if (pathname === '/api/files/tags' && method === 'PATCH')

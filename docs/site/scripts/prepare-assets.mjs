@@ -131,6 +131,12 @@ for (const name of [
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }
+for (const name of ['timeline-scroll', 'timeline-mobile']) {
+  await copyFile(
+    resolve(root, '../../.github/assets/timeline', `${name}.webm`),
+    resolve(root, 'public/demos', `${name}.webm`)
+  )
+}
 const index = [
   '# Flare documentation',
   '',

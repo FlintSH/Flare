@@ -24,15 +24,17 @@ Folder names can be up to 80 characters. Use a plain-text name without `/` or `\
 
 **All files** includes files from every folder. **Unfiled** includes files that do not belong to a folder. Opening a specific folder shows its direct files; open a subfolder to see the files inside that subfolder.
 
-Search, tag filters, sorting, dates, and image browsing stay within the folder you are viewing. Resetting those filters keeps the folder selected.
+Search, tag filters, sorting, dates, and image browsing stay within the folder you are viewing. Its direct files use the same [continuous scrolling and date rail](./library#scroll-through-your-library) as **All files**; the rail covers only the matching files in that folder. Resetting those filters keeps the folder selected.
 
 ## Move files
 
-For one file, open its menu and choose **Move to folder**. For several files, choose **Select**, select the files or current page, and choose **Move**. Pick a destination and confirm.
+For one file, open its menu and choose **Move to folder**. For several files, choose **Select**, select individual files or **Select visible files**, and choose **Move**. Pick a destination and confirm.
+
+A selection can include up to 100 files and stays selected as you scroll. **Select visible files** adds only loaded files currently on screen, not every file in the folder. Changing the folder or filters clears the selection; finish the move first.
 
 Choose **Unfiled** to remove files from their current folder. Moving a file preserves its share link, tags, password, visibility, and expiration.
 
-<Screenshot src="/evidence/vault-folders/bulk-move.jpg" alt="Move dialog with several selected files and a nested folder destination" caption="Move a selection together without changing its file links." />
+<Screenshot src="/screenshots/timeline/library-selection.webp" alt="A library selection retained while scrolling, with Select visible files and Move controls" caption="Select visible files, scroll to add others, then choose Move to pick a destination for the selection." />
 
 ::: tip Moving changes collection membership
 When a folder has a share link, moving a public file into it adds that file to the collection. Moving it out removes it from the collection. Its separate file link continues to follow its own access settings.

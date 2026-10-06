@@ -6,6 +6,7 @@ import { settingsPatchAllowed } from '@/lib/permissions/settings'
 describe('bearer route permissions', () => {
   it.each([
     ['GET', '/api/files', ['files.read']],
+    ['GET', '/api/files/timeline', ['files.read']],
     ['POST', '/api/files', ['files.upload']],
     ['GET', '/api/files/chunks', ['files.upload']],
     ['POST', '/api/files/chunks/a/complete', ['files.upload']],

@@ -6,6 +6,9 @@ node_modules
 npm-debug.log
 README.md
 docs/site
+docs/images/timeline
+.github/assets/timeline
+scripts/timeline
 .env
 .env.*
 .dockerignore

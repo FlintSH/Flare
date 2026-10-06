@@ -53,6 +53,20 @@ It builds a `FormData` body with the `file` field, infers a MIME type for common
 
 The client reads the file into memory, making it convenient for screenshots and small artifacts. For larger files, use the chunked recipe below or cURL's file upload.
 
+## Read your library timeline
+
+**Scope:** `files:read` · Account permission: **`files.read`**
+
+The downloadable example client can return account-wide calendar counts without loading all file metadata:
+
+```sh
+node examples/integrations.mjs timeline America/Los_Angeles
+# If you downloaded the example directly:
+node integrations.mjs timeline UTC
+```
+
+It uses `FLARE_URL` and `FLARE_TOKEN`, defaults to UTC, and prints the timeline JSON. Use the [timeline window example](./files#browse-the-whole-file-timeline) to fetch a small page from a particular calendar bucket with the returned upload-time ceiling. Existing page-based integrations continue to work.
+
 ## Page through your library
 
 **Scope:** `files:read`

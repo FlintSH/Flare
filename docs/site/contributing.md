@@ -143,6 +143,51 @@ Apply migrations to both databases before running the suites. Missing either env
 
 The [browser/API role recipes](/admin/roles#reproduce-the-permission-checks-locally) cover the rendered controls and real session behavior separately.
 
+## Continuous library browser checks and demos
+
+The [library guide](/guide/library#scroll-through-your-library) and [recorded walkthrough](/demos#browse-a-large-library) use a disposable account with 12,000 files dated from July 2018 to October 2026. The uploaded landscape illustrations and dates are demonstration fixtures. Captures render the actual application and use its real database and file requests.
+
+Create a **disposable local PostgreSQL database named exactly `flare_timeline_test_local`**. The seed accepts only `localhost` or `127.0.0.1` with the public schema and refuses a database containing accounts other than its two fixtures. It resets those fixture accounts and writes their local file objects beneath `uploads/timeline-demo/`; do not point it at an existing application installation. Install the root dependencies and the separate handbook dependencies first; the scripts use the handbook's Playwright and Sharp packages. Install Chromium as described in [Browser checks](#browser-checks) before the first run.
+
+From the repository root, use your disposable database role and authentication:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_timeline_test_local'
+export NEXTAUTH_URL='http://localhost:3064'
+export NEXTAUTH_SECRET='public-disposable-timeline-demo-secret-2026-only'
+export METICULOUS_RECORDING_ENABLED=false
+export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
+pnpm exec prisma migrate deploy
+node scripts/migrate-config.js
+node scripts/timeline/seed.cjs
+pnpm exec next dev --hostname 127.0.0.1 --port 3064
+```
+
+In another terminal, run the real browser checks:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-ui.cjs
+```
+
+The demonstration account is `timeline-demo-alex@example.test` with the deliberately public password `Timeline-demo-only-2026!`. The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a hosted Meticulous run or a benchmark of production storage.
+
+The browser checks cover direct date jumps, bounded mounted cards and file requests, selection across scrolling, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
+
+The timeline API regression suite needs a **separate disposable database**, because it clears users and events between cases. For example:
+
+```sh
+export FLARE_TIMELINE_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_timeline_test_api'
+DATABASE_URL="$FLARE_TIMELINE_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/files/timeline-database.test.ts
+```
+
+Create that database first and keep it separate from `flare_timeline_test_local`. The API suite accepts only PostgreSQL on `localhost` or `127.0.0.1`, with the exact database name `flare_timeline_test_api` or `flare_timeline_test_ci`. Omit the query string or use a single `schema=public`; other query parameters and URL fragments are rejected. Omitting `FLARE_TIMELINE_DATABASE_URL` skips the database suite; a skipped run is not database coverage. The code-quality CI workflow supplies and migrates its separate `flare_timeline_test_ci` database before running the suite.
+
+To refresh the screenshots and silent recordings, set `FLARE_TIMELINE_SCREENSHOTS` to a temporary screenshot directory and `FLARE_TIMELINE_VIDEOS` to a separate temporary recording directory before running the browser script. Inspect every capture before replacing the five canonical WebP sources in `docs/images/timeline/` and `timeline-scroll.webm` / `timeline-mobile.webm` in `.github/assets/timeline/`. Keep one source for each asset; the handbook build prepares its own copies. Update the written transcripts in [demos](/demos#browse-a-large-library) if the recorded actions change. The mobile recording uses Chromium at a narrow viewport, not a physical phone. Keep temporary output, failed recordings, and fixture uploads out of Git.
+
+Run these tools from a source checkout. The timeline fixture/capture scripts, their evidence directories, and the handbook tooling are excluded from Flare's Docker build context and application image.
+
 ## Security browser checks and demos
 
 The [sign-in security guide](/guide/security) includes real application captures for authenticator setup, both recovery methods, passkeys, and the optional passkey requirement. The passkey recordings use Chromium's virtual authenticator: the application and server perform real WebAuthn ceremonies, while the virtual device stands in for a physical authenticator. They do not show or test a native biometric prompt or a live external SSO provider.

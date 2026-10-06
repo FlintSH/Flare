@@ -193,3 +193,26 @@ export async function getFileExpirationInfo(
   })
   return event?.scheduledAt ?? null
 }
+
+/** Resolve one visible window's expirations in one query instead of per card. */
+export async function getFilesExpirationInfo(
+  fileIds: string[]
+): Promise<Map<string, Date | null>> {
+  const expirations = new Map<string, Date | null>()
+  if (!fileIds.length) return expirations
+  const rows = await prisma.event.findMany({
+    where: {
+      type: { in: expiryTypes },
+      status: { in: [...activeStatuses] },
+      OR: fileIds.map(payloadFilter).map((payload) => ({ payload })),
+    },
+    select: { payload: true, scheduledAt: true },
+    orderBy: { scheduledAt: 'asc' },
+  })
+  for (const row of rows) {
+    const payload = row.payload as { fileId?: string } | null
+    if (payload?.fileId && !expirations.has(payload.fileId))
+      expirations.set(payload.fileId, row.scheduledAt)
+  }
+  return expirations
+}

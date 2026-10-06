@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 27')
+  await expect(page.getByRole('status')).toContainText('3 of 28')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -64,6 +64,67 @@ test('walkthrough, screenshot dialog, and upload precedence are interactive', as
   await page.getByLabel('Use a token bound to this profile').check()
   await expect(page.getByLabel('3. This upload')).toBeDisabled()
   await expect(page.locator('.lab-result strong')).toHaveText('Public')
+})
+
+test('continuous library guide and its real recording are discoverable', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Find a capability').fill('timeline')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/library\.html$/)
+  await expect(page.locator('h2#scroll-through-your-library')).toBeVisible()
+  for (const name of [
+    'library-desktop',
+    'library-date-jump',
+    'library-mobile',
+    'library-selection',
+    'library-image-viewer',
+  ]) {
+    const screenshot = page.locator(
+      `.screenshot-button img[src$="${name}.webp"]`
+    )
+    await screenshot.scrollIntoViewIfNeeded()
+    await expect(screenshot).toBeVisible()
+    await expect
+      .poll(() => screenshot.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  await page.getByRole('link', { name: 'recorded library walkthrough' }).click()
+  await expect(page).toHaveURL(/demos\.html#browse-a-large-library$/)
+  for (const name of ['timeline-scroll', 'timeline-mobile']) {
+    const video = page.locator(`video[src$="${name}.webm"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Timeline recording metadata timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Timeline recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
 })
 
 test('API builder generates valid examples without contacting an instance', async ({
@@ -103,6 +164,7 @@ for (const width of [390, 1440]) {
   test(`pages fit the ${width}px viewport and load without browser errors`, async ({
     page,
   }) => {
+    test.setTimeout(60_000)
     await page.setViewportSize({ width, height: 900 })
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
@@ -115,11 +177,16 @@ for (const width of [390, 1440]) {
       './features.html',
       './versions.html',
       './demos.html',
+      './contributing.html',
+      './guide/index.html',
       './hosting/docker.html',
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
       './guide/account.html',
+      './guide/library.html',
+      './guide/folders.html',
+      './guide/tags.html',
       './guide/security.html',
       './api/security.html',
     ]) {
@@ -154,6 +221,7 @@ for (const theme of ['dark', 'light']) {
   test(`${theme} theme has no detected WCAG accessibility violations`, async ({
     page,
   }) => {
+    test.setTimeout(60_000)
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: theme })
     await page.addInitScript(
       (value) => localStorage.setItem('vitepress-theme-appearance', value),
@@ -168,10 +236,15 @@ for (const theme of ['dark', 'light']) {
       './features.html',
       './versions.html',
       './demos.html',
+      './contributing.html',
+      './guide/index.html',
       './api/files.html',
       './admin/roles.html',
       './api/roles.html',
       './guide/account.html',
+      './guide/library.html',
+      './guide/folders.html',
+      './guide/tags.html',
       './guide/security.html',
       './api/security.html',
       './hosting/docker.html',

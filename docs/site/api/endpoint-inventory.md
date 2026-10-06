@@ -19,6 +19,7 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | ------------------------------------------------ | ------ | -------------- | --------------------------------------------------------------------- |
 | `/api/files`                                     | GET    | `files:read`   | Paginated file metadata, search, filters, and image neighbors.        |
 | `/api/files`                                     | POST   | `files:upload` | One multipart file upload.                                            |
+| `/api/files/timeline`                            | GET    | `files:read`   | Account-wide calendar bucket counts for virtual file browsing.        |
 | `/api/files/types`                               | GET    | `files:read`   | MIME types present in the account.                                    |
 | `/api/files/chunks`                              | POST   | `files:upload` | Initialize a chunk upload.                                            |
 | `/api/files/chunks`                              | GET    | `files:upload` | Obtain a part URL using `uploadId` and `partNumber` query parameters. |

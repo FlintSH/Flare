@@ -16,7 +16,12 @@ vi.mock('@/lib/database/prisma', () => ({
 vi.mock('@/lib/logger', () => ({ loggers: { files: { error: vi.fn() } } }))
 vi.mock('@/lib/config', () => ({ getConfig: vi.fn() }))
 vi.mock('@/lib/events/handlers/file-expiry', () => ({
-  getFileExpirationInfo: mocks.expiration,
+  getFilesExpirationInfo: async (ids: string[]) =>
+    new Map(
+      await Promise.all(
+        ids.map(async (id) => [id, await mocks.expiration(id)] as const)
+      )
+    ),
 }))
 vi.mock('@/lib/files/streaming-upload', () => ({
   parseSingleFileUpload: vi.fn(),

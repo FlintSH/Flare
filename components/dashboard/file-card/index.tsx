@@ -312,6 +312,7 @@ export function FileCard({
     >
       <div className="relative">
         <Link
+          prefetch={false}
           href={safeUrl}
           aria-label={`Open ${file.name}`}
           aria-haspopup={isImage && onPreview ? 'dialog' : undefined}
@@ -362,7 +363,9 @@ export function FileCard({
             </Button>
           ) : (
             <Button variant="secondary" size="sm" asChild>
-              <Link href={safeUrl}>View</Link>
+              <Link prefetch={false} href={safeUrl}>
+                View
+              </Link>
             </Button>
           )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
@@ -482,7 +485,7 @@ export function FileCard({
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href={safeUrl}>
+                <Link prefetch={false} href={safeUrl}>
                   <ArrowUpRight />
                   Open file
                 </Link>
@@ -604,6 +607,7 @@ export function FileCard({
       <div className="border-t border-border/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <Link
+            prefetch={false}
             href={safeUrl}
             title={file.name}
             className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

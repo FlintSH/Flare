@@ -24,7 +24,8 @@ export function useImageGallery(
   filters: FileFilterOptions,
   files: FileType[],
   pagination: PaginationInfo,
-  refreshKey: number
+  refreshKey: number,
+  anchoredOnly = false
 ) {
   const [gallery, setGallery] = useState<GalleryState | null>(null)
   const [navigationPending, setNavigationPending] = useState(false)
@@ -47,9 +48,9 @@ export function useImageGallery(
 
   const open = useCallback(
     (file: FileType) => {
-      const images = files.filter((entry) =>
-        entry.mimeType.startsWith('image/')
-      )
+      const images = anchoredOnly
+        ? [file]
+        : files.filter((entry) => entry.mimeType.startsWith('image/'))
       const index = images.findIndex((entry) => entry.id === file.id)
       if (index < 0) return
       request.current?.abort()
@@ -61,13 +62,13 @@ export function useImageGallery(
         files: images,
         index,
         pagination,
-        atStart: pagination.page <= 1,
-        atEnd: pagination.page >= pagination.pageCount,
+        atStart: !anchoredOnly && pagination.page <= 1,
+        atEnd: !anchoredOnly && pagination.page >= pagination.pageCount,
         refreshKey,
         libraryFiles: files,
       })
     },
-    [files, pagination, refreshKey]
+    [files, pagination, refreshKey, anchoredOnly]
   )
 
   const move = useCallback(

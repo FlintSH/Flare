@@ -68,6 +68,12 @@ const features = [
   ],
   [
     'Organize',
+    'Continuous file timeline',
+    'Scroll through every matching file and use a quiet date rail to jump into your upload history.',
+    '/guide/library',
+  ],
+  [
+    'Organize',
     'Image gallery',
     'Browse images by month, open the lightbox, and navigate with keyboard arrows or touch.',
     '/guide/library',

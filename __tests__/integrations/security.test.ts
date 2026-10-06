@@ -40,6 +40,9 @@ describe('scoped API tokens', () => {
     expect(allowed('GET', '/api/files')).toBe(false)
     expect(allowed('POST', '/api/files', ['files:read'])).toBe(false)
     expect(allowed('GET', '/api/files', ['files:read'])).toBe(true)
+    expect(allowed('GET', '/api/files/timeline', ['files:read'])).toBe(true)
+    expect(allowed('GET', '/api/files/timeline', ['files:upload'])).toBe(false)
+    expect(allowed('POST', '/api/files/timeline', ['files:read'])).toBe(false)
     for (const path of [
       '/api/profile',
       '/api/profile/upload-token',

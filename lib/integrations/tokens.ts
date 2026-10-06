@@ -25,7 +25,10 @@ export function requiredApiScope(
   method: string,
   pathname: string
 ): ApiScope | null {
-  if (method === 'GET' && ['/api/files', '/api/files/types'].includes(pathname))
+  if (
+    method === 'GET' &&
+    ['/api/files', '/api/files/types', '/api/files/timeline'].includes(pathname)
+  )
     return 'files:read'
   if (method === 'POST' && pathname === '/api/files') return 'files:upload'
   if (

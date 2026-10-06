@@ -4,7 +4,7 @@
     "title": "Flare named-token API",
     "version": "1.0.0",
     "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
-    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner\u2019s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths.",
     "license": {
       "name": "MIT",
       "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"
@@ -41,7 +41,7 @@
         "operationId": "listFiles",
         "summary": "List and search your files",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request.",
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits.",
         "security": [
           {
             "BearerAuth": []
@@ -110,7 +110,7 @@
             }
           },
           "400": {
-            "description": "Invalid request/options, part list, file type, or expiration.",
+            "description": "Invalid page, limit, gallery pair, date, snapshot, or visibility filter.",
             "content": {
               "application/json": {
                 "schema": {
@@ -277,6 +277,16 @@
             "schema": {
               "type": "string",
               "enum": ["next", "previous"]
+            }
+          },
+          {
+            "name": "snapshot",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upload timestamp ceiling returned by GET /api/files/timeline. Reuse it unchanged across window reads; it is not a durable snapshot.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         ],
@@ -1561,6 +1571,213 @@
         },
         "x-flare-permissions": ["links.delete"]
       }
+    },
+    "/api/files/timeline": {
+      "get": {
+        "operationId": "getFileTimeline",
+        "summary": "Count file timeline buckets across your account",
+        "tags": ["Files"],
+        "description": "Database-aggregated counts only; no file metadata. Uses the same account-scoped filters as GET /api/files. Returns a fresh upload-time snapshot ceiling and nonempty calendar buckets, ordered newest or oldest. For non-date sorts returns one undated bucket. Fetch each visible window through GET /api/files with the same filters, snapshot, and date range intersected with the bucket. The snapshot does not freeze edits, deletions, or backdated inserts.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:read",
+        "x-flare-permissions": ["files.read"],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive filename or OCR-text match.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort order; unknown values fall back to newest.",
+            "schema": {
+              "type": "string",
+              "default": "newest",
+              "enum": [
+                "newest",
+                "oldest",
+                "largest",
+                "smallest",
+                "name",
+                "most-viewed",
+                "least-viewed",
+                "most-downloaded",
+                "least-downloaded"
+              ]
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive uploaded-at lower bound; use an ISO 8601 timestamp with timezone.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper bound. A date-only value includes the final day in server-local time; explicit timestamps preserve their instant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "visibility",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "description": "Owned folder ID or unfiled. Direct folder membership, without descendants.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Owned tag ID or untagged. Excluded tags do not count.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "description": "Calendar grouping. none still aggregates by month but preserves groupBy=none in the response. Weeks start Monday. Non-date sorts always return one undated bucket.",
+            "schema": {
+              "type": "string",
+              "enum": ["none", "month", "week", "year"],
+              "default": "none"
+            }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "description": "IANA time zone used for calendar boundaries, including daylight-saving transitions.",
+            "schema": {
+              "type": "string",
+              "default": "UTC",
+              "example": "America/Los_Angeles"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTimelineResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "total": 100,
+                    "snapshot": "2026-10-06T12:00:00.000Z",
+                    "groupBy": "none",
+                    "timezone": "UTC",
+                    "buckets": [
+                      {
+                        "key": "2026-10-01T00:00:00.000Z",
+                        "from": "2026-10-01T00:00:00.000Z",
+                        "to": "2026-11-01T00:00:00.000Z",
+                        "count": 100,
+                        "offset": 0
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid groupBy, timezone, date, or visibility filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "webhooks": {
@@ -1638,8 +1855,8 @@
       "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "flr_…",
-        "description": "Named API token from Profile → Integrations. Select files:read, files:upload, urls:read, urls:write as needed. Required scope is recorded in each operation description and x-flare-scope; HTTP bearer security arrays are empty because this is not OAuth. Missing scopes produce 401. Required owner permission is recorded in x-flare-permissions. Missing current role permission produces 403 after authentication succeeds. Administrator never expands token scopes."
+        "bearerFormat": "flr_\u2026",
+        "description": "Named API token from Profile \u2192 Integrations. Select files:read, files:upload, urls:read, urls:write as needed. Required scope is recorded in each operation description and x-flare-scope; HTTP bearer security arrays are empty because this is not OAuth. Missing scopes produce 401. Required owner permission is recorded in x-flare-permissions. Missing current role permission produces 403 after authentication succeeds. Administrator never expands token scopes."
       }
     },
     "schemas": {
@@ -2496,6 +2713,75 @@
               },
               "passwordProtected": {
                 "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "FileTimelineBucket": {
+        "type": "object",
+        "required": ["key", "from", "to", "count", "offset"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Bucket start ISO instant, or all for a non-date sort."
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Inclusive calendar start in UTC; null for an undated bucket."
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Exclusive calendar end in UTC; subtract 1 ms for the inclusive GET /api/files dateTo parameter. Null for an undated bucket."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of matching files preceding this bucket in the requested order."
+          }
+        }
+      },
+      "FileTimelineResponse": {
+        "type": "object",
+        "required": ["success", "data"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "data": {
+            "type": "object",
+            "required": ["total", "snapshot", "groupBy", "timezone", "buckets"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "snapshot": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Inclusive upload-time ceiling for subsequent file windows; not a durable database snapshot."
+              },
+              "groupBy": {
+                "type": "string",
+                "enum": ["none", "month", "week", "year"]
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "buckets": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FileTimelineBucket"
+                }
               }
             }
           }
