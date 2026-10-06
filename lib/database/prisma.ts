@@ -22,6 +22,9 @@ function createPrismaClient(): PrismaClient {
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()
 // Rebind after development hot reloads even when the connection pool is reused.
 // AuditEvent is excluded from the model extension, so this cannot recurse.
-configureAuditWriter((data) => prisma.auditEvent.create({ data }))
+configureAuditWriter(
+  (data) => prisma.auditEvent.create({ data }),
+  (data) => prisma.auditEvent.createMany({ data })
+)
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

@@ -3,13 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   configureAuditWriter,
   recordAudit,
+  recordAuditMany,
   setAuditActor,
   setAuditOutcome,
   setAuditTarget,
   withAuditRoute,
 } from '@/lib/audit'
+import { auditContext } from '@/lib/audit/context'
 import { auditQuerySchema, auditWhere } from '@/lib/audit/query'
 import { sanitizeAuditDetails } from '@/lib/audit/sanitize'
+import type { AuditInput } from '@/lib/audit/types'
 import { DEFAULT_PERMISSIONS, hasPermission } from '@/lib/permissions/catalog'
 
 const events: Record<string, unknown>[] = []
@@ -21,6 +24,112 @@ beforeEach(() => {
 })
 
 describe('safe durable audit events', () => {
+  it('keeps attempting later events when a single-writer adapter rejects one event', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const write = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValue(undefined)
+    configureAuditWriter(write)
+    try {
+      await recordAuditMany(
+        [1, 2, 3].map((id) => ({
+          action: 'file.delete',
+          category: 'files',
+          targetId: String(id),
+        }))
+      )
+      expect(write.mock.calls.map(([event]) => event.targetId)).toEqual([
+        '1',
+        '2',
+        '3',
+      ])
+      expect(error).toHaveBeenCalledOnce()
+    } finally {
+      error.mockRestore()
+    }
+  })
+
+  it('flushes over a thousand sanitized events in bounded batches with the captured actor', async () => {
+    const write = vi.fn()
+    const writeMany = vi.fn(async (batch) => {
+      events.push(...batch)
+    })
+    configureAuditWriter(write, writeMany)
+    const pending: AuditInput[] = []
+    await auditContext.run(
+      {
+        actorId: 'owner',
+        actorName: 'Alex',
+        requestId: 'request-bulk',
+        pending,
+      },
+      () =>
+        recordAuditMany(
+          Array.from({ length: 1005 }, (_, index) => ({
+            action: 'file.update',
+            category: 'files',
+            targetId: `file-${index}`,
+            targetName: `report-${index}.pdf`,
+            details: { after: { folderId: null, password: 'never-store' } },
+          }))
+        )
+    )
+    expect(write).not.toHaveBeenCalled()
+    expect(writeMany).not.toHaveBeenCalled()
+    await auditContext.run(
+      { actorId: 'different-actor', tokenId: 'different-token' },
+      () => recordAuditMany(pending)
+    )
+    expect(write).not.toHaveBeenCalled()
+    expect(writeMany.mock.calls.map(([batch]) => batch.length)).toEqual([
+      500, 500, 5,
+    ])
+    expect(events).toHaveLength(1005)
+    expect(new Set(events.map((event) => event.targetId)).size).toBe(1005)
+    expect(
+      events.every(
+        (event) =>
+          event.actorId === 'owner' && event.requestId === 'request-bulk'
+      )
+    ).toBe(true)
+    expect(events[1004]).toMatchObject({
+      targetName: 'report-1004.pdf',
+      details: { after: { folderId: null } },
+    })
+    expect(JSON.stringify(events)).not.toContain('never-store')
+    expect(JSON.stringify(events)).not.toContain('different-token')
+  })
+
+  it('continues remaining batches after an audit outage without exposing input or database errors', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const writeMany = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('private-database-url'))
+      .mockResolvedValue(undefined)
+    configureAuditWriter(vi.fn(), writeMany)
+    try {
+      await expect(
+        recordAuditMany(
+          Array.from({ length: 1001 }, (_, index) => ({
+            action: 'file.delete',
+            category: 'files',
+            targetId: `file-${index}`,
+          }))
+        )
+      ).resolves.toBeUndefined()
+      expect(writeMany.mock.calls.map(([batch]) => batch.length)).toEqual([
+        500, 500, 1,
+      ])
+      expect(error).toHaveBeenCalledOnce()
+      expect(error.mock.calls.flat().join(' ')).not.toContain(
+        'private-database-url'
+      )
+    } finally {
+      error.mockRestore()
+    }
+  })
+
   it('retains the filename for failed uploads before a file ID exists', async () => {
     await withAuditRoute(async () => {
       setAuditTarget({ type: 'file', name: 'quarterly-report.pdf' })

@@ -2,6 +2,7 @@
 // must deliberately choose a safe field; raw payloads and errors never pass.
 const keys = new Set([
   'before',
+  'beforeObserved',
   'after',
   'changedFields',
   'count',

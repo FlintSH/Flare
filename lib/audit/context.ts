@@ -14,6 +14,7 @@ export interface AuditContext {
   targetName?: string
   pending?: AuditInput[]
   transactionClient?: unknown
+  prismaAuditDisabled?: boolean
   outcome?: AuditOutcome
 }
 

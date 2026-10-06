@@ -9,18 +9,54 @@ export { setAuditActor, setAuditTarget, setAuditOutcome } from './context'
 export type { AuditInput, AuditOutcome } from './types'
 
 type AuditWriter = (data: Prisma.AuditEventCreateManyInput) => Promise<unknown>
+type AuditBatchWriter = (
+  data: Prisma.AuditEventCreateManyInput[]
+) => Promise<unknown>
+const AUDIT_BATCH_SIZE = 500
 const globalAudit = globalThis as typeof globalThis & {
   flareAuditWriter?: AuditWriter
+  flareAuditBatchWriter?: AuditBatchWriter
 }
 
 /** The base Prisma client is injected to avoid recursive audit interception. */
-export function configureAuditWriter(write: AuditWriter) {
+export function configureAuditWriter(
+  write: AuditWriter,
+  writeMany?: AuditBatchWriter
+) {
   globalAudit.flareAuditWriter = write
+  globalAudit.flareAuditBatchWriter = writeMany
+}
+
+function reportAuditFailure(error: unknown) {
+  // Never include input or raw database errors: either may contain secrets.
+  const kind =
+    error instanceof Error && /^[A-Za-z0-9_]{1,80}$/.test(error.name)
+      ? error.name
+      : 'UnknownError'
+  const code =
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    /^[A-Z0-9_]{1,20}$/.test(error.code)
+      ? error.code
+      : 'unknown'
+  console.error(
+    `[audit] Failed to persist an audit event (${kind}, ${code}); check database availability and migrations`
+  )
 }
 
 export async function recordAudit(input: AuditInput): Promise<void> {
+  return recordAuditMany([input])
+}
+
+/** Flush all per-object evidence in bounded writes, retaining best-effort behavior. */
+export async function recordAuditMany(
+  inputs: readonly AuditInput[]
+): Promise<void> {
+  if (!inputs.length) return
   const context = auditContext.getStore()
-  const event: AuditInput = {
+  const events = inputs.map((input): AuditInput => ({
     requestId: context?.requestId,
     method: context?.method,
     route: context?.route,
@@ -32,12 +68,13 @@ export async function recordAudit(input: AuditInput): Promise<void> {
     targetName: context?.targetName,
     ...input,
     details: {
-      ...(context?.tokenId ? { tokenId: context.tokenId } : {}),
+      // Capture absence too: a later flush must not inherit another token's identity.
+      tokenId: context?.tokenId,
       ...input.details,
     },
-  }
+  }))
   if (context?.pending) {
-    context.pending.push(event)
+    for (const event of events) context.pending.push(event)
     return
   }
   try {
@@ -47,35 +84,43 @@ export async function recordAudit(input: AuditInput): Promise<void> {
     }
     if (!globalAudit.flareAuditWriter)
       throw new Error('Audit writer unavailable')
-    await globalAudit.flareAuditWriter({
-      action: auditText(event.action, 150) ?? 'unknown',
-      category: auditText(event.category, 80) ?? 'system',
-      outcome: event.outcome ?? 'success',
-      actorId: auditText(event.actorId, 200),
-      actorName: auditText(event.actorName),
-      targetType: auditText(event.targetType, 80),
-      targetId: auditText(event.targetId, 200),
-      targetName: auditText(event.targetName, 500),
-      requestId: auditText(event.requestId, 100),
-      method: auditText(event.method, 12),
-      route: auditText(event.route, 300),
-      status: event.status,
-      details: sanitizeAuditDetails(event.details) as Prisma.InputJsonValue,
-    })
   } catch (error) {
-    // Never include the input or raw database error: either may contain secrets.
-    const kind = error instanceof Error ? error.name : 'UnknownError'
-    const code =
-      error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      typeof error.code === 'string' &&
-      /^[A-Z0-9_]{1,20}$/.test(error.code)
-        ? error.code
-        : 'unknown'
-    console.error(
-      `[audit] Failed to persist an audit event (${kind}, ${code}); check database availability and migrations`
-    )
+    reportAuditFailure(error)
+    return
+  }
+  const write = globalAudit.flareAuditWriter
+  const writeMany = globalAudit.flareAuditBatchWriter
+  for (let offset = 0; offset < events.length; offset += AUDIT_BATCH_SIZE) {
+    try {
+      const data = events
+        .slice(offset, offset + AUDIT_BATCH_SIZE)
+        .map((event) => ({
+          action: auditText(event.action, 150) ?? 'unknown',
+          category: auditText(event.category, 80) ?? 'system',
+          outcome: event.outcome ?? 'success',
+          actorId: auditText(event.actorId, 200),
+          actorName: auditText(event.actorName),
+          targetType: auditText(event.targetType, 80),
+          targetId: auditText(event.targetId, 200),
+          targetName: auditText(event.targetName, 500),
+          requestId: auditText(event.requestId, 100),
+          method: auditText(event.method, 12),
+          route: auditText(event.route, 300),
+          status: event.status,
+          details: sanitizeAuditDetails(event.details) as Prisma.InputJsonValue,
+        }))
+      if (writeMany && events.length > 1) await writeMany(data)
+      else
+        for (const event of data) {
+          try {
+            await write(event)
+          } catch (error) {
+            reportAuditFailure(error)
+          }
+        }
+    } catch (error) {
+      reportAuditFailure(error)
+    }
   }
 }
 
