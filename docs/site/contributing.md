@@ -249,6 +249,90 @@ pnpm exec vitest run __tests__/auth/security-database.test.ts
 
 Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic redemption for both code sets, stale-session fences, enrollment, encrypted secret handling, required-passkey transitions and fallback guards, and recovery for local and SSO-only accounts. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators or a live identity provider.
 
+## Sessions and audit browser checks and demos
+
+The [profile session guide](/guide/account#login-history-and-active-sessions), [audit guide](/admin/audit), and [recorded walkthroughs](/demos#review-and-revoke-browser-sessions) use real application operations with disposable accounts. They do not rely on production accounts or fabricated audit rows.
+
+Create a **disposable local PostgreSQL database named exactly `flare_audit_demo`** using your local PostgreSQL tools. The seed guard accepts only `localhost` or `127.0.0.1`, with `schema` omitted or set once to `public`; suffix database names, other schemas, duplicate schema parameters, and other URL query parameters are rejected. Use isolated uploads too. Never point this recipe at an existing application database: the seed replaces its demonstration accounts, clears security rate counters, and disables automatic OCR and OIDC in the fixture configuration.
+
+With application dependencies installed, run from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_audit_demo'
+export NEXTAUTH_URL='http://localhost:3071'
+export NEXTAUTH_SECRET='public-disposable-audit-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm dev --port 3071
+```
+
+Adjust the database role, port, and authentication to match your disposable PostgreSQL server. Open `http://localhost:3071/auth/login` once so the app initializes its configuration. In a second terminal with the same `DATABASE_URL`, run:
+
+```sh
+npm ci --prefix docs/site
+cd docs/site
+npx playwright install chromium
+cd ../..
+node scripts/audit/seed.cjs
+node scripts/audit/verify-ui.cjs
+```
+
+The deliberately public fixture password is `Audit-demo-only-2026!`. The accounts are **Alex Morgan** (`audit-demo-alex@example.test`, administrator), **Jamie Rivera** (`audit-demo-jamie@example.test`), and **Casey Chen** (`audit-demo-casey@example.test`). Use `FLARE_AUDIT_TEST_ORIGIN` to select another `localhost` application origin; its default is `http://localhost:3071`. The script uses the documentation Playwright installation and can use `PW_CHROMIUM_EXECUTABLE_PATH` for an installed Chromium binary. Install Chromium's required system libraries on a new Linux host.
+
+Run the seed before repeating the browser checks and inspect the JSON results and exit status. The workflow performs real account/file/security operations and OCR of a generated receipt test image, verifies that recognized text is absent from audit details, leaves demonstration evidence for inspection, and should run only against its disposable server. Discard its database and upload directory after verification. API examples in [sessions and audit contracts](/api/activity) can be executed in an authenticated console on this same instance.
+
+Capture screenshots and videos in separate runs, reseeding before each. Set only `FLARE_AUDIT_SCREENSHOTS` to a temporary directory for desktop/mobile stills; for the recording pass, leave that variable unset and set only `FLARE_AUDIT_VIDEOS`. Element screenshots can briefly resize the browser and spoil a simultaneous recording. The videos keep desktop dimensions; mobile coverage is recorded separately in the stills and browser assertions. Review every image and both recordings for credentials, private data, readable pauses, and the final sign-in screen. Only then replace canonical sources under `docs/images/audit/` and `.github/assets/audit/`. Keep generated copies under `docs/site/public/`, failed recordings, and temporary browser output out of Git. Update the descriptive transcripts on the demos page when the recorded steps change. The documentation browser checks verify that both recordings load without autoplay and that the new guides fit desktop and mobile viewports.
+
+To verify archives and audit logging together on that same disposable instance, reseed and run the separate integration check:
+
+```sh
+node scripts/audit/seed.cjs
+node scripts/audit/verify-archives.cjs
+```
+
+This uses real requests to upload a source, create and browse a ZIP, download an entry, and extract it. It verifies per-file attribution, denied and failed requests, selected member paths, and exclusion of entry contents from audit metadata, then opens the real administrator log with **Category** set to `archives`. Set `FLARE_AUDIT_SCREENSHOTS` to a temporary directory to capture `archive-events.webp`; inspect it before replacing the canonical [audit guide](/admin/audit) image. This check uses the same `FLARE_AUDIT_TEST_ORIGIN` and fixture accounts as the sessions/audit suite. It does not replace the broader archive codec, shared-access, and resource-limit checks above.
+
+### Same-tab account and session isolation
+
+Use the same disposable `flare_audit_demo` database and fixture setup above. To run this check on port 3072, start the application with that matching authentication origin in place of the earlier server:
+
+```sh
+export NEXTAUTH_URL='http://localhost:3072'
+pnpm dev --port 3072
+```
+
+Open `http://localhost:3072/auth/login` once to initialize configuration if needed. In a second terminal with the same `DATABASE_URL`, reseed and run:
+
+```sh
+export FLARE_AUDIT_TEST_ORIGIN='http://localhost:3072'
+node scripts/audit/seed.cjs
+node scripts/audit/verify-account-switch.cjs
+```
+
+This check loads Alex’s profile activity, revokes that exact browser session from a separate authenticated client, and follows **Files** to the real sign-in form for Jamie in the same tab. It checks that Alex’s activity is absent and Jamie’s activity is freshly loaded. It then remotely revokes Jamie’s session, follows the unvisited **Upload** link, and signs in as Jamie again, checking the new **This browser** marker while preserving Jamie’s legitimate earlier login history. A browser-document marker verifies that these transitions retain the same page context instead of clearing it with a full reload.
+
+Requests and sign-ins use the real disposable server. Reserved example IP addresses are deliberately supplied as proxy headers to distinguish fixture sessions; they are not measured device locations or evidence that arbitrary proxy headers are trustworthy. Set `FLARE_AUDIT_SCREENSHOTS` to a temporary directory to capture `account-switch.webp`, and inspect it before replacing `docs/images/audit/account-switch.webp`. The eleven canonical audit screenshots include this check and `archive-events.webp`; the main session/audit suite captures the other nine. The existing session-management recordings show normal review and revocation; this separate check covers account/session transitions without changing those walkthroughs.
+
+To check responses that arrive after an account switch, run the separate **controlled network-delay simulation** on the same disposable server:
+
+```sh
+node scripts/audit/seed.cjs
+node scripts/audit/verify-account-switch-delays.cjs
+```
+
+It holds an unchanged real response after Alex’s session revocation has completed, then signs in as Jamie through a second tab’s real form before releasing the response. A second case holds the confirmation-requirements read for **Set up authenticator** across the same account switch. The second tab reloads after sign-in to trigger normal session synchronization; the original document remains loaded. The checks use native session updates and verify that an earlier response cannot sign out Jamie or start a security change for Jamie. Unexpected follow-up mutations are counted and blocked, causing failure; the script does not fabricate successful operations. The original tab may remain signed out after the second-tab login; the check requires Alex’s panels to disappear and verifies Jamie’s live session separately. These timing simulations complement the primary same-tab check, which does not intercept backend responses. They produce no screenshots or recordings.
+
+### Audit database regression checks
+
+Create and migrate a separate local PostgreSQL database named exactly **`flare_audit_test`** before running the database suite. The guard accepts only `localhost` or `127.0.0.1`; supported URL options are `schema=public` and `connection_limit`. These tests erase users, roles, settings, and audit rows in that disposable database, so keep it separate from both the browser demo and an existing instance.
+
+```sh
+export FLARE_AUDIT_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_audit_test?connection_limit=1'
+DATABASE_URL="$FLARE_AUDIT_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/audit
+```
+
+Without `FLARE_AUDIT_DATABASE_URL`, database cases are skipped while core/API tests still run. The PostgreSQL cases verify commit/rollback handling, transaction connection use, safe settings and role snapshots, bulk filename retention beyond 1,000 files, tag metadata, email-failure outcomes, and avoiding recursive logging. The one-connection example also checks that transaction snapshots do not wait on a second connection. These checks complement the rendered browser flows and the session-security tests.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

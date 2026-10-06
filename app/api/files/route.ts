@@ -7,6 +7,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
@@ -39,7 +40,7 @@ import {
 const logger = loggers.files
 export const runtime = 'nodejs'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const limited = await rateLimit(req, uploadLimiter)
   if (limited) return limited
   let filePath = ''
@@ -123,7 +124,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -183,7 +184,11 @@ export async function GET(request: Request) {
           tag === 'untagged'
             ? { none: { excluded: false } }
             : {
-                some: { tagId: tag, excluded: false, tag: { userId: user.id } },
+                some: {
+                  tagId: tag,
+                  excluded: false,
+                  tag: { userId: user.id },
+                },
               },
       })
     }
@@ -262,7 +267,12 @@ export async function GET(request: Request) {
       })
       resultPage = {
         files,
-        pagination: { total, pageCount: Math.ceil(total / limit), page, limit },
+        pagination: {
+          total,
+          pageCount: Math.ceil(total / limit),
+          page,
+          limit,
+        },
       }
     }
 
@@ -289,4 +299,16 @@ export async function GET(request: Request) {
     logger.error('Error fetching files', error as Error)
     return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), { route: '/api/files' })(
+    req
+  )
+}
+
+export async function GET(request: Request) {
+  return withAuditRoute(async () => handleGET(request), {
+    route: '/api/files',
+  })(request)
 }

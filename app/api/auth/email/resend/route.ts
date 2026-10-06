@@ -1,10 +1,11 @@
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { EmailHttpError, emailRoute, emailSession } from '@/lib/email/http'
 import { hasVerifiedEmail } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return emailRoute(async () => {
     const { user, config } = await emailSession(req)
     if (!config.enabled || !user.email)
@@ -19,6 +20,14 @@ export async function POST(req: Request) {
         )
       await sendAccountToken(tx, fresh, 'verify', config)
     })
-    return { message: 'A verification link was sent to your email address.' }
+    return {
+      message: 'A verification link was sent to your email address.',
+    }
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/email/resend',
+  })(req)
 }

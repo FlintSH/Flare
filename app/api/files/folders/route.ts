@@ -1,10 +1,11 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { folderErrorResponse, folderMutationGuard } from '@/lib/folders/http'
 import { fileFoldersInputSchema } from '@/lib/folders/schema'
 import { moveFilesToFolder } from '@/lib/folders/service'
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -15,4 +16,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return folderErrorResponse(error)
   }
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/files/folders',
+  })(request)
 }

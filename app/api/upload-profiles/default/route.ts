@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
 import { profileError } from '@/lib/uploads/profiles'
 
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   const { user, response } = await requirePermission('uploadProfiles.manage')
   if (response) return response
   const guarded = profileMutationGuard(req)
@@ -36,4 +37,10 @@ export async function PUT(req: Request) {
   } catch (error) {
     return profileError(error)
   }
+}
+
+export async function PUT(req: Request) {
+  return withAuditRoute(async () => handlePUT(req), {
+    route: '/api/upload-profiles/default',
+  })(req)
 }

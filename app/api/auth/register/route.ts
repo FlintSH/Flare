@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailAddress, sendAccountToken } from '@/lib/email/account'
@@ -25,7 +26,7 @@ class RegistrationConflictError extends Error {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const limited = await rateLimit(req, authLimiter)
   if (limited) return limited
 
@@ -104,4 +105,10 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/register',
+  })(req)
 }

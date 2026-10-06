@@ -16,9 +16,10 @@ Flare gives administrators control over who can join, how files are stored, what
 | **Settings → Appearance** | Brand the instance, design light/dark themes and share pages, import/export packs, edit legacy colors/favicon and custom CSS/HTML | [Appearance](/admin/appearance)          |
 | **Settings → Email**      | Configure SMTP, test delivery, enable recovery and verification, inspect the outbox                                               | [Email](/admin/email)                    |
 | **Roles**                 | Create, organize, and combine permission groups; delegate account, content, or settings work                                      | [Roles and permissions](/admin/roles)    |
+| **Audit log**             | Search instance events and inspect actors, filenames, processing outcomes, and administrative changes; requires `audit.read`      | [Audit log](/admin/audit)                |
 | **Users**                 | Create/edit accounts, change roles, moderate content, remove avatars, inspect email access                                        | [Users and roles](/admin/users)          |
 
-Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
+Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`; Audit log at `/dashboard/audit`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
 
 Choose **Documentation** in the **Settings** header to open the handbook in a new tab. The link stays available in every settings section, including on phones, so you can read a guide while keeping unsaved changes in the original tab.
 
@@ -40,7 +41,7 @@ Reading instance settings needs `settings.read`; changing General needs `setting
 
 OCR extracts text from uploaded images so it can be searched and used by OCR-based tag rules. It is enabled by default. Disable **Background OCR Processing** if you do not need it or want to reduce processing work on a small server.
 
-Changing this switch does not erase existing OCR text. Upload options can opt individual uploads out of OCR, and extracting text is asynchronous. A successful upload does not mean text recognition is already finished or that the image contains recognizable text.
+OCR processing outcomes can be investigated in [Audit log](./audit); the audit details do not include extracted text. Changing this switch does not erase existing OCR text. Upload options can opt individual uploads out of OCR, and extracting text is asynchronous. A successful upload does not mean text recognition is already finished or that the image contains recognizable text.
 
 ### Credits
 

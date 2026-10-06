@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/permissions/server'
 import { clearProgress, getProgress } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-export async function GET() {
+async function handleGET() {
   const { session, response: permissionDenied } =
     await requirePermission('profile.export')
   if (permissionDenied) return permissionDenied
@@ -57,4 +58,10 @@ export async function GET() {
   headers.set('Connection', 'keep-alive')
 
   return new Response(stream, { headers })
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/profile/export/progress',
+  })()
 }

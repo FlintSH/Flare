@@ -1,3 +1,4 @@
+import { auditContext } from '@/lib/audit/context'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
@@ -19,20 +20,24 @@ export async function retryPendingOcrTags(): Promise<void> {
 /** Database markers survive process restarts; row locks make multiple replicas safe. */
 export function startOcrTagWorker(): void {
   if (state.flareOcrTagWorker) return
-  const timer = setInterval(async () => {
-    const worker = state.flareOcrTagWorker
-    if (!worker || worker.busy) return
-    worker.busy = true
-    try {
-      await retryPendingOcrTags()
-    } catch {
-      loggers.ocr.warn(
-        'OCR tag retries unavailable; retrying on the next poll.'
-      )
-    } finally {
-      worker.busy = false
-    }
-  }, 15_000)
+  const timer = setInterval(
+    () =>
+      auditContext.run({ actorId: null, actorName: 'System' }, async () => {
+        const worker = state.flareOcrTagWorker
+        if (!worker || worker.busy) return
+        worker.busy = true
+        try {
+          await retryPendingOcrTags()
+        } catch {
+          loggers.ocr.warn(
+            'OCR tag retries unavailable; retrying on the next poll.'
+          )
+        } finally {
+          worker.busy = false
+        }
+      }),
+    15_000
+  )
   timer.unref()
   state.flareOcrTagWorker = { timer, busy: false }
 }

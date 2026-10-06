@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import {
   securityBody,
   securityRoute,
@@ -7,7 +8,7 @@ import {
 } from '@/lib/auth/security/http'
 import { enableTotp } from '@/lib/auth/security/service'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return securityRoute(async () => {
     const { session } = await securitySession(req)
     const { code, challengeId } = z
@@ -18,4 +19,10 @@ export async function POST(req: Request) {
       .parse(await securityBody(req))
     return enableTotp(session, code, challengeId)
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/security/totp/enable',
+  })(req)
 }

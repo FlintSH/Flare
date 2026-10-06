@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import {
   assertRecentIdentity,
@@ -12,7 +13,7 @@ import { hasVerifiedEmail } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return emailRoute(async () => {
     const { user, session, config } = await emailSession(req)
     if (!config.enabled || !config.changes.enabled)
@@ -75,4 +76,10 @@ export async function POST(req: Request) {
         : 'Confirm the link sent to your new address to finish.',
     }
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/email/change',
+  })(req)
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 
-export async function GET() {
+async function handleGET() {
   try {
     const config = await getConfig()
     return NextResponse.json({
@@ -15,4 +16,10 @@ export async function GET() {
       message: 'Registration is currently unavailable.',
     })
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/auth/registration-status',
+  })()
 }

@@ -1,3 +1,5 @@
+import { headers } from 'next/headers'
+
 import { Prisma } from '@prisma/client'
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { compare } from 'bcryptjs'
@@ -6,6 +8,7 @@ import { JWT } from 'next-auth/jwt'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import type { OAuthConfig } from 'next-auth/providers/oauth'
 
+import { setAuditActor } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
@@ -22,6 +25,14 @@ import {
   lockSecurityUser,
   securityLimit,
 } from './security/shared'
+import {
+  BROWSER_SESSION_SECONDS,
+  createBrowserSession,
+  loginMetadata,
+  recordFailedLogin,
+  signOutBrowserSession,
+  validateBrowserSession,
+} from './sessions'
 
 const userSelect = {
   id: true,
@@ -60,6 +71,7 @@ declare module 'next-auth' {
       authTime?: number
       authMethod?: string
       sessionVersion?: number
+      sessionId?: string
     }
   }
 
@@ -74,12 +86,55 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string
     sessionVersion: number
+    sessionId?: string
+    sessionExpiresAt?: string
     name?: string | null
     email?: string | null
     image?: string | null
     emailAccessRequired?: boolean
     authTime?: number
     authMethod?: string
+  }
+}
+
+function passkeyAttemptId(response?: string) {
+  if (!response || response.length > 65536) return undefined
+  try {
+    const id = JSON.parse(response).id
+    return typeof id === 'string' && id.length <= 2048 ? id : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function trackLoginAttempt<T>(
+  method: string,
+  requestHeaders: Record<string, string> | undefined,
+  identity: { email?: string; passkeyId?: string },
+  authorize: () => Promise<T>
+) {
+  try {
+    const result = await authorize()
+    if (!result)
+      await recordFailedLogin(
+        method,
+        loginMetadata(new Headers(requestHeaders)),
+        identity
+      )
+    return result
+  } catch (error) {
+    // Asking for the second step is not a failed sign-in. Do not amplify rate-limited traffic into unlimited history writes.
+    if (!(
+      error instanceof Error &&
+      ['TwoFactorRequired', 'TooManyAttempts'].includes(error.message)
+    )) {
+      await recordFailedLogin(
+        method,
+        loginMetadata(new Headers(requestHeaders)),
+        identity
+      )
+    }
+    throw error
   }
 }
 
@@ -103,62 +158,69 @@ export const authOptions: NextAuthOptions = {
           (credentials.code?.length || 0) > 80
         )
           return null
-        try {
-          const ip =
-            req.headers?.['x-real-ip'] ||
-            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
-            'unknown'
-          await securityLimit(`password-ip:${ip}`, 100)
-          await securityLimit(
-            `password-account:${credentials.email.trim().toLowerCase()}`,
-            30
-          )
-          const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
-            select: userSelect,
-          })
-          if (
-            !user?.password ||
-            !(await compare(credentials.password, user.password))
-          )
-            return null
-          return await prisma.$transaction(async (tx) => {
-            const fresh = await lockSecurityUser(tx, user.id)
-            if (
-              fresh.password !== user.password ||
-              fresh.email !== user.email ||
-              fresh.sessionVersion !== user.sessionVersion
-            )
+        return trackLoginAttempt(
+          'credentials',
+          req.headers,
+          { email: credentials?.email },
+          async () => {
+            try {
+              const ip =
+                req.headers?.['x-real-ip'] ||
+                req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+                'unknown'
+              await securityLimit(`password-ip:${ip}`, 100)
+              await securityLimit(
+                `password-account:${credentials.email.trim().toLowerCase()}`,
+                30
+              )
+              const user = await prisma.user.findUnique({
+                where: { email: credentials.email },
+                select: userSelect,
+              })
+              if (
+                !user?.password ||
+                !(await compare(credentials.password, user.password))
+              )
+                return null
+              return await prisma.$transaction(async (tx) => {
+                const fresh = await lockSecurityUser(tx, user.id)
+                if (
+                  fresh.password !== user.password ||
+                  fresh.email !== user.email ||
+                  fresh.sessionVersion !== user.sessionVersion
+                )
+                  return null
+                if (fresh.passkeyRequired) throw new Error('PasskeyRequired')
+                if (fresh.totpSecret && !credentials.code)
+                  throw new Error('TwoFactorRequired')
+                const secondFactor = await consumeSecondFactor(
+                  tx,
+                  fresh,
+                  credentials.code
+                )
+                return {
+                  id: fresh.id,
+                  email: fresh.email,
+                  name: fresh.name,
+                  image: fresh.image,
+                  sessionVersion: fresh.sessionVersion,
+                  ...(secondFactor === 'recovery'
+                    ? { authenticationMethod: 'recovery' as const }
+                    : {}),
+                }
+              })
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                ['TwoFactorRequired', 'PasskeyRequired'].includes(error.message)
+              )
+                throw error
+              if (error instanceof SecurityError && error.status === 429)
+                throw new Error('TooManyAttempts')
               return null
-            if (fresh.passkeyRequired) throw new Error('PasskeyRequired')
-            if (fresh.totpSecret && !credentials.code)
-              throw new Error('TwoFactorRequired')
-            const secondFactor = await consumeSecondFactor(
-              tx,
-              fresh,
-              credentials.code
-            )
-            return {
-              id: fresh.id,
-              email: fresh.email,
-              name: fresh.name,
-              image: fresh.image,
-              sessionVersion: fresh.sessionVersion,
-              ...(secondFactor === 'recovery'
-                ? { authenticationMethod: 'recovery' as const }
-                : {}),
             }
-          })
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            ['TwoFactorRequired', 'PasskeyRequired'].includes(error.message)
-          )
-            throw error
-          if (error instanceof SecurityError && error.status === 429)
-            throw new Error('TooManyAttempts')
-          return null
-        }
+          }
+        )
       },
     }),
     CredentialsProvider({
@@ -178,33 +240,42 @@ export const authOptions: NextAuthOptions = {
           (credentials.expectedUserId?.length || 0) > 128
         )
           return null
-        try {
-          const ip =
-            req.headers?.['x-real-ip'] ||
-            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
-            'unknown'
-          await securityLimit(`passkey-login:${ip}`, 100)
-          const cookieName = passkeyCookieName()
-          const user = await authenticatePasskey(
-            credentials.challengeId,
-            JSON.parse(credentials.response) as AuthenticationResponseJSON,
-            req.headers?.cookie
-              ?.split(';')
-              .map((value: string) => value.trim())
-              .find((value: string) => value.startsWith(`${cookieName}=`))
-              ?.slice(cookieName.length + 1) || '',
-            credentials.expectedUserId
-          )
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            image: user.image,
-            sessionVersion: user.sessionVersion,
+        return trackLoginAttempt(
+          'passkey',
+          req.headers,
+          { passkeyId: passkeyAttemptId(credentials?.response) },
+          async () => {
+            try {
+              const ip =
+                req.headers?.['x-real-ip'] ||
+                req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+                'unknown'
+              await securityLimit(`passkey-login:${ip}`, 100)
+              const cookieName = passkeyCookieName()
+              const user = await authenticatePasskey(
+                credentials.challengeId,
+                JSON.parse(credentials.response) as AuthenticationResponseJSON,
+                req.headers?.cookie
+                  ?.split(';')
+                  .map((value: string) => value.trim())
+                  .find((value: string) => value.startsWith(`${cookieName}=`))
+                  ?.slice(cookieName.length + 1) || '',
+                credentials.expectedUserId
+              )
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                sessionVersion: user.sessionVersion,
+              }
+            } catch (error) {
+              if (error instanceof SecurityError && error.status === 429)
+                throw new Error('TooManyAttempts')
+              return null
+            }
           }
-        } catch {
-          return null
-        }
+        )
       },
     }),
     CredentialsProvider({
@@ -222,33 +293,40 @@ export const authOptions: NextAuthOptions = {
           credentials.code.length > 80
         )
           return null
-        try {
-          const ip =
-            req.headers?.['x-real-ip'] ||
-            req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
-            'unknown'
-          await securityLimit(`passkey-recovery-ip:${ip}`, 100)
-          await securityLimit(
-            `passkey-recovery-account:${credentials.email.trim().toLowerCase()}`,
-            30
-          )
-          const user = await authenticatePasskeyRecovery(
-            credentials.email.trim(),
-            credentials.code
-          )
-          if (!user) return null
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            image: user.image,
-            sessionVersion: user.sessionVersion,
+        return trackLoginAttempt(
+          'passkey-recovery',
+          req.headers,
+          { email: credentials?.email?.trim() },
+          async () => {
+            try {
+              const ip =
+                req.headers?.['x-real-ip'] ||
+                req.headers?.['x-forwarded-for']?.split(',')[0].trim() ||
+                'unknown'
+              await securityLimit(`passkey-recovery-ip:${ip}`, 100)
+              await securityLimit(
+                `passkey-recovery-account:${credentials.email.trim().toLowerCase()}`,
+                30
+              )
+              const user = await authenticatePasskeyRecovery(
+                credentials.email.trim(),
+                credentials.code
+              )
+              if (!user) return null
+              return {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                image: user.image,
+                sessionVersion: user.sessionVersion,
+              }
+            } catch (error) {
+              if (error instanceof SecurityError && error.status === 429)
+                throw new Error('TooManyAttempts')
+              return null
+            }
           }
-        } catch (error) {
-          if (error instanceof SecurityError && error.status === 429)
-            throw new Error('TooManyAttempts')
-          return null
-        }
+        )
       },
     }),
   ],
@@ -275,6 +353,15 @@ export const authOptions: NextAuthOptions = {
       })
 
       if (!result.ok) {
+        let metadata = { ipAddress: null, userAgent: null } as ReturnType<
+          typeof loginMetadata
+        >
+        try {
+          metadata = loginMetadata(await headers())
+        } catch {}
+        await recordFailedLogin('oidc', metadata, {
+          email: scopedProfile.email || undefined,
+        })
         return `/auth/login?error=${oidcErrorParams[result.reason]}`
       }
 
@@ -282,10 +369,18 @@ export const authOptions: NextAuthOptions = {
         where: { id: result.user.id },
         select: { totpSecret: true, passkeyRequired: true },
       })
-      if (security?.passkeyRequired)
-        return '/auth/login?local=1&error=OidcPasskeyRequired'
-      if (security?.totpSecret)
-        return '/auth/login?local=1&error=OidcTwoFactorRequired'
+      if (security?.passkeyRequired || security?.totpSecret) {
+        let metadata = { ipAddress: null, userAgent: null } as ReturnType<
+          typeof loginMetadata
+        >
+        try {
+          metadata = loginMetadata(await headers())
+        } catch {}
+        await recordFailedLogin('oidc', metadata, { userId: result.user.id })
+        return security.passkeyRequired
+          ? '/auth/login?local=1&error=OidcPasskeyRequired'
+          : '/auth/login?local=1&error=OidcTwoFactorRequired'
+      }
 
       Object.assign(user, result.user)
       return true
@@ -306,6 +401,21 @@ export const authOptions: NextAuthOptions = {
           user.authenticationMethod === 'recovery'
             ? 'recovery'
             : account?.provider || 'credentials'
+        let metadata = { ipAddress: null, userAgent: null } as ReturnType<
+          typeof loginMetadata
+        >
+        try {
+          metadata = loginMetadata(await headers())
+        } catch {
+          /* No HTTP request in service tests. */
+        }
+        const browserSession = await createBrowserSession(
+          token.id,
+          token.sessionVersion,
+          token.authMethod,
+          metadata
+        )
+        token.sessionId = browserSession.id
       }
 
       const freshUser = await prisma.user.findUnique({
@@ -328,6 +438,14 @@ export const authOptions: NextAuthOptions = {
         throw new Error('Session invalidated: Passkey sign-in required')
       }
 
+      const activeSession = await validateBrowserSession(
+        token.id,
+        token.sessionId,
+        token.sessionVersion
+      )
+      token.sessionExpiresAt = activeSession.expiresAt.toISOString()
+      setAuditActor({ id: freshUser.id, name: freshUser.name })
+
       // Remove obsolete authority from cookies issued before the role migration.
       delete token.role
       token.image = freshUser.image
@@ -343,6 +461,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }): Promise<Session> {
       if (token) {
+        if (token.sessionExpiresAt) session.expires = token.sessionExpiresAt
         session.user.id = token.id
         const access = await getUserAccess(token.id)
         session.user.roles = access.roles
@@ -354,8 +473,15 @@ export const authOptions: NextAuthOptions = {
         session.user.authTime = token.authTime
         session.user.authMethod = token.authMethod
         session.user.sessionVersion = token.sessionVersion
+        session.user.sessionId = token.sessionId
       }
       return session
+    },
+  },
+  events: {
+    async signOut({ token }) {
+      if (token?.id)
+        await signOutBrowserSession(token.id, token.sessionId, token.name)
     },
   },
   pages: {
@@ -364,7 +490,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: BROWSER_SESSION_SECONDS,
   },
 }
 

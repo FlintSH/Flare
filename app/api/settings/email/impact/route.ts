@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { emailAdminAccess, emailSettingsError } from '@/lib/email/admin'
 import { getEmailConfig, prepareEmailConfig } from '@/lib/email/config'
@@ -25,7 +26,7 @@ async function impact(config: EmailConfig) {
   })
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -47,4 +48,16 @@ export async function POST(request: Request) {
   } catch (error) {
     return emailSettingsError(error)
   }
+}
+
+export async function GET(request: Request) {
+  return withAuditRoute(async () => handleGET(request), {
+    route: '/api/settings/email/impact',
+  })(request)
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/settings/email/impact',
+  })(request)
 }

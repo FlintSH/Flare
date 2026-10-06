@@ -19,6 +19,47 @@ Verification, recovery-address enrollment, password recovery, and confirmed emai
 
 **Require passkey to sign in** is a separate opt-in setting, off by default. It blocks password and SSO sign-in and gives you ten dedicated emergency codes, each capable of signing in with only your account email. Save these separately from authenticator recovery codes. Registration alone does not enable the requirement. [Enable it and prepare recovery](./security#require-a-passkey-for-sign-in).
 
+## Login history and active sessions
+
+Open **Profile → Account** and scroll to **Active sessions** and **Login history**. These account-security controls are available independently of `profile.update`; you do not need permission to manage other users. A session belongs to one completed browser sign-in, so several tabs in the same browser can share a session while another browser or private window has its own.
+
+<Screenshot src="/screenshots/audit/sessions-desktop.webp" alt="Profile Account section showing active browser sessions, a This browser marker, individual Revoke session actions, and Revoke all sessions" caption="Review the sign-in time, last activity, method, and recorded client details before revoking a session." />
+
+### Revoke one session or all sessions
+
+1. In **Active sessions**, find the browser sign-in you want to end. The current session is marked **This browser**.
+2. Choose **Revoke session** and confirm **Revoke session**. A different browser loses access on its next authenticated request. For **This browser**, confirm **Revoke and sign out**; this ends your current session.
+3. To end every browser sign-in, choose **Revoke all sessions**, review the confirmation, and choose **Revoke all and sign out**. This includes the current session; sign in again with an allowed method to continue.
+4. Use **Refresh** to reload the list after activity in another browser. If a revocation fails, read the error and retry after resolving it; an error does not confirm the session ended.
+
+<Screenshot src="/screenshots/audit/revoke-session.webp" alt="Revoke this session confirmation explains that the other browser loses access on its next request" caption="Ending another session preserves the browser you are using." />
+
+<Screenshot src="/screenshots/audit/revoke-all.webp" alt="Revoke all sessions confirmation warns that every browser including this one will be signed out, with a Revoke all and sign out button" caption="The all-session confirmation includes the current browser explicitly." />
+
+Sessions expire after 30 days. **Last active** reflects authenticated server activity and is refreshed at most once per minute; it is not a precise timeline of every click. Browser/user-agent information and IP addresses describe the reported client, not a verified physical device or location. Several devices can share an IP, and an address can change. [Proxy configuration](/hosting/reverse-proxy#client-addresses-in-session-history) determines whether those addresses are trustworthy.
+
+Revocation affects subsequent authorization checks. It cannot recall a downloaded file, stop an already authorized response, or revoke an existing signed storage URL. Named API tokens and the legacy upload credential are separate: [revoke or rotate them](/api/authentication) as well when responding to a suspected compromise. Changing a password or sign-in security method can also invalidate sessions as described above and in the [security guide](./security).
+
+### Switch accounts in the same tab
+
+These lists show the currently signed-in account’s activity. Signing in as another account, or signing in again with a new browser session, reloads the lists and resets the history filter and open revocation confirmations. The **This browser** marker is determined again for the new sign-in. Switching accounts cannot undo a revocation already accepted by the server; check the original account’s sessions before retrying.
+
+<Screenshot src="/screenshots/audit/account-switch.webp" alt="Active sessions after a same-tab account switch and new sign-in, with This browser marking the replacement session" caption="The replacement sign-in has its own current-browser marker. This real-server regression uses deliberately supplied, reserved example IP addresses to distinguish disposable sessions." />
+
+### Review successful and failed sign-ins
+
+**Login history** shows completed sign-in successes and recorded failures attributed to your account, with time, sign-in method, and available client details. Choose **All attempts**, **Successful**, or **Failed**, then **Load more attempts** for older entries. The list covers the last 90 days in pages of 25. History starts when this feature is installed; earlier logins cannot be reconstructed. Some failed sign-ins cannot be associated with an account and therefore do not appear in a personal history. The intermediate authenticator prompt is not a failed login. Rate-limited attempts and failures handled only by an external SSO provider may not appear. A failed attempt is not an active session.
+
+<Screenshot src="/screenshots/audit/login-history.webp" alt="Login history showing successful and failed password attempts with timestamps, browser details, IP addresses, and an All attempts filter" caption="A failed attempt stays in history without becoming an active session." />
+
+If you see an unfamiliar successful sign-in, revoke it or all sessions, change the affected sign-in credential, review your registered passkeys and integration tokens, and contact your administrator. Repeated failures alone do not prove someone accessed your files; an administrator can investigate the [audit log](/admin/audit).
+
+<div style="max-width: 390px; margin-inline: auto">
+<Screenshot src="/screenshots/audit/sessions-mobile.webp" alt="Mobile Profile view showing the active-session list, the current-browser marker, and revocation controls" caption="The same session review and revocation controls work on a phone." />
+</div>
+
+[Watch the session-management demonstration](/demos#review-and-revoke-browser-sessions). Existing installations require everyone to sign in again after the [session-tracking migration](/hosting/maintenance#sessions-and-audit-log-migration).
+
 ## See your roles
 
 **Profile → Account → Your roles** shows your current role badges. Everyone applies automatically. Additional roles add permissions; a role name or color alone does not describe its authority. Ask the instance administrator to review a missing capability in [Roles](/admin/roles).
@@ -113,7 +154,7 @@ The archive contains:
 - `user-data.json` with basic account details, file metadata, saved OCR text, and shortened URLs with click counts.
 - Available uploaded files under `files/`, grouped by upload date.
 
-This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, or the passkey requirement. Export profile recipes separately if you want to keep those settings.
+This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, the passkey requirement, active-session records, login history, or instance audit events. Export profile recipes separately if you want to keep those settings.
 
 Inspect the archive and open important files before deleting their originals. Files that are missing from storage or cannot be retrieved can be skipped during export. If an expected file is absent, download it individually if possible and ask the administrator to check storage.
 
@@ -127,10 +168,10 @@ Inspect the archive and open important files before deleting their originals. Fi
 
 Deleting your own account requires `profile.update` and removes its content even when `files.delete` is absent. The last-accessible-administrator safeguard also applies.
 
-Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, and integrations from Flare, then signs you out. The same database transaction saves cleanup work for your stored files and uploaded avatar. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
+Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, and integrations from Flare, then signs you out. The same database transaction saves per-file deletion audit evidence and cleanup work for your stored files and uploaded avatar. If that audit insert fails, the account deletion and cleanup work roll back together; ask the operator to resolve the database problem before retrying. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
 
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 
-Storage cleanup can remain pending while the storage service is unavailable, its configuration has changed, or an operator must verify an older file's original storage location. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion does not erase operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
+Storage cleanup can remain pending while the storage service is unavailable, its configuration has changed, or an operator must verify an older file's original storage location. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion removes its personal session/history records but does not erase retained instance audit events, operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
 
 For a normal end to a session, use **Log out** instead of deleting the account.

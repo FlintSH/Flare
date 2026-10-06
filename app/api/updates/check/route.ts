@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
 import { checkForUpdates, getBuildInfo } from '@/lib/releases'
 
 const logger = loggers.api
 
-export async function GET() {
+async function handleGET() {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('settings.read')
@@ -23,4 +24,10 @@ export async function GET() {
       { status: 500 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/updates/check',
+  })()
 }

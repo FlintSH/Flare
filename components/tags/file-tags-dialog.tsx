@@ -223,7 +223,7 @@ export function FileTagsDialog({
                 Saving…
               </>
             ) : (
-              'Tags are visible only to you.'
+              'Tags are not shown on public file pages.'
             )}
           </span>
           <Button onClick={onClose} disabled={busy}>

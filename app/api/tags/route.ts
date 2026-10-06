@@ -1,11 +1,12 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
 import { tagInputSchema } from '@/lib/tags/schema'
 import { tagView, tagViewSelect } from '@/lib/tags/service'
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -41,4 +42,16 @@ export async function POST(request: Request) {
   } catch (error) {
     return tagErrorResponse(error)
   }
+}
+
+export async function GET(request: Request) {
+  return withAuditRoute(async () => handleGET(request), { route: '/api/tags' })(
+    request
+  )
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/tags',
+  })(request)
 }

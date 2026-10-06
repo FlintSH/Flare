@@ -264,6 +264,8 @@ Publication also applies the instance maximum file size and remaining account qu
 
 The normal filename-tag, OCR, and `file.ready` processing applies to newly published files. Inspecting a manifest or downloading one entry does not publish files or emit new-file events. See [webhook semantics](./webhooks) and [operator resource requirements](/hosting/storage#archive-processing).
 
+Archive requests also produce [audit evidence](/admin/audit) under category `archives`, with request outcomes for `archive.browse`, `archive.entry.read`, `archive.extract`, and `archive.create`. Source staging adds `archive.source.read`; preparing an entry response adds `archive.member.read` with its path in `details.name`. Their `details.size` values are bytes. Committed extraction adds `archive.member.extract` targeting the new file, with its source archive ID in `details.fileId` and member path in `details.name`. Normal file/folder mutation events can accompany those records. These events use the existing audit permissions, retention, and best-effort limits, add no webhook type, and do not change the response contracts above. Read success describes preparation of the response, not completion of its stream.
+
 ## Errors and retries
 
 Errors use the usual API error response with an `error` message. No source files are removed on failure. Mutations recheck current permissions, session version, source records, destination ownership, and the selected profile before publishing their outputs.

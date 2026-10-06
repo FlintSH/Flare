@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import {
   emailAdminAccess,
   emailDiagnostics,
@@ -8,7 +9,7 @@ import {
 import { getEmailSettingsView, saveEmailConfig } from '@/lib/email/config'
 import { startMailWorker } from '@/lib/email/worker'
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function PUT(request: Request) {
+async function handlePUT(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -43,4 +44,16 @@ export async function PUT(request: Request) {
   } catch (error) {
     return emailSettingsError(error)
   }
+}
+
+export async function GET(request: Request) {
+  return withAuditRoute(async () => handleGET(request), {
+    route: '/api/settings/email',
+  })(request)
+}
+
+export async function PUT(request: Request) {
+  return withAuditRoute(async () => handlePUT(request), {
+    route: '/api/settings/email',
+  })(request)
 }

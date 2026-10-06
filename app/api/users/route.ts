@@ -8,6 +8,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import {
@@ -34,7 +35,7 @@ const logger = loggers.users
 
 class UserEmailPolicyError extends Error {}
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { response } = await requirePermission('users.read')
     if (response) return response
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const rejected = roleMutationGuard(req)
   if (rejected) return rejected
   try {
@@ -211,7 +212,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   const rejected = roleMutationGuard(req)
   if (rejected) return rejected
   try {
@@ -428,4 +429,22 @@ export async function PUT(req: Request) {
     logger.error('Error updating user', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), { route: '/api/users' })(
+    req
+  )
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), { route: '/api/users' })(
+    req
+  )
+}
+
+export async function PUT(req: Request) {
+  return withAuditRoute(async () => handlePUT(req), { route: '/api/users' })(
+    req
+  )
 }

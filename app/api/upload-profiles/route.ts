@@ -1,3 +1,4 @@
+import { withAuditRoute } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -16,7 +17,7 @@ import {
   uploadRecipeSchema,
 } from '@/lib/uploads/schema'
 
-export async function GET() {
+async function handleGET() {
   const { user, response } = await requirePermission('uploadProfiles.manage')
   if (response) return response
   try {
@@ -74,7 +75,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const { user, response } = await requirePermission('uploadProfiles.manage')
   if (response) return response
   const guarded = profileMutationGuard(req)
@@ -101,4 +102,16 @@ export async function POST(req: Request) {
   } catch (error) {
     return profileError(error)
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/upload-profiles',
+  })()
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/upload-profiles',
+  })(req)
 }

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { ZodError, z } from 'zod'
 
 import { apiError, apiResponse } from '@/lib/api/response'
+import { setAuditActor, setAuditOutcome } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
@@ -87,6 +88,7 @@ export async function archiveActor(
   const user = await prisma.user.findUnique({ where: { id: session.user.id } })
   if (!user || user.sessionVersion !== session.user.sessionVersion)
     throw new ArchiveError('Sign in again to continue.', 401)
+  setAuditActor({ id: user.id, name: user.name })
   const access = await getUserAccess(user.id)
   if (permissions.some((permission) => !hasPermission(access, permission)))
     throw new ArchiveError(
@@ -162,6 +164,9 @@ export async function archiveRoute(action: () => Promise<unknown>) {
     response.headers.set('Cache-Control', 'private, no-store')
     return response
   } catch (error) {
+    // A final access recheck may fail inside a transaction's scoped context.
+    if (error instanceof ArchiveError && error.accessDenied)
+      setAuditOutcome('denied')
     let status = 500
     let message = 'Archive operation could not be completed.'
     if (

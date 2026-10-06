@@ -9,7 +9,11 @@ Open **Profile → Account → Sign-in security** to manage your account's sign-
 
 These controls belong to your account and remain available without the `profile.update` role permission. They do not change your role, make private files public, or replace the instance's email-verification policy. New accounts start with two-factor authentication off and no registered passkeys. **Require passkey to sign in** is off for new and existing accounts until you explicitly enable it; registering a passkey alone does not turn it on.
 
+Signing out or switching accounts resets the sign-in security controls and closes open setup or confirmation dialogs. Locally displayed setup details and recovery codes are cleared; save recovery codes before leaving the account. Reopen **Sign-in security** after signing in to load that account’s current methods and confirmation requirements. Switching accounts cannot undo a change already accepted by the server; sign back into the original account and check its result before retrying an uncertain change.
+
 When the passkey requirement is off, confirm security changes with your current password and, if enabled, an unused authenticator or authenticator recovery code. A passkey or authenticator-recovery sign-in within the last five minutes can confirm your identity instead. An SSO-only account needs a fresh SSO or passkey sign-in. When the requirement is on, security changes require a passkey or dedicated passkey-recovery sign-in within five minutes; a password, authenticator code, or SSO sign-in cannot replace that proof.
+
+Using **Confirm with a passkey** for the same account keeps the current security dialog open while refreshing your sign-in proof. Continue the action in that dialog after confirmation.
 
 Security dialogs and the password/basic email forms check that confirmation window again when you submit. If it has expired, they keep your edits and restore the required password/code fields or **Confirm with a passkey** prompt before sending the change. An SSO-only account using optional passkeys is asked to confirm with SSO again. Complete that confirmation, then submit again. If the confirmation requirements cannot be refreshed, the change stays unsent. [Updating your account](./account#change-your-password) describes the profile prompts.
 
@@ -18,6 +22,10 @@ For example, if recent recovery proof expires while **Add a passkey** is open, i
 <Screenshot src="/screenshots/security/security-overview.webp" alt="Sign-in security with authenticator setup and passkey registration controls, before either method is enabled" caption="Start in Profile → Account → Sign-in security. These screens use an isolated demonstration account." />
 
 [Watch the complete authenticator and recovery walkthrough](/demos#enable-use-and-recover-two-factor-authentication) or [the passkey walkthrough](/demos#create-use-and-remove-a-passkey). Both use the real application with disposable data; the passkey device is explicitly simulated.
+
+## Check where your account is signed in
+
+Use **Profile → Account → Active sessions** to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
 
 ## Choose your sign-in method
 

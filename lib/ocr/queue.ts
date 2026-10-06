@@ -1,3 +1,4 @@
+import { type AuditContext, auditContext } from '@/lib/audit/context'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -9,6 +10,7 @@ const logger = loggers.ocr
 interface OCRTask {
   filePath: string
   fileId: string
+  audit?: Omit<AuditContext, 'pending'>
 }
 
 class OCRQueue {
@@ -36,7 +38,18 @@ class OCRQueue {
       }
     }
 
-    this.queue.push(task)
+    const context = auditContext.getStore()
+    this.queue.push({
+      ...task,
+      audit: context
+        ? {
+            requestId: context.requestId,
+            actorId: context.actorId,
+            actorName: context.actorName,
+            tokenId: context.tokenId,
+          }
+        : { actorName: 'System' },
+    })
     this.processQueue()
   }
 
@@ -55,7 +68,9 @@ class OCRQueue {
       this.activeProcesses++
 
       try {
-        await processImageOCRTask(task)
+        await auditContext.run(task.audit ?? { actorName: 'System' }, () =>
+          processImageOCRTask(task)
+        )
       } catch (error) {
         logger.error(
           `OCR processing failed for file ${task.filePath}`,

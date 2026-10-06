@@ -1,5 +1,6 @@
 import { createWorker } from 'tesseract.js'
 
+import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
@@ -10,6 +11,21 @@ import type { OCRTask } from './queue'
 const logger = loggers.ocr
 
 export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
+  const file = await prisma.file.findUnique({
+    where: { id: fileId },
+    select: { name: true, userId: true },
+  })
+  const target = {
+    category: 'ocr',
+    targetType: 'file',
+    targetId: fileId,
+    targetName: file?.name,
+  }
+  await recordAudit({
+    ...target,
+    action: 'ocr.started',
+    details: { ownerId: file?.userId },
+  })
   try {
     const storageProvider = await getStorageProvider()
     const stream = await storageProvider.getFileStream(filePath)
@@ -39,6 +55,12 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
     // A failed attempt leaves durable work for the worker or the next OCR request.
     await applyPendingOcrTags(fileId)
 
+    await recordAudit({
+      ...target,
+      action: 'ocr.completed',
+      details: { confidence, textLength: text.trim().length },
+    })
+
     logger.info('OCR processing completed', {
       filePath,
       fileId,
@@ -47,6 +69,12 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
     })
     return { success: true, text: text.trim(), confidence }
   } catch (error) {
+    await recordAudit({
+      ...target,
+      action: 'ocr.failed',
+      outcome: 'failure',
+      details: { reason: 'Image recognition or storage access failed' },
+    })
     logger.error(`OCR processing failed for file ${filePath}`, error as Error, {
       fileId,
     })

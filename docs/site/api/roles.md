@@ -134,6 +134,8 @@ if (!revocation.ok) throw new Error(`Revocation failed: ${revocation.status}`)
 console.log('Sessions revoked')
 ```
 
+The owner can also revoke one or all of their own sessions through the separate [profile session API](./activity), which returns JSON rather than this administrator endpoint’s `204`.
+
 Revoking browser sessions does not revoke named API tokens or rotate the legacy upload credential. Those remain usable according to their scopes and the account's current permissions until separately revoked, expired, or rotated.
 
 ## Avatar publication and removal
@@ -152,7 +154,7 @@ The [operator recovery guide](/hosting/maintenance#recover-an-interrupted-avatar
 
 `DELETE /api/users/{id}` requires a browser session with `users.delete`, a same-origin request, and the target-account delegation checks. `DELETE /api/profile` deletes the caller's own account with `profile.update`; it uses the [shared session/legacy-credential authentication rules](/api/endpoint-inventory#dashboard-routes-using-the-shared-account-helper) and is not available to named API tokens. Neither operation requires a separate session-revocation or file-deletion grant.
 
-Both return **204 No Content** after account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. File jobs are queued in bulk, with a 120-second transaction budget for account deletion. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
+Both return **204 No Content** after per-file deletion audit records, account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. The audit insert is part of this transaction; if it fails, account deletion and queued cleanup roll back together. File jobs are queued in bulk, with a 120-second transaction budget for account deletion. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
 
 The response does not promise that object bytes have already been erased. An application worker deletes recorded files and app-owned avatars asynchronously against their recorded storage targets, preserving failed jobs for retry. Historical files without reliable storage provenance create unknown-target jobs that retain their paths for operator reconciliation; they do not authorize deletion against the current backend. Already-issued object-storage links can remain usable until cleanup or link expiry. The [operator cleanup guide](/hosting/maintenance#account-storage-cleanup) covers retries, backend identity changes, and recovery. The same durable queue also handles avatar cleanup; individual file and moderation deletion behavior is unchanged.
 

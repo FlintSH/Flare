@@ -127,6 +127,16 @@ Security management uses the account browser session, independently of `profile.
 
 NextAuth completes passkey sign-in through its credentials callback after validating the WebAuthn proof; obtaining public options is not authentication. Its separate `passkey-recovery` provider accepts email plus a dedicated single-use code while the account requires passkeys. It identifies the current email case-insensitively and requires an unambiguous account match; conflicting legacy addresses are rejected without consuming a code. Credential additions/removals, either recovery-set change, and toggling the requirement invalidate browser sessions; renaming a passkey preserves them. API credentials and sharing permissions keep their existing boundaries. See the [session security contract](./security).
 
+## Personal session and login-history routes
+
+These routes require the caller's own current browser session and do not require `profile.update` or `users.sessions`. They reject named API tokens and the legacy upload credential. Revocation is same-origin and does not retire integration credentials. [Request/response contracts and runnable browser examples](./activity) cover pagination and current-session sign-out.
+
+| Path                         | Methods     | Authentication and purpose                                                                                                    |
+| ---------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `/api/profile/sessions`      | GET, DELETE | Browser session; list active sessions, or revoke all of the caller's sessions including the current one. DELETE returns JSON. |
+| `/api/profile/sessions/{id}` | DELETE      | Browser session; revoke one owned session, returning the count and whether the caller was signed out.                         |
+| `/api/profile/login-history` | GET         | Browser session; read the caller's attributed successful/failed login history with outcome and cursor filters.                |
+
 ## Dashboard routes using the shared account helper
 
 These routes use `requireAuth`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
@@ -153,6 +163,7 @@ These operations require a browser session and the permission listed below. Admi
 
 | Path                             | Methods        | Required permission and purpose                                                                                                                           |
 | -------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/audit`                     | GET            | `audit.read`; filter instance-wide audit events by text, category, action, outcome, actor/target, time range, and page. Browser session only.             |
 | `/api/roles`                     | GET, POST      | GET: any of `roles.manage`, `users.roles`, `users.read`; POST: `roles.manage`. List the catalog/roles or create a role.                                   |
 | `/api/roles/{id}`                | PATCH, DELETE  | `roles.manage`; edit/delete a role within hierarchy and delegation limits.                                                                                |
 | `/api/users`                     | GET, POST, PUT | GET: `users.read`; POST: `users.create`; PUT identity: `users.update`. Assignment additionally requires `users.roles`; role-only PUT needs `users.roles`. |

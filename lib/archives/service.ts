@@ -5,6 +5,7 @@ import { open, stat } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 import type { z } from 'zod'
 
+import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { folderNameSchema } from '@/lib/folders/schema'
@@ -67,8 +68,14 @@ async function ownedFiles(actor: ArchiveActor, ids: string[]) {
     where: { id: { in: ids }, userId: actor.user.id },
     select: sourceSelect,
   })
-  if (files.length !== ids.length)
-    throw new ArchiveError('One or more source files are unavailable.', 404)
+  if (files.length !== ids.length) {
+    setAuditOutcome('denied')
+    throw new ArchiveError(
+      'One or more source files are unavailable.',
+      404,
+      true
+    )
+  }
   return ids.map((id) => files.find((file) => file.id === id)!)
 }
 
@@ -84,6 +91,37 @@ async function sourceStorage(file: SourceFile) {
   return target ? getStorageProviderForTarget(target) : getStorageProvider()
 }
 
+/** Keep source read evidence separate from the output archive being created. */
+async function stageArchiveSource(
+  file: SourceFile,
+  operation: ArchiveOperation,
+  maxBytes: number
+) {
+  const event = {
+    action: 'archive.source.read',
+    category: 'archives',
+    targetType: 'file',
+    targetId: file.id,
+    targetName: file.name,
+  }
+  try {
+    const source = await operation.stage(
+      await sourceStorage(file),
+      file.path,
+      maxBytes
+    )
+    await recordAudit({ ...event, details: { size: source.size } })
+    return source
+  } catch (error) {
+    await recordAudit({
+      ...event,
+      outcome: 'failure',
+      details: { reason: 'Archive source could not be read' },
+    })
+    throw error
+  }
+}
+
 async function inspect(
   actor: ArchiveActor,
   id: string,
@@ -91,6 +129,7 @@ async function inspect(
   extract: boolean
 ) {
   const [file] = await ownedFiles(actor, [id])
+  setAuditTarget({ type: 'file', id: file.id, name: file.name })
   return { file, manifest: await inspectSource(file, operation, extract) }
 }
 
@@ -102,9 +141,9 @@ async function inspectSource(
   const format = getArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
-  const source = await operation.stage(
-    await sourceStorage(file),
-    file.path,
+  const source = await stageArchiveSource(
+    file,
+    operation,
     ARCHIVE_LIMITS.archiveBytes
   )
   const codecName = getArchiveFormat(file.name)
@@ -146,8 +185,12 @@ export async function downloadArchiveEntry(
   if (!path || path.length > ARCHIVE_LIMITS.pathLength)
     throw new ArchiveError('Choose a valid archive entry.', 400)
   const { file, manifest } = await inspect(actor, id, operation, true)
-  return entryDownload(manifest, path, operation, () =>
-    recheckRead(actor, file, operation)
+  return entryDownload(
+    manifest,
+    path,
+    operation,
+    () => recheckRead(actor, file, operation),
+    file
   )
 }
 
@@ -166,8 +209,12 @@ export async function downloadSharedArchiveEntry(
   operation: ArchiveOperation
 ) {
   const manifest = await inspectSource(access.file, operation, true)
-  return entryDownload(manifest, path, operation, () =>
-    recheckSharedArchive(access, operation)
+  return entryDownload(
+    manifest,
+    path,
+    operation,
+    () => recheckSharedArchive(access, operation),
+    access.file
   )
 }
 
@@ -175,7 +222,8 @@ async function entryDownload(
   manifest: ArchiveManifest,
   path: string,
   operation: ArchiveOperation,
-  recheck: () => Promise<void>
+  recheck: () => Promise<void>,
+  source: SourceFile
 ) {
   const entry = manifest.entries.find(
     (entry) => entry.path === path && entry.type === 'file'
@@ -193,12 +241,21 @@ async function entryDownload(
     ? detected
     : 'application/octet-stream'
   await recheck()
-  return operation.download(
+  const response = operation.download(
     entry.diskPath,
     basename(entry.path),
     entry.size,
     mimeType
   )
+  await recordAudit({
+    action: 'archive.member.read',
+    category: 'archives',
+    targetType: 'file',
+    targetId: source.id,
+    targetName: source.name,
+    details: { name: entry.path, size: entry.size },
+  })
+  return response
 }
 
 async function lockPublication(
@@ -626,16 +683,23 @@ export async function extractArchive(
         for (const [path, upload] of prepared) {
           operation.signal.throwIfAborted()
           const parentPath = path.split('/').slice(0, -1).join('/')
-          files.push(
-            await publishPreparedUpload({
-              ...upload,
-              options: {
-                ...upload.options,
-                folderId: folderIds.get(parentPath)!,
-              },
-              transaction: tx,
-            })
-          )
+          const file = await publishPreparedUpload({
+            ...upload,
+            options: {
+              ...upload.options,
+              folderId: folderIds.get(parentPath)!,
+            },
+            transaction: tx,
+          })
+          files.push(file)
+          await recordAudit({
+            action: 'archive.member.extract',
+            category: 'archives',
+            targetType: 'file',
+            targetId: file.id,
+            targetName: file.name,
+            details: { fileId: source.id, name: path, folderId: file.folderId },
+          })
         }
         operation.signal.throwIfAborted()
         return { wrapper, files }
@@ -654,6 +718,8 @@ export async function extractArchive(
   } catch (error) {
     await cleanupWritten(actor, storage, written)
     throw error
+  } finally {
+    setAuditTarget({ type: 'file', id: source.id, name: source.name })
   }
 }
 
@@ -682,6 +748,11 @@ export async function createAccountArchive(
   input: z.infer<typeof createArchiveSchema>,
   operation: ArchiveOperation
 ) {
+  const suffix = input.format === 'zip' ? '.zip' : '.tar.gz'
+  const name = input.name.toLowerCase().endsWith(suffix)
+    ? input.name
+    : input.name + suffix
+  setAuditTarget({ type: 'file', name })
   if (input.folderId && !hasPermission(actor.user, 'folders.manage'))
     throw new ArchiveError('Your role cannot save archives into folders.', 403)
   await validateOwnedFolderId(actor.user.id, input.folderId)
@@ -691,9 +762,9 @@ export async function createAccountArchive(
   const entries = []
   let totalBytes = 0
   for (const [index, file] of sources.entries()) {
-    const staged = await operation.stage(
-      await sourceStorage(file),
-      file.path,
+    const staged = await stageArchiveSource(
+      file,
+      operation,
       Math.min(
         ARCHIVE_LIMITS.fileBytes,
         ARCHIVE_LIMITS.expandedBytes - totalBytes
@@ -710,10 +781,6 @@ export async function createAccountArchive(
   await createArchive(outputPath, input.format, entries, operation.signal)
   const outputSize = (await stat(outputPath)).size
   await preflightCapacity(actor, [outputSize])
-  const suffix = input.format === 'zip' ? '.zip' : '.tar.gz'
-  const name = input.name.toLowerCase().endsWith(suffix)
-    ? input.name
-    : input.name + suffix
   const storage = await getStorageProvider()
   const written: string[] = []
   try {
@@ -757,6 +824,7 @@ export async function createAccountArchive(
       }
     )
     enqueueUploadProcessing(file)
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
     return {
       file: {
         id: file.id,

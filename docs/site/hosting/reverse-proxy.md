@@ -85,6 +85,10 @@ For S3, Flare can issue temporary signed object URLs after authorizing access. T
 
 Flare uses forwarded client IPs for request throttling. Keep the app port private to the proxy and replace untrusted headers at the edge. This also keeps many users from incorrectly sharing the proxy's IP-based limit.
 
+## Client addresses in session history
+
+[Active sessions and login history](/guide/account#login-history-and-active-sessions) record client-address and browser information when it is available. Flare receives forwarded headers from the request; an IP value is not independent proof of identity. Keep the application port private and have the trusted edge replace incoming forwarding headers, as in the examples above. A user-agent string is supplied by the client and can be imitated. Do not infer an exact device or physical location from these fields.
+
 ## Passkeys and hostname changes
 
 Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.

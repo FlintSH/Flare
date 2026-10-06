@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArchiveOperation } from '@/lib/archives/operation'
+import { configureAuditWriter } from '@/lib/audit'
 
 const services = vi.hoisted(() => ({
   listArchive: vi.fn(),
@@ -79,6 +80,7 @@ function unfinishedPost(path: string) {
 describe('shared archive handler admission does not starve owner work', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configureAuditWriter(async () => {})
     findSource.mockResolvedValue(null)
     for (const service of Object.values(services))
       service.mockResolvedValue({ reached: true })

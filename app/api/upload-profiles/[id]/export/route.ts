@@ -1,8 +1,9 @@
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 import { profileView } from '@/lib/uploads/profiles'
 
-export async function GET(
+async function handleGET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -34,4 +35,13 @@ export async function GET(
       },
     }
   )
+}
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(_req, { params }), {
+    route: '/api/upload-profiles/[id]/export',
+  })(_req)
 }

@@ -54,6 +54,20 @@ const steps = [
     link: '/guide/security',
   },
   {
+    title: 'Know where you are signed in',
+    label: 'Sessions',
+    src: '/screenshots/audit/sessions-desktop.webp',
+    text: 'Review active browser sessions and login history in Profile → Account. Revoke an unfamiliar session, or sign out every browser including this one.',
+    link: '/guide/account',
+  },
+  {
+    title: 'Follow activity across the instance',
+    label: 'Audit',
+    src: '/screenshots/audit/audit-desktop.webp',
+    text: 'Use Audit log to filter file operations, background processing, and administrative changes. Inspect the actor, filename, outcome, and recorded details.',
+    link: '/admin/audit',
+  },
+  {
     title: 'Keep your tools connected',
     label: 'Automate',
     src: '/screenshots/handbook/integrations.webp',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
@@ -9,7 +10,7 @@ import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
 const logger = loggers.files
 
-export async function GET(
+async function handleGET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -21,6 +22,8 @@ export async function GET(
     const file = await prisma.file.findUnique({
       where: { id },
       select: {
+        id: true,
+        name: true,
         userId: true,
         mimeType: true,
         isOcrProcessed: true,
@@ -55,8 +58,10 @@ export async function GET(
 
     const session = await getAccessSession()
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return NextResponse.json(
         {
           success: false,
@@ -90,4 +95,13 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+
+export async function GET(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, context), {
+    route: '/api/files/[id]/ocr',
+  })(req)
 }

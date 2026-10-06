@@ -30,6 +30,8 @@ model User {
   passkeyRequired             Boolean               @default(false)
   passkeyRecoveryCodes        PasskeyRecoveryCode[]
   authChallenges              AuthChallenge[]
+  browserSessions             BrowserSession[]
+  loginAttempts               LoginAttempt[]
   roles                       Role[]
   createdAt                   DateTime              @default(now())
   updatedAt                   DateTime              @updatedAt
@@ -106,6 +108,37 @@ model AuthRateLimit {
   resetAt DateTime
 
   @@index([resetAt])
+}
+
+model BrowserSession {
+  id             String   @id @default(cuid())
+  userId         String
+  sessionVersion Int
+  authMethod     String
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  userId     String
+  authMethod String
+  outcome    String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt, id])
+  @@index([createdAt])
 }
 
 model Role {
@@ -390,6 +423,34 @@ model EventHandler {
   @@unique([eventType, handler])
   @@index([eventType])
   @@index([enabled])
+}
+
+// Historical snapshots deliberately have no foreign keys: deleting an account or
+// its content must not erase the record of who performed an action.
+model AuditEvent {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  action     String
+  category   String
+  outcome    String
+  actorId    String?
+  actorName  String?
+  targetType String?
+  targetId   String?
+  targetName String?
+  requestId  String?
+  method     String?
+  route      String?
+  status     Int?
+  details    Json     @default("{}")
+
+  @@index([createdAt, id])
+  @@index([category, createdAt])
+  @@index([action, createdAt])
+  @@index([outcome, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetId, createdAt])
+  @@index([requestId])
 }
 
 enum FileVisibility {

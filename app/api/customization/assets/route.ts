@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { fileTypeFromBuffer } from 'file-type'
 
+import { withAuditRoute } from '@/lib/audit'
 import { appearanceMutationGuard } from '@/lib/customization/http'
 import { requirePermission } from '@/lib/permissions/server'
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const { session, response: permissionDenied } =
     await requirePermission('appearance.manage')
   if (permissionDenied) return permissionDenied
@@ -37,7 +38,9 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     return NextResponse.json({
-      data: { url: `data:${type.mime};base64,${buffer.toString('base64')}` },
+      data: {
+        url: `data:${type.mime};base64,${buffer.toString('base64')}`,
+      },
     })
   } catch {
     return NextResponse.json(
@@ -45,4 +48,10 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/customization/assets',
+  })(request)
 }

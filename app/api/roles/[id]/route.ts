@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { readRoleJson, roleMutationGuard } from '@/lib/permissions/http'
 import { roleUpdateSchema } from '@/lib/permissions/schema'
@@ -16,7 +17,7 @@ import {
 
 type Context = { params: Promise<{ id: string }> }
 
-export async function PATCH(request: Request, context: Context) {
+async function handlePATCH(request: Request, context: Context) {
   const { user, response } = await requirePermission('roles.manage')
   if (response) return response
   const { id } = await context.params
@@ -79,7 +80,7 @@ export async function PATCH(request: Request, context: Context) {
   }
 }
 
-export async function DELETE(request: Request, context: Context) {
+async function handleDELETE(request: Request, context: Context) {
   const { user, response } = await requirePermission('roles.manage')
   if (response) return response
   const rejected = roleMutationGuard(request)
@@ -114,4 +115,16 @@ export async function DELETE(request: Request, context: Context) {
       { status: 500 }
     )
   }
+}
+
+export async function PATCH(request: Request, context: Context) {
+  return withAuditRoute(async () => handlePATCH(request, context), {
+    route: '/api/roles/[id]',
+  })(request)
+}
+
+export async function DELETE(request: Request, context: Context) {
+  return withAuditRoute(async () => handleDELETE(request, context), {
+    route: '/api/roles/[id]',
+  })(request)
 }

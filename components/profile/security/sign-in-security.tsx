@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
 import {
@@ -72,6 +72,15 @@ const titles: Record<Action, string> = {
 }
 
 export function SignInSecurity() {
+  const { data: session, status } = useSession()
+  const userId = session?.user?.id
+  if (status !== 'authenticated' || !userId) return null
+  // Inline passkey confirmation refreshes this account's session; keep its
+  // dialog open while the account-and-session-scoped status query refreshes.
+  return <AccountSignInSecurity key={userId} />
+}
+
+function AccountSignInSecurity() {
   const { data: session } = useSession()
   const {
     data: status,
@@ -92,6 +101,19 @@ export function SignInSecurity() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const lifecycle = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    lifecycle.current = controller
+    return () => {
+      controller.abort()
+      if (lifecycle.current === controller) lifecycle.current = null
+    }
+  }, [])
+  const isActive = (controller: AbortController | null) =>
+    !!controller &&
+    lifecycle.current === controller &&
+    !controller.signal.aborted
 
   useEffect(() => {
     setSupported(window.isSecureContext && !!window.PublicKeyCredential)
@@ -108,6 +130,8 @@ export function SignInSecurity() {
   }, [codes])
 
   async function openAction(next: Action, passkey?: AccountPasskey) {
+    const controller = lifecycle.current
+    if (!isActive(controller)) return
     setAction(next)
     setSelectedPasskey(passkey ?? null)
     setSetup(null)
@@ -119,12 +143,13 @@ export function SignInSecurity() {
     setBusy(true)
     try {
       const result = await refetch()
+      if (!isActive(controller)) return
       if (result.error)
         setError(
           'Unable to refresh your security settings. Try again or sign in again.'
         )
     } finally {
-      setBusy(false)
+      if (isActive(controller)) setBusy(false)
     }
   }
 
@@ -136,10 +161,13 @@ export function SignInSecurity() {
   }
 
   async function signInAgain() {
+    const controller = lifecycle.current
+    if (!isActive(controller)) return
     setBusy(true)
     try {
       await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch {
+      if (!isActive(controller)) return
       setError('Unable to open sign-in. Open the login page to sign in again.')
       setBusy(false)
     }
@@ -147,7 +175,20 @@ export function SignInSecurity() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!action || busy) return
+    const controller = lifecycle.current
+    if (!action || busy || !controller || !isActive(controller)) return
+    const active = () => isActive(controller)
+    const signal = controller.signal
+    async function accountRequest<T>(
+      path: string,
+      body?: unknown,
+      method?: string
+    ) {
+      if (!active()) throw new DOMException('Aborted', 'AbortError')
+      const result = await securityRequest<T>(path, body, method, signal)
+      if (!active()) throw new DOMException('Aborted', 'AbortError')
+      return result
+    }
     const form = event.currentTarget
     const proof = readSecurityProof(form)
     const data = new FormData(form)
@@ -161,6 +202,7 @@ export function SignInSecurity() {
           proof,
           action === 'require-passkey'
         )
+        if (!active()) return
         if (requirement) {
           setError(requirement)
           return
@@ -168,19 +210,22 @@ export function SignInSecurity() {
       }
       if (action === 'setup') {
         if (!setup) {
-          const next = await securityRequest<Setup>(
+          const next = await accountRequest<Setup>(
             '/api/auth/security/totp/setup',
             proof
           )
           // Generate the QR locally: the provisioning secret never goes to a third-party image service.
-          const qr = await import('qrcode')
-            .then((QRCode) =>
-              QRCode.toDataURL(next.uri, { width: 224, margin: 2 })
-            )
-            .catch(() => undefined)
+          const QRCode = await import('qrcode').catch(() => undefined)
+          if (!active()) return
+          const qr = QRCode
+            ? await QRCode.toDataURL(next.uri, { width: 224, margin: 2 }).catch(
+                () => undefined
+              )
+            : undefined
+          if (!active()) return
           setSetup({ ...next, qr })
         } else {
-          const result = await securityRequest<{ recoveryCodes: string[] }>(
+          const result = await accountRequest<{ recoveryCodes: string[] }>(
             '/api/auth/security/totp/enable',
             { code: data.get('setup-code'), challengeId: setup.challengeId }
           )
@@ -188,16 +233,16 @@ export function SignInSecurity() {
           setCodes(result.recoveryCodes)
         }
       } else if (action === 'codes') {
-        const result = await securityRequest<{ recoveryCodes: string[] }>(
+        const result = await accountRequest<{ recoveryCodes: string[] }>(
           '/api/auth/security/recovery-codes',
           proof
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'disable') {
-        await securityRequest('/api/auth/security/totp/disable', proof)
+        await accountRequest('/api/auth/security/totp/disable', proof)
         setComplete(true)
       } else if (action === 'require-passkey' || action === 'passkey-codes') {
-        const result = await securityRequest<{ recoveryCodes: string[] }>(
+        const result = await accountRequest<{ recoveryCodes: string[] }>(
           action === 'require-passkey'
             ? '/api/auth/security/passkeys/require'
             : '/api/auth/security/passkeys/recovery-codes',
@@ -205,29 +250,30 @@ export function SignInSecurity() {
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'allow-other-methods') {
-        await securityRequest('/api/auth/security/passkeys/require', {
+        await accountRequest('/api/auth/security/passkeys/require', {
           required: false,
         })
         setComplete(true)
       } else if (action === 'add-passkey') {
         const { startRegistration } = await import('@simplewebauthn/browser')
-        const result = await securityRequest<{
+        const result = await accountRequest<{
           options: PublicKeyCredentialCreationOptionsJSON
           challengeId: string
         }>('/api/auth/security/passkeys/options', {
           ...proof,
           name: data.get('passkey-name'),
         })
+        if (!active()) return
         const response = await startRegistration({
           optionsJSON: result.options,
         })
-        await securityRequest('/api/auth/security/passkeys/verify', {
+        await accountRequest('/api/auth/security/passkeys/verify', {
           challengeId: result.challengeId,
           response,
         })
         setComplete(true)
       } else if (selectedPasskey) {
-        await securityRequest(
+        await accountRequest(
           `/api/auth/security/passkeys/${encodeURIComponent(selectedPasskey.id)}`,
           {
             ...proof,
@@ -246,11 +292,12 @@ export function SignInSecurity() {
         }
       }
     } catch (cause) {
+      if (!active()) return
       setError(passkeyError(cause))
       // A recent passkey/SSO proof may have expired while this dialog was open.
       void refetch()
     } finally {
-      setBusy(false)
+      if (active()) setBusy(false)
     }
   }
 
@@ -733,7 +780,10 @@ export function SignInSecurity() {
                       requirePasskey={action === 'require-passkey'}
                       onBusyChange={setBusy}
                       onConfirmed={async () => {
+                        const controller = lifecycle.current
+                        if (!isActive(controller)) return
                         const result = await refetch()
+                        if (!isActive(controller)) return
                         if (result.error) throw result.error
                         setError(null)
                       }}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
@@ -15,7 +16,7 @@ function encodeFilename(filename: string): string {
   return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
 }
 
-export async function GET(
+async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -43,8 +44,11 @@ export async function GET(
       return new Response(null, { status: 404 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
+
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return new Response(null, { status: access.status })
     }
 
@@ -101,14 +105,16 @@ export async function GET(
       'X-Content-Type-Options': 'nosniff',
     }
 
-    return new NextResponse(stream as unknown as ReadableStream, { headers })
+    return new NextResponse(stream as unknown as ReadableStream, {
+      headers,
+    })
   } catch (error) {
     logger.error('File download error', error as Error)
     return new Response(null, { status: 500 })
   }
 }
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -140,8 +146,11 @@ export async function POST(
       return new Response(null, { status: 404 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
+
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return new Response(null, { status: access.status })
     }
 
@@ -171,9 +180,33 @@ export async function POST(
       'X-Content-Type-Options': 'nosniff',
     }
 
-    return new NextResponse(stream as unknown as ReadableStream, { headers })
+    return new NextResponse(stream as unknown as ReadableStream, {
+      headers,
+    })
   } catch (error) {
     logger.error('File download error', error as Error)
     return new Response(null, { status: 500 })
   }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(request, { params }), {
+    route: '/api/files/[id]/download',
+    action: 'file.download',
+    category: 'files',
+  })(request)
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handlePOST(request, { params }), {
+    route: '/api/files/[id]/download',
+    action: 'file.download',
+    category: 'files',
+  })(request)
 }

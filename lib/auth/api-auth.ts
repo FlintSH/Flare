@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
@@ -51,6 +52,11 @@ export async function getAuthenticatedUser(
       requiresEmailVerification(token.user, await getEmailConfig())
     )
       return null
+    setAuditActor({
+      id: token.user.id,
+      name: token.user.name,
+      tokenId: token.id,
+    })
     // Best-effort activity metadata must not make an otherwise valid request fail.
     await prisma.apiToken
       .update({ where: { id: token.id }, data: { lastUsedAt: new Date() } })
@@ -76,6 +82,7 @@ export async function getAuthenticatedUser(
       where: { id: session.user.id },
       select: {
         id: true,
+        name: true,
         storageUsed: true,
         urlId: true,
         vanityId: true,
@@ -88,9 +95,10 @@ export async function getAuthenticatedUser(
         createdAt: true,
       },
     })
-    return user && !requiresEmailVerification(user, await getEmailConfig())
-      ? { ...user, ...(await getUserAccess(user.id)) }
-      : null
+    if (!user || requiresEmailVerification(user, await getEmailConfig()))
+      return null
+    setAuditActor({ id: user.id, name: user.name })
+    return { ...user, ...(await getUserAccess(user.id)) }
   }
 
   if (suppliedToken) {
@@ -98,6 +106,7 @@ export async function getAuthenticatedUser(
       where: { uploadToken: suppliedToken },
       select: {
         id: true,
+        name: true,
         storageUsed: true,
         urlId: true,
         vanityId: true,
@@ -110,9 +119,10 @@ export async function getAuthenticatedUser(
         createdAt: true,
       },
     })
-    return user && !requiresEmailVerification(user, await getEmailConfig())
-      ? { ...user, ...(await getUserAccess(user.id)) }
-      : null
+    if (!user || requiresEmailVerification(user, await getEmailConfig()))
+      return null
+    setAuditActor({ id: user.id, name: user.name })
+    return { ...user, ...(await getUserAccess(user.id)) }
   }
 
   return null

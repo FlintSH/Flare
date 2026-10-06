@@ -191,6 +191,12 @@ export const PERMISSION_GROUPS = [
     description: 'Configure and administer the instance.',
     permissions: [
       {
+        key: 'audit.read',
+        label: 'View audit log',
+        description:
+          'Inspect instance-wide activity, historical account names, filenames, and security events, including private content metadata.',
+      },
+      {
         key: 'roles.manage',
         label: 'Manage roles',
         description:

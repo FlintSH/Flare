@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { randomUUID } from 'crypto'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -9,7 +10,7 @@ import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 
 const logger = loggers.users
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const limited = await rateLimit(req, generalLimiter)
   if (limited) return limited
 
@@ -55,4 +56,16 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function GET(req: Request) {
+  return withAuditRoute(async () => handleGET(req), {
+    route: '/api/profile/upload-token',
+  })(req)
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/profile/upload-token',
+  })(req)
 }
