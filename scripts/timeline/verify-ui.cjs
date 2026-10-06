@@ -2,8 +2,10 @@
 // Exercise the real server and seeded account. Only the explicit recovery check
 // aborts one network request; all recordings use real, successful server responses.
 const assert = require('node:assert/strict')
-const { mkdir, writeFile } = require('node:fs/promises')
+const { mkdir, mkdtemp, rmdir, writeFile } = require('node:fs/promises')
+const { tmpdir } = require('node:os')
 const path = require('node:path')
+const { checkRecordingEncoder, encodeRecording } = require('./recording.cjs')
 const {
   chromium,
   expect: baseExpect,
@@ -30,6 +32,10 @@ const evidence = {
 }
 
 async function context(browser, storageState, mobile = false, record = false) {
+  const recordingDirectory =
+    record && videos
+      ? await mkdtemp(path.join(tmpdir(), 'flare-timeline-recording-'))
+      : undefined
   const ctx = await browser.newContext({
     ...(storageState ? { storageState } : {}),
     viewport: mobile
@@ -41,7 +47,7 @@ async function context(browser, storageState, mobile = false, record = false) {
     ...(record && videos
       ? {
           recordVideo: {
-            dir: videos,
+            dir: recordingDirectory,
             size: mobile
               ? { width: 390, height: 844 }
               : { width: 1440, height: 1000 },
@@ -211,7 +217,18 @@ async function pause(page, ms = 1000) {
   if (videos) await page.waitForTimeout(ms)
 }
 
+async function saveRecording(video, name) {
+  const source = await video.path()
+  await encodeRecording(source, path.join(videos, `${name}.mp4`))
+  await video.delete()
+  await rmdir(path.dirname(source))
+}
+
 async function main() {
+  if (videos) {
+    await checkRecordingEncoder()
+    await mkdir(videos, { recursive: true })
+  }
   const browser = await chromium.launch({ headless: true })
   let page
   try {
@@ -360,8 +377,7 @@ async function main() {
     const video = page.video()
     await desktop.ctx.close()
     if (videos) {
-      await video.saveAs(path.join(videos, 'timeline-scroll.webm'))
-      await video.delete()
+      await saveRecording(video, 'timeline-scroll')
     }
 
     const phone = await context(browser, storageState, true)
@@ -804,8 +820,7 @@ async function main() {
       await pause(page, 3000)
       const mobileVideo = page.video()
       await mobileDemo.ctx.close()
-      await mobileVideo.saveAs(path.join(videos, 'timeline-mobile.webm'))
-      await mobileVideo.delete()
+      await saveRecording(mobileVideo, 'timeline-mobile')
     }
     assert.deepEqual(errors, [], 'No browser JavaScript errors')
     if (process.env.FLARE_TIMELINE_RESULTS) {

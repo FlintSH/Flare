@@ -23,7 +23,7 @@ These short, silent recordings capture actual browser interactions with Flare an
 
 ### Browse a large library
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.webm')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 
 1. Open **Files** in the isolated demonstration account. The library shows **12,000 files** and its newest uploads from October 2026.
 2. Scroll down through the file cards. More files appear in the same continuous list, and the slim rail at the right shows the current upload period.
@@ -36,7 +36,7 @@ This recording uses real application requests and a disposable account seeded wi
 ### Browse the same library on a phone
 
 <div style="max-width: 390px; margin-inline: auto">
-<video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.webm')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 </div>
 
 1. Open the same demonstration library at a 390px viewport. The single-column cards and date label fit beside the narrow rail.

@@ -94,7 +94,7 @@ test('continuous library guide and its real recording are discoverable', async (
   await page.getByRole('link', { name: 'recorded library walkthrough' }).click()
   await expect(page).toHaveURL(/demos\.html#browse-a-large-library$/)
   for (const name of ['timeline-scroll', 'timeline-mobile']) {
-    const video = page.locator(`video[src$="${name}.webm"]`)
+    const video = page.locator(`video[src$="${name}.mp4"]`)
     await expect(video).toHaveAttribute('preload', 'none')
     expect(await video.getAttribute('autoplay')).toBeNull()
     const duration = await video.evaluate(
@@ -124,6 +124,11 @@ test('continuous library guide and its real recording are discoverable', async (
         })
     )
     expect(duration).toBeGreaterThan(1)
+    await video.evaluate((element) => element.play())
+    await expect
+      .poll(() => video.evaluate((element) => element.currentTime))
+      .toBeGreaterThan(0)
+    await video.evaluate((element) => element.pause())
   }
 })
 

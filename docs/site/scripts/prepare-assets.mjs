@@ -133,8 +133,8 @@ for (const name of [
 }
 for (const name of ['timeline-scroll', 'timeline-mobile']) {
   await copyFile(
-    resolve(root, '../../.github/assets/timeline', `${name}.webm`),
-    resolve(root, 'public/demos', `${name}.webm`)
+    resolve(root, '../../.github/assets/timeline', `${name}.mp4`),
+    resolve(root, 'public/demos', `${name}.mp4`)
   )
 }
 const index = [
