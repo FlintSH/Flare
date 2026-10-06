@@ -83,12 +83,20 @@ class LinkElement {
 function dispatch(type: string, event?: unknown) {
   listeners.get(type)?.forEach((listener) => listener(event))
 }
-function render(selected: FileFilterOptions = filters, query = '') {
+function render(
+  selected: FileFilterOptions = filters,
+  query = '',
+  scope?: string
+) {
   harness.cursor = 0
   harness.effects = []
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const result = useFileLibraryPosition(selected, '/dashboard', query, () =>
-    onRestore()
+  const result = useFileLibraryPosition(
+    selected,
+    '/dashboard',
+    query,
+    () => onRestore(),
+    scope
   )
   harness.effects.forEach((effect) => effect())
   return result
@@ -133,6 +141,29 @@ afterEach(() => {
 })
 
 describe('file library history positions', () => {
+  it.each(['bob:first-session', 'alice:replacement-session'])(
+    'does not restore another account or browser session position for %s',
+    (scope) => {
+      const aliceScope = 'alice:first-session'
+      const aliceKey = libraryPositionKey(filters, aliceScope)
+      history.state = withLibraryPosition(nextState, aliceKey, 11999)
+      expect(render(filters, '', aliceScope).position.current).toBe(11999)
+      expect(render(filters, '', scope).position.current).toBe(0)
+      dispatch('popstate')
+      expect(render(filters, '', scope).position.current).toBe(0)
+      render(filters, '', scope).record(48)
+      vi.advanceTimersByTime(500)
+      expect(
+        readLibraryPosition(
+          history.state,
+          libraryPositionKey(filters, scope),
+          0
+        )
+      ).toBe(48)
+      expect(readLibraryPosition(history.state, aliceKey, 0)).toBe(0)
+    }
+  )
+
   it('canonicalizes parsed filters and rejects unrelated or malformed history positions', () => {
     const first = readFileFilters(
       new URLSearchParams(

@@ -20,6 +20,8 @@ The Owner column assumes the signed-in owner has `files.read`. The moderation co
 
 Private files deliberately return a not-found response to people without access. Another person signing in to the same instance does not make your private file accessible to them. Giving them its password does not override private visibility.
 
+The signed-in library is account-specific. When an open tab detects a different account or replacement browser session, it discards the previous files, selection, and dialogs before loading the current account's library. [Saved URL filters still apply](./library#change-accounts-or-sign-in-again); they do not grant access to the previous account's files.
+
 Flare is operated by your instance administrator. Private files and file passwords are access controls in the application; they do not provide end-to-end encryption from the server operator.
 
 ## Activity visible to administrators

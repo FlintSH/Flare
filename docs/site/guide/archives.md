@@ -167,6 +167,8 @@ After the initial header checks, Flare allows **five seconds** to read a share p
 
 ## Troubleshoot an operation
 
+When **Files** detects an account change or replacement sign-in, it closes the previous account's archive dialogs and clears the selection. An archive operation already accepted by the server can still finish. Sign back in to the original account and check its destination before retrying, so you do not create duplicate output.
+
 | What you see                              | What to do                                                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | No archive action                         | Check the format and entrypoint. Library tools require `files.read`; share-page browsing requires access to the file.                                                    |

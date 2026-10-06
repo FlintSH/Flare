@@ -189,6 +189,25 @@ It selects a tagged file, removes the tag through another authenticated client, 
 
 Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-tags.webp` during the successful membership read, before the simulated request failure. Inspect it before replacing `docs/images/timeline/library-tags.webp`. This separate tagging image supplements the seven library screenshots captured by `verify-ui.cjs`.
 
+### Account changes in an open library
+
+With the same disposable timeline database and server running, check an account change while the original library tab stays open:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-account-switch.cjs
+```
+
+Keep `DATABASE_URL` set to the same disposable database. The check accepts only the two seed accounts, adds 96 Jamie demonstration file records using existing fixture image bytes, and removes those added records afterward. It retains Alex's selection and an open **Create archive** dialog, signs in as Jamie through a real form in a second tab, and reloads only that second tab to trigger normal session synchronization. The original document stays open. It verifies that the old files and dialog disappear, Jamie's library loads, and date navigation cannot bring Alex's cards back. It also checks a replacement session for the same account and sign-out from the other tab.
+
+Separate scenarios **simulate delayed network delivery** by holding completed, real timeline or file-list responses until after the account changes. They check that an old response cannot repopulate the new library; they do not fabricate a successful API response. These checks are separate from the ordinary scrolling recordings.
+
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-account-switch.webp` after the new account loads and passes date-navigation checks. Inspect it before replacing `docs/images/timeline/library-account-switch.webp`; the image should contain only the current demonstration account's files, with no old selection or dialog.
+
+Set `FLARE_TIMELINE_SCHEMA_EVIDENCE` to a temporary JSON path to capture actual dated and undated timeline responses for two known fixture IDs. `scripts/checks.test.mjs` checks the published OpenAPI boundary types against the captured examples in `scripts/fixtures/timeline-responses.json`, including JSON null for non-date sorts. This is a focused contract regression, not validation of every OpenAPI operation.
+
+### Timeline API and capture output
+
 The timeline API regression suite needs a **separate disposable database**, because it clears users and events between cases. For example:
 
 ```sh
@@ -199,7 +218,7 @@ pnpm exec vitest run __tests__/files/timeline-database.test.ts
 
 Create that database first and keep it separate from `flare_timeline_test_local`. The API suite accepts only PostgreSQL on `localhost` or `127.0.0.1`, with the exact database name `flare_timeline_test_api` or `flare_timeline_test_ci`. Omit the query string or use a single `schema=public`; other query parameters and URL fragments are rejected. Omitting `FLARE_TIMELINE_DATABASE_URL` skips the database suite; a skipped run is not database coverage. The code-quality CI workflow supplies and migrates its separate `flare_timeline_test_ci` database before running the suite.
 
-To refresh the screenshots and silent recordings, set `FLARE_TIMELINE_SCREENSHOTS` to a temporary screenshot directory and `FLARE_TIMELINE_VIDEOS` to a separate temporary recording directory before running the browser script. Recording requires `ffmpeg` on your `PATH` with its `libx264` H.264 encoder; ordinary browser checks and screenshots do not require it. The script converts the browser recordings to MP4 for playback in the handbook and PR links. Inspect every capture before replacing the eight canonical WebP sources in `docs/images/timeline/` and `timeline-scroll.mp4` / `timeline-mobile.mp4` in `.github/assets/timeline/`. Keep one source for each asset; the handbook build prepares its own copies. Update the written transcripts in [demos](/demos#browse-a-large-library) if the recorded actions change. The mobile recording uses Chromium at a narrow viewport, not a physical phone. Keep temporary output, failed recordings, and fixture uploads out of Git.
+To refresh the screenshots and silent recordings, set `FLARE_TIMELINE_SCREENSHOTS` to a temporary screenshot directory and `FLARE_TIMELINE_VIDEOS` to a separate temporary recording directory before running the browser script. Recording requires `ffmpeg` on your `PATH` with its `libx264` H.264 encoder; ordinary browser checks and screenshots do not require it. The script converts the browser recordings to MP4 for playback in the handbook and PR links. Inspect every capture before replacing the nine canonical WebP sources in `docs/images/timeline/` and `timeline-scroll.mp4` / `timeline-mobile.mp4` in `.github/assets/timeline/`. The main suite captures seven screenshots; the tag-refresh and account-switch checks each capture one more. Keep one source for each asset; the handbook build prepares its own copies. Update the written transcripts in [demos](/demos#browse-a-large-library) if the recorded actions change. The mobile recording uses Chromium at a narrow viewport, not a physical phone. Keep temporary output, failed recordings, and fixture uploads out of Git.
 
 Run these tools from a source checkout. The timeline fixture/capture scripts, their evidence directories, and the handbook tooling are excluded from Flare's Docker build context and application image.
 

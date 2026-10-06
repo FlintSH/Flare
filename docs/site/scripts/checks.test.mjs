@@ -1,10 +1,77 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+
+test('OpenAPI timeline boundary types accept real dated and undated responses', async () => {
+  const spec = JSON.parse(
+    await readFile(new URL('../public/openapi.json', import.meta.url), 'utf8')
+  )
+  const { cases } = JSON.parse(
+    await readFile(
+      new URL('./fixtures/timeline-responses.json', import.meta.url),
+      'utf8'
+    )
+  )
+  const resolveRef = ({ $ref }) => {
+    assert.ok($ref.startsWith('#/'), 'Timeline schemas use local references')
+    return $ref
+      .slice(2)
+      .split('/')
+      .reduce((value, key) => value[key], spec)
+  }
+  const response = resolveRef(
+    spec.paths['/api/files/timeline'].get.responses['200'].content[
+      'application/json'
+    ].schema
+  )
+  const bucket = resolveRef(response.properties.data.properties.buckets.items)
+
+  // Focused JSON Schema type validation: OpenAPI 3.1's `nullable` annotation
+  // cannot widen `type`. This deliberately does not claim full schema validation.
+  const checkType = (schema, value) => {
+    const actual = value === null ? 'null' : typeof value
+    const allowed = Array.isArray(schema.type) ? schema.type : [schema.type]
+    assert.ok(allowed.includes(actual), `${actual} is not allowed by type`)
+  }
+  const observed = new Set()
+  for (const fixture of cases) {
+    assert.equal(fixture.body.success, true)
+    assert.ok(fixture.body.data.buckets.length > 0)
+    for (const value of fixture.body.data.buckets) {
+      for (const name of ['from', 'to']) {
+        const schema = bucket.properties[name]
+        checkType(schema, value[name])
+        assert.equal(schema.format, 'date-time')
+        observed.add(value[name] === null ? 'null' : typeof value[name])
+        if (value[name] !== null)
+          assert.ok(Number.isFinite(Date.parse(value[name])))
+      }
+    }
+  }
+  assert.deepEqual([...observed].sort(), ['null', 'string'])
+  for (const name of ['from', 'to']) {
+    const schema = bucket.properties[name]
+    assert.equal('nullable' in schema, false)
+    for (const invalid of [false, 42, {}, []])
+      assert.throws(() => checkType(schema, invalid), /not allowed by type/)
+    assert.throws(
+      () => checkType({ ...schema, type: 'string', nullable: true }, null),
+      /null is not allowed by type/,
+      'The previous OpenAPI 3.0 spelling must reject the real null response'
+    )
+  }
+})
 
 test('coverage gate requires docs in the feature commit, not a later follow-up', async () => {
   const root = await mkdtemp(resolve(tmpdir(), 'flare-docs-policy-'))

@@ -79,6 +79,7 @@ test('continuous library guide and its real recording are discoverable', async (
     'library-desktop',
     'library-date-jump',
     'library-mobile',
+    'library-account-switch',
     'library-selection',
     'library-image-viewer',
   ]) {

@@ -95,7 +95,11 @@ const summary: FileTimeline = {
     },
   ],
 }
-type Props = { filters: FileFilterOptions; refreshKey: number }
+type Props = {
+  filters: FileFilterOptions
+  refreshKey: number
+  scope?: string | null
+}
 const initial: Props = { filters, refreshKey: 0 }
 function render(props = initial) {
   let result!: ReturnType<typeof useFileTimeline>
@@ -104,7 +108,11 @@ function render(props = initial) {
     harness.cursor = 0
     harness.effects = []
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    result = useFileTimeline(props.filters, props.refreshKey)
+    result = useFileTimeline(
+      props.filters,
+      props.refreshKey,
+      props.scope === undefined ? 'alice:first-browser' : props.scope
+    )
     harness.effects.forEach((effect) => effect())
   } while (harness.dirty)
   return result
@@ -160,6 +168,78 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('virtual file library requests', () => {
+  it.each(['bob:first-browser', 'alice:replacement-browser'])(
+    'clears the previous cache and rejects its requests/callbacks when identity changes to %s',
+    async (scope) => {
+      let alice = await initialize()
+      alice.ensureRange([0])
+      complete(requests[1], 'alice-')
+      await flush()
+      alice = render()
+      expect(alice.getFile(0)?.id).toBe('alice-0')
+      alice.ensureRange([48])
+      const props = { ...initial, scope }
+      let next = render(props)
+      expect(next.timeline).toBeNull()
+      expect(next.getFile(0)).toBeUndefined()
+      expect(requests[2].signal.aborted).toBe(true)
+      expect(alice.getFile(0)).toBeUndefined()
+      alice.ensureRange([96])
+      expect(requests).toHaveLength(4)
+      requests[3].resolve(json({ data: summary }))
+      await flush()
+      next = render(props)
+      next.ensureRange([0])
+      complete(requests[4], 'next-')
+      complete(requests[2], 'alice-late-')
+      await flush()
+      next = render(props)
+      expect(next.getFile(0)?.id).toBe('next-0')
+      expect(next.getFile(48)).toBeUndefined()
+      expect(next.hasFailed(48)).toBe(false)
+    }
+  )
+
+  it('does not load or expose a library without authenticated scope, including late summaries and errors', async () => {
+    render()
+    const old = requests[0]
+    const signedOut = { ...initial, scope: null }
+    expect(render(signedOut)).toMatchObject({
+      timeline: null,
+      error: false,
+      isLoading: false,
+    })
+    expect(old.signal.aborted).toBe(true)
+    old.resolve(json({ data: summary }))
+    await flush()
+    const hook = render(signedOut)
+    hook.ensureRange([0])
+    hook.retry()
+    expect(hook.timeline).toBeNull()
+    expect(requests).toHaveLength(1)
+    render({ ...initial, scope: 'bob:new-browser' })
+    expect(requests).toHaveLength(2)
+  })
+
+  it('invalidates retained callbacks and cache on unmount even if fetch resolves after abort', async () => {
+    let hook = await initialize()
+    hook.ensureRange([0])
+    complete(requests[1], 'alice-')
+    await flush()
+    hook = render()
+    hook.ensureRange([48])
+    for (const slot of harness.slots)
+      (slot as { cleanup?: () => void })?.cleanup?.()
+    expect(requests[2].signal.aborted).toBe(true)
+    complete(requests[2], 'late-')
+    await flush()
+    expect(hook.getFile(0)).toBeUndefined()
+    expect(hook.getFile(48)).toBeUndefined()
+    hook.ensureRange([96])
+    hook.retry()
+    expect(requests).toHaveLength(3)
+  })
+
   it('jumps directly to a deep window, preserving filters, date intersection, and snapshot', async () => {
     const props = {
       filters: {

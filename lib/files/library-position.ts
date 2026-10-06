@@ -3,8 +3,12 @@ import type { FileFilterOptions } from '@/types/components/file'
 const HISTORY_POSITION = 'flareFileLibrary'
 
 /** Canonical filters, including legacy page links, identify this history entry. */
-export function libraryPositionKey(filters: FileFilterOptions): string {
+export function libraryPositionKey(
+  filters: FileFilterOptions,
+  scope?: string
+): string {
   return JSON.stringify({
+    scope,
     folder: filters.folder ?? null,
     tag: filters.tag ?? null,
     search: filters.search,

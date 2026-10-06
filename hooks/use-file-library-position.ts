@@ -15,6 +15,7 @@ type PendingPosition = {
   pathname: string
   query: string
   index: number
+  scope?: string
 }
 
 /** Store only a filter identity and file rank in this browser history entry. */
@@ -22,9 +23,10 @@ export function useFileLibraryPosition(
   filters: FileFilterOptions,
   pathname: string,
   urlQuery: string,
-  onRestore: () => void
+  onRestore: () => void,
+  scope?: string
 ) {
-  const key = libraryPositionKey(filters)
+  const key = libraryPositionKey(filters, scope)
   const fallback = (filters.page - 1) * filters.limit
   const position = useRef(
     typeof window === 'undefined'
@@ -48,7 +50,7 @@ export function useFileLibraryPosition(
     // link can commit its destination before this component's cleanup runs.
     if (
       actual.toString() !== next.query ||
-      libraryPositionKey(readFileFilters(actual, 24)) !== next.key
+      libraryPositionKey(readFileFilters(actual, 24), next.scope) !== next.key
     )
       return
     if (readLibraryPosition(window.history.state, next.key, -1) === next.index)
@@ -67,10 +69,10 @@ export function useFileLibraryPosition(
     (index: number) => {
       if (!Number.isSafeInteger(index) || index < 0) return
       position.current = index
-      pending.current = { key, pathname, query: urlQuery, index }
+      pending.current = { key, pathname, query: urlQuery, index, scope }
       if (timer.current === null) timer.current = setTimeout(flush, 500)
     },
-    [key, pathname, urlQuery, flush]
+    [key, pathname, urlQuery, flush, scope]
   )
 
   useEffect(() => {
@@ -82,7 +84,7 @@ export function useFileLibraryPosition(
     const actual = new URLSearchParams(window.location.search)
     const matches =
       window.location.pathname === pathname &&
-      libraryPositionKey(readFileFilters(actual, 24)) === key
+      libraryPositionKey(readFileFilters(actual, 24), scope) === key
     const restored = matches
       ? readLibraryPosition(window.history.state, key, fallback)
       : fallback
@@ -97,7 +99,7 @@ export function useFileLibraryPosition(
       moved
     )
       restoreCallback.current()
-  }, [key, pathname, urlQuery, fallback])
+  }, [key, pathname, urlQuery, fallback, scope])
 
   useEffect(() => {
     const click = (event: MouseEvent) => {
@@ -108,7 +110,7 @@ export function useFileLibraryPosition(
       const actual = new URLSearchParams(window.location.search)
       if (
         window.location.pathname !== pathname ||
-        libraryPositionKey(readFileFilters(actual, 24)) !== key
+        libraryPositionKey(readFileFilters(actual, 24), scope) !== key
       )
         return
       if (timer.current !== null) clearTimeout(timer.current)
@@ -130,7 +132,7 @@ export function useFileLibraryPosition(
       window.removeEventListener('popstate', restore)
       flush()
     }
-  }, [key, pathname, fallback, flush])
+  }, [key, pathname, fallback, flush, scope])
 
   return { position, record }
 }

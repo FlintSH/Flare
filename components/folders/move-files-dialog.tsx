@@ -21,6 +21,7 @@ import type { FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
 
 import { folderRequest, useFolders } from '@/hooks/use-folders'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
 
 export function MoveFilesDialog({
@@ -30,6 +31,7 @@ export function MoveFilesDialog({
   files: FileType[]
   onClose: () => void
 }) {
+  const lifetime = useRequestLifetime()
   const { folders, loading, error: loadError, reload, changed } = useFolders()
   const { toast } = useToast()
   const [destination, setDestination] = useState<string | null | undefined>(
@@ -54,14 +56,22 @@ export function MoveFilesDialog({
     )
     .sort((a, b) => a.path.localeCompare(b.path))
   const move = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (busy || destination === undefined || destinationUnavailable) return
     setBusy(true)
     setError('')
     try {
-      await folderRequest('/api/files/folders', 'POST', {
-        fileIds: files.map((file) => file.id),
-        folderId: destination,
-      })
+      await folderRequest(
+        '/api/files/folders',
+        'POST',
+        {
+          fileIds: files.map((file) => file.id),
+          folderId: destination,
+        },
+        signal
+      )
+      if (signal.aborted) return
       changed()
       toast({
         title:
@@ -72,34 +82,45 @@ export function MoveFilesDialog({
       })
       onClose()
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t move these files.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   const create = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (busy || !name.trim() || destinationUnavailable) return
     setBusy(true)
     setError('')
     try {
-      const folder = await folderRequest<FolderView>('/api/folders', 'POST', {
-        name: name.trim(),
-        parentId: destination ?? null,
-      })
+      const folder = await folderRequest<FolderView>(
+        '/api/folders',
+        'POST',
+        {
+          name: name.trim(),
+          parentId: destination ?? null,
+        },
+        signal
+      )
+      if (signal.aborted) return
       changed()
       await reload()
+      if (signal.aborted) return
       setDestination(folder.id)
       setCreating(false)
       setName('')
       setSearch('')
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t create this folder.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   return (

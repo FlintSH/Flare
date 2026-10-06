@@ -35,6 +35,16 @@ The date rail follows the files matching your current filters. Size, view-count,
 
 Watch the [recorded library walkthrough](/demos#browse-a-large-library) for a real scroll and date jump using demonstration files.
 
+## Change accounts or sign in again
+
+The library belongs to the currently authenticated account and browser session. It waits until Flare knows which account is signed in before showing files. When an open tab detects sign-out, it removes the library and asks you to sign in.
+
+Signing in as another account, or starting a new session for the same account, loads fresh files and counts. It also clears selected files, open file dialogs, the image viewer, and the previous browsing position. This applies when the change is detected after signing in through another tab; you do not need to close the old library first.
+
+Filters in the page address remain bookmark settings. If an old folder or tag filter leaves the new account's view empty, choose **All files**, then **Reset filters**. Start any unfinished file action again after checking the new selection. Changing accounts cannot undo an operation the server already accepted.
+
+<Screenshot src="/screenshots/timeline/library-account-switch.webp" alt="The original library tab after signing in as Jamie in another tab, showing Jamie's 97 demonstration files with no previous selection or archive dialog" caption="A real account switch loads the new account's library in the original tab. These filenames and images are disposable demonstration data." />
+
 ## Search and narrow the results
 
 Type in the search field to find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.

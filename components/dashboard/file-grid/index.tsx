@@ -16,6 +16,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import type { DateRange } from 'react-day-picker'
 
 import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
@@ -45,10 +46,39 @@ import { useFolders } from '@/hooks/use-folders'
 import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 import { usePermissions } from '@/hooks/use-permissions'
+import {
+  RequestLifetimeProvider,
+  useRequestLifetime,
+} from '@/hooks/use-request-lifetime'
 import { useTags } from '@/hooks/use-tags'
 import { toast } from '@/hooks/use-toast'
 
 export function FileGrid() {
+  const { data: session, status } = useSession()
+  if (status === 'loading') return <p role="status">Loading files…</p>
+  if (
+    status !== 'authenticated' ||
+    !session?.user?.id ||
+    !session.user.sessionId
+  )
+    return <p role="status">Sign in to view your files.</p>
+  const scope = JSON.stringify([session.user.id, session.user.sessionId])
+  // Replacing an account or browser session discards every retained card,
+  // selection, dialog, gallery and pending action together before rendering.
+  return <AccountFileGrid key={scope} scope={scope} />
+}
+
+function AccountFileGrid({ scope }: { scope: string }) {
+  const lifetime = useRequestLifetime()
+  return (
+    <RequestLifetimeProvider lifetime={lifetime}>
+      <FileLibrary scope={scope} />
+    </RequestLifetimeProvider>
+  )
+}
+
+function FileLibrary({ scope }: { scope: string }) {
+  const lifetime = useRequestLifetime()
   const { can } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const selectionBar = useRef<HTMLDivElement>(null)
@@ -90,20 +120,27 @@ export function FileGrid() {
     resetFilters,
   } = useFileFilters()
   const { position: anchorIndex, record: recordPosition } =
-    useFileLibraryPosition(filters, pathname, urlQuery, () =>
-      setRefreshKey((value) => value + 1)
+    useFileLibraryPosition(
+      filters,
+      pathname,
+      urlQuery,
+      () => setRefreshKey((value) => value + 1),
+      scope
     )
-  const library = useFileTimeline(filters, refreshKey)
-  const selection = useFreshFileSelection(selectedFiles, filters)
+  const library = useFileTimeline(filters, refreshKey, scope)
+  const selection = useFreshFileSelection(selectedFiles, [scope, filters])
   const openSelection = async (action: 'tags' | 'move' | 'archive') => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     try {
       const fresh = await selection.refresh()
-      if (!fresh) return
+      if (!fresh || signal.aborted) return
       setSelectedFiles(fresh)
       if (action === 'tags') setTaggingFiles(fresh)
       if (action === 'move') setMovingFiles(fresh)
       if (action === 'archive') setCreatingArchive(fresh)
     } catch (error) {
+      if (signal.aborted) return
       toast({
         title: 'Couldn’t open selected files',
         description:

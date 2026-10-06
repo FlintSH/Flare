@@ -7,17 +7,22 @@ export function useFreshFileSelection(files: FileType[], scope: unknown) {
   const [loading, setLoading] = useState(false)
   const active = useRef<AbortController | null>(null)
   const key = JSON.stringify([scope, files.map((file) => file.id)])
-  const currentKey = useRef(key)
+  const currentKey = useRef<string | null>(key)
   currentKey.current = key
 
   useEffect(() => {
+    currentKey.current = key
     active.current?.abort()
     active.current = null
     setLoading(false)
-    return () => active.current?.abort()
+    return () => {
+      currentKey.current = null
+      active.current?.abort()
+    }
   }, [key])
 
   const refresh = useCallback(async () => {
+    if (currentKey.current !== key) return null
     active.current?.abort()
     const controller = new AbortController()
     active.current = controller

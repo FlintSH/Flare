@@ -25,6 +25,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
@@ -37,6 +38,7 @@ export function TagManager({
   onOpenChange: (open: boolean) => void
   onDeleted: (id: string) => void
 }) {
+  const lifetime = useRequestLifetime()
   const { can } = usePermissions()
   const { tags, loading, error: loadError, reload, changed } = useTags()
   const { toast } = useToast()
@@ -71,6 +73,8 @@ export function TagManager({
     }
   }
   const save = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     setBusy(true)
     setError('')
     try {
@@ -81,25 +85,31 @@ export function TagManager({
           name: name.trim(),
           ruleSource: automatic ? source : null,
           ruleText: automatic ? phrase.trim() : null,
-        }
+        },
+        signal
       )
+      if (signal.aborted) return
       changed()
       setEditing(null)
       toast({ title: existing ? 'Tag saved' : 'Tag created' })
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t save this tag.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   const remove = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (!existing) return
     setBusy(true)
     setError('')
     try {
-      await tagRequest(`/api/tags/${existing.id}`, 'DELETE')
+      await tagRequest(`/api/tags/${existing.id}`, 'DELETE', undefined, signal)
+      if (signal.aborted) return
       changed()
       onDeleted(existing.id)
       setEditing(null)
@@ -108,22 +118,28 @@ export function TagManager({
         description: 'Your files are still in your vault.',
       })
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t delete this tag.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   const apply = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (!existing) return
     setBusy(true)
     setError('')
     try {
       const result = await tagRequest<{ count: number }>(
         `/api/tags/${existing.id}/apply`,
-        'POST'
+        'POST',
+        undefined,
+        signal
       )
+      if (signal.aborted) return
       changed()
       setConfirmApply(false)
       toast({
@@ -131,11 +147,12 @@ export function TagManager({
         description: `${result.count} ${result.count === 1 ? 'file tagged' : 'files tagged'}. Tags you removed were left alone.`,
       })
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t apply this rule.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   const ruleUnchanged =

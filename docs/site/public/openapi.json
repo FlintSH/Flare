@@ -2225,15 +2225,13 @@
             "description": "Bucket start ISO instant, or all for a non-date sort."
           },
           "from": {
-            "type": "string",
+            "type": ["string", "null"],
             "format": "date-time",
-            "nullable": true,
             "description": "Inclusive calendar start in UTC; null for an undated bucket."
           },
           "to": {
-            "type": "string",
+            "type": ["string", "null"],
             "format": "date-time",
-            "nullable": true,
             "description": "Exclusive calendar end in UTC; subtract 1 ms for the inclusive GET /api/files dateTo parameter. Null for an undated bucket."
           },
           "count": { "type": "integer", "minimum": 1 },

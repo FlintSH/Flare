@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 import { useFileTagMemberships } from '@/hooks/use-file-tag-memberships'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
 
 /** Each change is additive/removing, so bulk edits preserve every other tag. */
@@ -31,6 +32,7 @@ export function FileTagsDialog({
   onClose: () => void
   onChanged: (files: FileType[]) => void
 }) {
+  const lifetime = useRequestLifetime()
   const { tags, loading, error: loadError, reload, changed } = useTags()
   const memberships = useFileTagMemberships(files.map((file) => file.id))
   const [search, setSearch] = useState('')
@@ -46,8 +48,10 @@ export function FileTagsDialog({
     tag: Pick<TagView, 'id' | 'name'>,
     action: 'add' | 'remove'
   ) => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     const updated = await memberships.update(tag, action)
-    if (!updated) return
+    if (!updated || signal.aborted) return
     const freshTags = new Map(updated.map((file) => [file.id, file.tags]))
     onChanged(
       files.map((file) => ({
@@ -59,18 +63,23 @@ export function FileTagsDialog({
     setAnnouncement(`${tag.name} ${action === 'add' ? 'added' : 'removed'}.`)
   }
   const toggle = async (tag: TagView, all: boolean) => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (busy || !ready) return
     setBusy(true)
     setError('')
     try {
       await update(tag, all ? 'remove' : 'add')
     } catch (error) {
+      if (signal.aborted) return
       setError(error instanceof Error ? error.message : 'Couldn’t update tags.')
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   const create = async () => {
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     if (busy || !ready || !search.trim()) return
     setBusy(true)
     setError('')
@@ -82,18 +91,26 @@ export function FileTagsDialog({
         .toLowerCase()
       const tag =
         tags.find((tag) => tag.name.toLowerCase() === normalized) ??
-        (await tagRequest<TagView>('/api/tags', 'POST', {
-          name: search.trim(),
-        }))
+        (await tagRequest<TagView>(
+          '/api/tags',
+          'POST',
+          {
+            name: search.trim(),
+          },
+          signal
+        ))
+      if (signal.aborted) return
       changed()
       await update(tag, 'add')
+      if (signal.aborted) return
       setSearch('')
     } catch (error) {
+      if (signal.aborted) return
       setError(
         error instanceof Error ? error.message : 'Couldn’t create this tag.'
       )
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
   return (

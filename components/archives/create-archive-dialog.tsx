@@ -32,6 +32,7 @@ import { formatBytes, formatFileSize } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 
 import { ArchiveDestination } from './archive-destination'
 import {
@@ -58,6 +59,7 @@ export function CreateArchiveDialog({
   onOpenArchive: (file: ArchiveFileRef) => void
 }) {
   const { can } = usePermissions()
+  const lifetime = useRequestLifetime()
   const {
     folders,
     loading,
@@ -94,7 +96,9 @@ export function CreateArchiveDialog({
 
   async function create(event: React.FormEvent) {
     event.preventDefault()
+    const { signal } = lifetime.current
     if (
+      signal.aborted ||
       busy ||
       !profileReady ||
       !allowed ||
@@ -108,16 +112,22 @@ export function CreateArchiveDialog({
       const next = await archiveRequest<{
         file: ArchiveFileRef
         totalBytes: number
-      }>('/api/files/archive', {
-        fileIds: files.map((file) => file.id),
-        name: archiveOutputName(name, format),
-        format,
-        folderId,
-        ...archiveProfileRequest(profileId, profileSnapshot),
-      })
+      }>(
+        '/api/files/archive',
+        {
+          fileIds: files.map((file) => file.id),
+          name: archiveOutputName(name, format),
+          format,
+          folderId,
+          ...archiveProfileRequest(profileId, profileSnapshot),
+        },
+        signal
+      )
+      if (signal.aborted) return
       changed()
       setResult(next)
     } catch (cause) {
+      if (signal.aborted) return
       setError(archiveErrorMessage(cause))
       if (
         profileId &&
@@ -129,7 +139,7 @@ export function CreateArchiveDialog({
       }
       void reload()
     } finally {
-      setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
 

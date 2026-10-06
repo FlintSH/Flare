@@ -13,13 +13,15 @@ import {
 
 export function useFileTimeline(
   filters: FileFilterOptions,
-  refreshKey: number
+  refreshKey: number,
+  scope: string | null
 ) {
   const [result, setResult] = useState<{
     key: string
     data: FileTimeline
+    generation: number
   } | null>(null)
-  const [error, setError] = useState(false)
+  const [errorKey, setErrorKey] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const pages = useRef(new Map<string, FileType[]>())
   const failures = useRef(new Set<string>())
@@ -30,42 +32,82 @@ export function useFileTimeline(
   const grouping = filters.groupBy
   // Legacy page links still restore their position when browser history changes
   // only page. A fresh result remounts the virtual viewport at that anchor.
-  const resultKey = `${query}|${grouping}|${filters.page}|${refreshKey}`
-  const timeline = result?.key === resultKey ? result.data : null
+  const resultKey = JSON.stringify([
+    scope,
+    query,
+    grouping,
+    filters.page,
+    refreshKey,
+  ])
+  const currentKey = useRef<string | null>(resultKey)
+  currentKey.current = resultKey
+  const timeline = scope && result?.key === resultKey ? result.data : null
+  const error = !!scope && errorKey === resultKey
 
   useEffect(() => {
     const controller = new AbortController()
     const activeRequests = pending.current
-    generation.current++
+    const cachedPages = pages.current
+    const failedPages = failures.current
+    const started = ++generation.current
+    currentKey.current = resultKey
     activeRequests.forEach((request) => request.abort())
     activeRequests.clear()
-    pages.current.clear()
-    failures.current.clear()
+    cachedPages.clear()
+    failedPages.clear()
     requiredKeys.current.clear()
     setResult(null)
-    setError(false)
+    setErrorKey(null)
     const params = new URLSearchParams(query)
     params.set('groupBy', grouping)
     params.set('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
-    void fetch(`/api/files/timeline?${params}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load the library')
-        const result = await response.json()
-        if (!controller.signal.aborted)
-          setResult({ key: resultKey, data: result.data })
+    if (scope)
+      void fetch(`/api/files/timeline?${params}`, {
+        signal: controller.signal,
+        cache: 'no-store',
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setError(true)
-      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Could not load the library')
+          const result = await response.json()
+          if (
+            !controller.signal.aborted &&
+            generation.current === started &&
+            currentKey.current === resultKey
+          )
+            setResult({
+              key: resultKey,
+              data: result.data,
+              generation: started,
+            })
+        })
+        .catch(() => {
+          if (
+            !controller.signal.aborted &&
+            generation.current === started &&
+            currentKey.current === resultKey
+          )
+            setErrorKey(resultKey)
+        })
     return () => {
+      generation.current = started + 1
+      currentKey.current = null
       controller.abort()
       activeRequests.forEach((request) => request.abort())
+      activeRequests.clear()
+      cachedPages.clear()
+      failedPages.clear()
+      requiredKeys.current.clear()
     }
-  }, [query, grouping, refreshKey, resultKey])
+  }, [query, grouping, refreshKey, resultKey, scope])
 
   const ensureRange = useCallback(
     (indices: number[]) => {
-      if (!timeline) return
+      if (
+        !timeline ||
+        currentKey.current !== resultKey ||
+        generation.current !== result?.generation
+      )
+        return
       const required = new Map(
         indices
           .filter(
@@ -130,12 +172,19 @@ export function useFileTimeline(
             ).toISOString()
           )
         }
-        void fetch(`/api/files?${params}`, { signal: controller.signal })
+        void fetch(`/api/files?${params}`, {
+          signal: controller.signal,
+          cache: 'no-store',
+        })
           .then(async (response) => {
             if (!response.ok)
               throw new Error('Could not load this part of the library')
             const result = await response.json()
-            if (controller.signal.aborted || generation.current !== started)
+            if (
+              controller.signal.aborted ||
+              generation.current !== started ||
+              currentKey.current !== resultKey
+            )
               return
             const expected = Math.min(
               TIMELINE_PAGE_SIZE,
@@ -153,49 +202,75 @@ export function useFileTimeline(
             }
           })
           .catch(() => {
-            if (!controller.signal.aborted && generation.current === started)
+            if (
+              !controller.signal.aborted &&
+              generation.current === started &&
+              currentKey.current === resultKey
+            )
               failures.current.add(key)
           })
           .finally(() => {
             if (pending.current.get(key) === controller)
               pending.current.delete(key)
-            if (!controller.signal.aborted && generation.current === started)
+            if (
+              !controller.signal.aborted &&
+              generation.current === started &&
+              currentKey.current === resultKey
+            )
               setRevision((value) => value + 1)
           })
       })
     },
-    [timeline, query, filters.dateFrom, filters.dateTo]
+    [
+      timeline,
+      query,
+      filters.dateFrom,
+      filters.dateTo,
+      resultKey,
+      result?.generation,
+    ]
   )
 
   const getFile = useCallback(
     (index: number) => {
-      if (!timeline) return undefined
+      if (
+        !timeline ||
+        currentKey.current !== resultKey ||
+        generation.current !== result?.generation
+      )
+        return undefined
       const bucket = bucketAt(timeline.buckets, index)
       const { key } = timelinePage(bucket, index)
       return pages.current.get(key)?.[
         (index - bucket.offset) % TIMELINE_PAGE_SIZE
       ]
     },
-    [timeline]
+    [timeline, resultKey, result?.generation]
   )
   const hasFailed = useCallback(
     (index: number) => {
-      if (!timeline) return false
+      if (
+        !timeline ||
+        currentKey.current !== resultKey ||
+        generation.current !== result?.generation
+      )
+        return false
       return failures.current.has(
         timelinePage(bucketAt(timeline.buckets, index), index).key
       )
     },
-    [timeline]
+    [timeline, resultKey, result?.generation]
   )
   const retry = useCallback(() => {
+    if (!scope || currentKey.current !== resultKey) return
     failures.current.clear()
     setRevision((value) => value + 1)
-  }, [])
+  }, [scope, resultKey])
 
   return {
     timeline,
     error,
-    isLoading: !timeline && !error,
+    isLoading: !!scope && !timeline && !error,
     revision,
     getFile,
     hasFailed,

@@ -1,0 +1,54 @@
+{
+  "provenance": "Real authenticated GET /api/files/timeline responses from the disposable timeline seed, captured on 2026-10-06 from the production build of the account-isolation fix (working tree based on 56a89d1). Requests select two known demonstration IDs; response bodies are unchanged.",
+  "cases": [
+    {
+      "query": "sortBy=largest&ids=timeline-demo-file-00000,timeline-demo-file-11999",
+      "body": {
+        "data": {
+          "total": 2,
+          "snapshot": "2026-10-06T06:08:45.217Z",
+          "groupBy": "none",
+          "timezone": "UTC",
+          "buckets": [
+            {
+              "key": "all",
+              "from": null,
+              "to": null,
+              "count": 2,
+              "offset": 0
+            }
+          ]
+        },
+        "success": true
+      }
+    },
+    {
+      "query": "sortBy=newest&groupBy=month&ids=timeline-demo-file-00000,timeline-demo-file-11999",
+      "body": {
+        "data": {
+          "total": 2,
+          "snapshot": "2026-10-06T06:08:45.231Z",
+          "groupBy": "month",
+          "timezone": "UTC",
+          "buckets": [
+            {
+              "key": "2026-10-01T00:00:00.000Z",
+              "from": "2026-10-01T00:00:00.000Z",
+              "to": "2026-11-01T00:00:00.000Z",
+              "count": 1,
+              "offset": 0
+            },
+            {
+              "key": "2018-07-01T00:00:00.000Z",
+              "from": "2018-07-01T00:00:00.000Z",
+              "to": "2018-08-01T00:00:00.000Z",
+              "count": 1,
+              "offset": 1
+            }
+          ]
+        },
+        "success": true
+      }
+    }
+  ]
+}

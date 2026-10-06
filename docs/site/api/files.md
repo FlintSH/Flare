@@ -267,6 +267,12 @@ curl --fail-with-body --get \
 
 `from` is inclusive and `to` exclusive. Both are ISO UTC instants for local calendar boundaries; daylight-saving changes can make a week or month shorter or longer. `offset` is the number of matching files before this bucket in the selected order. Empty periods are omitted. `newest` returns newest buckets first; `oldest` returns oldest first. `key` equals `from`. Non-date sorts return `groupBy: "none"` and one bucket with `key: "all"`, null boundaries, and the total count. An empty result returns `total: 0` and `buckets: []`. `groupBy` otherwise preserves the requested value, including `none`.
 
+Treat both boundaries as `string | null` when generating a client from the OpenAPI 3.1 contract. For example, a nonempty `sortBy=largest` response contains an undated bucket like this; do not parse its null boundaries as dates:
+
+```json
+{ "key": "all", "from": null, "to": null, "count": 124, "offset": 0 }
+```
+
 To load a visible window, request `GET /api/files` with the same filters and sort, the returned `snapshot`, and a bounded `limit` (maximum 100). Within a dated bucket, set `dateFrom` to the later of the original lower bound and `bucket.from`; set `dateTo` to the earlier of the original upper bound and **one millisecond before `bucket.to`**. Page numbers start at 1 **inside that filtered bucket**, not at the bucket's global `offset`. With the undated bucket, keep the original date filters. Never replace a user's narrower date range with the whole bucket.
 
 This executable Node.js example loads the first window of the oldest populated month. It uses a named token from the environment and does not put credentials in a URL:
