@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { securitySession } from '@/lib/auth/security/http'
 import { assertSecurityProof } from '@/lib/auth/security/service'
@@ -19,7 +20,7 @@ const logger = loggers.users
 
 class ProfileUpdateError extends Error {}
 
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -204,7 +205,7 @@ export async function PUT(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDELETE(req: Request) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -223,4 +224,16 @@ export async function DELETE(req: Request) {
     logger.error('Account deletion error:', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }
+}
+
+export async function PUT(req: Request) {
+  return withAuditRoute(async () => handlePUT(req), { route: '/api/profile' })(
+    req
+  )
+}
+
+export async function DELETE(req: Request) {
+  return withAuditRoute(async () => handleDELETE(req), {
+    route: '/api/profile',
+  })(req)
 }

@@ -174,6 +174,8 @@ The demonstration account is `timeline-demo-alex@example.test` with the delibera
 
 The browser checks cover direct date jumps, bounded mounted cards and file requests, selection and archive inputs across scrolling, fresh bulk-tag membership after a real external API change, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure and the separate archive-input and current-tag membership regressions. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
 
+Separate unrecorded checks create and revoke disposable named tokens, verify selected-ID listing and timeline counts stay within the token owner's account, reject an upload-only token on those reads, and run `examples/integrations.mjs files` against the real local server. They verify request-level audit attribution to the owner and token ID, including denied reads, without retaining token secrets in audit details or captures.
+
 The timeline API regression suite needs a **separate disposable database**, because it clears users and events between cases. For example:
 
 ```sh
@@ -293,6 +295,60 @@ pnpm exec vitest run __tests__/auth/security-database.test.ts
 ```
 
 Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic redemption for both code sets, stale-session fences, enrollment, encrypted secret handling, required-passkey transitions and fallback guards, and recovery for local and SSO-only accounts. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators or a live identity provider.
+
+## Sessions and audit browser checks and demos
+
+The [profile session guide](/guide/account#login-history-and-active-sessions), [audit guide](/admin/audit), and [recorded walkthroughs](/demos#review-and-revoke-browser-sessions) use real application operations with disposable accounts. They do not rely on production accounts or fabricated audit rows.
+
+Create a **disposable local PostgreSQL database named exactly `flare_audit_demo`** using your local PostgreSQL tools. The seed guard accepts only `localhost` or `127.0.0.1`, with `schema` omitted or set once to `public`; suffix database names, other schemas, duplicate schema parameters, and other URL query parameters are rejected. Use isolated uploads too. Never point this recipe at an existing application database: the seed replaces its demonstration accounts, clears security rate counters, and disables automatic OCR and OIDC in the fixture configuration.
+
+With application dependencies installed, run from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_audit_demo'
+export NEXTAUTH_URL='http://localhost:3071'
+export NEXTAUTH_SECRET='public-disposable-audit-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm dev --port 3071
+```
+
+Adjust the database role, port, and authentication to match your disposable PostgreSQL server. Open `http://localhost:3071/auth/login` once so the app initializes its configuration. In a second terminal with the same `DATABASE_URL`, run:
+
+```sh
+npm ci --prefix docs/site
+cd docs/site
+npx playwright install chromium
+cd ../..
+node scripts/audit/seed.cjs
+node scripts/audit/verify-ui.cjs
+```
+
+The deliberately public fixture password is `Audit-demo-only-2026!`. The accounts are **Alex Morgan** (`audit-demo-alex@example.test`, administrator), **Jamie Rivera** (`audit-demo-jamie@example.test`), and **Casey Chen** (`audit-demo-casey@example.test`). Use `FLARE_AUDIT_TEST_ORIGIN` to select another `localhost` application origin; its default is `http://localhost:3071`. The script uses the documentation Playwright installation and can use `PW_CHROMIUM_EXECUTABLE_PATH` for an installed Chromium binary. Install Chromium's required system libraries on a new Linux host.
+
+Run the seed before repeating the browser checks and inspect the JSON results and exit status. The workflow performs real account/file/security operations and OCR of a generated receipt test image, verifies that recognized text is absent from audit details, leaves demonstration evidence for inspection, and should run only against its disposable server. Discard its database and upload directory after verification. API examples in [sessions and audit contracts](/api/activity) can be executed in an authenticated console on this same instance.
+
+Capture screenshots and videos in separate runs, reseeding before each. Set only `FLARE_AUDIT_SCREENSHOTS` to a temporary directory for desktop/mobile stills; for the recording pass, leave that variable unset and set only `FLARE_AUDIT_VIDEOS`. Element screenshots can briefly resize the browser and spoil a simultaneous recording. The videos keep desktop dimensions; mobile coverage is recorded separately in the stills and browser assertions. Review every image and both recordings for credentials, private data, readable pauses, and the final sign-in screen. Only then replace canonical sources under `docs/images/audit/` and `.github/assets/audit/`. Keep generated copies under `docs/site/public/`, failed recordings, and temporary browser output out of Git. Update the descriptive transcripts on the demos page when the recorded steps change. The documentation browser checks verify that both recordings load without autoplay and that the new guides fit desktop and mobile viewports.
+
+To verify archives and audit logging together on that same disposable instance, reseed and run the separate integration check:
+
+```sh
+node scripts/audit/seed.cjs
+node scripts/audit/verify-archives.cjs
+```
+
+This uses real requests to upload a source, create and browse a ZIP, download an entry, and extract it. It verifies per-file attribution, denied and failed requests, selected member paths, and exclusion of entry contents from audit metadata, then opens the real administrator log with **Category** set to `archives`. Set `FLARE_AUDIT_SCREENSHOTS` to a temporary directory to capture `archive-events.webp`; inspect it before replacing the canonical [audit guide](/admin/audit) image. This check uses the same `FLARE_AUDIT_TEST_ORIGIN` and fixture accounts as the sessions/audit suite. It does not replace the broader archive codec, shared-access, and resource-limit checks above.
+
+### Audit database regression checks
+
+Create and migrate a separate local PostgreSQL database named exactly **`flare_audit_test`** before running the database suite. The guard accepts only `localhost` or `127.0.0.1`; supported URL options are `schema=public` and `connection_limit`. These tests erase users, roles, settings, and audit rows in that disposable database, so keep it separate from both the browser demo and an existing instance.
+
+```sh
+export FLARE_AUDIT_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_audit_test?connection_limit=1'
+DATABASE_URL="$FLARE_AUDIT_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/audit
+```
+
+Without `FLARE_AUDIT_DATABASE_URL`, database cases are skipped while core/API tests still run. The PostgreSQL cases verify commit/rollback handling, transaction connection use, safe settings and role snapshots, bulk filename retention beyond 1,000 files, tag metadata, email-failure outcomes, and avoiding recursive logging. The one-connection example also checks that transaction snapshots do not wait on a second connection. These checks complement the rendered browser flows and the session-security tests.
 
 ## Local visual testing with Meticulous
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -20,7 +21,7 @@ const spectacleSchema = z.object({
   delay: z.number().min(0).max(10000),
 })
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('tokens.manage')
@@ -509,4 +510,10 @@ fi
 echo "Recording completed."
 upload_recording "$TEMP_FILE"
 exit 0`
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/profile/spectacle',
+  })(req)
 }

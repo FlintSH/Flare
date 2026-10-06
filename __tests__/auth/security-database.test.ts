@@ -23,6 +23,7 @@ suite('account security against disposable PostgreSQL', () => {
   let passkeys: typeof import('@/lib/auth/security/passkeys')
   let auth: typeof import('@/lib/auth')
   let required: typeof import('@/lib/auth/security/required-passkeys')
+  let browserSessions: typeof import('@/lib/auth/sessions')
   let password: string
   const session = (
     version = 1,
@@ -55,6 +56,7 @@ suite('account security against disposable PostgreSQL', () => {
     passkeys = await import('@/lib/auth/security/passkeys')
     auth = await import('@/lib/auth')
     required = await import('@/lib/auth/security/required-passkeys')
+    browserSessions = await import('@/lib/auth/sessions')
     password = await hash('correct test password', 4)
   })
   beforeEach(async () => {
@@ -76,6 +78,18 @@ suite('account security against disposable PostgreSQL', () => {
     await prisma?.$disconnect()
     vi.unstubAllEnvs()
   })
+
+  async function trackedSession(version = 1, method = 'credentials') {
+    const record = await browserSessions.createBrowserSession(
+      'security-owner',
+      version,
+      method,
+      { ipAddress: '192.0.2.10', userAgent: 'Security test browser' }
+    )
+    const result = session(version, method)
+    result.user.sessionId = record.id
+    return result
+  }
 
   async function enroll() {
     const setup = await service.setupTotp(session(), {
@@ -247,6 +261,7 @@ suite('account security against disposable PostgreSQL', () => {
         token: {
           id: 'security-owner',
           sessionVersion: 2,
+          sessionId: (await trackedSession(2, 'passkey')).user.sessionId,
           authMethod: 'passkey',
         },
       })
@@ -801,6 +816,7 @@ suite('account security against disposable PostgreSQL', () => {
       token: {
         id: 'security-owner',
         sessionVersion: 1,
+        sessionId: (await trackedSession()).user.sessionId,
         authTime,
         authMethod: 'credentials',
       },
@@ -891,6 +907,7 @@ suite('account security against disposable PostgreSQL', () => {
       token: {
         id: user.id,
         sessionVersion: 1,
+        sessionId: (await trackedSession()).user.sessionId,
         authTime,
         authMethod: 'credentials',
       },
@@ -1150,5 +1167,237 @@ suite('account security against disposable PostgreSQL', () => {
       attempts.filter((result) => result.status === 'fulfilled')
     ).toHaveLength(3)
     expect((await prisma.authRateLimit.findFirstOrThrow()).count).toBe(6)
+  })
+  it('tracks successful authentication in a revocable server record and rejects legacy cookies', async () => {
+    const jwt = auth.authOptions.callbacks!.jwt as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<Record<string, unknown>>
+    await expect(
+      jwt({ token: { id: 'security-owner', sessionVersion: 1 } })
+    ).rejects.toThrow('Sign in again after upgrading')
+    const user = await authorizeProvider()({
+      email: 'test@example.invalid',
+      password: 'correct test password',
+    })
+    const token = await jwt({
+      token: {},
+      user,
+      account: { provider: 'credentials' },
+    })
+    expect(token.sessionId).toEqual(expect.any(String))
+    expect(await prisma.browserSession.count()).toBe(1)
+    expect(await prisma.loginAttempt.findFirstOrThrow()).toMatchObject({
+      userId: 'security-owner',
+      authMethod: 'credentials',
+      outcome: 'success',
+    })
+    await expect(jwt({ token })).resolves.toMatchObject({
+      sessionId: token.sessionId,
+    })
+    await browserSessions.signOutBrowserSession(
+      'security-owner',
+      token.sessionId as string
+    )
+    await expect(jwt({ token })).rejects.toThrow('Session revoked or expired')
+  })
+
+  it('logs failures against known accounts without saving supplied credentials or treating the second-factor prompt as failure', async () => {
+    const authorize = authorizeProvider()
+    await authorize({
+      email: 'test@example.invalid',
+      password: 'a-private-wrong-password',
+    })
+    await authorize({
+      email: 'unknown@example.invalid',
+      password: 'a-private-wrong-password',
+    })
+    expect(await prisma.loginAttempt.count()).toBe(1)
+    const history = await browserSessions.listLoginHistory('security-owner')
+    expect(history.attempts[0]).toMatchObject({
+      authMethod: 'credentials',
+      outcome: 'failure',
+    })
+    expect(JSON.stringify(history)).not.toMatch(
+      /private-wrong|unknown@example|password|userId/
+    )
+    await enroll()
+    await expect(
+      authorize({
+        email: 'test@example.invalid',
+        password: 'correct test password',
+      })
+    ).rejects.toThrow('TwoFactorRequired')
+    expect(await prisma.loginAttempt.count()).toBe(1)
+  })
+
+  it('isolates active sessions and prevents revoking another account or using a revoked caller', async () => {
+    const current = await trackedSession()
+    const other = await trackedSession()
+    await prisma.user.create({
+      data: {
+        id: 'second-owner',
+        email: 'second@example.invalid',
+        urlId: 'second-owner',
+        uploadToken: 'second-owner',
+      },
+    })
+    const foreign = await browserSessions.createBrowserSession(
+      'second-owner',
+      1,
+      'oidc',
+      { ipAddress: null, userAgent: null }
+    )
+    const listing = await browserSessions.listBrowserSessions(current)
+    expect(listing.sessions).toHaveLength(2)
+    expect(listing.sessions.filter((row) => row.current)).toHaveLength(1)
+    expect(JSON.stringify(listing)).not.toMatch(
+      /sessionVersion|second-owner|uploadToken/
+    )
+    await expect(
+      browserSessions.revokeBrowserSessions(current, foreign.id)
+    ).rejects.toMatchObject({ status: 404 })
+    expect(
+      await browserSessions.revokeBrowserSessions(current, other.user.sessionId)
+    ).toEqual({ revokedCount: 1, signedOut: false })
+    await expect(
+      browserSessions.validateBrowserSession(
+        'security-owner',
+        current.user.sessionId,
+        1
+      )
+    ).resolves.toBeTruthy()
+    await expect(
+      browserSessions.revokeBrowserSessions(other)
+    ).rejects.toMatchObject({ status: 401 })
+    expect(
+      await browserSessions.revokeBrowserSessions(
+        current,
+        current.user.sessionId
+      )
+    ).toEqual({ revokedCount: 1, signedOut: true })
+  })
+
+  it('fences concurrent login and revoke-all with the account version and preserves API credentials', async () => {
+    const current = await trackedSession()
+    await trackedSession()
+    const outcomes = await Promise.allSettled([
+      browserSessions.revokeBrowserSessions(current),
+      browserSessions.createBrowserSession('security-owner', 1, 'passkey', {
+        ipAddress: null,
+        userAgent: null,
+      }),
+    ])
+    expect(outcomes[0].status).toBe('fulfilled')
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: 'security-owner' },
+    })
+    expect(user).toMatchObject({
+      sessionVersion: 2,
+      uploadToken: 'security-token',
+    })
+    expect(
+      await prisma.browserSession.count({
+        where: { userId: user.id, sessionVersion: 2, revokedAt: null },
+      })
+    ).toBe(0)
+    const jwt = auth.authOptions.callbacks!.jwt as unknown as (
+      input: Record<string, unknown>
+    ) => Promise<unknown>
+    await expect(
+      jwt({
+        token: {
+          id: user.id,
+          sessionVersion: 1,
+          sessionId: current.user.sessionId,
+        },
+      })
+    ).rejects.toThrow('Version mismatch')
+    await expect(
+      browserSessions.createBrowserSession(user.id, 1, 'credentials', {
+        ipAddress: null,
+        userAgent: null,
+      })
+    ).rejects.toThrow('Version mismatch')
+    await expect(trackedSession(2)).resolves.toBeTruthy()
+  })
+
+  it('expires sessions independently of cookie renewal and only throttles activity writes', async () => {
+    const current = await trackedSession()
+    const id = current.user.sessionId!
+    const original = await prisma.browserSession.findUniqueOrThrow({
+      where: { id },
+    })
+    await browserSessions.validateBrowserSession('security-owner', id, 1)
+    expect(
+      (await prisma.browserSession.findUniqueOrThrow({ where: { id } }))
+        .lastSeenAt
+    ).toEqual(original.lastSeenAt)
+    await prisma.browserSession.update({
+      where: { id },
+      data: { lastSeenAt: new Date(Date.now() - 120000) },
+    })
+    await browserSessions.validateBrowserSession('security-owner', id, 1)
+    expect(
+      (
+        await prisma.browserSession.findUniqueOrThrow({ where: { id } })
+      ).lastSeenAt.getTime()
+    ).toBeGreaterThan(Date.now() - 10000)
+    await prisma.browserSession.update({
+      where: { id },
+      data: { expiresAt: new Date(0) },
+    })
+    await expect(
+      browserSessions.validateBrowserSession('security-owner', id, 1)
+    ).rejects.toThrow('expired')
+    expect(
+      (await browserSessions.listBrowserSessions(current)).sessions
+    ).toHaveLength(0)
+  })
+
+  it('paginates tied timestamps without duplicates, filters outcomes, and hides old login history', async () => {
+    await prisma.loginAttempt.createMany({
+      data: Array.from({ length: 31 }, (_, i) => ({
+        id: `attempt-${String(i).padStart(3, '0')}`,
+        userId: 'security-owner',
+        authMethod: 'credentials',
+        outcome: i === 0 ? 'failure' : 'success',
+        createdAt: new Date(Math.floor(Date.now() / 60000) * 60000),
+      })),
+    })
+    await prisma.loginAttempt.create({
+      data: {
+        userId: 'security-owner',
+        authMethod: 'passkey',
+        outcome: 'success',
+        createdAt: new Date(0),
+      },
+    })
+    const first = await browserSessions.listLoginHistory('security-owner')
+    const second = await browserSessions.listLoginHistory(
+      'security-owner',
+      'all',
+      first.nextCursor!
+    )
+    expect(first.attempts).toHaveLength(25)
+    expect(second.attempts).toHaveLength(6)
+    expect(second.nextCursor).toBeNull()
+    expect(
+      new Set([...first.attempts, ...second.attempts].map((row) => row.id)).size
+    ).toBe(31)
+    expect(
+      (await browserSessions.listLoginHistory('security-owner', 'failure'))
+        .attempts
+    ).toHaveLength(1)
+    expect(
+      (await browserSessions.listLoginHistory('different-account')).attempts
+    ).toHaveLength(0)
+    await expect(
+      browserSessions.listLoginHistory('security-owner', 'invalid')
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      browserSessions.listLoginHistory('security-owner', 'all', 'invalid')
+    ).rejects.toMatchObject({ status: 400 })
+    await browserSessions.cleanupSessionHistory()
+    expect(await prisma.loginAttempt.count()).toBe(31)
   })
 })

@@ -1,9 +1,10 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
 import { applyTagToExistingFiles } from '@/lib/tags/service'
 
-export async function POST(
+async function handlePOST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -18,4 +19,13 @@ export async function POST(
   } catch (error) {
     return tagErrorResponse(error)
   }
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handlePOST(request, { params }), {
+    route: '/api/tags/[id]/apply',
+  })(request)
 }

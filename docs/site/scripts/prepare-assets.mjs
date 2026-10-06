@@ -137,13 +137,15 @@ for (const name of ['timeline-scroll', 'timeline-mobile']) {
     resolve(root, 'public/demos', `${name}.mp4`)
   )
 }
-for (const name of [
-  'archive-browse-extract',
-  'archive-create',
-  'archive-share-browse',
+for (const [directory, name] of [
+  ['audit', 'session-management'],
+  ['audit', 'audit-investigation'],
+  ['archives', 'archive-browse-extract'],
+  ['archives', 'archive-create'],
+  ['archives', 'archive-share-browse'],
 ]) {
   await copyFile(
-    resolve(root, '../../.github/assets/archives', `${name}.webm`),
+    resolve(root, '../../.github/assets', directory, `${name}.webm`),
     resolve(root, 'public/demos', `${name}.webm`)
   )
 }

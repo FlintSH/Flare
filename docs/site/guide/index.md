@@ -47,10 +47,11 @@ Continue with [uploading files](./uploading) and [sharing and privacy](./sharing
 | **Upload**                 | Queue files and choose the destination, upload profile, visibility, password, and expiration. |
 | **Paste**                  | Save text or code as a shareable file.                                                        |
 | **Links**                  | Create short redirects under your instance's domain and see their click counts.               |
-| **Profile → Account**      | Update identity, password, email, and personal workspace appearance.                          |
+| **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.             |
 | **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.            |
 | **Profile → Integrations** | Create scoped API tokens and outgoing webhooks.                                               |
 | **Profile → Your data**    | Check storage use, export data, or delete your account.                                       |
+| **Audit log**              | Investigate instance activity with the `audit.read` permission.                               |
 | **Users / Settings**       | Administrator controls for accounts and the instance.                                         |
 
 On a small screen, use the navigation menu to reach these pages. Profile and Settings remember the selected section in the page address, so browser Back and Forward work when moving between sections.

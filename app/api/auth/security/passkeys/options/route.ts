@@ -1,3 +1,4 @@
+import { withAuditRoute } from '@/lib/audit'
 import {
   passkeyName,
   proofSchema,
@@ -7,7 +8,7 @@ import {
 } from '@/lib/auth/security/http'
 import { registrationOptions } from '@/lib/auth/security/passkeys'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return securityRoute(async () => {
     const { session } = await securitySession(req)
     const data = proofSchema
@@ -15,4 +16,10 @@ export async function POST(req: Request) {
       .parse(await securityBody(req))
     return registrationOptions(session, data, data.name)
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/security/passkeys/options',
+  })(req)
 }

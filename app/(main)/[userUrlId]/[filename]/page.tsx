@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { detectArchiveFormat } from '@/lib/archives/shared'
+import { recordAudit } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
@@ -245,6 +246,20 @@ export default async function FilePage({
     session,
     providedPassword
   )
+
+  await recordAudit({
+    action: 'file.view',
+    category: 'files',
+    outcome: access.allowed ? 'success' : 'denied',
+    actorId: session?.user?.id,
+    actorName: session?.user?.name || 'Anonymous',
+    targetType: 'file',
+    targetId: file.id,
+    targetName: file.name,
+    route: '/[userUrlId]/[filename]',
+    method: 'GET',
+    details: access.allowed ? {} : { reason: access.reason },
+  })
 
   if (!access.allowed) {
     if (access.reason === 'private') {

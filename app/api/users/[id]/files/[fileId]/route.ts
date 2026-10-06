@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
+import { recordAudit, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -11,7 +12,7 @@ import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-export async function DELETE(
+async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ): Promise<NextResponse> {
@@ -38,10 +39,30 @@ export async function DELETE(
       return new NextResponse('File not found', { status: 404 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
     try {
       const storageProvider = await getStorageProvider()
       await storageProvider.deleteFile(file.path)
+      await recordAudit({
+        action: 'storage.deleted',
+        category: 'storage',
+        targetType: 'file',
+        targetId: file.id,
+        targetName: file.name,
+      })
     } catch (error) {
+      await recordAudit({
+        action: 'storage.delete_failed',
+        category: 'storage',
+        outcome: 'failure',
+        targetType: 'file',
+        targetId: file.id,
+        targetName: file.name,
+        details: {
+          reason: 'Storage deletion failed; file metadata deletion continues',
+          ownerId: file.userId,
+        },
+      })
       logger.error('Error deleting file from storage:', error as Error)
     }
 
@@ -70,7 +91,7 @@ export async function DELETE(
   }
 }
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ): Promise<NextResponse> {
@@ -120,4 +141,22 @@ export async function PATCH(
     logger.error('Error updating file:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string; fileId: string }> }
+): Promise<NextResponse> {
+  return withAuditRoute(async () => handleDELETE(request, { params }), {
+    route: '/api/users/[id]/files/[fileId]',
+  })(request)
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string; fileId: string }> }
+): Promise<NextResponse> {
+  return withAuditRoute(async () => handlePATCH(request, { params }), {
+    route: '/api/users/[id]/files/[fileId]',
+  })(request)
 }

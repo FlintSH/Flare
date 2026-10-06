@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { RateLimiterMemory } from 'rate-limiter-flexible'
 import { z } from 'zod'
 
+import { setAuditActor, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
@@ -117,18 +118,21 @@ async function currentSession(
   if (!user || user.sessionVersion !== viewer.sessionVersion) return null
   const email = tx ? await getEmailConfigForUpdate(tx) : await getEmailConfig()
   if (requiresEmailVerification(user, email)) return null
+  setAuditActor({ id: user.id, name: user.name })
   return { user: { id: user.id, ...(await getUserAccess(user.id, client)) } }
 }
 
 function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
   if (access.allowed) return
+  setAuditOutcome('denied')
   throw new ArchiveError(
     access.reason === 'private'
       ? 'Archive not found.'
       : access.reason === 'password_required'
         ? 'Enter the file password to browse this archive.'
         : 'The file password is incorrect.',
-    access.status
+    access.status,
+    true
   )
 }
 
@@ -141,6 +145,7 @@ export async function authorizeSharedArchive(
     getAccessSession(),
   ])
   if (!file) throw new ArchiveError('Archive not found.', 404)
+  setAuditTarget({ type: 'file', id: file.id, name: file.name })
   const viewer =
     session?.user?.id && typeof session.user.sessionVersion === 'number'
       ? { id: session.user.id, sessionVersion: session.user.sessionVersion }

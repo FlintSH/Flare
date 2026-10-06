@@ -24,6 +24,7 @@ describe('permission-aware dashboard navigation', () => {
     expect(html).not.toContain('href="/dashboard/users"')
     expect(html).not.toContain('href="/dashboard/roles"')
     expect(html).not.toContain('href="/dashboard/settings"')
+    expect(html).not.toContain('href="/dashboard/audit"')
   })
 
   it('shows independently delegated management capabilities', () => {
@@ -46,6 +47,14 @@ describe('permission-aware dashboard navigation', () => {
     )
   })
 
+  it('shows audit access independently from account and settings administration', () => {
+    mocks.user.permissions = ['audit.read']
+    const html = renderToStaticMarkup(React.createElement(DashboardNav))
+    expect(html).toContain('href="/dashboard/audit"')
+    expect(html).not.toContain('href="/dashboard/users"')
+    expect(html).not.toContain('href="/dashboard/settings"')
+  })
+
   it('grants administrators access to every navigation destination', () => {
     mocks.user.permissions = ['administrator']
     const html = renderToStaticMarkup(React.createElement(DashboardNav))
@@ -56,6 +65,7 @@ describe('permission-aware dashboard navigation', () => {
       'users',
       'roles',
       'settings',
+      'audit',
     ]) {
       expect(html).toContain(`href="/dashboard/${destination}"`)
     }

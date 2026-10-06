@@ -1,3 +1,4 @@
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import {
   getUploadStorage,
@@ -14,7 +15,7 @@ function validPart(value: string) {
     throw new UploadError('Invalid part number.')
   return part
 }
-export async function GET(req: Request, { params }: Context) {
+async function handleGET(req: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -34,7 +35,7 @@ export async function GET(req: Request, { params }: Context) {
     return uploadErrorResponse(error)
   }
 }
-export async function PUT(req: Request, { params }: Context) {
+async function handlePUT(req: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(req)
     if (response) return response
@@ -83,4 +84,16 @@ export async function PUT(req: Request, { params }: Context) {
   } catch (error) {
     return uploadErrorResponse(error)
   }
+}
+
+export async function GET(req: Request, { params }: Context) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    route: '/api/files/chunks/[uploadId]/part/[partNumber]',
+  })(req)
+}
+
+export async function PUT(req: Request, { params }: Context) {
+  return withAuditRoute(async () => handlePUT(req, { params }), {
+    route: '/api/files/chunks/[uploadId]/part/[partNumber]',
+  })(req)
 }

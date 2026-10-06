@@ -180,6 +180,14 @@ suite('archive publication against disposable PostgreSQL', () => {
   function context(id: string) {
     return { params: Promise.resolve({ id }) }
   }
+  async function waitForArchiveRelease(key: string) {
+    await vi.waitFor(async () => {
+      const { ArchiveOperation } = await import('@/lib/archives/operation')
+      const operation = new ArchiveOperation(key, new AbortController().signal)
+      await operation.release()
+    })
+  }
+
   async function source(name: string, bytes: Buffer, userId = 'archive-owner') {
     const path = `uploads/${userId}/${randomUUID()}`
     state.objects.set(path, bytes)
@@ -276,6 +284,193 @@ suite('archive publication against disposable PostgreSQL', () => {
       },
     })
   }
+
+  it('audits owner archive reads and extraction with the source identity and every published member', async () => {
+    const file = await archive()
+    await prisma.auditEvent.deleteMany()
+    expect(
+      (
+        await listing.GET(
+          request(`/api/files/${file.id}/archive`),
+          context(file.id)
+        )
+      ).status
+    ).toBe(200)
+    const entry = await download.GET(
+      request(`/api/files/${file.id}/archive/entry?path=notes%2Freadme.txt`),
+      context(file.id)
+    )
+    expect(await entry.text()).toBe('Hello archive')
+    await waitForArchiveRelease('archive-owner')
+    expect((await extract(file.id)).status).toBe(200)
+    const events = await prisma.auditEvent.findMany({
+      where: { category: 'archives' },
+    })
+    expect(
+      events.find((event) => event.action === 'archive.extract')
+    ).toMatchObject({
+      actorId: 'archive-owner',
+      actorName: 'archive-owner',
+      targetId: file.id,
+      targetName: 'source.zip',
+      outcome: 'success',
+    })
+    expect(
+      events.find((event) => event.action === 'archive.member.read')
+    ).toMatchObject({
+      targetId: file.id,
+      targetName: 'source.zip',
+      details: { name: 'notes/readme.txt', size: 13 },
+    })
+    const extracted = events.filter(
+      (event) => event.action === 'archive.member.extract'
+    )
+    expect(extracted).toHaveLength(2)
+    expect(extracted.map((event) => event.targetName).sort()).toEqual([
+      'empty.bin',
+      'readme.txt',
+    ])
+    for (const event of extracted) {
+      expect(event).toMatchObject({
+        actorId: 'archive-owner',
+        details: { fileId: file.id },
+      })
+      expect(event.targetId).not.toBe(file.id)
+    }
+    expect(JSON.stringify(events)).not.toMatch(
+      /Hello archive|source-password-hash|flare-archive-|uploads\//
+    )
+  })
+
+  it('audits every archive-creation source and binds success or failure to the intended output', async () => {
+    const one = await source('First.txt', Buffer.from('source-content-one'))
+    const two = await source('Second.txt', Buffer.from('source-content-two'))
+    await prisma.auditEvent.deleteMany()
+    const input = {
+      fileIds: [one.id, two.id],
+      name: 'Collected',
+      format: 'zip',
+      folderId: null,
+    }
+    const response = await creation.POST(request('/api/files/archive', input))
+    expect(response.status).toBe(200)
+    const output = (await response.json()).data.file
+    const events = await prisma.auditEvent.findMany({
+      where: { category: 'archives' },
+    })
+    expect(
+      events
+        .filter((event) => event.action === 'archive.source.read')
+        .map((event) => event.targetName)
+        .sort()
+    ).toEqual(['First.txt', 'Second.txt'])
+    expect(
+      events.find((event) => event.action === 'archive.create')
+    ).toMatchObject({
+      actorId: 'archive-owner',
+      targetId: output.id,
+      targetName: 'Collected.zip',
+      outcome: 'success',
+    })
+    state.objects.delete(one.path)
+    expect(
+      (
+        await creation.POST(
+          request('/api/files/archive', { ...input, name: 'Failed output' })
+        )
+      ).status
+    ).toBe(500)
+    expect(
+      await prisma.auditEvent.findFirstOrThrow({
+        where: { action: 'archive.source.read', outcome: 'failure' },
+      })
+    ).toMatchObject({ targetId: one.id, targetName: 'First.txt' })
+    expect(
+      await prisma.auditEvent.findFirstOrThrow({
+        where: { action: 'archive.create', outcome: 'failure' },
+      })
+    ).toMatchObject({ targetId: null, targetName: 'Failed output.zip' })
+    expect(
+      JSON.stringify(
+        await prisma.auditEvent.findMany({ where: { category: 'archives' } })
+      )
+    ).not.toMatch(/source-content|Missing fixture object|uploads\//)
+  })
+
+  it('audits anonymous shared-member access and password/private denials without credentials', async () => {
+    const file = await publicArchive('archive-password-fixture')
+    state.userId = ''
+    await prisma.auditEvent.deleteMany()
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'wrong-password-fixture' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(401)
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { visibility: 'PRIVATE' },
+    })
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'archive-password-fixture' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    await prisma.file.update({
+      where: { id: file.id },
+      data: { visibility: 'PUBLIC' },
+    })
+    const response = await sharedDownload.POST(
+      sharedRequest(
+        file.id,
+        { path: 'notes/readme.txt', password: 'archive-password-fixture' },
+        true
+      ),
+      context(file.id)
+    )
+    expect(await response.text()).toBe('Hello archive')
+    await waitForArchiveRelease(`share:${file.id}`)
+    state.onRead = async () => {
+      state.onRead = undefined
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { visibility: 'PRIVATE' },
+      })
+    }
+    expect(
+      (
+        await sharedListing.POST(
+          sharedRequest(file.id, { password: 'archive-password-fixture' }),
+          context(file.id)
+        )
+      ).status
+    ).toBe(404)
+    const events = await prisma.auditEvent.findMany({
+      where: { category: 'archives' },
+    })
+    expect(
+      events
+        .filter((event) => event.action === 'archive.browse')
+        .map((event) => event.outcome)
+    ).toEqual(['denied', 'denied', 'denied'])
+    expect(
+      events.find((event) => event.action === 'archive.member.read')
+    ).toMatchObject({
+      actorId: null,
+      actorName: 'Anonymous',
+      targetId: file.id,
+      targetName: 'source.zip',
+      details: { name: 'notes/readme.txt' },
+    })
+    expect(JSON.stringify(events)).not.toMatch(
+      /password-fixture|Hello archive|source-password-hash|uploads\//
+    )
+  })
 
   it('lets anonymous share visitors browse and download JSON or form entries without exposing credentials or changing account data', async () => {
     const file = await publicArchive('sender secret')

@@ -1,4 +1,4 @@
-import type { User } from '@prisma/client'
+import type { BrowserSession, User } from '@prisma/client'
 import type { NextAuthOptions } from 'next-auth'
 import { createHash, generateKeyPairSync, randomUUID, sign } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -17,6 +17,8 @@ import {
 import { getAuthOptions } from '@/lib/auth'
 import type { FlareConfig } from '@/lib/config'
 import { type RoleSummary } from '@/lib/permissions/catalog'
+
+vi.mock('@/lib/audit', () => ({ recordAudit: vi.fn(), setAuditActor: vi.fn() }))
 
 vi.mock('@/lib/email/config', async () => {
   const { DEFAULT_EMAIL_CONFIG } = await import('@/lib/email/schema')
@@ -58,6 +60,7 @@ const db = vi.hoisted(() => {
   }
   return {
     rows: [] as StoredUser[],
+    sessions: [] as BrowserSession[],
     oidc,
     create: vi.fn(),
     update: vi.fn(),
@@ -143,17 +146,64 @@ vi.mock('@/lib/database/prisma', async () => {
       }
     ),
   }
+  const browserSession = {
+    create: vi.fn(async ({ data }: { data: Partial<BrowserSession> }) => {
+      const row = {
+        id: `session-${db.sessions.length}`,
+        createdAt: new Date(),
+        lastSeenAt: new Date(),
+        revokedAt: null,
+        ...data,
+      } as BrowserSession
+      db.sessions.push(row)
+      return { ...row }
+    }),
+    findFirst: vi.fn(
+      async ({
+        where,
+      }: {
+        where: {
+          id: string
+          userId: string
+          sessionVersion: number
+          revokedAt: null
+          expiresAt: { gt: Date }
+        }
+      }) =>
+        db.sessions.find(
+          (row) =>
+            row.id === where.id &&
+            row.userId === where.userId &&
+            row.sessionVersion === where.sessionVersion &&
+            row.revokedAt === null &&
+            row.expiresAt > where.expiresAt.gt
+        ) || null
+    ),
+    updateMany: vi.fn(async () => ({ count: 0 })),
+  }
+  const loginAttempt = { create: vi.fn(async () => ({})) }
   return {
     prisma: {
       user,
       role,
+      browserSession,
+      loginAttempt,
+
       $transaction: async <T>(
         callback: (tx: {
           user: typeof user
           role: typeof role
           $executeRaw: ReturnType<typeof vi.fn>
         }) => T
-      ) => callback({ user, role, $executeRaw: vi.fn() }),
+      ) =>
+        callback({
+          user,
+          role,
+          browserSession,
+          loginAttempt,
+          $queryRaw: vi.fn(),
+          $executeRaw: vi.fn(),
+        } as never),
     },
   }
 })
@@ -398,6 +448,7 @@ describe.sequential('OIDC protocol and application sign-in', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     db.rows = [makeUser()]
+    db.sessions = []
     Object.assign(db.oidc, {
       issuer,
       autoProvision: true,

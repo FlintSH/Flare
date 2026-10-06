@@ -9,6 +9,8 @@ Browsing folders uses `files.read`; creating and organizing them requires `folde
 
 Folders give a project or collection its own place while **All files** keeps your entire library available. Each file belongs to one folder or is unfiled. [Tags](./tags) work across folders when a file belongs to several topics.
 
+Folder and file organization changes can leave names and IDs in the [instance audit log](/admin/audit), visible to people with `audit.read` even when the folder is not shared.
+
 Everyone initially includes folder permissions; an administrator can restrict them through roles. Creating a folder does not change file links, storage paths, visibility, or passwords.
 
 <Screenshot src="/evidence/vault-folders/folder-desktop.jpg" alt="A folder containing files, a child folder, tags, and Share and Upload here controls" caption="Browse a project's direct files while keeping subfolders and sharing controls close by." />

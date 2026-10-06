@@ -1,8 +1,9 @@
+import { withAuditRoute } from '@/lib/audit'
 import { isPasswordRecoveryAvailable } from '@/lib/email/account'
 import { emailRoute, emailSession } from '@/lib/email/http'
 import { hasVerifiedEmail, requiresEmailVerification } from '@/lib/email/policy'
 
-export async function GET() {
+async function handleGET() {
   return emailRoute(async () => {
     const { user, config } = await emailSession()
     return {
@@ -26,4 +27,10 @@ export async function GET() {
       graceEndsAt: config.verification.graceEndsAt,
     }
   })
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/auth/email/status',
+  })()
 }

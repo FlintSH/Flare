@@ -1,8 +1,9 @@
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser } from '@/lib/email/account'
 import { emailRoute, emailSession } from '@/lib/email/http'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return emailRoute(async () => {
     const { user } = await emailSession(req)
     await prisma.$transaction(async (tx) => {
@@ -22,4 +23,10 @@ export async function POST(req: Request) {
     })
     return { message: 'The pending email change was canceled.' }
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/email/cancel-change',
+  })(req)
 }

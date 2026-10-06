@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getEmailCapabilities } from '@/lib/email/config'
 
-export async function GET() {
+async function handleGET() {
   try {
     return NextResponse.json(await getEmailCapabilities())
   } catch {
@@ -11,4 +12,10 @@ export async function GET() {
       { status: 503 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/auth/email/capabilities',
+  })()
 }

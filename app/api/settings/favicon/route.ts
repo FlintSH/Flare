@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { join } from 'path'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getConfig, updateConfigSection } from '@/lib/config'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -9,7 +10,7 @@ import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('appearance.manage')
@@ -57,4 +58,10 @@ export async function POST(req: Request) {
     logger.error('Error updating favicon:', error as Error)
     return new NextResponse('Internal server error', { status: 500 })
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/settings/favicon',
+  })(req)
 }

@@ -1,4 +1,5 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { folderErrorResponse, folderMutationGuard } from '@/lib/folders/http'
 import { folderUpdateSchema } from '@/lib/folders/schema'
@@ -7,7 +8,7 @@ import { hasPermission } from '@/lib/permissions/catalog'
 
 type Context = { params: Promise<{ id: string }> }
 
-export async function PATCH(request: Request, { params }: Context) {
+async function handlePATCH(request: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -26,7 +27,7 @@ export async function PATCH(request: Request, { params }: Context) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Context) {
+async function handleDELETE(request: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -38,4 +39,16 @@ export async function DELETE(request: Request, { params }: Context) {
   } catch (error) {
     return folderErrorResponse(error)
   }
+}
+
+export async function PATCH(request: Request, { params }: Context) {
+  return withAuditRoute(async () => handlePATCH(request, { params }), {
+    route: '/api/folders/[id]',
+  })(request)
+}
+
+export async function DELETE(request: Request, { params }: Context) {
+  return withAuditRoute(async () => handleDELETE(request, { params }), {
+    route: '/api/folders/[id]',
+  })(request)
 }

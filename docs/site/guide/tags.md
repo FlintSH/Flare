@@ -9,7 +9,7 @@ Viewing tags in your library uses `files.read`. Creating tags/rules and applying
 
 Tags let a file belong to several topics without duplicating or moving it. A screenshot might have **Website**, **Bug report**, and **Release 2** tags while staying in its project folder.
 
-Tags, automatic matching rules, and tag names are private to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs.
+Tags, automatic matching rules, and tag names belong to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs. People with `audit.read` can see recorded tag names, IDs, and change metadata in the [instance audit log](/admin/audit); account organization is not hidden from that administrative history.
 
 <Screenshot src="/screenshots/timeline/library-desktop.webp" alt="The continuous file library with tags shown beneath individual file previews" caption="Labels add context to your library without changing where a file lives." />
 

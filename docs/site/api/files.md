@@ -301,7 +301,9 @@ if (bucket) {
 
 The timeline creates a new `snapshot` ceiling from PostgreSQL’s clock on every request, matching the clock used for upload timestamps even when the application host’s clock differs. It is an upload-time boundary, **not a durable database snapshot or continuation token**. Files uploaded later are excluded from subsequent windows that retain that ceiling. Deletions, backdated inserts, sharing/folder/tag changes, and changes to size/name/view/download sorts can still move results; fetch a fresh timeline and clear cached windows after a mutation or when refreshing. Offset reads within a very large bucket or a non-date sort can still cost more than early pages. Ordinary page clients and anchored image navigation remain supported unchanged.
 
-Timeline responses use `Cache-Control: private, no-store`. Invalid groupings, time zones, dates, or visibility filters return `400`; auth and current-role failures use the same `401`/`403` behavior as listing. Pagination and gallery parameters do not apply to timeline summaries.
+Timeline responses use `Cache-Control: private, no-store`. Invalid groupings, time zones, dates, visibility, or selected-ID filters return `400`; auth and current-role failures use the same `401`/`403` behavior as listing. Pagination and gallery parameters do not apply to timeline summaries.
+
+File-list and timeline reads can appear as request-level `http.get` events in the [instance audit log](/admin/audit). These include the acting account and applicable token ID when available, without recording the bearer secret. The log uses its existing access, retention, and best-effort rules; reading metadata does not itself create file-ready webhook events.
 
 ## Discover file types
 

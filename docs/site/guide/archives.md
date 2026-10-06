@@ -20,6 +20,8 @@ Creation and extraction remain **owner-only library operations** requiring a sig
 
 Existing files and links stay unchanged. **Private (no profile)** is the default for extraction and creation: new files are private, with no file password or expiration. Your account's default upload profile is not selected automatically. You can explicitly choose an owned **Upload profile** to apply its sharing, tags, expiration, naming, and share-page settings. Review the summary before confirming: a public profile can make new outputs public. Original files' Flare passwords and visibility are not copied into the result.
 
+Archive activity can appear in the administrator's [audit log](../admin/audit), including archive filenames, selected member paths, outcomes, and the acting account when available. File passwords and entry contents are not recorded as audit metadata. Making an archive private or deleting it does not remove its existing audit history.
+
 The screenshots below show real operations with disposable demonstration files. Watch the recorded [library workflows](../demos#browse-and-extract-an-archive) and [shared browsing](../demos#browse-and-download-a-shared-archive), or [reproduce them locally](../contributing#archive-browser-checks-and-demos).
 
 ## Browse and save one entry

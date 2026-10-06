@@ -45,6 +45,32 @@ This recording uses real application requests and a disposable account seeded wi
 
 This is Chromium rendering the real application at mobile width, using the same local database as the desktop recording. It demonstrates the narrow layout and full-library date navigation; it is not a physical-phone or touch-gesture recording.
 
+### Review and revoke browser sessions
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Review and revoke browser sessions: silent Flare recording" :src="withBase('/demos/session-management.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open **Profile → Account** on the isolated demonstration instance and scroll to **Active sessions**.
+2. Review **This browser** and the other signed-in browser sessions, including their sign-in methods and activity times.
+3. Inspect **Login history**, where a rejected demonstration password appears as **Failed** beside successful sign-ins.
+4. Choose **Revoke session** on another browser and confirm **Revoke session**. The list reloads without that session; the browser check separately verifies its next authenticated request is rejected.
+5. Choose **Revoke all sessions** and confirm **Revoke all and sign out**. The current browser returns to sign-in too.
+
+The recording uses real browser sign-ins and server revocations against a disposable database. Revocation applies to subsequent protected requests; API credentials and previously issued storage URLs have separate lifetimes. [Follow the account guide](./guide/account#login-history-and-active-sessions). The recording stays at desktop width. Separate screenshots and browser checks in that guide cover the mobile controls.
+
+### Investigate instance activity
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Investigate instance activity: silent Flare audit-log recording" :src="withBase('/demos/audit-investigation.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open **Audit log** on the isolated demonstration instance with an administrator session.
+2. Review recorded activity produced by a real demonstration upload, visibility changes, download, denied access, actual OCR of a generated receipt image, a rejected OCR request on a text file, deletion, role assignment, and settings change.
+3. Enter **quarterly-report.txt** in **Search activity**, choose **Apply filters**, and expand a **File delete** event. The deleted filename and acting account remain recorded.
+4. Review **Recorded details** and request context. Choose **Clear filters**, set **Outcome** to **Denied**, and apply to inspect refused requests.
+5. Add **missing-demo-filename** to search and apply. Flare shows **No activity matches these filters**. Clear the filters and return to recent instance activity.
+
+These screens display real events produced by demonstration operations. The setup uses API requests before opening the recorded audit page; the recording shows investigation of those events. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
+
+The audit guide also includes a [separate real-server archive investigation capture](./admin/audit), produced by creating, browsing, downloading from, and extracting an archive on the disposable instance. [Reproduce the combined archive/audit check](./contributing#sessions-and-audit-browser-checks-and-demos) to verify those events; they are separate from the recorded investigation above.
+
 ### Browse and extract an archive
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse and extract an archive: silent Flare recording" :src="withBase('/demos/archive-browse-extract.webm')">Your browser does not support this video. Follow the transcript below.</video>

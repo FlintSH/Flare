@@ -8,6 +8,8 @@ Choose a storage backend during setup or under **Settings → Storage**. Changin
 
 <Screenshot src="/screenshots/preferences/settings-storage.png" alt="Flare Storage settings showing the storage provider and upload limits" caption="Storage and quota controls live together in Settings." />
 
+Session records, login history, and [audit events](/admin/audit) are stored in PostgreSQL, independently of local/S3 file bytes. They do not count toward a user's uploaded-file quota. Monitor database growth and preserve these records in [backups](./maintenance#sessions-and-audit-log-migration); deleting an uploaded object does not remove its historical audit metadata.
+
 ## Local storage
 
 Local storage writes beneath the application's `uploads` directory: **`/app/uploads` in the official container**. Mount a persistent volume there. The app runs as UID/GID `1001`; its entrypoint prepares upload-directory ownership on startup.
@@ -76,6 +78,8 @@ The shared-read rate budget resets when the process restarts. Client identificat
 Extracting adds new file records and storage bytes while retaining the original archive. Creating an archive adds one new file while retaining all selected source files. Outputs default to private/no expiration, without inheriting the account’s default profile. An explicitly selected owned profile instead supplies sharing, tags, expiration, naming, and share style; its current permissions, revision, and effective inherited settings are checked before publication. Changing an inherited account or instance default can return `409` and require the user to review the refreshed profile summary. The normal account quota and maximum output-file size apply; quota bypass does not remove fixed archive limits. Failed operations do not publish partial output sets. Archive creation is not a backup or storage migration: preserve the database, stored files, and secrets using the [backup procedure](./maintenance).
 
 If output objects were written before a failure, their uncommitted paths are queued for the existing [storage deletion worker](./maintenance#account-storage-cleanup) using the recorded destination target. Bytes can remain until that worker succeeds. A database failure that prevents queuing is logged and requires operator reconciliation; atomic publication of file records is not a promise that every failed storage write disappears immediately.
+
+Archive requests and published file/folder changes can appear in the [instance audit log](/admin/audit). Archive names and selected member paths are sensitive operational metadata, even when outputs are private. These records use the existing best-effort audit storage and retention rules; a successful entry response does not prove that the later stream reached the recipient completely.
 
 ## Changing backend or bucket
 

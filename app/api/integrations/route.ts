@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { encryptSecret } from '@/lib/email/crypto'
@@ -73,7 +74,7 @@ const webhookSelect = {
   createdAt: true,
 } as const
 
-export async function GET() {
+async function handleGET() {
   const session = await getAccessSession()
   if (!session?.user)
     return NextResponse.json(
@@ -136,7 +137,7 @@ export async function GET() {
   )
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getAccessSession()
   if (!session?.user)
     return NextResponse.json(
@@ -352,7 +353,9 @@ export async function POST(request: Request) {
           },
         })) >= 10
       )
-        return { error: 'Webhook test limit reached. Try again in an hour.' }
+        return {
+          error: 'Webhook test limit reached. Try again in an hour.',
+        }
       const id = `test:${randomUUID()}`
       await tx.webhookDelivery.create({
         data: {
@@ -392,4 +395,16 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), {
+    route: '/api/integrations',
+  })()
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/integrations',
+  })(request)
 }

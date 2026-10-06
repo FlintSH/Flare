@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
@@ -19,7 +20,7 @@ import {
 
 type Context = { params: Promise<{ id: string }> }
 
-export async function GET(_req: Request, { params }: Context) {
+async function handleGET(_req: Request, { params }: Context) {
   const { response } = await requirePermission('users.email')
   if (response) return response
   return emailRoute(async () => {
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: Context) {
   })
 }
 
-export async function POST(req: Request, { params }: Context) {
+async function handlePOST(req: Request, { params }: Context) {
   const { user: actor, response } = await requirePermission('users.email')
   if (response) return response
   return emailRoute(async () => {
@@ -53,7 +54,9 @@ export async function POST(req: Request, { params }: Context) {
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
-      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
+      const row = await tx.config.findUnique({
+        where: { key: 'flare_config' },
+      })
       if (row) {
         const saved = row.value as { settings?: { email?: unknown } }
         config = resolveEmailConfig(saved.settings?.email).config
@@ -87,4 +90,16 @@ export async function POST(req: Request, { params }: Context) {
           : 'Email verification exemption updated.',
     }
   })
+}
+
+export async function GET(_req: Request, { params }: Context) {
+  return withAuditRoute(async () => handleGET(_req, { params }), {
+    route: '/api/users/[id]/email',
+  })(_req)
+}
+
+export async function POST(req: Request, { params }: Context) {
+  return withAuditRoute(async () => handlePOST(req, { params }), {
+    route: '/api/users/[id]/email',
+  })(req)
 }

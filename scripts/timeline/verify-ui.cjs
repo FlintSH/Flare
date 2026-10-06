@@ -2,9 +2,11 @@
 // Exercise the real server and seeded account. Only the explicit recovery check
 // aborts one network request; all recordings use real, successful server responses.
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
 const { mkdir, mkdtemp, rmdir, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const path = require('node:path')
+const { promisify } = require('node:util')
 const { checkRecordingEncoder, encodeRecording } = require('./recording.cjs')
 const {
   chromium,
@@ -12,6 +14,7 @@ const {
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
 const expect = baseExpect.configure({ timeout: 90_000 })
+const execFileAsync = promisify(execFile)
 
 const origin = process.env.FLARE_TIMELINE_TEST_ORIGIN || 'http://localhost:3064'
 const target = new URL(origin)
@@ -222,6 +225,99 @@ async function saveRecording(video, name) {
   await encodeRecording(source, path.join(videos, `${name}.mp4`))
   await video.delete()
   await rmdir(path.dirname(source))
+}
+
+async function verifyNamedReads(ctx) {
+  const started = new Date().toISOString()
+  const created = []
+  const ownedId = 'timeline-demo-file-00000'
+  const foreignId = 'timeline-demo-other-account-file'
+  try {
+    for (const scope of ['files:read', 'files:upload']) {
+      const response = await ctx.request.post(origin + '/api/integrations', {
+        headers: { Origin: origin },
+        data: {
+          action: 'create-token',
+          name: `Timeline browser verification ${scope}`,
+          scopes: [scope],
+        },
+      })
+      assert.equal(response.status(), 200, 'Create disposable named token')
+      created.push(await response.json())
+    }
+    const [reader, uploader] = created
+    for (const endpoint of ['/api/files', '/api/files/timeline']) {
+      const url = new URL(endpoint, origin)
+      url.searchParams.set('ids', `${ownedId},${foreignId}`)
+      if (endpoint === '/api/files') url.searchParams.set('limit', '100')
+      else url.searchParams.set('timezone', 'UTC')
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${reader.secret}` },
+      })
+      assert.equal(response.status, 200, 'Named read scope permits metadata')
+      const result = await response.json()
+      if (endpoint === '/api/files')
+        assert.deepEqual(
+          result.data.map((file) => file.id),
+          [ownedId]
+        )
+      else assert.equal(result.data.total, 1)
+      const denied = await fetch(url, {
+        headers: { Authorization: `Bearer ${uploader.secret}` },
+      })
+      assert.equal(denied.status, 401, 'Upload-only scope cannot read metadata')
+    }
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ['examples/integrations.mjs', 'files', ownedId, foreignId],
+      { env: { ...process.env, FLARE_URL: origin, FLARE_TOKEN: reader.secret } }
+    )
+    assert.deepEqual(
+      JSON.parse(stdout).data.map((file) => file.id),
+      [ownedId]
+    )
+    const audit = await ctx.request.get(
+      origin +
+        '/api/audit?' +
+        new URLSearchParams({ action: 'http.get', from: started, limit: '100' })
+    )
+    assert.equal(audit.status(), 200)
+    const { events } = await audit.json()
+    for (const route of ['/api/files', '/api/files/timeline']) {
+      assert.ok(
+        events.some(
+          (event) =>
+            event.route === route &&
+            event.actorId === 'timeline-demo-alex' &&
+            event.details.tokenId === reader.token.id &&
+            event.outcome === 'success'
+        ),
+        `Named read is attributed to its owner and token at ${route}`
+      )
+      assert.ok(
+        events.some(
+          (event) =>
+            event.route === route &&
+            event.actorId === null &&
+            event.outcome === 'denied'
+        ),
+        `Rejected read scope is audited at ${route}`
+      )
+    }
+    assert.ok(!JSON.stringify(events).includes(reader.secret))
+    assert.ok(!JSON.stringify(events).includes(uploader.secret))
+    passed(
+      'Named-token selected-ID reads and the example client enforce ownership/scope and audit the owner/token without credentials'
+    )
+  } finally {
+    for (const entry of created) {
+      const response = await ctx.request.post(origin + '/api/integrations', {
+        headers: { Origin: origin },
+        data: { action: 'revoke-token', id: entry.token.id },
+      })
+      assert.equal(response.status(), 200, 'Revoke disposable named token')
+    }
+  }
 }
 
 async function main() {
@@ -626,12 +722,10 @@ async function main() {
       .click()
     await ready(page)
     await expect(
-      page
-        .locator('[data-file-index="0"]')
-        .getByRole('button', {
-          name: 'Show files tagged Favorites',
-          exact: true,
-        })
+      page.locator('[data-file-index="0"]').getByRole('button', {
+        name: 'Show files tagged Favorites',
+        exact: true,
+      })
     ).toHaveCount(0)
     await page
       .getByRole('slider', { name: 'Browse files by date' })
@@ -671,6 +765,7 @@ async function main() {
     passed(
       'Bulk tags refresh offscreen selections after a real external removal and submit add for the unchecked tag'
     )
+    await verifyNamedReads(details.ctx)
     await top(page)
     await page
       .getByRole('link', {

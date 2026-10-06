@@ -2,6 +2,7 @@ import type { BaseEvent, EventPayload } from '@/types/events'
 import { ExpiryAction } from '@/types/events'
 import type { Prisma } from '@prisma/client'
 
+import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
@@ -69,6 +70,21 @@ async function expireFile(
           },
         })
       } else throw new Error('Invalid file expiration action.')
+      await recordAudit({
+        action: 'file.expiration.applied',
+        category: 'files',
+        actorId: null,
+        actorName: 'System',
+        targetType: 'file',
+        targetId: file.id,
+        targetName: file.name,
+        details: {
+          ownerId: file.userId,
+          eventId: event.id,
+          expiresAt: currentEvent.scheduledAt,
+          expiryAction: payload.action,
+        },
+      })
       logger.info('File expiration applied', {
         fileId: file.id,
         action: payload.action,
@@ -157,6 +173,14 @@ export async function scheduleFileExpiration(
         },
       },
     })
+    await recordAudit({
+      action: 'file.expiration.scheduled',
+      category: 'files',
+      targetType: 'file',
+      targetId: file.id,
+      targetName: file.name,
+      details: { ownerId: file.userId, expiresAt, expiryAction: action },
+    })
   })
 }
 
@@ -176,6 +200,33 @@ export async function cancelFileExpiration(fileId: string): Promise<boolean> {
       where: { id: fileId },
       data: { uploadOptions: { ...options, expiresAt: null } },
     })
+    if (count > 0) {
+      const previousExpiry =
+        typeof options.expiresAt === 'string'
+          ? new Date(options.expiresAt)
+          : null
+      await recordAudit({
+        action: 'file.expiration.cancelled',
+        category: 'files',
+        targetType: 'file',
+        targetId: file.id,
+        targetName: file.name,
+        details: {
+          ownerId: file.userId,
+          count,
+          expiresAt:
+            previousExpiry && !Number.isNaN(previousExpiry.getTime())
+              ? previousExpiry
+              : undefined,
+          expiryAction: [
+            ExpiryAction.DELETE,
+            ExpiryAction.SET_PRIVATE,
+          ].includes(options.expiryAction as ExpiryAction)
+            ? options.expiryAction
+            : undefined,
+        },
+      })
+    }
     return count > 0
   })
 }

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import {
+  Activity,
   FileText,
   FolderOpen,
   LinkIcon,
@@ -65,6 +66,12 @@ const baseRoutes = [
 ]
 
 const managementRoutes = [
+  {
+    href: '/dashboard/audit',
+    label: 'Audit log',
+    icon: Activity,
+    permission: 'audit.read',
+  },
   {
     href: '/dashboard/roles',
     label: 'Roles',

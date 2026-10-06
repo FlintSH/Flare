@@ -1,6 +1,7 @@
 import { ExpiryAction } from '@/types/events'
 
 import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import {
@@ -13,7 +14,7 @@ import { hasPermission } from '@/lib/permissions/catalog'
 
 const logger = loggers.files
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -44,7 +45,7 @@ export async function GET(
   }
 }
 
-export async function POST(
+async function handlePOST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -102,7 +103,7 @@ export async function POST(
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -134,4 +135,31 @@ export async function DELETE(
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     )
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    route: '/api/files/[id]/expiry',
+  })(req)
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handlePOST(req, { params }), {
+    route: '/api/files/[id]/expiry',
+  })(req)
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleDELETE(req, { params }), {
+    route: '/api/files/[id]/expiry',
+  })(req)
 }

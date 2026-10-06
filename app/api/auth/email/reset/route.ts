@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { resetPassword } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
 import { emailRoute } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   return emailRoute(async () => {
     const { token, password } = z
       .object({
@@ -27,4 +28,10 @@ export async function POST(req: Request) {
       message: 'Your password was changed. Sign in with your new password.',
     }
   })
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/auth/email/reset',
+  })(req)
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
@@ -8,7 +9,7 @@ import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-export async function GET(
+async function handleGET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -21,6 +22,8 @@ export async function GET(
     const file = await prisma.file.findUnique({
       where: { id },
       select: {
+        id: true,
+        name: true,
         mimeType: true,
         path: true,
         visibility: true,
@@ -37,8 +40,11 @@ export async function GET(
       return new NextResponse('Not an image', { status: 400 })
     }
 
+    setAuditTarget({ type: 'file', id: file.id, name: file.name })
+
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
+      setAuditOutcome('denied')
       return new NextResponse(null, {
         status: access.status,
         headers: { 'Cache-Control': 'private, no-store' },
@@ -63,4 +69,15 @@ export async function GET(
     logger.error('Error serving thumbnail:', error as Error)
     return new NextResponse('Error serving thumbnail', { status: 500 })
   }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(request, { params }), {
+    action: 'file.thumbnail',
+    category: 'files',
+    route: '/api/files/[id]/thumbnail',
+  })(request)
 }

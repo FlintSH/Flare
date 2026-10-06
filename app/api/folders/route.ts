@@ -1,4 +1,5 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { folderErrorResponse, folderMutationGuard } from '@/lib/folders/http'
@@ -9,7 +10,7 @@ import {
   folderViewSelect,
 } from '@/lib/folders/service'
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -37,4 +38,16 @@ export async function POST(request: Request) {
   } catch (error) {
     return folderErrorResponse(error)
   }
+}
+
+export async function GET(request: Request) {
+  return withAuditRoute(async () => handleGET(request), {
+    route: '/api/folders',
+  })(request)
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/folders',
+  })(request)
 }

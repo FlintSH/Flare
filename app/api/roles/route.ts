@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { PERMISSION_GROUPS, hasPermission } from '@/lib/permissions/catalog'
@@ -15,7 +16,7 @@ import {
   roleSelect,
 } from '@/lib/permissions/server'
 
-export async function GET() {
+async function handleGET() {
   const session = await getAccessSession()
   if (!session?.user)
     return NextResponse.json(
@@ -50,7 +51,7 @@ export async function GET() {
   )
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const { user, response } = await requirePermission('roles.manage')
   if (response) return response
   const rejected = roleMutationGuard(request)
@@ -89,4 +90,14 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function GET() {
+  return withAuditRoute(async () => handleGET(), { route: '/api/roles' })()
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/roles',
+  })(request)
 }

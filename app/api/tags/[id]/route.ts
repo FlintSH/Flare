@@ -1,4 +1,5 @@
 import { apiResponse } from '@/lib/api/response'
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
@@ -7,7 +8,7 @@ import { TagError, tagView, tagViewSelect } from '@/lib/tags/service'
 
 type Context = { params: Promise<{ id: string }> }
 
-export async function PATCH(request: Request, { params }: Context) {
+async function handlePATCH(request: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -26,7 +27,7 @@ export async function PATCH(request: Request, { params }: Context) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Context) {
+async function handleDELETE(request: Request, { params }: Context) {
   try {
     const { user, response } = await requireAuth(request)
     if (response) return response
@@ -66,4 +67,16 @@ export async function DELETE(request: Request, { params }: Context) {
   } catch (error) {
     return tagErrorResponse(error)
   }
+}
+
+export async function PATCH(request: Request, { params }: Context) {
+  return withAuditRoute(async () => handlePATCH(request, { params }), {
+    route: '/api/tags/[id]',
+  })(request)
+}
+
+export async function DELETE(request: Request, { params }: Context) {
+  return withAuditRoute(async () => handleDELETE(request, { params }), {
+    route: '/api/tags/[id]',
+  })(request)
 }

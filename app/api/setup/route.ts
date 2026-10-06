@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -20,7 +21,7 @@ class SetupAlreadyCompleteError extends Error {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const limited = await rateLimit(req, setupLimiter)
   if (limited) return limited
 
@@ -107,4 +108,10 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), { route: '/api/setup' })(
+    req
+  )
 }

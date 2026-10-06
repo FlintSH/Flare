@@ -336,13 +336,13 @@ async function browseAndExtract(browser, state, fixture) {
   )
   assert.ok((await content.text()).includes('A small project handoff'))
   await page.getByRole('link', { name: 'Open folder', exact: true }).click()
-  await expect(
-    page.getByRole('button', { name: /guide/ }).first()
-  ).toBeVisible()
-  await shot(page, 'extracted-folder')
-  await page
+  await page.waitForURL((url) => url.searchParams.get('folder') === root.id)
+  const guide = page
+    .getByRole('region', { name: 'Subfolders', exact: true })
     .getByRole('button', { name: 'Open folder guide', exact: true })
-    .click()
+  await expect(guide).toBeVisible()
+  await shot(page, 'extracted-folder')
+  await guide.click()
   await expect(
     page.getByRole('button', { name: 'Manage README.md', exact: true })
   ).toBeVisible()

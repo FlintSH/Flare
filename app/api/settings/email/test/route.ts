@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { emailAdminAccess, emailSettingsError } from '@/lib/email/admin'
 import {
   getSavedEmailConfig,
@@ -23,7 +24,7 @@ const testSchema = z.object({
   clearPassword: z.boolean().optional(),
 })
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const denied = await emailAdminAccess(request)
   if (denied) return denied
   try {
@@ -59,4 +60,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return emailSettingsError(error)
   }
+}
+
+export async function POST(request: Request) {
+  return withAuditRoute(async () => handlePOST(request), {
+    route: '/api/settings/email/test',
+  })(request)
 }

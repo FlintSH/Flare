@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -20,7 +21,7 @@ interface FileData {
   password: string | null
 }
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -50,7 +51,9 @@ export async function GET(
         ? {
             OR: [
               { name: { contains: search, mode: 'insensitive' as const } },
-              { ocrText: { contains: search, mode: 'insensitive' as const } },
+              {
+                ocrText: { contains: search, mode: 'insensitive' as const },
+              },
             ],
           }
         : {}),
@@ -96,4 +99,13 @@ export async function GET(
     logger.error('Error fetching user files:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    route: '/api/users/[id]/files',
+  })(req)
 }

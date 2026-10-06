@@ -122,3 +122,7 @@ The last-used timestamp is best-effort activity metadata, not a full audit log. 
 | `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                   |
 
 Missing credentials, unknown tokens, expired tokens, revoked tokens, missing scopes, and required email verification intentionally share a generic `401` response. The server does not reveal which authentication check failed to an unauthenticated caller. An authenticated request lacking a current role permission returns `403`; restoring that role grant can restore access without issuing another token.
+
+## Browser-session revocation and audit access
+
+[Active sessions](/guide/account#login-history-and-active-sessions) tracks interactive sign-ins only. Revoking one or all browser sessions does not revoke named API tokens or rotate the legacy upload credential. Retire those separately in Profile when responding to compromised access. Tokens are never accepted by the session-history or [audit API](./activity), even when their owner has Administrator or `audit.read`. Recorded token-authorized activity identifies the account and applicable operation without retaining the token secret.

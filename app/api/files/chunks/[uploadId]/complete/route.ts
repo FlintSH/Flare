@@ -1,8 +1,9 @@
+import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { completeChunkUpload } from '@/lib/uploads/chunks'
 import { uploadErrorResponse } from '@/lib/uploads/options'
 
-export async function POST(
+async function handlePOST(
   req: Request,
   { params }: { params: Promise<{ uploadId: string }> }
 ) {
@@ -17,4 +18,13 @@ export async function POST(
   } catch (error) {
     return uploadErrorResponse(error)
   }
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ uploadId: string }> }
+) {
+  return withAuditRoute(async () => handlePOST(req, { params }), {
+    route: '/api/files/chunks/[uploadId]/complete',
+  })(req)
 }

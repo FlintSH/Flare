@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
@@ -16,7 +17,7 @@ const flameshotSchema = z.object({
   useCompositor: z.boolean(),
 })
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   try {
     const { session, response: permissionDenied } =
       await requirePermission('tokens.manage')
@@ -222,4 +223,10 @@ ${useWayland ? 'echo -n "$URL" | wl-copy' : 'echo -n "$URL" | xsel -ib'}
 echo "Screenshot uploaded successfully: $URL"
 ${useWayland ? 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"' : 'notify-send "Screenshot Uploaded" "URL copied to clipboard: $URL"'}
 exit 0`
+}
+
+export async function POST(req: Request) {
+  return withAuditRoute(async () => handlePOST(req), {
+    route: '/api/profile/flameshot',
+  })(req)
 }

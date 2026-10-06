@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 
+import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
 
 const logger = loggers.users
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -32,8 +33,18 @@ export async function GET(
       ...(search
         ? {
             OR: [
-              { shortCode: { contains: search, mode: 'insensitive' as const } },
-              { targetUrl: { contains: search, mode: 'insensitive' as const } },
+              {
+                shortCode: {
+                  contains: search,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                targetUrl: {
+                  contains: search,
+                  mode: 'insensitive' as const,
+                },
+              },
             ],
           }
         : {}),
@@ -68,4 +79,13 @@ export async function GET(
     logger.error('Error fetching user URLs:', error as Error)
     return new NextResponse('Internal Server Error', { status: 500 })
   }
+}
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return withAuditRoute(async () => handleGET(req, { params }), {
+    route: '/api/users/[id]/urls',
+  })(req)
 }

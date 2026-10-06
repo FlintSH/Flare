@@ -108,6 +108,7 @@ export default defineConfig({
         ['First-run setup', '/admin/setup'],
         ['Roles & permissions', '/admin/roles'],
         ['Manage accounts', '/admin/users'],
+        ['Audit log', '/admin/audit'],
         ['Appearance studio', '/admin/appearance'],
         ['Account email', '/admin/email'],
         ['Single sign-on', '/admin/sso'],
@@ -122,6 +123,7 @@ export default defineConfig({
         ['Recipes & examples', '/api/recipes'],
         ['Roles & session contracts', '/api/roles'],
         ['Sign-in security contracts', '/api/security'],
+        ['Sessions & audit contracts', '/api/activity'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
       group('Project', [

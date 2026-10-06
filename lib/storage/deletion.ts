@@ -1,6 +1,8 @@
 import type { Prisma, StorageDeletion } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
+import { recordAudit } from '@/lib/audit'
+import { auditContext } from '@/lib/audit/context'
 import { prisma } from '@/lib/database/prisma'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
@@ -118,6 +120,23 @@ export async function deleteAccountWithStorageCleanup(
     permission,
     async (tx) => {
       await queueAccountStorageDeletion(tx, targetId)
+      // PostgreSQL cascades bypass Prisma query hooks. Preserve every filename
+      // in the same transaction, without materializing a whole library in JS.
+      const context = auditContext.getStore()
+      const actor = await tx.user.findUnique({
+        where: { id: actorId },
+        select: { name: true },
+      })
+      await tx.$executeRaw`
+        INSERT INTO "AuditEvent"
+          (id, action, category, outcome, "actorId", "actorName",
+           "targetType", "targetId", "targetName", "requestId", details)
+        SELECT gen_random_uuid()::text, 'file.delete', 'files', 'success',
+          ${actorId}, ${actor?.name ?? actorId}, 'file', id, LEFT(name, 500),
+          ${context?.requestId ?? null},
+          jsonb_build_object('reason', 'Account deleted', 'ownerId', "userId")
+        FROM "File" WHERE "userId" = ${targetId}
+      `
       await tx.user.delete({ where: { id: targetId } })
     },
     self,
@@ -225,8 +244,40 @@ export async function processStorageDeletion(
     const completed = await prisma.storageDeletion.deleteMany({
       where: leaseWhere(job),
     })
+    if (completed.count === 1)
+      await recordAudit({
+        action: 'storage.deleted',
+        category: 'storage',
+        actorName: 'System',
+        targetType: 'StorageDeletion',
+        targetId: job.id,
+        details: {
+          ownerId: job.ownerId,
+          provider: job.provider,
+          attempts: job.attempts,
+        },
+      })
     return completed.count === 1
   } catch (error) {
+    await recordAudit({
+      action: 'storage.delete_failed',
+      category: 'storage',
+      outcome: 'failure',
+      actorName: 'System',
+      targetType: 'StorageDeletion',
+      targetId: job.id,
+      details: {
+        ownerId: job.ownerId,
+        provider: job.provider,
+        attempts: job.attempts,
+        reason:
+          error instanceof StorageTargetUnknown
+            ? 'Unknown storage provenance'
+            : error instanceof StorageTargetChangedError
+              ? 'Storage target changed'
+              : 'Storage deletion failed; retry scheduled',
+      },
+    })
     const delay = Math.min(
       STORAGE_DELETION_MAX_RETRY_MS,
       STORAGE_DELETION_RETRY_MS *
