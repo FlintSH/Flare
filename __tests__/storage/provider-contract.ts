@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { type Readable } from 'node:stream'
+import { setImmediate } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
 
 import { validateFileType } from '@/lib/security/file-validation'
@@ -75,6 +76,29 @@ export function runStorageProviderContract(
         await ctx.cleanup()
       }
     })
+
+    it.each([false, true])(
+      'retains bytes until a delayed consumer reads them (range: %s)',
+      async (ranged) => {
+        const { provider, prefix } = await makeProvider()
+        try {
+          const data = Buffer.from('0123456789')
+          const path = uniqueName(prefix, 'delayed-read.bin')
+          await provider.uploadFile(data, path, 'application/octet-stream')
+          const stream = await provider.getFileStream(
+            path,
+            ranged ? { start: 2, end: 6 } : undefined
+          )
+          // Response setup and audit writes can yield before reading starts.
+          // Yield through a full event-loop turn so an eager resume loses data.
+          await setImmediate()
+          const read = await streamToBuffer(stream)
+          expect(read).toEqual(ranged ? data.subarray(2, 7) : data)
+        } finally {
+          await ctx.cleanup()
+        }
+      }
+    )
 
     it('getFileStream honors inclusive ranges and open-ended ranges', async () => {
       const { provider, prefix } = await makeProvider()

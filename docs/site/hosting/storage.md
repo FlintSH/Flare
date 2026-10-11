@@ -35,6 +35,8 @@ The provider is configured through saved instance settings. Flare does not read 
 
 The credential needs the object operations Flare uses: read, write, delete, object metadata, and multipart upload/complete/abort. Bucket listing and copying are used by storage-level folder operations. Provider-specific permission names differ; scope access to this bucket and test upload, download, delete, avatar, and larger multipart workflows before inviting users. Flare's dashboard folders organize database records and do not create a public directory listing in the bucket.
 
+Thumbnail and other streamed reads keep the S3 response unread until their consumer starts reading, so response setup does not discard the image bytes. If an older build returns an empty `200` for a thumbnail, or the image optimizer returns `400` for it, update Flare and restart its replicas. Stored objects and credentials need no changes for this fix; follow [thumbnail troubleshooting](./troubleshooting#image-thumbnails-fail) if a preview remains broken.
+
 ### Private files and signed links
 
 Keep uploaded file objects private. Flare checks file access before serving or redirecting to a signed URL. Ordinary S3 object and download links created by the current implementation generally last **six hours**; multipart part-upload URLs last **one hour**. A recipient who has an unexpired signed URL can continue using that URL until expiry, even if a later Flare permission change would deny a new request. Deleting the object removes the underlying bytes.

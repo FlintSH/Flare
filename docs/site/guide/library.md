@@ -78,6 +78,10 @@ Grouping adds headings to the continuous list and adjusts the date rail to the s
 
 ## Inspect images
 
+Image cards show previews for public images and for your private or password-protected images. Protected previews use your browser session, and GIFs retain their animation. The thumbnail endpoint reads the original image; public raster cards can be resized by the image optimizer, while protected images and GIFs load the original bytes directly. Large originals can take longer to load. Only visible and nearby cards load as you scroll.
+
+<Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
+
 Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence.
 
 | Action                 | How                                        |
@@ -157,4 +161,6 @@ Choose **All files**, then **Reset filters**. A move, tag edit, or visibility ch
 
 ::: details A file downloads but has no preview
 Storage and browser preview support are separate. Flare previews common images, media, PDFs, text, code, and CSV. Unsupported formats remain downloadable. Browser codec support can also prevent playback even when the upload succeeded.
+
+For a supported image showing a generic icon, reload the page to retry its preview. If it still fails, check the thumbnail request as described in [thumbnail troubleshooting](/hosting/troubleshooting#image-thumbnails-fail).
 :::
