@@ -132,7 +132,9 @@ Removing the last administrator exemption under an all-user policy requires a ve
 
 With `users.read` and `content.read`, choose **View Content** on a user to inspect their files and shortened URLs. Changing their file settings needs `content.update`; deleting content needs `content.delete`. Content permissions are instance-wide, including content owned by accounts above your role; they do not grant role assignment or instance settings access. The content dialog provides search, pagination, and file filters. You can open files, adjust visibility, delete a file, inspect link destinations/clicks, and remove shortened links. Removing a user's avatar is available from their row. It clears the profile image immediately and queues the owned object for durable cleanup; stored bytes and cached copies can remain until cleanup or cache expiry.
 
-<Screenshot src="/screenshots/roles/users-content.webp" alt="Administrator content dialog listing a user's files and moderation actions" caption="Review an account's content without switching to its identity." />
+Image previews in **View Content** use your current browser session. With `content.read`, private and password-protected images load without signing in as the owner or entering the file password. Public previews and animated GIFs also load directly from Flare. The thumbnail endpoint currently streams the original image, so even these small previews can transfer large files.
+
+<Screenshot src="/screenshots/roles/users-content.webp" alt="Administrator content dialog showing loaded thumbnails for another user's public, private, password-protected, and animated GIF uploads" caption="Review an account's content without switching to its identity; private and protected previews use your moderator session." />
 
 Deletion has no recycle bin. Individual file deletion removes the database record and attempts to remove its bytes; it does not use the account-cleanup queue described below. If the storage backend is unavailable during individual file deletion, check logs for objects that may need reconciliation. Never make broad direct bucket deletions from a UI count alone.
 

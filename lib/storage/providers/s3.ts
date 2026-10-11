@@ -186,16 +186,12 @@ export class S3StorageProvider implements StorageProvider {
 
         const stream = response.Body as Readable
 
-        stream.pause()
-
         stream.on('error', (error) => {
           logger.error(`S3 stream error for ${key}`, error as Error, { key })
         })
 
-        process.nextTick(() => {
-          stream.resume()
-        })
-
+        // The consumer starts reading. Resuming before it attaches discards
+        // bytes while callers prepare responses or await other work.
         return signal ? addAbortSignal(signal, stream) : stream
       } catch (error) {
         signal?.throwIfAborted()

@@ -48,6 +48,16 @@ If accounts and file records remain but bytes cannot be read, check your storage
 
 If accounts and settings also disappeared, inspect the PostgreSQL volume and database URL. You may be connected to a new empty database. Do not complete setup again until you have checked whether the original data still exists.
 
+## Image thumbnails fail
+
+Check the direct `/api/files/{id}/thumbnail` response in the same signed-in browser, even if the failed request is to `/_next/image?url=.../thumbnail`. A successful image response must contain readable image bytes; `200` with an empty body is still a failure. The thumbnail endpoint streams the original image, and the optimizer can resize public library previews. Protected library previews and **View Content** use the browser session directly.
+
+An S3 stream bug in older builds could discard the image before the response started reading it. The direct route then returned an empty `200`, and the optimizer rejected it with `400` and `"url" parameter is valid but internal response is invalid`. Deploy the fixed build, restart all app replicas, and reload open tabs. Existing S3 objects need no re-upload, thumbnail regeneration, bucket permission change, or database migration. If a proxy retained an old empty response, purge the affected thumbnail URL after updating; ordinary file access rules still apply.
+
+For private or password-protected images that fail only in **View Content**, update the frontend too: current moderation previews bypass the image optimizer, which does not forward browser authentication headers. They use the moderator's existing `content.read` permission.
+
+If the direct request also fails, check that the session is still valid and has `files.read` for owned images or `content.read` for moderation. Private images are hidden with `404` from other visitors, and password-protected public images require the file password outside authorized owner/moderator sessions. For a `500`, inspect the application logs and storage availability. Keep file passwords and private file URLs out of support reports. See [library preview recovery](/guide/library#understand-activity-and-refresh) and [moderation permissions](/admin/users#moderate-files-and-shortened-links).
+
 ## S3 failures
 
 | Error or behavior                                     | Likely cause                                                                                                      |

@@ -654,8 +654,8 @@ export function UserList() {
             sizes="40px"
             priority={false}
             loading="lazy"
-            // Animated GIFs are flattened/broken by the optimizer; serve as-is.
-            unoptimized={file.mimeType === 'image/gif'}
+            // Moderation previews need this browser's session for file access.
+            unoptimized
           />
         </div>
       )

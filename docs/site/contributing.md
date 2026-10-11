@@ -189,6 +189,25 @@ It selects a tagged file, removes the tag through another authenticated client, 
 
 Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-tags.webp` during the successful membership read, before the simulated request failure. Inspect it before replacing `docs/images/timeline/library-tags.webp`. This separate tagging image supplements the seven library screenshots captured by `verify-ui.cjs`.
 
+### Thumbnail browser regression
+
+With the same disposable timeline database and server running, check thumbnail delivery in the library and another account's **View Content** dialog:
+
+```sh
+export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
+node scripts/timeline/verify-thumbnails.cjs
+```
+
+Keep `DATABASE_URL` set to the disposable `flare_timeline_test_local` database. The check refuses other database names and accounts. It uploads four temporary images through the real API, verifies the original thumbnail bytes and anonymous private/password access boundaries, and checks public, private, password-protected, and animated GIF previews at desktop and mobile widths. Public raster library cards retain image optimization; protected library previews, GIFs, and all moderation previews load directly. The second seeded administrator supplies the moderation session. Requests and uploads are real; the check uses no network stubs. It deletes its uploads afterward.
+
+Cleanup attempts every tracked upload even when a deletion fails, then closes Chromium. Verification, deletion, and browser-shutdown failures are reported together, and the command exits unsuccessfully. If a deletion failed, restore the local server/session and remove the listed **Thumbnail check** uploads from Alex's disposable library before retrying; the next run refuses stale fixtures. Cleanup failure tests use simulated responses and rejected requests without making real deletions.
+
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `thumbnail-library-desktop.webp`, `thumbnail-library-mobile.webp`, `thumbnail-moderation-desktop.webp`, and `thumbnail-moderation-mobile.webp`. Inspect every capture before updating handbook evidence. These checks verify the rendered application rather than a Meticulous replay; they do not establish a pixel-identical comparison with a baseline.
+
+The shared storage contract tests also delay attaching a reader by a full event-loop turn, for complete and ranged reads. They catch S3 streams that lose their bytes before response setup finishes. The default S3 contract uses an in-memory SDK backend; the optional `TEST_S3_*` run in `__tests__/storage/s3.test.ts` exercises a separately configured S3-compatible endpoint. Local browser checks against filesystem storage alone do not establish S3 service compatibility.
+
+`__tests__/files/thumbnail-stream.test.ts` additionally serves a controlled S3 GET response on a loopback HTTP socket and exercises the actual AWS SDK response stream and audited thumbnail route. The fixture simulates the S3 service response; it does not call a hosted bucket. Both delayed reads and route responses must preserve the exact PNG bytes, including when audit persistence yields before the response is returned.
+
 ### Account changes in an open library
 
 With the same disposable timeline database and server running, check an account change while the original library tab stays open:
