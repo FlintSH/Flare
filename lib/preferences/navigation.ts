@@ -10,6 +10,7 @@ export const PROFILE_SECTIONS = [
   'account',
   'uploads',
   'integrations',
+  'invites',
   'data',
 ] as const
 

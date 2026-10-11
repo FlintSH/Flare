@@ -19,7 +19,8 @@ export function roleMutationGuard(request: Request) {
 
 /** Bound streamed input as well as Content-Length; role commands are small. */
 export async function readRoleJson(
-  request: Request
+  request: Request,
+  label = 'Role request'
 ): Promise<
   { data: unknown; response: null } | { data: null; response: NextResponse }
 > {
@@ -28,7 +29,7 @@ export async function readRoleJson(
     return {
       data: null,
       response: NextResponse.json(
-        { error: 'Role request exceeds 32 KB' },
+        { error: `${label} exceeds 32 KB` },
         { status: 413 }
       ),
     }
@@ -46,7 +47,7 @@ export async function readRoleJson(
           return {
             data: null,
             response: NextResponse.json(
-              { error: 'Role request exceeds 32 KB' },
+              { error: `${label} exceeds 32 KB` },
               { status: 413 }
             ),
           }

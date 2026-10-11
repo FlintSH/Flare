@@ -71,6 +71,7 @@ The former scalar `role: "USER" | "ADMIN"` no longer exists. Use:
 - **Edit:** `PUT /api/users` with `id` and the fields being changed. A role-only edit can send `{ "id": "…", "roleIds": ["…"] }`. Role assignment needs `users.roles`; identity edits need `users.update`.
 - **Read:** directory, account-creation, and account-update responses expose `roles`, an array of role summaries including implicit Everyone; session users also expose effective `permissions`. Read permission keys instead of comparing role names. The legacy `/api/users/{id}/login` metadata response contains only explicitly assigned roles and does not expose effective permissions.
 - **Filter:** `GET /api/users?roleId=ROLE_ID` replaces the old scalar role filter. Filtering by Everyone returns all accounts. Pagination still uses `page` and `limit`, with an optional `search` value.
+- **Invited accounts:** each `GET /api/users` item includes `invitedBy`, either `null` or `{ "id": "…", "name": "…" }` for the account that created the [invite](./invites) it joined with. It becomes `null` when that creator's account is deleted. Create and update responses omit the field.
 
 `roleIds` is a replacement set of at most 100 distinct, existing, non-Everyone role IDs. Omitting it on update preserves assignments; passing `[]` removes additional roles. Never send Everyone's ID: it applies implicitly. The old `role` field is no longer supported; update custom dashboard clients with the server migration.
 
@@ -168,13 +169,15 @@ The response does not promise that object bytes have already been erased. An app
 
 For `PATCH /api/settings`, send a partial `{ "settings": { ... } }` body. Every supplied section is checked before any changes are accepted:
 
-| Field                                                     | Permission          |
-| --------------------------------------------------------- | ------------------- |
-| `settings.general.credits`, `settings.general.ocr`        | `settings.general`  |
-| `settings.general.registrations`, `settings.general.oidc` | `settings.security` |
-| `settings.general.storage`                                | `settings.storage`  |
-| `settings.appearance`                                     | `appearance.manage` |
-| `settings.advanced` (custom CSS/head HTML)                | `administrator`     |
+| Field                                                                                | Permission          |
+| ------------------------------------------------------------------------------------ | ------------------- |
+| `settings.general.credits`, `settings.general.ocr`                                   | `settings.general`  |
+| `settings.general.registrations` (including `inviteLimits`), `settings.general.oidc` | `settings.security` |
+| `settings.general.storage`                                                           | `settings.storage`  |
+| `settings.appearance`                                                                | `appearance.manage` |
+| `settings.advanced` (custom CSS/head HTML)                                           | `administrator`     |
+
+Whether Everyone can create invites is stored on the Everyone role, not in settings. Change it with `PUT /api/settings/invites`, which needs `settings.security` and the caller's own `invites.create`; see [invite contracts](./invites#change-who-can-invite).
 
 Empty/unknown sections do not grant an escape from these checks. Custom CSS/head HTML can execute code in the instance browser context and therefore requires Administrator. The legacy whole-settings `POST /api/settings` operation also requires Administrator. Email and the appearance studio retain their dedicated routes. Reading settings does not grant permission to write any section; writing a section does not authorize replacing the whole configuration.
 
@@ -182,4 +185,4 @@ Empty/unknown sections do not grant an escape from these checks. Custom CSS/head
 
 Named-token scope names and their supported paths are unchanged. They now intersect the owner's current permissions: for example `files:upload` also needs `files.upload`; creating a link with `urls:write` needs `links.create`, and deleting one needs `links.delete`. See [authentication](/api/authentication#scopes-and-account-roles).
 
-Role edits and account assignments do not emit a webhook event. The existing `file.ready` payload, version, signing format, retry policy, and event JSON Schema are unchanged. Webhook management itself requires `webhooks.manage`; it is not a named-token capability.
+Role edits, account assignments, and invite changes do not emit a webhook event. The existing `file.ready` payload, version, signing format, retry policy, and event JSON Schema are unchanged. Webhook management itself requires `webhooks.manage`; it is not a named-token capability.

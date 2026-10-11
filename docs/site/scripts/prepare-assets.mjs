@@ -143,6 +143,9 @@ for (const [directory, name] of [
   ['archives', 'archive-browse-extract'],
   ['archives', 'archive-create'],
   ['archives', 'archive-share-browse'],
+  ['invites', 'admin-invite'],
+  ['invites', 'join-with-invite'],
+  ['invites', 'member-invites'],
 ]) {
   await copyFile(
     resolve(root, '../../.github/assets', directory, `${name}.webm`),

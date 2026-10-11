@@ -68,6 +68,13 @@ const keys = new Set([
   'expiryAction',
   'eventType',
   'retry',
+  // Invite metadata; token values and digests are never recorded.
+  'note',
+  'creatorId',
+  'maxUses',
+  'uses',
+  'accountId',
+  'accountName',
 ])
 const safeField = /^[a-zA-Z][a-zA-Z0-9_.]{0,99}$/
 

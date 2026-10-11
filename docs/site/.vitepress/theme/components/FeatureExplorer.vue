@@ -176,6 +176,12 @@ const features = [
   ],
   [
     'Host & administer',
+    'Invite links',
+    'Let people join a private instance with a link. Set uses, expiry, and roles; see who joined; let members invite within limits.',
+    '/guide/invites',
+  ],
+  [
+    'Host & administer',
     'Access & moderation',
     'Manage users, roles, shared storage quotas, registration, and uploaded content.',
     '/admin/users',

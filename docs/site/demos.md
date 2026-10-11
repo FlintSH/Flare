@@ -107,6 +107,42 @@ This is a real stored ZIP generated from two private fixture files. The explicit
 
 This recording uses an anonymous visitor and a real unprotected public archive. The browser checks verify the downloaded bytes and that no **Extract all** action appears. Separate, unrecorded checks exercise protected-file access, reject missing or incorrect passwords, and deny unrelated visitors after the source becomes private. The guide includes the [password gate, unlocked page, and mobile captures](./guide/archives#browse-an-archive-shared-with-you). Existing file visibility and password rules apply to every shared entry request.
 
+### Invite someone with a role
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Invite someone with a role: silent Flare recording with the invite token blurred" :poster="withBase('/screenshots/invites/create-invite.webp')" :src="withBase('/demos/admin-invite.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. As the demonstration administrator **Alex Morgan**, open **Settings → Access → Invites**. Turn on **Let everyone create invites**, then choose **Save settings**. **Settings updated** confirms the change.
+2. Open **Users** and choose the **Invites** tab. It shows **No invites yet**.
+3. Choose **Create invite** and enter the note **For Sam Rivera**. Keep **Uses** at **1 person** and choose **7 days** under **Expires after**.
+4. Select the **Admin** role. A warning explains that anyone using the link becomes a full administrator. Clear **Admin** and select **Moderator** instead.
+5. Choose **Create invite link**. **Your invite link is ready** shows the link, blurred in this recording. Choose **Copy link**; the button changes to **Copied**. The summary reads **Single use**, the expiry date, and **Grants Moderator**.
+6. Choose **Done**. **For Sam Rivera** appears as **Active** with **0 of 1 use** and the **Moderator** role.
+
+This recording performs real settings and invite operations on an isolated instance whose registration is closed. Turning on the switch grants Create invites to the Everyone role. [Read the administrator guide](./admin/users#invite-links).
+
+### Join with an invite link
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Join with an invite link: silent Flare recording of a new account registration" :poster="withBase('/screenshots/invites/register-invite.webp')" :src="withBase('/demos/join-with-invite.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In a separate signed-out browser, open the invite link from the previous recording.
+2. **You’re invited** explains that **Alex Morgan invited you to join Flare** and lists the **Moderator** role.
+3. Enter the username **Sam Rivera**, the demonstration address `sam@invite-demo.example`, and a password twice. The password is masked.
+4. Choose **Create account**. Flare creates the account, signs in, and opens **Your Files**. The navigation includes **Users** because the invite granted Moderator.
+
+Afterward the single-use link is spent: opening it again shows **Invite unavailable** with **This invite link has already been used.** In **Users**, Sam’s account shows **Invited by Alex Morgan**. [Read what invited people see](./guide/invites#what-the-invited-person-sees).
+
+### Let members invite people
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Let members invite people: silent Flare recording of Profile Invites with the invite token blurred" :poster="withBase('/screenshots/invites/profile-invites.webp')" :src="withBase('/demos/member-invites.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. As the ordinary member **Jamie Rivera**, open **Profile → Invites**. The note explains the member limits: up to five active invites, each link works once and expires within 30 days.
+2. Choose **Create invite** and enter the note **For Priya**. **Uses** offers only **1 person**.
+3. Under **Expires after**, choose **1 day**. Longer choices such as **90 days** and **Never** are not offered to members.
+4. Choose **Create invite link**, then **Copy link**. The link is blurred in this recording.
+5. Choose **Done**. **For Priya** appears as **Active** with **Copy link** and **Revoke** buttons.
+
+The member has no role picker because they cannot assign roles. [Read about member limits](./guide/invites#limits-for-members).
+
 ### Enable, use, and recover two-factor authentication
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Enable, use, and recover two-factor authentication: silent Flare recording" :src="withBase('/demos/two-factor-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>

@@ -19,7 +19,10 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/auth/page-session', () => ({ getPageSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { user: { findUnique: mocks.user } },
+  prisma: {
+    user: { findUnique: mocks.user },
+    role: { findUnique: async () => ({ permissions: [] }) },
+  },
 }))
 vi.mock('@/lib/config', () => ({ getConfig: mocks.config }))
 vi.mock('@/lib/customization/recovery', () => ({

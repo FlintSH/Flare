@@ -84,6 +84,7 @@ async function handleGET(req: Request) {
         urlId: true,
         vanityId: true,
         storageUsed: true,
+        invite: { select: { creator: { select: { id: true, name: true } } } },
         _count: {
           select: {
             files: true,
@@ -106,9 +107,10 @@ async function handleGET(req: Request) {
     }
 
     return paginatedResponse<UserResponse[]>(
-      users.map((user) => ({
+      users.map(({ invite, ...user }) => ({
         ...user,
         roles: [...user.roles, ...(everyone ? [everyone] : [])],
+        invitedBy: invite?.creator ?? null,
       })),
       pagination
     )

@@ -31,6 +31,14 @@ export const configSchema = z.object({
       registrations: z.object({
         enabled: z.boolean(),
         disabledMessage: z.string(),
+        // Apply only to people who can invite but cannot create users directly.
+        inviteLimits: z
+          .object({
+            activeInvites: z.number().int().min(1).max(100).default(5),
+            usesPerInvite: z.number().int().min(1).max(100).default(1),
+            lifetimeDays: z.number().int().min(1).max(365).default(30),
+          })
+          .default({}),
       }),
       storage: z.object({
         provider: z.enum(['local', 's3']).default('local'),
@@ -110,6 +118,11 @@ export const DEFAULT_CONFIG: FlareConfig = {
       registrations: {
         enabled: true,
         disabledMessage: '',
+        inviteLimits: {
+          activeInvites: 5,
+          usesPerInvite: 1,
+          lifetimeDays: 30,
+        },
       },
       storage: {
         provider: 'local',
@@ -264,6 +277,11 @@ export async function updateConfig(
             registrations: {
               ...currentConfig.settings.general.registrations,
               ...(newConfig.settings?.general?.registrations || {}),
+              inviteLimits: {
+                ...currentConfig.settings.general.registrations.inviteLimits,
+                ...(newConfig.settings?.general?.registrations?.inviteLimits ||
+                  {}),
+              },
             },
             storage: {
               ...currentConfig.settings.general.storage,

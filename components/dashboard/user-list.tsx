@@ -109,6 +109,7 @@ interface User {
   urlId: string
   vanityId: string | null
   storageUsed: number
+  invitedBy?: { id: string; name: string | null } | null
   _count: {
     files: number
     shortenedUrls: number
@@ -952,6 +953,11 @@ export function UserList() {
                           >
                             {user.email}
                           </p>
+                          {user.invitedBy && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Invited by {user.invitedBy.name || 'an account'}
+                            </p>
+                          )}
                           <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
                             <p className="sm:hidden">
                               <RoleBadges roles={user.roles} />

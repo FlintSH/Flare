@@ -166,11 +166,15 @@ Inspect the archive and open important files before deleting their originals. Fi
 
 **Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 
+## Invite people
+
+When your roles include **Create invites**, **Profile → Invites** lets you create invite links so people can make their own account, even while registration is closed. You choose how many people each link admits and when it expires, then copy, track, and revoke your links in the same place. [Read the invite guide](./invites).
+
 ## Delete your account
 
 Deleting your own account requires `profile.update` and removes its content even when `files.delete` is absent. The last-accessible-administrator safeguard also applies.
 
-Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, and integrations from Flare, then signs you out. The same database transaction saves per-file deletion audit evidence and cleanup work for your stored files and uploaded avatar. If that audit insert fails, the account deletion and cleanup work roll back together; ask the operator to resolve the database problem before retrying. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
+Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, integrations, and invite links from Flare, then signs you out. Accounts that joined with your invites keep their accounts. The same database transaction saves per-file deletion audit evidence and cleanup work for your stored files and uploaded avatar. If that audit insert fails, the account deletion and cleanup work roll back together; ask the operator to resolve the database problem before retrying. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
 
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 

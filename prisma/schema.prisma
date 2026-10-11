@@ -33,6 +33,9 @@ model User {
   browserSessions             BrowserSession[]
   loginAttempts               LoginAttempt[]
   roles                       Role[]
+  inviteId                    String?
+  invite                      Invite?               @relation("InviteMembers", fields: [inviteId], references: [id], onDelete: SetNull)
+  createdInvites              Invite[]              @relation("CreatedInvites")
   createdAt                   DateTime              @default(now())
   updatedAt                   DateTime              @updatedAt
   storageUsed                 Float                 @default(0)
@@ -53,6 +56,8 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+
+  @@index([inviteId])
 }
 
 model Passkey {
@@ -152,8 +157,30 @@ model Role {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   users       User[]
+  invites     Invite[]
 
   @@index([position])
+}
+
+// Invite links create accounts even while registration is closed. Lookups use
+// the hash; the encrypted copy only lets the creator copy their link again.
+model Invite {
+  id        String    @id @default(cuid())
+  creatorId String
+  tokenHash String    @unique
+  token     String
+  note      String    @default("")
+  maxUses   Int?
+  uses      Int       @default(0)
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  creator   User      @relation("CreatedInvites", fields: [creatorId], references: [id], onDelete: Cascade)
+  roles     Role[]
+  members   User[]    @relation("InviteMembers")
+
+  @@index([creatorId, createdAt])
+  @@index([createdAt])
 }
 
 model EmailToken {

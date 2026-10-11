@@ -38,6 +38,7 @@ interface CreateUserInput {
   password?: string
   oidcSubject?: string
   roleIds?: string[]
+  inviteId?: string
   emailVerified?: Date
   emailVerifiedFor?: string
   emailVerificationSource?: string
@@ -70,6 +71,9 @@ export async function createUser(
       emailExempt: input.emailExempt,
       urlId,
       roles: { connect: roleIds.map((id) => ({ id })) },
+      ...(input.inviteId
+        ? { invite: { connect: { id: input.inviteId } } }
+        : {}),
       uploadToken: uuidv4(),
     },
   })

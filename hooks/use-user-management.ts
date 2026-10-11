@@ -13,6 +13,7 @@ export interface User {
   urlId: string
   vanityId: string | null
   storageUsed: number
+  invitedBy?: { id: string; name: string | null } | null
   _count: {
     files: number
     shortenedUrls: number

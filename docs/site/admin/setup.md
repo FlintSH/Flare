@@ -32,7 +32,7 @@ Setup validates required fields and URL syntax. It does **not** connect to the b
 
 ## 3. Choose who can join
 
-Allow registration for an open community instance, or close registration and create accounts through Users. If closed, set a message explaining how people can request access.
+Allow registration for an open community instance, or close registration and create accounts through Users. If closed, set a message explaining how people can request access. People can still join a closed instance with an [invite link](/admin/users#invite-links); only administrators can create one until you allow others to.
 
 You can go back and edit the first three steps before creating the instance. Creation saves the administrator and core configuration together. After it succeeds, these choices are managed in Settings and Users rather than rerunning account creation.
 

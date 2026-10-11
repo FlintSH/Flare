@@ -8,12 +8,21 @@ import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 
 import { EmailCapabilities, emailRequest } from '@/components/email/api'
+import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export function RegisterForm() {
+export function RegisterForm({
+  invite,
+  inviteRoles = [],
+  notice,
+}: {
+  invite?: string
+  inviteRoles?: { id: string; name: string; color: string }[]
+  notice?: string
+}) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,12 +72,17 @@ export function RegisterForm() {
           email,
           password,
           name,
+          ...(invite ? { invite } : {}),
         }),
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to register')
+        const data = await res.json().catch(() => ({}))
+        throw new Error(
+          typeof data.code === 'string' && data.code.startsWith('invite_')
+            ? `${data.error} Ask the person who invited you for a new link.`
+            : data.error || 'Failed to register'
+        )
       }
 
       const registered = await res.json()
@@ -96,6 +110,20 @@ export function RegisterForm() {
 
   return (
     <form onSubmit={onSubmit} aria-busy={isLoading}>
+      {notice && (
+        <p
+          role="status"
+          className="mb-5 rounded-xl border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground"
+        >
+          {notice}
+        </p>
+      )}
+      {inviteRoles.length > 0 && (
+        <div className="mb-5 space-y-2 rounded-xl border border-border bg-muted/30 p-3 text-sm">
+          <p className="text-muted-foreground">You’ll join with these roles:</p>
+          <RoleBadges roles={inviteRoles} />
+        </div>
+      )}
       {verificationRequired && (
         <p className="mb-5 rounded-xl border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground">
           We’ll ask you to confirm your email before using your account.

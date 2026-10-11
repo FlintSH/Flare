@@ -54,6 +54,8 @@ describe('OIDC configuration migration', () => {
     expect(parsed.settings.general.registrations).toEqual({
       enabled: false,
       disabledMessage: 'Invite only',
+      // Older documents gain the default member invite limits.
+      inviteLimits: { activeInvites: 5, usesPerInvite: 1, lifetimeDays: 30 },
     })
   })
 

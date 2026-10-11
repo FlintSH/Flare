@@ -14,11 +14,13 @@ import {
   Plug,
   Trash2,
   Upload,
+  UserPlus,
   UserRound,
 } from 'lucide-react'
 
 import { PersonalAppearanceSettings } from '@/components/customization/personal-appearance-settings'
 import { IntegrationsPanel } from '@/components/integrations/integrations-panel'
+import { InviteManager } from '@/components/invites/invite-manager'
 import {
   PreferencesPanel,
   PreferencesShell,
@@ -77,6 +79,14 @@ const sections = [
     icon: Plug,
   },
   {
+    id: 'invites',
+    hint: 'Invite people to join',
+    title: 'Invites',
+    description:
+      'Create invite links so the people you choose can make an account here.',
+    icon: UserPlus,
+  },
+  {
     id: 'data',
     hint: 'Storage, exports, and account',
     title: 'Your data',
@@ -103,12 +113,14 @@ export function ProfileClient({
   )
   const handleRefresh = useCallback(() => router.refresh(), [router])
 
-  const visibleSections = sections.filter(
-    (section) =>
-      (section.id !== 'uploads' && section.id !== 'integrations') ||
-      (section.id === 'uploads'
-        ? can('files.upload') || can('uploadProfiles.manage')
-        : can('tokens.manage') || can('webhooks.manage'))
+  const visibleSections = sections.filter((section) =>
+    section.id === 'uploads'
+      ? can('files.upload') || can('uploadProfiles.manage')
+      : section.id === 'integrations'
+        ? can('tokens.manage') || can('webhooks.manage')
+        : section.id === 'invites'
+          ? can('invites.create')
+          : true
   )
   const displayedSection = visibleSections.some(
     (section) => section.id === activeSection
@@ -233,6 +245,14 @@ export function ProfileClient({
           embedded
           onSetupTool={() => setSection('uploads', { updateHistory: false })}
         />
+      </PreferencesPanel>
+
+      <PreferencesPanel active={displayedSection === 'invites'}>
+        <Card>
+          <CardContent className="pt-6">
+            <InviteManager context="profile" />
+          </CardContent>
+        </Card>
       </PreferencesPanel>
 
       <PreferencesPanel active={displayedSection === 'data'}>
