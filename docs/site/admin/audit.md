@@ -42,6 +42,7 @@ The log combines application mutations, selected file-access activity, authentic
 | OCR and background work     | Processing outcomes and failures, file context where available, expiration and cleanup activity.                                        |
 | Accounts and authentication | Sign-in/session events, account changes, credential-management actions, and failed or denied operations where attribution is available. |
 | Roles and assignments       | Changed roles, permissions, membership, and the acting account.                                                                         |
+| Invites                     | Invite creation, uses, revocation, account-deletion removal, and the accounts that joined, without invite tokens.                       |
 | Instance configuration      | Settings, email, storage, and appearance changes with safe changed-field metadata.                                                      |
 | Integrations                | Credential and webhook configuration/lifecycle activity without secret values.                                                          |
 
@@ -58,6 +59,10 @@ Search the filename or apply its **Target ID**, then review the event sequence. 
 Expiration records use `file.expiration.scheduled`, `file.expiration.cancelled`, and `file.expiration.applied`, retaining the file context and selected expiry metadata. Applied background work is attributed to the system. Scheduling success alone does not prove that the later action ran; inspect the applied event and current file state.
 
 For [archive activity](/guide/archives), filter **Category** to `archives`. `archive.browse`, `archive.entry.read`, `archive.extract`, and `archive.create` record request outcomes. `archive.source.read` identifies staged source files; `archive.member.read` identifies the selected member prepared for preview or download; `archive.member.extract` links a newly published file to its source archive and member path. Source/member read sizes are bytes, unlike file-snapshot sizes. A preview and a later download can produce separate reads. Entry contents and file passwords are excluded, and a successful response still does not prove complete delivery.
+
+For [invite links](/admin/users#invite-links), filter **Category** to `invites`. `invite.create` records the note, creator, use limit, expiry, and granted role IDs. `invite.update` records a use or a revocation. `invite.redeem` records the account that joined, with its name and the role IDs it received; registration is anonymous, so its actor is not an existing account. `invite.delete` appears when deleting an account removes the invites it created. Invite tokens and their digests are never recorded.
+
+<Screenshot src="/screenshots/invites/audit-invites.webp" alt="Audit log filtered to the invites category showing invite update, redeem, and create events with their actors and invite notes" caption="Invite events trace who created each link and which account used it." />
 
 <Screenshot src="/screenshots/audit/archive-events.webp" alt="Audit log filtered to archives showing real extraction and member events for Team handoff.zip alongside denied and failed archive requests" caption="Archive activity keeps source and output context alongside request outcomes. This capture comes from real operations on the disposable demonstration instance." />
 

@@ -158,6 +158,16 @@ These routes use `requireAuth`, whose compatibility path accepts a browser sessi
 
 Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 
+## Invite routes
+
+These routes require a browser session; named API tokens and the legacy upload credential cannot authorize them. Mutations reject cross-origin requests, and request bodies must be JSON. [Invite request/response contracts](./invites) cover schemas, statuses, limits, and errors.
+
+| Path                    | Methods   | Required permission and purpose                                                                                                                                                                          |
+| ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/invites`          | GET, POST | GET `scope=mine`: `invites.create` or `invites.manage`; GET `scope=all`: `invites.manage`. POST: `invites.create`; attaching roles also needs `users.roles`. Member limits apply without `users.create`. |
+| `/api/invites/{id}`     | DELETE    | Revoke: `invites.create` for your own invite, or `invites.manage` for anyone's. Returns the revoked invite as JSON.                                                                                      |
+| `/api/settings/invites` | GET, PUT  | GET: `settings.read`; PUT: `settings.security` and your own `invites.create`. Read member limits, or add/remove `invites.create` on Everyone.                                                            |
+
 ## Delegated administration session routes
 
 These operations require a browser session and the permission listed below. Administrator grants every permission. Account writes and role assignments also check hierarchy; role/account mutations preserve an accessible administrator. Named tokens do not inherit these capabilities from their owner. [Role and account request/response contracts](./roles) document replacement of the old scalar role field.
@@ -191,20 +201,20 @@ Email administration validates origins for mutations; appearance administration 
 
 ## Public and bootstrap routes
 
-| Path                            | Methods   | Authentication and purpose                                                                                                                                                                  |
-| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                           |
-| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                        |
-| `/api/setup/check`              | GET       | Public setup-completion state.                                                                                                                                                              |
-| `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates Everyone, the full-access Admin role, the first account assignment, and settings atomically and rate-limits attempts.                |
-| `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                               |
-| `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits.                                                                                       |
-| `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                     |
-| `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection. |
-| `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                      |
-| `/api/avatars/{filename}`       | GET       | Serve a currently referenced avatar; `404` for obsolete/unowned keys and `503` when its recorded storage target is unavailable.                                                             |
+| Path                            | Methods   | Authentication and purpose                                                                                                                                                                      |
+| ------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                               |
+| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                            |
+| `/api/setup/check`              | GET       | Public setup-completion state.                                                                                                                                                                  |
+| `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates Everyone, the full-access Admin role, the first account assignment, and settings atomically and rate-limits attempts.                    |
+| `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                                   |
+| `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits. An active `invite` creates an account while registration is closed and applies its roles. |
+| `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                         |
+| `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection.     |
+| `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                          |
+| `/api/avatars/{filename}`       | GET       | Serve a currently referenced avatar; `404` for obsolete/unowned keys and `503` when its recorded storage target is unavailable.                                                                 |
 
-Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
+Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. With closed registration, account creation additionally requires an active [invite](./invites#register-with-an-invite). Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
 
 ## Maintaining an integration
 

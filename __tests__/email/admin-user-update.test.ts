@@ -70,6 +70,7 @@ const initial: User = {
   image: null,
   avatarStoragePath: null,
   avatarStorageTarget: null,
+  inviteId: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2026-01-01'),
   storageUsed: 0,

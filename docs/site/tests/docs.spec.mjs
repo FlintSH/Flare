@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 31')
+  await expect(page.getByRole('status')).toContainText('3 of 32')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -218,6 +218,9 @@ for (const width of [390, 1440]) {
       './api/activity.html',
       './guide/archives.html',
       './api/archives.html',
+      './guide/invites.html',
+      './api/invites.html',
+      './admin/users.html',
     ]) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
@@ -282,6 +285,9 @@ for (const theme of ['dark', 'light']) {
       './api/archives.html',
       './hosting/docker.html',
       './guide/sharing.html',
+      './guide/invites.html',
+      './api/invites.html',
+      './admin/users.html',
     ]) {
       await page.goto(path)
       await page.waitForLoadState('networkidle')
@@ -570,6 +576,96 @@ test('sessions and audit guides, walkthroughs, and recordings are discoverable',
             () => {
               clearTimeout(timeout)
               reject(new Error('Activity recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
+})
+
+test('invite guides, walkthrough, and recordings are discoverable', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Find a capability').fill('invite links')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/invites\.html$/)
+  await expect(page.locator('h1')).toHaveText('Invite people')
+  for (const name of [
+    'profile-invites',
+    'create-invite',
+    'invite-ready',
+    'register-invite',
+    'register-invite-mobile',
+    'invite-used',
+    'revoke-invite',
+    'profile-invites-mobile',
+  ]) {
+    const screenshot = page.locator(
+      `.screenshot-button img[src$="${name}.webp"]`
+    )
+    await screenshot.scrollIntoViewIfNeeded()
+    await expect(screenshot).toBeVisible()
+    await expect
+      .poll(() => screenshot.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  await page.goto('./admin/users.html#invite-links')
+  for (const name of [
+    'settings-invites',
+    'roles-invitations',
+    'users-invites',
+    'users-invited-by',
+  ]) {
+    const screenshot = page.locator(
+      `.screenshot-button img[src$="${name}.webp"]`
+    )
+    await screenshot.scrollIntoViewIfNeeded()
+    await expect
+      .poll(() => screenshot.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  await page.goto('./demos.html')
+  await page.getByRole('button', { name: '12. Invite', exact: true }).click()
+  await expect(page.locator('.tour-description')).toContainText(
+    'Bring people in by invitation'
+  )
+  await expect(page.locator('.tour-description a')).toHaveAttribute(
+    'href',
+    /guide\/invites\.html$/
+  )
+  for (const name of [
+    'admin-invite.webm',
+    'join-with-invite.webm',
+    'member-invites.webm',
+  ]) {
+    const video = page.locator(`video[src$="${name}"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Recording metadata timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Invite recording failed to load'))
             },
             { once: true }
           )

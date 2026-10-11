@@ -19,7 +19,7 @@ A new instance creates two roles automatically:
 | **Everyone** | Applies automatically to every account, including future local and SSO accounts. Includes the existing personal file, organization, link, profile, integration, and appearance capabilities. |
 | **Admin**    | Assigned to the first account. Its **Administrator** permission grants every permission, including newly added permissions, and bypasses role hierarchy.                                     |
 
-Everyone does not initially grant account administration, content moderation, instance settings, role management, or quota bypass. Administrators still follow maximum upload sizes, file validation, and applicable email verification rules.
+Everyone does not initially grant invitations, account administration, content moderation, instance settings, role management, or quota bypass. Only administrators can create invite links until you grant [Create invites](./users#choose-who-can-invite). Administrators still follow maximum upload sizes, file validation, and applicable email verification rules.
 
 Everyone cannot be deleted, renamed, reordered, manually assigned, or granted Administrator. You can change its permissions, color, and description. Removing a permission from Everyone affects every account that does not receive it through another role. Review that impact before saving: adding a restricted role does not subtract anything Everyone already grants.
 
@@ -65,6 +65,7 @@ These are the keys used in role records and the session permission list. The int
 | Saved uploads       | `uploadProfiles.manage`                                                                                      | Create, update, import, export, and choose upload profiles.                                                                                            |
 | Integrations        | `tokens.manage`, `webhooks.manage`                                                                           | Manage one's own upload credentials/named tokens, or webhook destinations and delivery controls.                                                       |
 | Personal appearance | `appearance.personal`                                                                                        | Change personal appearance preferences.                                                                                                                |
+| Invitations         | `invites.create`, `invites.manage`                                                                           | Create invite links and revoke your own, or view and revoke every account's invites. Neither reveals another person's link.                            |
 | Accounts            | `users.read`, `users.create`, `users.update`, `users.delete`, `users.sessions`, `users.email`, `users.roles` | List, create, edit, delete accounts; invalidate sessions; manage email access; assign roles. These are independent permissions and obey hierarchy.     |
 | Content moderation  | `content.read`, `content.update`, `content.delete`                                                           | Inspect other accounts' files/links, change their file settings, or delete their content. Reading includes private and password-protected file access. |
 | Role administration | `roles.manage`                                                                                               | Create and maintain roles within the delegation rules below.                                                                                           |
@@ -97,10 +98,14 @@ Example responsibilities:
 | Appearance designers | `settings.read`, `appearance.manage`                             | Publish the instance's design without storage or email administration.                    |
 | Account support      | `users.read`, `users.update`, `users.sessions`, `users.email`    | Help accounts below their role recover access; cannot assign roles without `users.roles`. |
 | Contributors         | `files.upload`, `pastes.create`                                  | Restore upload/paste capabilities after those permissions are removed from Everyone.      |
+| Community hosts      | `invites.create`                                                 | Invite people within the member limits while invites stay closed to everyone else.        |
+| Invite reviewers     | `users.read`, `invites.manage`                                   | Review every invite and who joined in **Users → Invites**, and revoke misused links.      |
 
 Custom CSS/head HTML requires Administrator because it can execute code in other people’s browser sessions; a delegated designer cannot use those advanced editors.
 
 `audit.read` is a separate instance-wide permission. Administrator includes it; Everyone does not receive it by default. Delegating it exposes retained activity across all accounts, including filenames and actor identities for private content and accounts above the reader’s role. It does not confer `content.read`, `users.sessions`, or a way to edit/delete audit events. Review the [audit privacy and retention boundaries](./audit#access-and-privacy) before granting it.
+
+Invitations are separate from account creation. `invites.create` lets a person bring in new accounts that receive Everyone, subject to the [member invite limits](./users#set-member-limits) unless they also have `users.create`. Attaching roles to an invite additionally requires `users.roles` and follows the delegation rules above, checked again when the link is used. `invites.manage` is instance-wide like content moderation, but it never reveals another person's invite link. The **Let everyone create invites** switch in Settings changes Everyone's `invites.create` grant; it requires `settings.security` and your own `invites.create`.
 
 Content moderation is instance-wide and does not use the account-management hierarchy: these grants can apply to content owned by higher-ranked accounts. Content reading is sensitive: a moderator with `content.read` can see private content and bypass file passwords. Explain this access to the people using your instance. [Sharing and privacy](/guide/sharing) describes the reader-facing boundaries.
 

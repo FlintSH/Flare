@@ -111,9 +111,10 @@ suite('setup contracts against disposable PostgreSQL', () => {
     expect(saved.settings.email.enabled).toBe(false)
     expect(saved.settings.general.setup.completed).toBe(true)
     expect(saved.settings.general.setup.completedAt).toBeInstanceOf(Date)
-    expect(saved.settings.general.registrations).toEqual(
-      payload().registrations
-    )
+    expect(saved.settings.general.registrations).toEqual({
+      ...payload().registrations,
+      inviteLimits: { activeInvites: 5, usesPerInvite: 1, lifetimeDays: 30 },
+    })
     expect(saved.settings.general.storage.provider).toBe('local')
   })
 

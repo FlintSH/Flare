@@ -90,6 +90,7 @@ export default defineConfig({
         ['Upload profiles', '/guide/upload-profiles'],
         ['Screenshot tools', '/guide/screenshot-tools'],
         ['Your account', '/guide/account'],
+        ['Invite people', '/guide/invites'],
         ['Two-factor authentication & passkeys', '/guide/security'],
         ['Personal appearance', '/guide/appearance'],
       ]),
@@ -124,6 +125,7 @@ export default defineConfig({
         ['Roles & session contracts', '/api/roles'],
         ['Sign-in security contracts', '/api/security'],
         ['Sessions & audit contracts', '/api/activity'],
+        ['Invite contracts', '/api/invites'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
       group('Project', [

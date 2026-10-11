@@ -11,13 +11,13 @@ Flare gives administrators control over who can join, how files are stored, what
 | Section                   | What you can do                                                                                                                   | Detailed guide                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | **Settings → General**    | Enable background image OCR, show credits, inspect installed version and update information                                       | [General](#general)                      |
-| **Settings → Access**     | Open/close registration, set the closed-registration message, configure OIDC                                                      | [Users](/admin/users), [SSO](/admin/sso) |
+| **Settings → Access**     | Open/close registration, set the closed-registration message, choose who can invite and member invite limits, configure OIDC      | [Users](/admin/users), [SSO](/admin/sso) |
 | **Settings → Storage**    | Select local/S3 storage, set maximum file size, enable storage quotas                                                             | [Storage](/hosting/storage)              |
 | **Settings → Appearance** | Brand the instance, design light/dark themes and share pages, import/export packs, edit legacy colors/favicon and custom CSS/HTML | [Appearance](/admin/appearance)          |
 | **Settings → Email**      | Configure SMTP, test delivery, enable recovery and verification, inspect the outbox                                               | [Email](/admin/email)                    |
 | **Roles**                 | Create, organize, and combine permission groups; delegate account, content, or settings work                                      | [Roles and permissions](/admin/roles)    |
 | **Audit log**             | Search instance events and inspect actors, filenames, processing outcomes, and administrative changes; requires `audit.read`      | [Audit log](/admin/audit)                |
-| **Users**                 | Create/edit accounts, change roles, moderate content, remove avatars, inspect email access                                        | [Users and roles](/admin/users)          |
+| **Users**                 | Create/edit accounts, change roles, moderate content, remove avatars, inspect email access, review and revoke invite links        | [Users and roles](/admin/users)          |
 
 Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`; Audit log at `/dashboard/audit`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
 

@@ -101,6 +101,18 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Invite links migration
+
+Migration `20261011010000_invites` adds the `Invite` table, its role join table, and an optional `User.inviteId` reference. Normal image startup applies it; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.
+
+After the upgrade, **only administrators can create invite links**, because Administrator includes the new `invites.create` and `invites.manage` permissions while Everyone does not receive them. Until you save different values, Flare applies the default member limits: 5 active invites, 1 use, and a 30-day longest expiry. Review **Settings → Access → Invites** and [who can invite](/admin/users#invite-links) before announcing the feature. Test by creating a single-use invite, opening it in a private window, and creating a disposable account.
+
+Creating an invite encrypts a copy of its token with the same key as webhook signing secrets: `FLARE_EMAIL_ENCRYPTION_KEY` or its `_FILE` equivalent, otherwise `NEXTAUTH_SECRET`, at least 32 characters. Without it, invite creation fails with a clear error while existing invites and other features keep working.
+
+Invite tokens are part of their link's URL. Reverse proxies and access logs can record `/auth/register?invite=…` paths; treat those logs as sensitive while links are active, or exclude the query string from logging. Backups contain invite digests, encrypted copies, notes, and who joined; restoring an older backup can make links that were revoked or used up after that backup usable again. After a restore, revoke invites you no longer want in **Users → Invites**.
+
+To roll back, use the recorded old image with its matching pre-upgrade database and file backup, as described in [Rollback](#rollback). Accounts and invites created after that backup are not in it; account for them before switching traffic.
+
 ### File library timeline index
 
 Migration `20261006000000_file_library_timeline` adds an index on the file owner's ID, descending upload time, and file ID. The homepage uses it to read small chronological windows and aggregate calendar counts across the account. It preserves file records, links, folders, tags, sharing rules, and existing paginated API clients. No new setting, environment variable, worker, or data backfill is needed.
@@ -206,7 +218,7 @@ Upgrade PostgreSQL separately from Flare. Keeping `postgres:16-alpine` within Po
 
 ## Secrets and key rotation
 
-Flare encrypts saved SMTP passwords, token-bearing mail payloads, and webhook signing secrets. The active encryption key for those values is `FLARE_EMAIL_ENCRYPTION_KEY` or its `_FILE` equivalent, otherwise `NEXTAUTH_SECRET`.
+Flare encrypts saved SMTP passwords, token-bearing mail payloads, webhook signing secrets, and copies of invite tokens. The active encryption key for those values is `FLARE_EMAIL_ENCRYPTION_KEY` or its `_FILE` equivalent, otherwise `NEXTAUTH_SECRET`. Invite links are looked up by a digest, so they keep working after a key change, but their creators can no longer copy them again; send new invites if needed.
 
 Preserve the same effective key during recreation and restores. Introducing a dedicated key that differs from the previous fallback is a key change too. Setting a new key does not automatically re-encrypt database values.
 

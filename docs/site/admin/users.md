@@ -1,5 +1,5 @@
 ---
-description: Manage registration, accounts, administrator roles, content moderation, vanity links, and email access.
+description: Manage registration, invite links, accounts, administrator roles, content moderation, vanity links, and email access.
 ---
 
 # Users, roles, and access
@@ -27,9 +27,74 @@ Administrator grants all these permissions. Delegated managers can manage only a
 
 ## Open or close registration
 
-With `settings.security`, go to **Settings → Access → Registration**. Disable registration to prevent public password-account sign-ups, then add a useful message such as “This is a private team instance. Contact the administrator for access.” Existing users retain their accounts, and administrators can still create users.
+With `settings.security`, go to **Settings → Access → Registration**. Disable registration to prevent public password-account sign-ups, then add a useful message such as “This is a private team instance. Ask a member for an invite link.” Existing users retain their accounts, administrators can still create users, and people with an active [invite link](#invite-links) can still create an account.
 
 OIDC auto-provisioning is a separate setting. Closing password registration does not by itself define which identities your identity provider may provision. Review both controls when operating a private instance.
+
+## Invite links
+
+An invite link lets a person create their own local password account while registration is closed. It is the friendlier alternative to choosing someone's password with **New User**: the invited person picks their own username, email address, and password. The [invite guide](/guide/invites) covers creating, copying, sharing, tracking, and revoking links; this section covers who may invite and how to oversee invites across the instance.
+
+### Choose who can invite
+
+Invites use two [permissions](./roles#permission-reference) in the **Invitations** group. Neither is part of the default Everyone role, so **only administrators can invite until you grant them**.
+
+| Permission                                | Allows                                                                                                                              |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Create invites** (`invites.create`)     | Create invite links from **Profile → Invites** (or **Users → Invites** with `users.read`), copy your own links, and revoke them.    |
+| **Manage all invites** (`invites.manage`) | View every account's invites, including their notes and who joined, and revoke any invite. It does not reveal other people's links. |
+
+To let every account invite people, open **Settings → Access → Invites**, turn on **Let everyone create invites**, and choose **Save settings**. This switch grants Create invites to the Everyone role, and the Roles page shows the same change. Turning it off removes the grant again. Changing it requires `settings.security` and your own `invites.create`; administrators have both.
+
+<Screenshot src="/screenshots/invites/settings-invites.webp" alt="Settings Access Invites card with Let everyone create invites turned on and member limits of 5 active invites, 1 use per invite, and 30 days longest expiry" caption="One switch lets every account invite people; the limits keep member invites modest." />
+
+To let only some people invite, leave the switch off and add **Create invites** to a role instead, for example a “Community host” role, then assign it in Users. Grant **Manage all invites** to people who should oversee and revoke links; it is instance-wide and does not follow the account hierarchy, like content moderation.
+
+<Screenshot src="/screenshots/invites/roles-invitations.webp" alt="Everyone role editor filtered to the Invitations group, with Create invites turned on and Manage all invites turned off" caption="Invite access is an ordinary role permission. Here the Settings switch has granted Create invites to Everyone." />
+
+### Set member limits
+
+**Limits for members** apply to anyone who can invite but lacks **Create users** (`users.create`). People with Create users, including administrators, can already create accounts directly, so these limits do not apply to them.
+
+| Setting                       | Default | Range | Effect                                                                          |
+| ----------------------------- | ------- | ----- | ------------------------------------------------------------------------------- |
+| **Active invites per person** | 5       | 1–100 | Invites a person can have that are not used up, expired, or revoked.            |
+| **Uses per invite**           | 1       | 1–100 | Most accounts one member invite can create. Members cannot choose **No limit**. |
+| **Longest expiry (days)**     | 30      | 1–365 | Latest expiry a member can choose. Members cannot choose **Never**.             |
+
+Choose **Save settings** after editing them. Limits apply when an invite is created; existing invites keep the uses and expiry chosen at the time. Lowering a limit does not revoke anything, so revoke invites individually if you need to shorten them. Accounts without member limits can choose any expiry, **No limit** for uses, and up to 1,000 active invites each.
+
+### Review and revoke every invite
+
+Open **Users → Invites**. With **Manage all invites**, **Created by** defaults to **Anyone** and each link shows its creator, note, status, uses, expiry, granted roles, and the accounts that joined. Without it, the tab shows only your own invites. Choose **Revoke** and confirm to stop a link immediately; accounts already created with it are unaffected.
+
+<Screenshot src="/screenshots/invites/users-invites.webp" alt="Users Invites tab showing invites created by Jamie Rivera that are paused or revoked, and Show set to All invites" caption="Managers see every invite. Here member invites are paused after Let everyone create invites was turned off." />
+
+For security, nobody can copy another person's invite link, even with Administrator. Ask the creator for the link or create a new invite.
+
+A link shows **Paused** when its creator can no longer create invites or grant its roles, for example after you turn off **Let everyone create invites**, remove a role, or the creator's account must verify its email. Paused links stop working but resume if that access returns before they expire. Revoke them if they should never work again.
+
+### Grant roles with an invite
+
+People with **Assign roles** (`users.roles`) can choose **Roles for new accounts** while creating an invite. The usual [delegation rules](./roles#delegate-without-handing-over-the-instance) apply: a delegated manager can grant only roles below their highest role whose permissions they already have. Selecting a role with Administrator shows a warning, because anyone using that link becomes a full administrator.
+
+Flare checks the grants again when someone uses the link. If the creator has lost Create invites or can no longer grant one of the roles, the link is paused rather than creating an account with unexpected access. Deleting a role removes it from pending invites; they then create accounts without it. Everyone always applies.
+
+### Trace who invited whom
+
+Accounts created with an invite show **Invited by** and the creator's name in the Users list. Each invite lists the accounts that joined with it. The [audit log](./audit) records invites under the `invites` category: `invite.create`, `invite.update` for uses and revocation, `invite.redeem` with the new account's name and granted role IDs, and `invite.delete` when an account deletion removes its creator's invites. Invite tokens never appear in audit details.
+
+<Screenshot src="/screenshots/invites/users-invited-by.webp" alt="Users list where Sam Rivera shows Invited by Alex Morgan with the Moderator role and Priya Shah shows Invited by Jamie Rivera" caption="Accounts created with an invite show who invited them." />
+
+Deleting an account also deletes the invites it created, so they stop working. Accounts that joined with those invites remain, but no longer show **Invited by**; the audit log keeps the history.
+
+### Keep invites safe
+
+- **Possession is enough.** Anyone with an active link can create an account. Prefer single-use links, short expiry times, and private channels. Revoke a link that was posted publicly.
+- **Invites create local accounts.** The invited person signs in with the password they choose. Invites do not create or link SSO identities; [OIDC auto-provisioning](./sso#registration-and-auto-login) remains a separate control.
+- **Usual sign-up checks apply.** Registration rate limits, the email-verification policy for new users, and the password rules apply to invited people too.
+- **Links are stored safely.** Flare stores a SHA-256 digest of each 256-bit token for lookup and an encrypted copy so the creator can copy it again. Creating invites requires the encryption key used for webhook secrets; see [secrets](/hosting/configuration#core-environment-variables).
+- **Closing registration is still worthwhile.** Invite pages are reachable only with a valid link. The ordinary `/auth/register` page stays unavailable while registration is closed.
 
 ## Create an account
 
@@ -39,7 +104,7 @@ OIDC auto-provisioning is a separate setting. Closing password registration does
 4. Select any additional **Roles** the person needs. Everyone applies automatically; leave the additional roles empty to use only that baseline. Assign the Admin role only for full instance control.
 5. Save and communicate the sign-in details through your normal secure channel.
 
-The account form requires a name of at least two characters and a valid email. When email is enabled, password inputs are limited to 72 UTF-8 bytes. Do not treat a passwordless local account as an invitation or an SSO link: there is no email-based automatic account linking. [SSO provisioning](/admin/sso#account-creation-and-identity) explains how new SSO accounts are created.
+The account form requires a name of at least two characters and a valid email. When email is enabled, password inputs are limited to 72 UTF-8 bytes. Do not treat a passwordless local account as an invitation or an SSO link: there is no email-based automatic account linking. To let a person choose their own password, send an [invite link](#invite-links) instead. [SSO provisioning](/admin/sso#account-creation-and-identity) explains how new SSO accounts are created.
 
 With email enabled, new administrator-created accounts follow the configured **inherit/exempt** verification policy. Flare can queue a verification message when recovery or verification is active, but that is not a substitute for creating a working sign-in method.
 

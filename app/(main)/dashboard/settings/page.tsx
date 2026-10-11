@@ -6,6 +6,7 @@ import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { redactEmailConfig } from '@/lib/email/config'
+import { everyoneCanInvite } from '@/lib/invites/service'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { redactSettings } from '@/lib/permissions/settings'
 import {
@@ -24,10 +25,11 @@ export default async function SettingsPage({
   if (!session?.user?.id) redirect('/auth/login')
   if (!hasPermission(session.user, 'settings.read'))
     redirect('/dashboard/profile')
-  const [config, recovery, params] = await Promise.all([
+  const [config, recovery, params, inviteAccess] = await Promise.all([
     getConfig(),
     isAppearanceRecovery(),
     searchParams,
+    everyoneCanInvite(),
   ])
   return (
     <InstanceSettings
@@ -46,6 +48,7 @@ export default async function SettingsPage({
       )}
       buildInfo={getBuildInfo()}
       recovery={recovery}
+      initialEveryoneCanInvite={inviteAccess}
     />
   )
 }

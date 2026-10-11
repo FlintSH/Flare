@@ -116,6 +116,25 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    id: 'invites',
+    label: 'Invitations',
+    description: 'Bring new people to this instance with invite links.',
+    permissions: [
+      {
+        key: 'invites.create',
+        label: 'Create invites',
+        description:
+          'Create invite links and revoke your own. People can join with a link even while registration is closed.',
+      },
+      {
+        key: 'invites.manage',
+        label: 'Manage all invites',
+        description:
+          'View and revoke invite links created by anyone, including who joined with them.',
+      },
+    ],
+  },
+  {
     id: 'users',
     label: 'User management',
     description: 'Manage accounts below your highest role.',

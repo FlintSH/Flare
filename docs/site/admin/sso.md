@@ -77,7 +77,7 @@ Keep an independently usable administrator method and saved recovery codes befor
 
 ## Registration and auto-login
 
-**Allow Registrations** controls public local password-account creation. **Auto-Provision Users** independently controls new OIDC account creation. For a private team, restrict access in your identity provider and review both Flare switches.
+**Allow Registrations** controls public local password-account creation. **Auto-Provision Users** independently controls new OIDC account creation. For a private team, restrict access in your identity provider and review both Flare switches. [Invite links](/admin/users#invite-links) always create local password accounts, even while registration is closed; they do not create or link SSO identities.
 
 OIDC Auto-login simplifies the normal login screen; it is not a mechanism for deleting or cryptographically disabling all local credentials. The local sign-in escape URL is deliberate. The setting also suppresses local email password recovery, so administrators should keep their local fallback password available.
 

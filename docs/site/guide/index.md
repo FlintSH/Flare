@@ -16,7 +16,7 @@ This guide is for people using an existing Flare instance. Everyone supplies the
 Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form.
 
 - **Registration available:** create an account, then follow any email-verification instructions.
-- **Registration closed:** ask the administrator for access. A public file link does not require an account unless the file's access settings require one.
+- **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 - **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
 - **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).

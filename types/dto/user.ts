@@ -71,6 +71,8 @@ export interface UserResponse {
   urlId: string
   vanityId: string | null
   storageUsed: number
+  /** Listed accounts only: who created the invite this account joined with. */
+  invitedBy?: { id: string; name: string | null } | null
   _count: {
     files: number
     shortenedUrls: number

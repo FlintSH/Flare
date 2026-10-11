@@ -55,3 +55,7 @@ Start with [troubleshooting](./hosting/troubleshooting). For a reproducible prob
 ## Can I create moderators without giving full administration?
 
 Yes. [Create a role](./admin/roles) with the relevant account/content permissions and assign it in Users. Everyone and additional roles combine additively; there are no explicit deny rules. Delegated role and account management obey hierarchy, while Administrator grants every permission.
+
+## How do people join if registration is closed?
+
+Send them an [invite link](./guide/invites). Administrators can create invites from **Users → Invites** or **Profile → Invites**, and can let other people invite through **Settings → Access → Invites** or a role. Each link can be limited by uses and expiry, can grant roles, and can be revoked at any time. [Who can invite and member limits](./admin/users#invite-links).

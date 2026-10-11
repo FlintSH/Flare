@@ -152,6 +152,7 @@ export function auditRoutePath(url: string): string {
     'profile',
     'users',
     'roles',
+    'invites',
     'settings',
     'appearance',
     'assets',

@@ -412,6 +412,52 @@ pnpm exec vitest run __tests__/audit
 
 Without `FLARE_AUDIT_DATABASE_URL`, database cases are skipped while core/API tests still run. The PostgreSQL cases verify commit/rollback handling, transaction connection use, safe settings and role snapshots, bulk filename retention beyond 1,000 files, tag metadata, email-failure outcomes, and avoiding recursive logging. The one-connection example also checks that transaction snapshots do not wait on a second connection. These checks complement the rendered browser flows and the session-security tests.
 
+## Invite browser checks and demos
+
+The [invite guide](/guide/invites), [administrator guide](/admin/users#invite-links), and [recorded walkthroughs](/demos#invite-someone-with-a-role) use real application operations with disposable accounts. Nothing is simulated: the script creates invites, registers real accounts with them, revokes them, and toggles the Everyone grant.
+
+Create a **disposable local PostgreSQL database named exactly `flare_invites_demo`**. The seed guard accepts only `localhost` or `127.0.0.1`, with `schema` omitted or set once to `public`; other names, schemas, and URL query parameters are rejected. Never point this recipe at an existing application database: the seed deletes every invite, replaces its demonstration accounts and accounts using `@invite-demo.example` addresses, clears security rate counters and audit events, closes registration, and removes invite permissions from Everyone.
+
+With application dependencies installed, run from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_invites_demo'
+export NEXTAUTH_URL='http://localhost:3073'
+export NEXTAUTH_SECRET='public-disposable-invite-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm start --port 3073
+```
+
+`pnpm dev --port 3073` also works for quick checks; the published captures use the production build. Open `http://localhost:3073/auth/login` once so the app initializes its configuration. In a second terminal with the same `DATABASE_URL`, run:
+
+```sh
+npm ci --prefix docs/site
+cd docs/site
+npx playwright install chromium
+cd ../..
+node scripts/invites/seed.cjs
+node scripts/invites/verify-ui.cjs
+```
+
+The deliberately public fixture password is `Invite-demo-only-2026!`. The accounts are **Alex Morgan** (`invite-demo-alex@example.test`, administrator) and **Jamie Rivera** (`invite-demo-jamie@example.test`, Everyone only). Use `FLARE_INVITES_TEST_ORIGIN` to select another `localhost` origin; the default is `http://localhost:3073`. The script uses the documentation Playwright installation and accepts `PW_CHROMIUM_EXECUTABLE_PATH`. On a Linux host without Chromium's system libraries, install them with `npx playwright install-deps chromium` as a machine administrator.
+
+The script turns on **Let everyone create invites** through Settings, creates a Moderator invite in **Users → Invites** (checking the Administrator warning), registers Sam Rivera in a signed-out browser, and confirms that the spent link shows **Invite unavailable** and that closed registration still hides the ordinary sign-up page. As Jamie, it creates invites within the member limits, verifies the API rejects unlimited uses and non-expiring links, and registers Priya Shah on a phone-sized screen. As Alex, it revokes one of Jamie's invites, turns the switch off to confirm member invites pause, checks **Invited by** in the accounts list, the Invitations permission group in Roles, and the `invites` audit category, and verifies that audit events contain no tokens. Registration is rate-limited per client address, so each fixture browser sends a different reserved documentation address in `X-Forwarded-For`; these are not real visitors.
+
+Capture screenshots and videos in separate runs, reseeding before each. Set only `FLARE_INVITES_SCREENSHOTS` to a temporary directory for the thirteen desktop/mobile stills; for the recording pass, leave it unset and set only `FLARE_INVITES_VIDEOS`, which records `admin-invite.webm`, `join-with-invite.webm`, and `member-invites.webm` with visible typing. Both modes blur the one-time invite link field; review every frame anyway for tokens, credentials, and private data. Then replace the canonical sources under `docs/images/invites/` and `.github/assets/invites/` and update the transcripts on the demos page. Discard the database afterward.
+
+### Invite database regression checks
+
+Create and migrate a separate local PostgreSQL database whose name starts with **`flare_invites_test_`**, for example `flare_invites_test_local`. The tests erase users, roles, settings, invites, and audit events in that database.
+
+```sh
+export FLARE_INVITES_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_invites_test_local'
+DATABASE_URL="$FLARE_INVITES_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/invites
+```
+
+Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the policy and token unit tests still run. The PostgreSQL cases use the real route handlers to cover closed-registration sign-up, role grants and their recheck when a link is used, member limits, the Everyone switch and its permissions, revocation, paused links, concurrent use of a single-use link, rollback of a failed registration, deletion of a creator's account, and audit records without tokens.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

@@ -55,6 +55,20 @@ const models: Record<
     fields: ['id', 'name', 'permissions', 'position', 'systemKey'],
   },
   Config: { category: 'settings', target: 'setting', fields: ['id', 'key'] },
+  // Token values and their digests never enter audit details.
+  Invite: {
+    category: 'invites',
+    target: 'invite',
+    fields: [
+      'id',
+      'note',
+      'creatorId',
+      'maxUses',
+      'uses',
+      'expiresAt',
+      'revokedAt',
+    ],
+  },
   ApiToken: {
     category: 'tokens',
     target: 'token',
@@ -548,12 +562,14 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 targetName:
                   typeof current.name === 'string'
                     ? current.name
-                    : typeof current.key === 'string'
-                      ? current.key
-                      : typeof (current.file as Row | undefined)?.name ===
-                          'string'
-                        ? ((current.file as Row).name as string)
-                        : undefined,
+                    : model === 'Invite'
+                      ? (current.note as string) || undefined
+                      : typeof current.key === 'string'
+                        ? current.key
+                        : typeof (current.file as Row | undefined)?.name ===
+                            'string'
+                          ? ((current.file as Row).name as string)
+                          : undefined,
                 details,
               })
             }

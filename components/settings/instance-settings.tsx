@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import type { BuildInfo } from '@/types/dto/updates'
@@ -107,11 +108,13 @@ export function InstanceSettings({
   initialSection,
   buildInfo,
   recovery = false,
+  initialEveryoneCanInvite = false,
 }: {
   initialConfig: FlareConfig
   initialSection: (typeof SETTINGS_SECTIONS)[number]
   buildInfo: BuildInfo
   recovery?: boolean
+  initialEveryoneCanInvite?: boolean
 }) {
   const { can } = usePermissions()
   const [activeSection, setSection] = usePreferenceSection(
@@ -149,9 +152,19 @@ export function InstanceSettings({
   const [cssEditorOpen, setCssEditorOpen] = useState(false)
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  // Stored on the Everyone role, not in the config document.
+  const [savedEveryoneCanInvite, setSavedEveryoneCanInvite] = useState(
+    initialEveryoneCanInvite
+  )
+  const [everyoneCanInvite, setEveryoneCanInvite] = useState(
+    initialEveryoneCanInvite
+  )
+  const inviteAccessChanged = everyoneCanInvite !== savedEveryoneCanInvite
 
   const hasChanges =
-    !deepEqual(savedConfig, workingConfig) || pendingFaviconFile !== null
+    !deepEqual(savedConfig, workingConfig) ||
+    pendingFaviconFile !== null ||
+    inviteAccessChanged
 
   function changedFields(previous: unknown, next: unknown): unknown {
     if (deepEqual(previous, next)) return undefined
@@ -190,27 +203,43 @@ export function InstanceSettings({
         setPendingFaviconFile(null)
         setFaviconPreviewUrl(null)
       }
-      const response = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          settings: changedFields(savedConfig.settings, snapshot.settings),
-        }),
-      })
-      if (!response.ok) {
-        const body = await response.json().catch(() => null)
-        throw new Error(body?.error || 'Settings could not be saved.')
+      const settings = changedFields(savedConfig.settings, snapshot.settings)
+      if (settings !== undefined) {
+        const response = await fetch('/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings }),
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => null)
+          throw new Error(body?.error || 'Settings could not be saved.')
+        }
+        // Appearance publication and email own their own saves. Preserve any
+        // changes they completed while the general settings request was running.
+        setSavedConfig((previous) => ({
+          ...snapshot,
+          settings: {
+            ...snapshot.settings,
+            customization: previous.settings.customization,
+            email: previous.settings.email,
+          },
+        }))
       }
-      // Appearance publication and email own their own saves. Preserve any
-      // changes they completed while the general settings request was running.
-      setSavedConfig((previous) => ({
-        ...snapshot,
-        settings: {
-          ...snapshot.settings,
-          customization: previous.settings.customization,
-          email: previous.settings.email,
-        },
-      }))
+      if (inviteAccessChanged) {
+        const requested = everyoneCanInvite
+        const response = await fetch('/api/settings/invites', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ everyoneCanInvite: requested }),
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => null)
+          throw new Error(
+            body?.error || 'Who can create invites could not be saved.'
+          )
+        }
+        setSavedEveryoneCanInvite(requested)
+      }
       router.refresh()
       toast({
         title: 'Settings updated',
@@ -246,6 +275,7 @@ export function InstanceSettings({
     setPendingFaviconFile(null)
 
     setWorkingConfig(structuredClone(savedConfig))
+    setEveryoneCanInvite(savedEveryoneCanInvite)
 
     toast({
       title: 'Changes discarded',
@@ -385,6 +415,7 @@ export function InstanceSettings({
       description: 'Choose who can join and how they sign in.',
       icon: ShieldCheck,
       dirty:
+        inviteAccessChanged ||
         !deepEqual(
           savedConfig.settings.general.registrations,
           workingConfig.settings.general.registrations
@@ -697,6 +728,138 @@ export function InstanceSettings({
                       This message will be shown to users on the login page when
                       registrations are disabled
                     </p>
+                  </div>
+                )}
+                {!workingConfig.settings.general.registrations.enabled && (
+                  <p className="text-sm text-muted-foreground">
+                    People with an active invite link can still create an
+                    account.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card id="invites" className="scroll-mt-28">
+              <CardHeader>
+                <CardTitle>Invites</CardTitle>
+                <CardDescription>
+                  Invite links let people create an account, even while
+                  registration is closed. Administrators can always create them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="everyone-can-invite">
+                      Let everyone create invites
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Every account can invite people from Profile → Invites.
+                      This grants Create invites to the Everyone role; use Roles
+                      to allow only some people instead.
+                    </p>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {inviteAccessChanged && <ChangeIndicator />}
+                    <Switch
+                      id="everyone-can-invite"
+                      checked={everyoneCanInvite}
+                      onCheckedChange={setEveryoneCanInvite}
+                      disabled={!can('invites.create')}
+                      className={
+                        inviteAccessChanged
+                          ? 'border-primary ring-1 ring-primary bg-primary/5'
+                          : ''
+                      }
+                    />
+                  </div>
+                </div>
+                {!can('invites.create') && (
+                  <p className="text-xs text-muted-foreground">
+                    You can change this only if your roles let you create
+                    invites yourself.
+                  </p>
+                )}
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Limits for members</p>
+                    <p className="text-sm text-muted-foreground">
+                      Apply to people who can invite but cannot create accounts
+                      directly. Changes affect invites created afterward.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    {(
+                      [
+                        ['activeInvites', 'Active invites per person', 1, 100],
+                        ['usesPerInvite', 'Uses per invite', 1, 100],
+                        ['lifetimeDays', 'Longest expiry (days)', 1, 365],
+                      ] as const
+                    ).map(([field, label, min, max]) => (
+                      <div key={field} className="space-y-2">
+                        <Label htmlFor={`invite-limit-${field}`}>{label}</Label>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Input
+                            id={`invite-limit-${field}`}
+                            type="number"
+                            inputMode="numeric"
+                            min={min}
+                            max={max}
+                            value={
+                              workingConfig.settings.general.registrations
+                                .inviteLimits[field]
+                            }
+                            onChange={(event) => {
+                              const value = Number.parseInt(
+                                event.target.value,
+                                10
+                              )
+                              if (Number.isNaN(value)) return
+                              handleSettingChange('general', {
+                                registrations: {
+                                  ...workingConfig.settings.general
+                                    .registrations,
+                                  inviteLimits: {
+                                    ...workingConfig.settings.general
+                                      .registrations.inviteLimits,
+                                    [field]: Math.min(
+                                      max,
+                                      Math.max(min, value)
+                                    ),
+                                  },
+                                },
+                              })
+                            }}
+                            className={getFieldClasses('general', [
+                              'registrations',
+                              'inviteLimits',
+                              field,
+                            ])}
+                          />
+                          {isFieldChanged('general', [
+                            'registrations',
+                            'inviteLimits',
+                            field,
+                          ]) && <ChangeIndicator />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {(can('users.read') || can('roles.manage')) && (
+                  <div className="flex flex-wrap gap-2">
+                    {can('users.read') &&
+                      (can('invites.create') || can('invites.manage')) && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href="/dashboard/users?tab=invites">
+                            Review invites
+                          </Link>
+                        </Button>
+                      )}
+                    {can('roles.manage') && (
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/dashboard/roles">Manage roles</Link>
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

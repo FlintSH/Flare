@@ -51,6 +51,7 @@ Preview the full site with `npm ci --prefix docs/site` then
 - 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
+  - [Invite links](https://flintsh.github.io/Flare/guide/invites.html): let people join a private instance with single- or multi-use links, optional roles, and member limits
   - [Unified setup](https://flintsh.github.io/Flare/admin/setup.html): account, storage, access, optional personalization and email in one guided flow
   - [Appearance studio](https://flintsh.github.io/Flare/admin/appearance.html): branding, paired palettes, share layouts, previews and portable packs
   - [Upload profiles](https://flintsh.github.io/Flare/guide/upload-profiles.html): reusable defaults and recipes across browser and screenshot tools
@@ -99,7 +100,7 @@ In Settings, accounts with the corresponding role permissions can configure:
 
 - Setting a shared storage quota (roles can grant a quota exemption) and a maximum file size
 - Choosing storage and optional OCR processing
-- Configuring registration options and sign-in policy
+- Configuring registration options, who can create invite links, and sign-in policy
 - Customizing the site's appearance and branding
 - Managing advanced settings like custom CSS and HTML
 

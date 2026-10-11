@@ -137,6 +137,18 @@ export async function deleteAccountWithStorageCleanup(
           jsonb_build_object('reason', 'Account deleted', 'ownerId', "userId")
         FROM "File" WHERE "userId" = ${targetId}
       `
+      // The account's invite links cascade too; accounts that joined remain.
+      await tx.$executeRaw`
+        INSERT INTO "AuditEvent"
+          (id, action, category, outcome, "actorId", "actorName",
+           "targetType", "targetId", "targetName", "requestId", details)
+        SELECT gen_random_uuid()::text, 'invite.delete', 'invites', 'success',
+          ${actorId}, ${actor?.name ?? actorId}, 'invite', id,
+          NULLIF(LEFT(note, 500), ''), ${context?.requestId ?? null},
+          jsonb_build_object('reason', 'Account deleted', 'creatorId',
+            "creatorId", 'uses', uses)
+        FROM "Invite" WHERE "creatorId" = ${targetId}
+      `
       await tx.user.delete({ where: { id: targetId } })
     },
     self,

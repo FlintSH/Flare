@@ -81,6 +81,13 @@ const steps = [
     text: 'Browse shared archive paths and download entries. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
     link: '/guide/archives',
   },
+  {
+    title: 'Bring people in by invitation',
+    label: 'Invite',
+    src: '/screenshots/invites/profile-invites.webp',
+    text: 'Keep registration closed and send invite links instead. Choose how many people each link admits and when it expires, see who joined, and revoke a link anytime.',
+    link: '/guide/invites',
+  },
 ]
 const step = computed(() => steps[current.value])
 </script>
