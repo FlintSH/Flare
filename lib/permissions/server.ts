@@ -80,6 +80,17 @@ export async function ensureBuiltInRoles(tx: Prisma.TransactionClient) {
   return { everyone, administrator }
 }
 
+function combineAccess(
+  assigned: RoleSummary[],
+  everyone: RoleSummary | null
+): UserAccess {
+  const roles = [
+    ...assigned.filter((role) => role.systemKey !== 'everyone'),
+    ...(everyone ? [everyone] : []),
+  ].sort((a, b) => b.position - a.position || a.name.localeCompare(b.name))
+  return { roles, permissions: resolvePermissions(roles) }
+}
+
 export async function getUserAccess(
   userId: string,
   tx: AccessClient = prisma
@@ -95,11 +106,28 @@ export async function getUserAccess(
     }),
   ])
   if (!user) return { roles: [], permissions: [] }
-  const roles = [
-    ...user.roles.filter((role) => role.systemKey !== 'everyone'),
-    ...(everyone ? [everyone] : []),
-  ].sort((a, b) => b.position - a.position || a.name.localeCompare(b.name))
-  return { roles, permissions: resolvePermissions(roles) }
+  return combineAccess(user.roles, everyone)
+}
+
+/** Batched getUserAccess for lists; missing accounts are absent from the map. */
+export async function getUsersAccess(
+  userIds: readonly string[],
+  tx: AccessClient = prisma
+): Promise<Map<string, UserAccess>> {
+  if (!userIds.length) return new Map()
+  const [users, everyone] = await Promise.all([
+    tx.user.findMany({
+      where: { id: { in: [...userIds] } },
+      select: { id: true, roles: { select: roleSelect } },
+    }),
+    tx.role.findUnique({
+      where: { systemKey: 'everyone' },
+      select: roleSelect,
+    }),
+  ])
+  return new Map(
+    users.map((user) => [user.id, combineAccess(user.roles, everyone)])
+  )
 }
 
 /** Session-only guard. A named or legacy API token can never authorize role management. */

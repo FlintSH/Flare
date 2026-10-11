@@ -103,7 +103,7 @@ Test sign-in, upload, download, and any integrations you depend on after the upd
 
 ### Invite links migration
 
-Migration `20261011010000_invites` adds the `Invite` table, its role join table, and an optional `User.inviteId` reference. Normal image startup applies it; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.
+Migrations `20261011010000_invites` and `20261011020000_invite_member_index` add the `Invite` table, its role join table, and an optional, indexed `User.inviteId` reference. The index keeps invite lists and account deletion from scanning every account. Normal image startup applies both; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.
 
 After the upgrade, **only administrators can create invite links**, because Administrator includes the new `invites.create` and `invites.manage` permissions while Everyone does not receive them. Until you save different values, Flare applies the default member limits: 5 active invites, 1 use, and a 30-day longest expiry. Review **Settings → Access → Invites** and [who can invite](/admin/users#invite-links) before announcing the feature. Test by creating a single-use invite, opening it in a private window, and creating a disposable account.
 

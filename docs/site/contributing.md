@@ -456,7 +456,7 @@ DATABASE_URL="$FLARE_INVITES_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/invites
 ```
 
-Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the policy and token unit tests still run. The PostgreSQL cases use the real route handlers to cover closed-registration sign-up, role grants and their recheck when a link is used, member limits, the Everyone switch and its permissions, revocation, paused links, concurrent use of a single-use link, rollback of a failed registration, deletion of a creator's account, and audit records without tokens.
+Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the policy and token unit tests still run. The PostgreSQL cases use the real route handlers to cover closed-registration sign-up, role grants and their recheck when a link is used, member limits, the Everyone switch and its permissions, revocation, paused links, concurrent use of a single-use link, rollback of a failed registration, deletion of a creator's account, audit records without tokens, batched permission reads that match single-account reads, and the joined-account index.
 
 ## Local visual testing with Meticulous
 

@@ -66,7 +66,7 @@ Choose **Save settings** after editing them. Limits apply when an invite is crea
 
 ### Review and revoke every invite
 
-Open **Users → Invites**. With **Manage all invites**, **Created by** defaults to **Anyone** and each link shows its creator, note, status, uses, expiry, granted roles, and the accounts that joined. Without it, the tab shows only your own invites. Choose **Revoke** and confirm to stop a link immediately; accounts already created with it are unaffected.
+Open **Users → Invites**. With **Manage all invites**, **Created by** defaults to **Anyone** and each link shows its creator, note, status, uses, expiry, granted roles, and the accounts that joined. Without it, the tab shows only your own invites. Choose **Revoke** and confirm to stop a link immediately; accounts already created with it are unaffected. Statuses reflect each creator's permissions when the list loads, so choose **Refresh** after changing roles elsewhere.
 
 <Screenshot src="/screenshots/invites/users-invites.webp" alt="Users Invites tab showing invites created by Jamie Rivera that are paused or revoked, and Show set to All invites" caption="Managers see every invite. Here member invites are paused after Let everyone create invites was turned off." />
 

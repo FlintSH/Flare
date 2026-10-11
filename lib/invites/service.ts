@@ -17,6 +17,7 @@ import {
   assertCanManageRole,
   ensureBuiltInRoles,
   getUserAccess,
+  getUsersAccess,
   lockRoleChanges,
   requireActorPermission,
   roleSelect,
@@ -124,14 +125,27 @@ async function creatorEligibility(records: InviteRecord[]) {
     ),
   ]
   if (!creators.length) return new Map<string, UserAccess | null>()
-  const [users, email] = await Promise.all([
-    prisma.user.findMany({ where: { id: { in: creators } } }),
+  // A constant number of reads, however many creators appear on the page.
+  const [users, accessById, email] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: creators } },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        emailVerifiedFor: true,
+        emailVerificationSource: true,
+        emailExempt: true,
+        createdAt: true,
+      },
+    }),
+    getUsersAccess(creators),
     getEmailConfig(),
   ])
   const eligible = new Map<string, UserAccess | null>()
   for (const id of creators) {
     const user = users.find((candidate) => candidate.id === id)
-    const access = user ? await getUserAccess(id) : null
+    const access = accessById.get(id)
     eligible.set(
       id,
       user &&

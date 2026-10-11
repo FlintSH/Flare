@@ -656,6 +656,33 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     ).toMatchObject({ inviteId: null, name: 'Kept Person' })
   })
 
+  it('batches creator access reads with the same result as single reads', async () => {
+    const lead = await prisma.role.create({
+      data: {
+        name: 'Lead',
+        position: 50,
+        permissions: ['invites.create', 'users.roles'],
+      },
+    })
+    await account('lead', 'Lee Lead', [lead.id])
+    const batched = await service.getUsersAccess([
+      'admin',
+      'member',
+      'lead',
+      'missing',
+    ])
+    expect([...batched.keys()].sort()).toEqual(['admin', 'lead', 'member'])
+    for (const id of ['admin', 'member', 'lead'])
+      expect(batched.get(id)).toEqual(await service.getUserAccess(id))
+    expect(await service.getUsersAccess([])).toEqual(new Map())
+    // Joined-account lookups and creator deletion use this index.
+    expect(
+      await prisma.$queryRaw<{ indexname: string }[]>`
+        SELECT indexname FROM pg_indexes
+        WHERE tablename = 'User' AND indexname = 'User_inviteId_idx'`
+    ).toHaveLength(1)
+  })
+
   it('validates list queries and create payloads', async () => {
     expect((await list('scope=everyone')).status).toBe(400)
     expect((await list('limit=500')).status).toBe(400)
