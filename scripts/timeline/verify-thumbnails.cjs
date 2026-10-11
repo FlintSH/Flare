@@ -9,6 +9,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { cleanupThumbnailFixtures } = require('./thumbnail-cleanup.cjs')
 const expect = baseExpect.configure({ timeout: 45_000 })
 
 const origin = process.env.FLARE_TIMELINE_TEST_ORIGIN || 'http://localhost:3064'
@@ -63,7 +64,10 @@ async function checkPreviews(page, scope, moderation = false) {
   for (const file of fixtures) {
     const image = scope.getByRole('img', { name: file.name, exact: true })
     await expect(image).toBeVisible()
-    await image.scrollIntoViewIfNeeded()
+    // Scrolling can remount a virtual card; resolve its image again below.
+    await image.evaluate((img) =>
+      img.scrollIntoView({ block: 'center', behavior: 'instant' })
+    )
     await expect
       .poll(() => image.evaluate((img) => img.complete && img.naturalWidth > 0))
       .toBe(true)
@@ -124,6 +128,7 @@ async function main() {
   if (screenshots) await mkdir(screenshots, { recursive: true })
   const browser = await chromium.launch({ headless: true })
   let owner
+  const failures = []
   try {
     owner = await login(browser, accountIds[0])
     const illustration = await readFile(
@@ -213,6 +218,7 @@ async function main() {
       exact: true,
     })
     await expect(library).toHaveAttribute('aria-busy', 'false')
+    await expect(library.getByRole('img')).toHaveCount(fixtures.length)
     for (const [size, viewport] of [
       ['desktop', { width: 1440, height: 1000 }],
       ['mobile', { width: 390, height: 844 }],
@@ -235,6 +241,7 @@ async function main() {
     await dialog
       .getByRole('textbox', { name: 'Search this user’s files' })
       .fill(prefix)
+    await expect(dialog.getByRole('img')).toHaveCount(fixtures.length)
     for (const [size, viewport] of [
       ['desktop', { width: 1440, height: 1000 }],
       ['mobile', { width: 390, height: 844 }],
@@ -246,17 +253,16 @@ async function main() {
         `PASS: ${size} moderator previews load using another account's session`
       )
     }
+  } catch (error) {
+    failures.push(error)
   } finally {
-    if (owner) {
-      for (const file of fixtures) {
-        const response = await owner.context.request.delete(
-          origin + `/api/files/${file.id}`,
-          { headers: { Origin: origin } }
-        )
-        assert.ok(response.ok(), `Cleanup failed for ${file.name}`)
-      }
-    }
-    await browser.close()
+    await cleanupThumbnailFixtures({
+      browser,
+      owner,
+      fixtures,
+      origin,
+      failures,
+    })
   }
 }
 
