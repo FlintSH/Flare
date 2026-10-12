@@ -57,6 +57,8 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 
 Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
 
+A local file-open failure or failed view-counter write returns `500` and closes the acquired storage stream. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
+
 ## Dashboard account routes requiring a browser session
 
 These routes explicitly read an interactive session. Neither a named API token nor a legacy account upload token by itself supplies that session. Ownership, current role permission, and feature-policy checks still apply. Profile edits use `profile.update`; full exports require `profile.export`, `files.read`, and `links.read` together (progress alone uses `profile.export`); upload profiles `uploadProfiles.manage`; token and uploader-configuration management `tokens.manage`; webhooks `webhooks.manage`; personal appearance `appearance.personal`. File changes separately check `files.share`, `files.update`, or `files.delete`.

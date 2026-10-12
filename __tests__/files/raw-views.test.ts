@@ -1,9 +1,17 @@
 import { GET } from '@/app/(raw)/[userUrlId]/[filename]/raw/route'
 import { hashSync } from 'bcryptjs'
+import type { ReadStream } from 'node:fs'
+import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { setTimeout as delay } from 'node:timers/promises'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configureAuditWriter } from '@/lib/audit'
+import { LocalStorageProvider } from '@/lib/storage/providers/local'
+
+// Probe the native descriptor too; @types/node omits this runtime property.
+type LocalReadStream = ReadStream & { fd: number | null }
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -197,3 +205,156 @@ describe('raw file views', () => {
     }
   )
 })
+
+describe.each([undefined, 'bytes=0-2'])(
+  'local raw stream lifecycle (range: %s)',
+  (range) => {
+    async function withLocalFile(
+      check: (path: string, provider: LocalStorageProvider) => Promise<void>
+    ) {
+      await mkdir('uploads', { recursive: true })
+      const directory = await mkdtemp('uploads/raw-views-test-')
+      const path = join(directory, 'fixture.txt')
+      await writeFile(path, content)
+      try {
+        await check(path, new LocalStorageProvider())
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    }
+
+    it('opens the real file before writing its view and streams the expected bytes', async () => {
+      await withLocalFile(async (path, provider) => {
+        let stream: LocalReadStream | undefined
+        let closed: Promise<void> | undefined
+        mocks.size.mockImplementation(() => provider.getFileSize(path))
+        mocks.stream.mockImplementation(async (_path, options) => {
+          stream = (await provider.getFileStream(
+            path,
+            options
+          )) as LocalReadStream
+          closed = new Promise((resolve) => stream!.once('close', resolve))
+          return stream
+        })
+        mocks.update.mockImplementation(async ({ data }) => {
+          expect(stream?.pending).toBe(false)
+          expect(stream?.fd).toBeTypeOf('number')
+          expect(stream?.readableFlowing).toBe(false)
+          file.views += data.views.increment
+          return file
+        })
+        try {
+          const response = await request({ range })
+          expect(response.status).toBe(range ? 206 : 200)
+          expect(await response.text()).toBe(
+            (range ? content.subarray(0, 3) : content).toString()
+          )
+          await closed
+          expect(stream?.fd).toBeNull()
+          expect(file.views).toBe(8)
+        } finally {
+          stream?.destroy()
+          await closed
+        }
+      })
+    })
+
+    it('handles a file removed after the size check without counting a view', async () => {
+      await withLocalFile(async (path, provider) => {
+        let stream: LocalReadStream | undefined
+        let closed: Promise<void> | undefined
+        mocks.size.mockImplementation(() => provider.getFileSize(path))
+        mocks.stream.mockImplementation(async (_path, options) => {
+          await unlink(path)
+          stream = (await provider.getFileStream(
+            path,
+            options
+          )) as LocalReadStream
+          closed = new Promise((resolve) => stream!.once('close', resolve))
+          return stream
+        })
+        mocks.update.mockImplementation(async ({ data }) => {
+          await delay(25)
+          file.views += data.views.increment
+          return file
+        })
+        try {
+          const response = await request({ range })
+          expect(response.status).toBe(500)
+          expect(mocks.update).not.toHaveBeenCalled()
+          expect(file.views).toBe(7)
+          expect(stream?.destroyed).toBe(true)
+          await closed
+          expect(stream?.fd).toBeNull()
+        } finally {
+          stream?.destroy()
+          await closed
+        }
+      })
+    })
+
+    it('closes the real descriptor when the view-count write rejects', async () => {
+      await withLocalFile(async (path, provider) => {
+        let stream: LocalReadStream | undefined
+        let closed: Promise<void> | undefined
+        mocks.size.mockImplementation(() => provider.getFileSize(path))
+        mocks.stream.mockImplementation(async (_path, options) => {
+          stream = (await provider.getFileStream(
+            path,
+            options
+          )) as LocalReadStream
+          closed = new Promise((resolve) => stream!.once('close', resolve))
+          return stream
+        })
+        mocks.update.mockImplementation(async () => {
+          await delay(25)
+          expect(stream?.fd).toBeTypeOf('number')
+          throw new Error('View counter unavailable')
+        })
+        try {
+          const response = await request({ range })
+          expect(response.status).toBe(500)
+          expect(mocks.update).toHaveBeenCalledOnce()
+          expect(file.views).toBe(7)
+          expect(stream?.destroyed).toBe(true)
+          await closed
+          expect(stream?.fd).toBeNull()
+        } finally {
+          stream?.destroy()
+          await closed
+        }
+      })
+    })
+
+    it('closes the real descriptor if response header validation fails', async () => {
+      await withLocalFile(async (path, provider) => {
+        let stream: LocalReadStream | undefined
+        let closed: Promise<void> | undefined
+        mocks.size.mockImplementation(() => provider.getFileSize(path))
+        mocks.stream.mockImplementation(async (_path, options) => {
+          stream = (await provider.getFileStream(
+            path,
+            options
+          )) as LocalReadStream
+          closed = new Promise((resolve) => stream!.once('close', resolve))
+          return stream
+        })
+        const mimeType = file.mimeType
+        file.mimeType = 'text/plain\r\ninvalid-header'
+        try {
+          const response = await request({ range })
+          expect(response.status).toBe(500)
+          expect(mocks.update).not.toHaveBeenCalled()
+          expect(file.views).toBe(7)
+          expect(stream?.destroyed).toBe(true)
+          await closed
+          expect(stream?.fd).toBeNull()
+        } finally {
+          file.mimeType = mimeType
+          stream?.destroy()
+          await closed
+        }
+      })
+    })
+  }
+)

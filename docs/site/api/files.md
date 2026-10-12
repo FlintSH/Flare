@@ -219,6 +219,8 @@ Normal pages use offsets, so a library changing between requests can move entrie
 
 `views` includes share-page visits and successful `GET /{userUrlId}/{filename}/raw` responses. Each full response or `206` range response increments the total once. Raw access denials, missing files, failures opening storage, and `HEAD` requests do not increment it. This counts requests, including bots and repeated media ranges, rather than unique visitors or completed transfers. Existing totals are preserved after upgrading; earlier raw traffic is not backfilled. See [sharing and privacy](/guide/sharing#view-counts) for caching and direct-storage limits.
 
+The stored file must open successfully before Flare writes the counter. A local file-open failure or failed counter write returns `500` and closes the acquired stream. After resolving the [storage or database failure](/hosting/troubleshooting#raw-links-return-500), retry the request.
+
 To check a disposable **public file without a password** that you own, set `FLARE_FILE_IDS` to its ID and `FLARE_FILE_PATH` to its URL-encoded `urlPath` from the list response, such as `/abc123/fixture.txt`. The file must contain at least three bytes. Run the metadata read below before and after the raw requests; in an otherwise idle fixture, `views` increases by two. The bearer token needs `files:read` for the metadata read. Raw content uses the file's public access and receives no bearer token.
 
 ```sh

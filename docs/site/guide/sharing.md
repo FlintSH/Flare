@@ -88,6 +88,8 @@ This is a request count, not a count of unique people or completed transfers. Bo
 
 After upgrading, existing totals are retained and new raw requests contribute immediately. Earlier raw requests are not backfilled; no configuration change or database migration is needed. Refresh the library after opening a raw link to see its updated total.
 
+If a raw request returns `500`, Flare may have failed to open the stored file or save its view count. The request stops and its storage stream is closed. Ask the operator to [check storage and database availability](../hosting/troubleshooting#raw-links-return-500), then retry; a failed counter write does not add a view.
+
 <Screenshot src="/screenshots/sharing/raw-view-count.webp" alt="Real Flare library showing nine views for raw-view-fixture.txt after one full raw request and one range request" caption="This disposable local file started with seven views. A full raw request and a range request raised its displayed total to nine; a HEAD probe left it unchanged." />
 
 ## Give a file a lifetime
