@@ -1,0 +1,123 @@
+[
+  {
+    "source": "docs/images/roles/role-editor.webp",
+    "name": "demo-role-editor.webp"
+  },
+  {
+    "source": "docs/images/roles/user-roles.webp",
+    "name": "demo-user-roles.webp"
+  },
+  { "source": ".github/assets/roles/roles-demo.mp4", "name": "demo-roles.mp4" },
+  {
+    "source": "docs/images/security/totp-setup.webp",
+    "name": "demo-authenticator-setup.webp"
+  },
+  {
+    "source": "docs/images/security/passkey-required.webp",
+    "name": "demo-required-passkey.webp"
+  },
+  {
+    "source": ".github/assets/security/two-factor-demo.webm",
+    "name": "demo-two-factor.webm"
+  },
+  {
+    "source": ".github/assets/security/passkey-demo.webm",
+    "name": "demo-passkeys.webm"
+  },
+  {
+    "source": ".github/assets/security/passkey-required-demo.webm",
+    "name": "demo-passkey-required.webm"
+  },
+  {
+    "source": "docs/images/audit/sessions-desktop.webp",
+    "name": "demo-active-sessions.webp"
+  },
+  {
+    "source": "docs/images/audit/login-history.webp",
+    "name": "demo-login-history.webp"
+  },
+  {
+    "source": ".github/assets/audit/session-management.webm",
+    "name": "demo-sessions.webm"
+  },
+  {
+    "source": "docs/images/audit/audit-filtered.webp",
+    "name": "demo-audit-log.webp"
+  },
+  {
+    "source": ".github/assets/audit/audit-investigation.webm",
+    "name": "demo-audit.webm"
+  },
+  {
+    "source": "docs/images/archives/browse.webp",
+    "name": "demo-archive-browser.webp"
+  },
+  {
+    "source": "docs/images/archives/create.webp",
+    "name": "demo-create-archive.webp"
+  },
+  {
+    "source": "docs/images/archives/share-browse.webp",
+    "name": "demo-shared-archive.webp"
+  },
+  {
+    "source": ".github/assets/archives/archive-browse-extract.webm",
+    "name": "demo-archive-extract.webm"
+  },
+  {
+    "source": ".github/assets/archives/archive-create.webm",
+    "name": "demo-archive-create.webm"
+  },
+  {
+    "source": ".github/assets/archives/archive-share-browse.webm",
+    "name": "demo-archive-share.webm"
+  },
+  {
+    "source": "docs/images/timeline/library-desktop.webp",
+    "name": "demo-file-library.webp"
+  },
+  {
+    "source": ".github/assets/timeline/timeline-scroll.mp4",
+    "name": "demo-library-desktop.mp4"
+  },
+  {
+    "source": ".github/assets/timeline/timeline-mobile.mp4",
+    "name": "demo-library-mobile.mp4"
+  },
+  {
+    "source": "docs/images/invites/create-invite.webp",
+    "name": "demo-create-invite.webp"
+  },
+  {
+    "source": "docs/images/invites/register-invite.webp",
+    "name": "demo-join-invite.webp"
+  },
+  {
+    "source": ".github/assets/invites/admin-invite.webm",
+    "name": "demo-admin-invite.webm"
+  },
+  {
+    "source": ".github/assets/invites/join-with-invite.webm",
+    "name": "demo-join-invite.webm"
+  },
+  {
+    "source": ".github/assets/invites/member-invites.webm",
+    "name": "demo-member-invites.webm"
+  },
+  {
+    "source": "docs/images/handbook/docs-versions.webp",
+    "name": "demo-docs-versions.webp"
+  },
+  {
+    "source": "docs/images/documentation-links/settings-desktop.webp",
+    "name": "demo-documentation-link.webp"
+  },
+  {
+    "source": "docs/images/thumbnails/library-previews.webp",
+    "name": "demo-library-previews.webp"
+  },
+  {
+    "source": "docs/images/roles/users-content.webp",
+    "name": "demo-moderation-previews.webp"
+  }
+]

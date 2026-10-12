@@ -233,6 +233,10 @@ jobs:
       - name: Generate Release Body
         id: release_body
         run: |
+          RELEASE_NOTES=".github/release-notes/v${{ needs.check-version.outputs.version }}.md"
+          if [ -f "$RELEASE_NOTES" ]; then
+            cp "$RELEASE_NOTES" release_body.md
+          else
           cat << 'EOF' > release_body.md
           ## What's Changed
 
@@ -244,6 +248,10 @@ jobs:
 
           **Deploy with Railway:** https://railway.com/template/JVT41u?referralCode=R5s8WT
           EOF
+          fi
+
+      - name: Prepare release assets
+        run: node scripts/releases/prepare-assets.mjs "${{ needs.check-version.outputs.version }}" "$RUNNER_TEMP/flare-release-assets"
 
       - name: Create Git Tag
         run: |
@@ -253,10 +261,11 @@ jobs:
           git push origin "v${{ needs.check-version.outputs.version }}"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
           draft: false
           prerelease: false
-          body_path: release_body.md 
+          body_path: release_body.md
+          files: ${{ runner.temp }}/flare-release-assets/*

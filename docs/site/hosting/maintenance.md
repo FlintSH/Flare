@@ -101,6 +101,23 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Upgrading from 2.1 to 3.0
+
+Flare 3.0 adds roles, authenticator 2FA and passkeys, revocable browser sessions and login history, the audit log, archive tools, continuous library scrolling, and invite links. Use the normal backup and upgrade steps above, and stop all old application replicas before starting the new version. The official image applies the migrations automatically; source deployments run `npx prisma migrate deploy` before starting the updated application.
+
+Before upgrading, preserve the existing `NEXTAUTH_SECRET` and any separate email encryption key. Record the old image and take a consistent database-and-files backup. Allow a maintenance window for the [library timeline index](#file-library-timeline-index), especially on a large database.
+
+- **Everyone signs in again.** Old browser cookies have no server-side session record. Existing accounts, passwords, SSO bindings, files, links, and integration credentials remain in place. See the [sessions and audit migration](#sessions-and-audit-log-migration).
+- **Roles replace the old account type.** Everyone initially preserves ordinary personal workflows, and former administrators receive Admin. Custom dashboard clients replace `role` with `roleIds` for writes, `roles` for responses, and `roleId` for filtering. Named tokens retain their scopes and also obey their owner's current permissions. Follow [Upgrading to roles](#upgrading-to-roles).
+- **New security and invite settings are conservative.** Authenticator 2FA and the passkey requirement stay off until an account enrolls or explicitly enables them. Registering a passkey alone does not block other sign-in methods. Only administrators can invite by default; existing public-registration settings remain unchanged.
+- **Uploads retain their data; unfinished multipart sessions need restarting.** Sessions initialized before the [storage-provenance migration](#storage-provenance-migration) cannot complete without the new target metadata. Historical cleanup jobs with unknown targets wait for operator verification rather than deleting from an assumed destination.
+- **History has an operational cost.** Audit and login history start with this feature; earlier activity is not backfilled. Login history has a 90-day window, while audit history has no automatic retention cutoff. Include the new records and cleanup queue in backups and database capacity planning.
+- **Archive limits apply independently of upload settings.** New extracted files and generated archives default to private without an upload profile. Review [supported formats, sizes, and profile choices](../guide/archives#supported-sizes-and-formats) before depending on this workflow.
+
+After migration, sign in as an existing administrator, inspect **Roles**, and check an ordinary account's upload, share, and integration workflows. Check library date navigation, a disposable archive, and **Profile → Account → Active sessions**. Use the corresponding guides to test authenticator/passkey recovery and invites with isolated accounts before enabling them for others.
+
+Rollback requires the recorded old image plus its matching pre-upgrade database and file backup. An older image cannot use the removed role enum's replacement schema; changing the image alone is insufficient. [Follow the restore and rollback instructions](#rollback).
+
 ### Invite links migration
 
 Migrations `20261011010000_invites` and `20261011020000_invite_member_index` add the `Invite` table, its role join table, and an optional, indexed `User.inviteId` reference. The index keeps invite lists and account deletion from scanning every account. Normal image startup applies both; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.

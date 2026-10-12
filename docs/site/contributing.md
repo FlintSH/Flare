@@ -569,6 +569,22 @@ npm run check:changes -- --base BASE_COMMIT_SHA
 
 Replace `BASE_COMMIT_SHA` with the actual hexadecimal commit SHA you are comparing against. The gate requires related documentation areas to change in the same commit as user, administrator, hosting, or API code. A documentation follow-up commit does not cover an earlier feature commit; amend or reorganize the commits before submitting. It cannot verify semantic completeness; reviewers and agents must still use the coverage matrix in `AGENTS.md`.
 
+## Publish an application release
+
+Stable application releases start with a commit on `main` that updates the root `package.json` version. The **Release** workflow builds and publishes AMD64 and ARM64 images to Docker Hub and GHCR, creates their multi-architecture version and `latest` tags, then creates the matching `vX.Y.Z` Git tag and GitHub release. Let that workflow create the tag: a pre-existing version tag makes it skip the release. Run the application and documentation checks before pushing the version bump.
+
+Write reviewed release notes in `.github/release-notes/vX.Y.Z.md` in the same commit, with feature coverage, important defaults and limits, upgrade compatibility, real demonstrations, and deployment instructions. When that file exists, the workflow publishes it verbatim; otherwise it retains the generated commit-list notes. The 3.0 preparation reviewed the endpoint inventory, named-token OpenAPI, request examples, webhook schema, and relevant feature guides against the released implementation; release packaging does not change those contracts.
+
+For attachments, add `.github/release-notes/vX.Y.Z.assets.json`, an array of `{ "source": "repository/relative/path", "name": "release-attachment-name.ext" }` records. Sources must already be reviewed real screenshots or recordings; keep copied assets out of Git. The preparation script checks missing sources, paths, and duplicate names, then copies the files into a temporary directory. The release action uploads them alongside the notes, so release-download links work when publication completes. Use descriptive alt text and link videos to the handbook's written transcripts. Inspect every selected image and recording for credentials and private data before publishing.
+
+You can verify the attachment preparation locally without creating a tag or release:
+
+```sh
+node scripts/releases/prepare-assets.mjs 3.0.0 /tmp/flare-3.0-release-assets
+```
+
+This stable workflow updates `latest` and publishes a stable release. A prerelease requires a separate change to its channel and image handling before a prerelease version is pushed. The documentation workflow rebuilds the stable handbook and its dated archive after the successful release workflow; automatic page provenance continues to come from the selected Git tag.
+
 ## Publish the site
 
 The [VitePress deployment guide](https://vitepress.dev/guide/deploy) describes the static hosting model. No database, authentication secret, server-side renderer, or app environment variables are needed for this site.

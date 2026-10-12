@@ -5,6 +5,8 @@ description: Session-only role management, account role assignments, settings de
 
 # Roles and session contracts
 
+Flare 3.0 replaces the scalar `role` account field used in 2.1 with role assignments. Existing custom dashboard clients must update their account writes, responses, and filtering as described below; the old field is no longer accepted. Named-token scopes remain unchanged, and tokens also follow their owner's current operation permissions.
+
 The dashboard uses a **browser session** to administer roles and other accounts. These administration routes do not accept named API tokens or a legacy upload credential as a substitute for that session. The self-service profile route retains the separately documented legacy-credential compatibility path for ordinary preferences and deletion; [password/plain-email changes](./security#password-and-plain-email-changes) additionally require a browser session and security proof. They are listed here for contributors and existing dashboard clients; the [named-token OpenAPI document](/openapi.json) deliberately excludes them.
 
 Authorization uses the current account's permissions from Everyone plus all assigned roles, reloaded for authenticated requests. The server rechecks authority inside serialized role/account mutations, so a stale open editor does not preserve permission after revocation. See the [roles guide](/admin/roles) for the permission catalog and safety rules.
