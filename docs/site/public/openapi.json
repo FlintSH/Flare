@@ -2024,7 +2024,11 @@
           },
           "uploadedAt": { "type": "string", "format": "date-time" },
           "visibility": { "type": "string", "enum": ["PUBLIC", "PRIVATE"] },
-          "views": { "type": "integer", "minimum": 0 },
+          "views": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Request count from share-page visits and successful GET responses from /{userUrlId}/{filename}/raw, including each 206 range response. Raw HEAD probes, access denials, missing files, and failures opening storage do not increment it. Includes bots and repeat requests; not unique visitors or completed transfers. Historical raw requests are not backfilled."
+          },
           "downloads": { "type": "integer", "minimum": 0 },
           "folderId": { "type": ["string", "null"] },
           "user": {

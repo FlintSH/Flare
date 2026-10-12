@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { once } from 'node:events'
+import { ReadStream } from 'node:fs'
 import { Readable } from 'stream'
 
 import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
@@ -59,6 +61,8 @@ function createRobustStream(nodeStream: Readable): ReadableStream {
           streamClosed = true
         }
       })
+
+      nodeStream.resume()
     },
 
     cancel() {
@@ -68,6 +72,60 @@ function createRobustStream(nodeStream: Readable): ReadableStream {
       }
     },
   })
+}
+
+async function createFileResponse(
+  nodeStream: Readable,
+  req: Request,
+  fileId: string,
+  init: ResponseInit
+): Promise<NextResponse> {
+  let streamError: Error | null = nodeStream.errored
+  const onError = (error: Error) => {
+    streamError = error
+  }
+
+  // Keep errors handled and bytes paused until local open and the counter write
+  // finish. createReadStream returns before its asynchronous open completes.
+  nodeStream.on('error', onError)
+  nodeStream.pause()
+
+  try {
+    if (nodeStream.destroyed) {
+      throw streamError ?? new Error('Storage stream closed before serving')
+    }
+    if (nodeStream instanceof ReadStream && nodeStream.pending) {
+      await once(nodeStream, 'open')
+    }
+    if (streamError) throw streamError
+
+    // Validate headers before counting a request that cannot produce a response.
+    const headers = new Headers(init.headers)
+    if (req.method === 'GET') {
+      await prisma.file.update({
+        where: { id: fileId },
+        data: { views: { increment: 1 } },
+      })
+    }
+    if (streamError) throw streamError
+
+    const response = new NextResponse(createRobustStream(nodeStream), {
+      ...init,
+      headers,
+    })
+    // The response body now owns error handling and cancellation.
+    nodeStream.off('error', onError)
+    return response
+  } catch (error) {
+    if (nodeStream.closed) {
+      nodeStream.off('error', onError)
+    } else {
+      // Retain the listener through asynchronous destruction/descriptor closure.
+      nodeStream.once('close', () => nodeStream.off('error', onError))
+      nodeStream.destroy()
+    }
+    throw error
+  }
 }
 
 async function handleGET(
@@ -130,7 +188,7 @@ async function handleGET(
         'Keep-Alive': 'timeout=300, max=1000',
       }
 
-      return new NextResponse(createRobustStream(stream), {
+      return await createFileResponse(stream, req, file.id, {
         status: 206,
         headers,
       })
@@ -148,7 +206,7 @@ async function handleGET(
       'Keep-Alive': 'timeout=300, max=1000',
     }
 
-    return new NextResponse(createRobustStream(stream), { headers })
+    return await createFileResponse(stream, req, file.id, { headers })
   } catch (error) {
     logger.error('File serve error:', error as Error)
     if (error instanceof Error && error.message.includes('NoSuchKey')) {

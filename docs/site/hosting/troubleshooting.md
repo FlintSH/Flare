@@ -48,6 +48,14 @@ If accounts and file records remain but bytes cannot be read, check your storage
 
 If accounts and settings also disappeared, inspect the PostgreSQL volume and database URL. You may be connected to a new empty database. Do not complete setup again until you have checked whether the original data still exists.
 
+## Raw links return 500
+
+`GET /{userUrlId}/{filename}/raw` checks access, opens the stored content, and saves one view before serving the response. A local file can disappear between the size check and opening it; this returns `500` without counting a view. A failed database counter write also returns `500` without serving the content. Both full and range responses close acquired streams on these failures so repeated requests do not retain file descriptors.
+
+Inspect the application's **File serve error** logs, confirm that the original storage object exists and is readable, and check PostgreSQL availability and write permissions. Restore the missing object from your backup or resolve the storage/database problem, then retry the raw request and refresh the library. A failed counter write does not add a view. No re-upload or database migration is required for files whose bytes and metadata are intact.
+
+An unknown file URL or a private file requested by an unauthorized visitor returns `404`; a public file with a missing or incorrect password returns `401`. Check [sharing and privacy](/guide/sharing#view-counts) before treating an access denial as a storage failure.
+
 ## Image thumbnails fail
 
 Check the direct `/api/files/{id}/thumbnail` response in the same signed-in browser, even if the failed request is to `/_next/image?url=.../thumbnail`. A successful image response must contain readable image bytes; `200` with an empty body is still a failure. The thumbnail endpoint streams the original image, and the optimizer can resize public library previews. Protected library previews and **View Content** use the browser session directly.

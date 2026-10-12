@@ -80,6 +80,18 @@ On S3 storage, an authorized response can provide a temporary signed storage URL
 
 Dashboard copy buttons and generated screenshot tools copy the normal share-page URL. For automation that needs a different response URL, see the [API guide](../api/index).
 
+### View counts
+
+The view total on a [library file card](./library#understand-activity-and-refresh) includes share-page visits and successful `GET` requests to `/{userUrlId}/{filename}/raw`. Each raw request adds one view, including a `206` byte-range response used for media playback. Raw requests denied by visibility or password checks, missing files, storage failures before a stream is opened, and `HEAD` probes do not add views.
+
+This is a request count, not a count of unique people or completed transfers. Bots, link previews, repeat requests, and each media range request can add views. Opening a share page that loads its content through `/raw` can add both a page view and raw-content views. Browser or external-cache hits that do not reach Flare add no raw views; `/direct` lookups and reads from an issued S3 URL do not add raw views either.
+
+After upgrading, existing totals are retained and new raw requests contribute immediately. Earlier raw requests are not backfilled; no configuration change or database migration is needed. Refresh the library after opening a raw link to see its updated total.
+
+If a raw request returns `500`, Flare may have failed to open the stored file or save its view count. The request stops and its storage stream is closed. Ask the operator to [check storage and database availability](../hosting/troubleshooting#raw-links-return-500), then retry; a failed counter write does not add a view.
+
+<Screenshot src="/screenshots/sharing/raw-view-count.webp" alt="Real Flare library showing nine views for raw-view-fixture.txt after one full raw request and one range request" caption="This disposable local file started with seven views. A full raw request and a range request raised its displayed total to nine; a HEAD probe left it unchanged." />
+
 ## Give a file a lifetime
 
 With `files.update`, use **Manage expiration** to schedule one of two actions:

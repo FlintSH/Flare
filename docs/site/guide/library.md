@@ -149,7 +149,7 @@ OCR supports images, not a general PDF or office-document indexing workflow. Res
 
 ## Understand activity and refresh
 
-Cards show view and download counts, and those counts can drive sorting. They measure access activity, not verified unique people. Treat them as useful signals rather than audience analytics.
+Cards show view and download counts, and those counts can drive sorting. Share-page visits and successful `/raw` GET requests contribute to the view total, including media range requests. The count can include bots and multiple requests from one person; see [view counts](./sharing#view-counts) for the counting rules and upgrade behavior.
 
 Use **Refresh files** to fetch the latest results. Uploads completed through the dashboard drop overlay also refresh an open library. Files can move within a sorted list when uploads, deletions, or activity change its order.
 
