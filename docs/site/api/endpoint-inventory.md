@@ -55,6 +55,8 @@ Archive share pages use separate read operations under the same file-access rule
 
 The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access. `/{userUrlId}/{filename}/direct` is a video-only lookup that returns JSON containing a signed storage URL or raw-route fallback after checking access; it does not stream the file itself. An issued S3 URL can remain valid until its own expiry after Flare access settings change. `/{userUrlId}/{filename}` is the rendered share page. `GET /u/{shortCode}` publicly redirects a short link and increments its count.
 
+Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
+
 ## Dashboard account routes requiring a browser session
 
 These routes explicitly read an interactive session. Neither a named API token nor a legacy account upload token by itself supplies that session. Ownership, current role permission, and feature-policy checks still apply. Profile edits use `profile.update`; full exports require `profile.export`, `files.read`, and `links.read` together (progress alone uses `profile.export`); upload profiles `uploadProfiles.manage`; token and uploader-configuration management `tokens.manage`; webhooks `webhooks.manage`; personal appearance `appearance.personal`. File changes separately check `files.share`, `files.update`, or `files.delete`.

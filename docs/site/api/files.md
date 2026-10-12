@@ -215,6 +215,29 @@ The response excludes password hashes and OCR text. `hasPassword` indicates prot
 
 Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
 
+### Check raw view counts
+
+`views` includes share-page visits and successful `GET /{userUrlId}/{filename}/raw` responses. Each full response or `206` range response increments the total once. Raw access denials, missing files, failures opening storage, and `HEAD` requests do not increment it. This counts requests, including bots and repeated media ranges, rather than unique visitors or completed transfers. Existing totals are preserved after upgrading; earlier raw traffic is not backfilled. See [sharing and privacy](/guide/sharing#view-counts) for caching and direct-storage limits.
+
+To check a disposable **public file without a password** that you own, set `FLARE_FILE_IDS` to its ID and `FLARE_FILE_PATH` to its URL-encoded `urlPath` from the list response, such as `/abc123/fixture.txt`. The file must contain at least three bytes. Run the metadata read below before and after the raw requests; in an otherwise idle fixture, `views` increases by two. The bearer token needs `files:read` for the metadata read. Raw content uses the file's public access and receives no bearer token.
+
+```sh
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  --data-urlencode "ids=$FLARE_FILE_IDS" \
+  "$FLARE_URL/api/files"
+
+curl --fail-with-body --output /dev/null "$FLARE_URL$FLARE_FILE_PATH/raw"
+curl --fail-with-body --range 0-2 --output /dev/null "$FLARE_URL$FLARE_FILE_PATH/raw"
+
+curl --fail-with-body --head "$FLARE_URL$FLARE_FILE_PATH/raw"
+
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  --data-urlencode "ids=$FLARE_FILE_IDS" \
+  "$FLARE_URL/api/files"
+```
+
 ## Browse the whole file timeline
 
 **`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**

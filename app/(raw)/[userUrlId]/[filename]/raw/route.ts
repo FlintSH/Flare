@@ -118,6 +118,13 @@ async function handleGET(
         end,
       })
 
+      if (req.method === 'GET') {
+        await prisma.file.update({
+          where: { id: file.id },
+          data: { views: { increment: 1 } },
+        })
+      }
+
       const headers = {
         'Content-Range': `bytes ${start}-${end}/${size}`,
         'Accept-Ranges': 'bytes',
@@ -137,6 +144,13 @@ async function handleGET(
     }
 
     const stream = await storageProvider.getFileStream(file.path)
+    if (req.method === 'GET') {
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { views: { increment: 1 } },
+      })
+    }
+
     const headers = {
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
