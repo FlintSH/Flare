@@ -70,7 +70,7 @@ export function validateArchivePath(raw: string, directory = false): string {
 }
 
 /** Also tracks inferred directories, so file/directory and case collisions fail. */
-class ManifestBuilder {
+export class ManifestBuilder {
   entries: ArchiveEntry[] = []
   totalBytes = 0
   fileCount = 0

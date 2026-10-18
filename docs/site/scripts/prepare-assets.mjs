@@ -143,6 +143,8 @@ for (const [directory, name] of [
   ['archives', 'archive-browse-extract'],
   ['archives', 'archive-create'],
   ['archives', 'archive-share-browse'],
+  ['archives', 'archive-large-preview'],
+  ['archives', 'archive-large-tgz'],
   ['invites', 'admin-invite'],
   ['invites', 'join-with-invite'],
   ['invites', 'member-invites'],

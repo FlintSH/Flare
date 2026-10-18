@@ -1,6 +1,9 @@
 import {
+  ARCHIVE_BROWSE_LIMITS,
   ARCHIVE_LIMITS,
   type ArchiveEntry,
+  type ArchiveListing,
+  type ArchiveListingProgress,
   type ArchiveOutputFormat,
   detectArchiveFormat,
 } from '@/lib/archives/shared'
@@ -17,8 +20,8 @@ export function archiveSelectionSize(files: { size: number }[]) {
   }
 }
 
-export const TEXT_PREVIEW_BYTES = 256 * 1024
-export const IMAGE_PREVIEW_BYTES = 10 * 1024 * 1024
+export const TEXT_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.textPreviewBytes
+export const IMAGE_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.imagePreviewBytes
 
 export const ARCHIVE_FORM_DIALOG_CLASS =
   'max-h-[calc(100dvh-2rem)] overflow-hidden [&>div:first-child]:flex [&>div:first-child]:max-h-[calc(100dvh-7rem)] [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
@@ -78,15 +81,10 @@ export function isArchiveCandidate(name: string, mimeType: string) {
   )
 }
 
-export function isSafeArchiveImage(mimeType: string) {
-  return /^(image\/(png|jpeg|gif|webp|avif|bmp))$/.test(
-    mimeType.split(';')[0].trim().toLowerCase()
-  )
-}
-
 export interface ArchiveFileRef {
   id: string
   name: string
+  mimeType?: string
   urlPath?: string
   folderId?: string | null
 }
@@ -96,63 +94,126 @@ export type ArchiveSource =
 
 export const OWNER_ARCHIVE_SOURCE: ArchiveSource = { kind: 'owner' }
 
-/** Shared passwords and entry paths travel in the body, never in a URL. */
-export function archiveReadRequest(
+/** Shared passwords travel in the body, never in a URL. */
+export function archiveListingRequest(
   id: string,
   source: ArchiveSource,
-  path?: string
-): { url: string; body?: { password?: string; path?: string } } {
+  options: { progress?: boolean; after?: number } = {}
+): {
+  url: string
+  body?: { password?: string; progress?: true; after?: number }
+} {
   const base = `/api/files/${encodeURIComponent(id)}/archive`
   if (source.kind === 'share')
     return {
-      url: `${base}/share${path === undefined ? '' : '/entry'}`,
+      url: `${base}/share`,
       body: {
         ...(source.password ? { password: source.password } : {}),
-        ...(path === undefined ? {} : { path }),
+        ...(options.progress ? { progress: true as const } : {}),
+        ...(options.after ? { after: options.after } : {}),
       },
     }
-  return {
-    url: path === undefined ? base : archiveEntryUrl(id, path),
-  }
+  const query = new URLSearchParams()
+  if (options.progress) query.set('progress', '1')
+  if (options.after) query.set('after', String(options.after))
+  return { url: query.size ? `${base}?${query}` : base }
+}
+
+/**
+ * GET URL for one entry by its position in the listing, so member names stay
+ * out of URLs. Shared reads after a password use the unlock cookie the
+ * listing request set; the password itself never appears here.
+ */
+export function archiveEntryHref(
+  id: string,
+  source: ArchiveSource,
+  position: number,
+  options: { inline?: boolean } = {}
+) {
+  const base = `/api/files/${encodeURIComponent(id)}/archive${source.kind === 'share' ? '/share' : ''}/entry`
+  return `${base}?entry=${position}${options.inline ? '&disposition=inline' : ''}`
 }
 
 export function archiveEntryName(path: string) {
   return path.split('/').filter(Boolean).at(-1) || path
 }
 
-/** Include implicit ZIP directories without confusing common path prefixes. */
+/** A listed entry, or a folder implied by its children (no position). */
+export interface ArchiveRow extends ArchiveEntry {
+  position?: number
+}
+
+export interface ArchiveTree {
+  /** Direct children of each folder path ('' is the root), unsorted. */
+  children: Map<string, ArchiveRow[]>
+  /** Every file and folder, including implied folders, for search. */
+  rows: ArchiveRow[]
+  folderCount: number
+}
+
+/** Include implicit directories without confusing common path prefixes. */
+export function buildArchiveTree(entries: ArchiveEntry[]): ArchiveTree {
+  const nodes = new Map<string, ArchiveRow>()
+  entries.forEach((entry, position) => {
+    const path = entry.path.replace(/\/$/, '')
+    if (!path) return
+    const parts = path.split('/')
+    for (let index = 1; index < parts.length; index++) {
+      const parent = parts.slice(0, index).join('/')
+      if (!nodes.has(`d:${parent}`))
+        nodes.set(`d:${parent}`, { path: parent, type: 'directory', size: 0 })
+    }
+    const key = `${entry.type === 'directory' ? 'd' : 'f'}:${path}`
+    // A repeated path refers to its last copy, as on the server.
+    nodes.set(key, { ...entry, path, position })
+  })
+  const children = new Map<string, ArchiveRow[]>()
+  let folderCount = 0
+  for (const row of nodes.values()) {
+    if (row.type === 'directory') folderCount++
+    const parent = row.path.includes('/')
+      ? row.path.slice(0, row.path.lastIndexOf('/'))
+      : ''
+    let list = children.get(parent)
+    if (!list) children.set(parent, (list = []))
+    list.push(row)
+  }
+  return { children, rows: [...nodes.values()], folderCount }
+}
+
+const collator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+function compareRows(left: ArchiveRow, right: ArchiveRow) {
+  if (left.type !== right.type) return left.type === 'directory' ? -1 : 1
+  return collator.compare(left.path, right.path)
+}
+
+export function archiveFolderRows(tree: ArchiveTree, directory: string) {
+  return [...(tree.children.get(directory) ?? [])].sort(compareRows)
+}
+
+export function searchArchiveRows(tree: ArchiveTree, search: string) {
+  const query = search.trim().toLowerCase()
+  return tree.rows
+    .filter((row) => row.path.toLowerCase().includes(query))
+    .sort(compareRows)
+}
+
+/** Rows shown for a folder, or for a search across the whole archive. */
 export function archiveEntriesAt(
   entries: ArchiveEntry[],
   directory: string,
   search: string
 ): ArchiveEntry[] {
-  const all = new Map<string, ArchiveEntry>()
-  for (const entry of entries) {
-    const path = entry.path.replace(/\/$/, '')
-    const parts = path.split('/')
-    for (let index = 1; index < parts.length; index++) {
-      const parent = parts.slice(0, index).join('/')
-      if (!all.has(parent))
-        all.set(parent, { path: parent, type: 'directory', size: 0 })
-    }
-    all.set(path, { ...entry, path })
-  }
-  const query = search.trim().toLowerCase()
-  const prefix = directory ? `${directory}/` : ''
-  return [...all.values()]
-    .filter((entry) => {
-      if (query) return entry.path.toLowerCase().includes(query)
-      if (!entry.path.startsWith(prefix)) return false
-      const relative = entry.path.slice(prefix.length)
-      return relative.length > 0 && !relative.includes('/')
-    })
-    .sort((a, b) =>
-      a.type !== b.type
-        ? a.type === 'directory'
-          ? -1
-          : 1
-        : a.path.localeCompare(b.path)
-    )
+  const tree = buildArchiveTree(entries)
+  return (
+    search.trim()
+      ? searchArchiveRows(tree, search)
+      : archiveFolderRows(tree, directory)
+  ).map((row) => ({ path: row.path, type: row.type, size: row.size }))
 }
 
 export function archiveOutputName(name: string, format: ArchiveOutputFormat) {
@@ -160,27 +221,27 @@ export function archiveOutputName(name: string, format: ArchiveOutputFormat) {
   return `${stem || 'Archive'}.${format}`
 }
 
+export type ArchivePreviewKind = 'image' | 'video' | 'audio' | 'text'
+
+/** A guess from the name; the server checks the bytes before inline display. */
 export function archivePreviewKind(
   path: string
-): { type: 'image'; mimeType: string } | { type: 'text' } | null {
-  const extension = path.split('.').at(-1)?.toLowerCase() || ''
-  const imageTypes: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    avif: 'image/avif',
-    bmp: 'image/bmp',
-  }
-  if (imageTypes[extension])
-    return { type: 'image', mimeType: imageTypes[extension] }
+): { type: ArchivePreviewKind } | null {
+  const name = path.split('/').at(-1)?.toLowerCase() || ''
+  const extension = name.includes('.') ? name.split('.').at(-1)! : ''
+  if (/^(png|jpe?g|gif|webp|avif|bmp|ico)$/.test(extension))
+    return { type: 'image' }
+  if (/^(mp4|m4v|mov|webm|mkv|ogv)$/.test(extension)) return { type: 'video' }
+  if (/^(mp3|m4a|aac|wav|flac|ogg|oga|opus)$/.test(extension))
+    return { type: 'audio' }
   // Active formats are displayed as text, never embedded as documents.
   if (
-    /^(txt|md|markdown|csv|json|jsonl|yaml|yml|toml|xml|svg|html|htm|css|js|jsx|ts|tsx|mjs|cjs|py|go|rs|sh|bash|zsh|log|ini|conf|cfg|c|cpp|h|hpp|java|sql|rb|php|vue|svelte)$/.test(
+    /^(txt|text|md|markdown|rst|adoc|csv|tsv|json|jsonl|ndjson|yaml|yml|toml|xml|svg|html?|xhtml|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|py|go|rs|sh|bash|zsh|fish|ps1|bat|cmd|log|ini|conf|cfg|properties|env|c|cc|cpp|cxx|h|hpp|cs|java|kt|kts|swift|scala|gradle|rb|php|pl|lua|r|dart|sql|vue|svelte|tex|srt|vtt|diff|patch|lock|gitignore|gitattributes|editorconfig|dockerignore|npmrc)$/.test(
       extension
     ) ||
-    /(^|\/)(readme|license|dockerfile|makefile)$/i.test(path)
+    /^(readme|license|licence|copying|notice|authors|contributors|changelog|changes|todo|dockerfile|makefile|procfile|gemfile|rakefile|vagrantfile|caddyfile|justfile)$/.test(
+      name
+    )
   )
     return { type: 'text' }
   return null
@@ -216,10 +277,6 @@ export async function readPreviewBytes(response: Response, limit: number) {
     offset += chunk.length
   }
   return { bytes, truncated }
-}
-
-export function archiveEntryUrl(id: string, path: string) {
-  return `/api/files/${encodeURIComponent(id)}/archive/entry?path=${encodeURIComponent(path)}`
 }
 
 export async function archiveRequest<T>(
@@ -260,4 +317,76 @@ export function archiveErrorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
     : 'The archive request could not be completed. Please try again.'
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        reject(signal.reason)
+      },
+      { once: true }
+    )
+  })
+}
+
+export type ArchiveLoadUpdate =
+  | { status: 'busy' }
+  | {
+      status: 'indexing'
+      entries: ArchiveEntry[]
+      progress: ArchiveListingProgress
+    }
+
+/**
+ * Load a listing, polling while the server reads a slow archive. Entries found
+ * so far arrive through `onUpdate`, so browsing can start before the end.
+ */
+export async function loadArchiveListing(
+  id: string,
+  source: ArchiveSource,
+  options: {
+    signal: AbortSignal
+    onUpdate: (update: ArchiveLoadUpdate) => void
+  }
+): Promise<ArchiveListing> {
+  let entries: ArchiveEntry[] = []
+  let busyRetries = 0
+  while (true) {
+    const request = archiveListingRequest(id, source, {
+      progress: true,
+      after: entries.length,
+    })
+    const response = await archiveFetch(
+      request.url,
+      request.body,
+      options.signal
+    )
+    const result = await response.json().catch(() => ({}))
+    if (response.status === 202) {
+      const progress = result.data as ArchiveListingProgress
+      entries = entries.concat(progress.entries)
+      options.onUpdate({ status: 'indexing', entries, progress })
+      await sleep(1000, options.signal)
+      continue
+    }
+    if (response.status === 429 && busyRetries < 6) {
+      busyRetries++
+      options.onUpdate({ status: 'busy' })
+      const seconds = Number(response.headers.get('Retry-After')) || 5
+      await sleep(Math.min(seconds, 60) * 1000, options.signal)
+      continue
+    }
+    if (!response.ok)
+      throw new ArchiveRequestError(
+        result.error ||
+          'The archive request could not be completed. Please try again.',
+        response.status
+      )
+    const listing = result.data as ArchiveListing
+    return { ...listing, entries: entries.concat(listing.entries) }
+  }
 }

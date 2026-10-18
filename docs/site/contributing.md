@@ -243,7 +243,7 @@ Run these tools from a source checkout. The timeline fixture/capture scripts, th
 
 ## Archive browser checks and demos
 
-The [archive workspace](/guide/archives) uses real uploads, sessions, storage, and database publication. Its local browser script creates ZIP, TAR.GZ, and GZIP fixtures, exercises owner-library browsing and extraction, packages selected files, and checks both private defaults and an explicitly selected public upload profile. It also tests anonymous share-page browsing, file-password protection, and individual entry downloads without offering extraction to recipients.
+The [archive workspace](/guide/archives) uses real uploads, sessions, storage, and database publication. Its local browser script creates ZIP, TAR.GZ, and GZIP fixtures, exercises owner-library browsing and extraction, packages selected files, and checks both private defaults and an explicitly selected public upload profile. It also tests anonymous share-page browsing, file-password protection with the unlock cookie, and individual entry downloads without offering extraction to recipients. A cut-off ZIP and a ZIP with one damaged member check the archive-level and per-entry errors.
 
 Use a **disposable local PostgreSQL database named exactly `archive_demo`**. `scripts/archives/seed.cjs` accepts only `localhost` or `127.0.0.1` and either no query parameters or a single `schema=public`. It resets the two public fixture accounts, uses local storage, and disables OCR and OIDC in that disposable instance. Do not point it at an existing installation. Create the database with your local PostgreSQL tools, then run from the repository root:
 
@@ -264,7 +264,7 @@ node scripts/archives/seed.cjs
 node scripts/archives/verify-ui.cjs
 ```
 
-The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with password `Archive-demo-only-2026!`. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
+The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with password `Archive-demo-only-2026!`. The seed also raises the disposable instance's upload limit to 4 GB for the optional large-archive checks. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
 
 Set `FLARE_ARCHIVE_SCREENSHOTS` and `FLARE_ARCHIVE_VIDEOS` to separate temporary output directories to capture evidence. The primary recordings are `archive-browse-extract.webm`, `archive-create.webm`, and `archive-share-browse.webm`; inspect generated screenshots and recordings before replacing sources in `docs/images/archives/` and `.github/assets/archives/`. The shared recording uses an anonymous, unprotected public archive. Protected-file checks produce separate stills; do not capture password values or credential-bearing URLs. Preserve written transcripts in [Demos](/demos), and keep failed or incidental recordings out of Git. `FLARE_ARCHIVE_TEST_ORIGIN` can override the default `http://localhost:3062`, but must remain a disposable HTTP `localhost` origin matching the running app's `NEXTAUTH_URL`.
 
@@ -275,6 +275,14 @@ node scripts/archives/seed.cjs
 FLARE_ARCHIVE_SHARE_ONLY=true node scripts/archives/verify-ui.cjs
 ```
 
+Set `FLARE_ARCHIVE_LARGE=true` to add the large-archive checks. `scripts/archives/large-fixtures.cjs` generates, in a temporary directory, a ZIP of about 906 MiB with 20,025 files (20 handbook screenshots, an existing Flare recording, a generated tone and log, 20,000 small files, and 900 MiB of random data) and a TAR.GZ of about 337 MiB. The script uploads both through the chunked upload API in 5 MiB parts, then checks the listing time, the extraction explanation, video seeking with `206` responses, audio, **Load more**, the image viewer, path search, TAR.GZ reading progress, and a fast preview of the TAR.GZ's last entry. Allow roughly 4 GB of free disk space for the fixtures, the uploaded copies, and multipart staging; the temporary fixtures are removed afterward. The recordings `archive-large-preview.webm` and `archive-large-tgz.webm` and the `large-*`, `video-preview`, `text-preview-more`, `image-gallery`, and `tgz-*` stills come from this mode.
+
+The archive reader has its own suite, which needs no database or browser. It builds ZIP (including ZIP64, prepended data, CP437 and Unicode names, and problem entries), TAR, TAR.GZ, and GZIP fixtures and checks listings, ranged reads, CRC verification, checkpoint seeking, truncation, the extraction assessment, unlock cookies, and the listing cache:
+
+```sh
+pnpm exec vitest run __tests__/archives/reader.test.ts
+```
+
 The separate archive database suite requires its own disposable database; do not reuse the browser fixture database:
 
 ```sh
@@ -283,7 +291,7 @@ DATABASE_URL="$FLARE_ARCHIVE_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/archives/database.test.ts
 ```
 
-The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. Shared archive tests also check current visibility/password access and revalidation after staging. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility or a Meticulous zero-diff result. If Meticulous authentication or a suitable recorded session is unavailable, report that gap and use these local checks without triggering a hosted run.
+The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. Shared archive tests also check current visibility/password access, revalidation after reading an archive, separate listing and entry rate budgets, and shared reads joining one listing. The streamed-preview tests cover byte ranges, inline media detection, damaged members, the extraction explanation, `202` progress polling with a cursor, and unlock cookies. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility or a Meticulous zero-diff result. If Meticulous authentication or a suitable recorded session is unavailable, report that gap and use these local checks without triggering a hosted run.
 
 Shared-request admission has separate handler and body-guard regression suites:
 

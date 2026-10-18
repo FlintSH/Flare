@@ -22,7 +22,7 @@ Use **Upload** when you want to review settings before sending files. For quick 
 
 The same selected options apply to the queued files. To give different files different passwords or destinations, upload them in separate batches. The open form keeps its chosen settings after a successful batch, including the password and visibility override. Review or reset them before uploading something different.
 
-Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not automatically extract or publish its members. Open **Browse archive** from its library menu to inspect it, or [extract into a new folder](./archives#extract-into-your-library). Archive operations have additional format and resource limits; an upload succeeding does not mean the archive can be inspected.
+Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not automatically extract or publish its members. Open **Browse archive** from its library menu to inspect it, or [extract into a new folder](./archives#extract-into-your-library). Archive browsing supports archives of any size, but an upload succeeding does not mean every entry can be previewed or the archive extracted; extraction has its own limits.
 
 Anyone who can access a supported archive's [share page](./archives#browse-an-archive-shared-with-you) can browse and download its entries under the file's visibility/password rules. This does not create separate library files. Review the archive's contents before making it public.
 

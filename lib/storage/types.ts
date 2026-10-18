@@ -7,6 +7,13 @@ export interface RangeOptions {
   end?: number
 }
 
+/** Positional reads from one stored object, for archive indexes. */
+export interface RandomAccessFile {
+  readonly size: number
+  read(position: number, length: number): Promise<Buffer>
+  close(): Promise<void>
+}
+
 export interface StorageProvider {
   // Discriminates the backend without resorting to `instanceof` checks.
   readonly kind: 'local' | 's3'
@@ -31,6 +38,11 @@ export interface StorageProvider {
     range?: RangeOptions,
     signal?: AbortSignal
   ): Promise<Readable>
+  /**
+   * Optional cheap positional reads. Providers without it serve archive reads
+   * through ranged {@link getFileStream} requests instead.
+   */
+  openRandomAccess?(path: string): Promise<RandomAccessFile>
   getFileUrl(path: string): Promise<string>
   getFileSize(path: string): Promise<number>
   renameFolder(oldPath: string, newPath: string): Promise<void>

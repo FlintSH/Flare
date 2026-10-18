@@ -26,6 +26,7 @@ export function ArchiveViewer() {
       <ArchiveBrowserContent
         key={file.id}
         file={file}
+        format={file.archiveFormat}
         source={{ kind: 'share', password: verifiedPassword }}
       />
     </section>

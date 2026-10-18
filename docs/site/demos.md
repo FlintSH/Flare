@@ -75,14 +75,38 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse and extract an archive: silent Flare recording" :src="withBase('/demos/archive-browse-extract.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. In Alex Morgan's demonstration library, open the menu for **Field kit.zip** and choose **Browse archive**. Flare displays four files and four folders.
+1. In Alex Morgan's demonstration library, open the menu for **Field kit.zip** and choose **Browse archive**. Flare displays four files and four folders. The arrow keys, **End**, and **Home** move focus through the folder list.
 2. Search for **README** and select **guide/README.md**. Its text appears beside the matching path, with a **Download entry** action.
 3. Search for **flare-icon** and select **images/flare-icon.png**. Flare previews the verified PNG directly from the archive.
 4. Clear the search and choose **Extract all**. Select **Campaigns** under **Save to** and enter **Field kit unpacked** as **New folder name**.
 5. Keep **Private (no profile)** and choose **Extract files**. **Archive extracted** confirms that four private files were saved and the original archive remains unchanged.
 6. Choose **Open folder**. The wrapper contains **drafts**, **empty**, **guide**, and **images**. Open **guide** to see the new **README.md** and **checklist.csv** library files.
 
-The app reads a real stored ZIP and publishes its new folder tree to the disposable database. The browser checks also verify the extracted bytes, the preserved empty directory, and the unchanged source archive. [Follow the archive guide](./guide/archives#browse-and-save-one-entry) and [reproduce the checks](./contributing#archive-browser-checks-and-demos).
+The app reads a real stored ZIP and publishes its new folder tree to the disposable database. The browser checks also verify the extracted bytes, the preserved empty directory, and the unchanged source archive. [Follow the archive guide](./guide/archives#browse-and-preview-entries) and [reproduce the checks](./contributing#archive-browser-checks-and-demos).
+
+### Preview files in a large archive
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Preview files in a large archive: silent Flare recording" :src="withBase('/demos/archive-large-preview.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open the menu for **Studio handoff.zip**, a 906 MB ZIP, and choose **Browse archive**. The listing appears at once: 20,025 files in 114 folders, 908 MB unpacked. **Extract all** is unavailable, and the line below it explains that the archive is larger than the 256 MB extraction limit.
+2. Open **media** and select **share-walkthrough.webm**. The video plays inside the archive and jumps near its end without the rest of the archive being read.
+3. Select **notification.wav** to show the audio player.
+4. Return to **Archive root**, open **logs**, and select **server-2026-10-17.log**. Its first 256 KiB appear, and **Load more** adds the next 256 KiB of the 6 MB log.
+5. Return to **Archive root**, open **photos** and then **2026-10**, and select the first image. **Expand** opens the full-screen viewer, and the right arrow moves to image 2 of 20.
+6. Close the viewer; the image shown last is selected in the list. Search for **module-19999** to find one file among 20,000 project files.
+7. Clear the search, return to **Archive root**, and open **projects**, **campaign-01**, and **src**. Pressing **End** in the list moves focus to **module-19968.ts**, the last of 417 files.
+
+The archive is a disposable fixture generated for the check: 20 real Flare screenshots as photos, a real Flare recording as the video, a generated tone, a generated server log, 20,000 small project files, and a 900 MiB block of random data. It was uploaded through the normal chunked upload API to the local storage provider. The browser checks also confirm that seeking the video used partial (`206`) responses. [Read how Flare handles large archives](./guide/archives#large-archives).
+
+### Read a large TAR.GZ
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Read a large TAR.GZ: silent Flare recording" :src="withBase('/demos/archive-large-tgz.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open the menu for **Render outputs.tar.gz**, a 337 MB compressed archive, and choose **Browse archive**. A progress bar shows how much of the compressed data has been read, and the **frames** folder is listed while reading continues.
+2. When reading finishes, the summary shows 81 files and 480 MB unpacked, and explains why **Extract all** is unavailable.
+3. Search for **approved** and select **summary/approved-cut.md**, the last file in the archive. Its text appears in well under a second, because Flare resumes reading near the file instead of decompressing the archive from the start.
+
+This TAR.GZ is a disposable generated fixture of 80 alternating log and random-data files plus a short summary at the end. TAR.GZ and GZIP files have no index, so the first read always takes time proportional to their size; later previews of the same archive start near the file while its index stays in memory.
 
 ### Create an archive with a saved profile
 

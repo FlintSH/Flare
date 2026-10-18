@@ -18,8 +18,7 @@ import {
 } from '@/lib/permissions/server'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
 import { queueStorageDeletion } from '@/lib/storage/deletion'
-import { getStorageProviderForTarget } from '@/lib/storage/target-provider'
-import { captureStorageTarget, parseStorageTarget } from '@/lib/storage/targets'
+import { captureStorageTarget } from '@/lib/storage/targets'
 import {
   accountUploadOptions,
   effectiveUploadRevision,
@@ -37,6 +36,13 @@ import {
   uploadProfileOptionsSchema,
 } from '@/lib/uploads/schema'
 
+import type { IndexedEntry } from './archive-index'
+import {
+  archiveEntry,
+  archiveListing,
+  archiveSourceRef,
+  sourceStorage,
+} from './browse'
 import { createArchive, readArchive } from './codec'
 import { ArchiveError } from './errors'
 import type {
@@ -44,6 +50,7 @@ import type {
   createArchiveSchema,
   extractArchiveSchema,
 } from './http'
+import type { ArchiveEntrySelector } from './index-cache'
 import type { ArchiveOperation } from './operation'
 import {
   ARCHIVE_LIMITS,
@@ -77,18 +84,6 @@ async function ownedFiles(actor: ArchiveActor, ids: string[]) {
     )
   }
   return ids.map((id) => files.find((file) => file.id === id)!)
-}
-
-async function sourceStorage(file: SourceFile) {
-  const target = parseStorageTarget(file.storageTarget)
-  if (file.storageTarget !== null && !target)
-    throw new ArchiveError(
-      'The file has invalid storage provenance. Ask the operator to reconcile it.',
-      409
-    )
-  // Historical files use the active provider, matching existing file downloads.
-  // A recorded target never silently falls back to a different backend.
-  return target ? getStorageProviderForTarget(target) : getStorageProvider()
 }
 
 /** Keep source read evidence separate from the output archive being created. */
@@ -155,107 +150,75 @@ async function inspectSource(
   })
 }
 
-function publicManifest(manifest: ArchiveManifest) {
-  return {
-    ...manifest,
-    entries: manifest.entries.map(({ path, type, size }) => ({
-      path,
-      type,
-      size,
-    })),
-  }
+type ListingOptions = { progress: boolean; after: number; signal: AbortSignal }
+
+function memberReadAudit(source: SourceFile) {
+  return (entry: IndexedEntry, length: number) =>
+    recordAudit({
+      action: 'archive.member.read',
+      category: 'archives',
+      targetType: 'file',
+      targetId: source.id,
+      targetName: source.name,
+      details: { name: entry.path, size: entry.size, bytes: length },
+    })
 }
 
+/** Owner library listing; reads only the archive index, never every member. */
 export async function listArchive(
   actor: ArchiveActor,
   id: string,
-  operation: ArchiveOperation
+  options: ListingOptions
 ) {
-  const { file, manifest } = await inspect(actor, id, operation, false)
-  await recheckRead(actor, file, operation)
-  return publicManifest(manifest)
+  const [file] = await ownedFiles(actor, [id])
+  setAuditTarget({ type: 'file', id: file.id, name: file.name })
+  return archiveListing(await archiveSourceRef(file), {
+    ...options,
+    recheck: () => recheckRead(actor, file, options.signal),
+  })
 }
 
-export async function downloadArchiveEntry(
+export async function readArchiveEntry(
   actor: ArchiveActor,
   id: string,
-  path: string,
-  operation: ArchiveOperation
+  selector: ArchiveEntrySelector,
+  request: Request,
+  inline: boolean
 ) {
-  if (!path || path.length > ARCHIVE_LIMITS.pathLength)
-    throw new ArchiveError('Choose a valid archive entry.', 400)
-  const { file, manifest } = await inspect(actor, id, operation, true)
-  return entryDownload(
-    manifest,
-    path,
-    operation,
-    () => recheckRead(actor, file, operation),
-    file
-  )
+  const [file] = await ownedFiles(actor, [id])
+  setAuditTarget({ type: 'file', id: file.id, name: file.name })
+  return archiveEntry(await archiveSourceRef(file), selector, {
+    request,
+    requester: `user:${actor.user.id}`,
+    inline,
+    recheck: () => recheckRead(actor, file, request.signal),
+    audit: memberReadAudit(file),
+  })
 }
 
 export async function listSharedArchive(
   access: SharedArchiveAccess,
-  operation: ArchiveOperation
+  options: ListingOptions
 ) {
-  const manifest = await inspectSource(access.file, operation, false)
-  await recheckSharedArchive(access, operation)
-  return publicManifest(manifest)
-}
-
-export async function downloadSharedArchiveEntry(
-  access: SharedArchiveAccess,
-  path: string,
-  operation: ArchiveOperation
-) {
-  const manifest = await inspectSource(access.file, operation, true)
-  return entryDownload(
-    manifest,
-    path,
-    operation,
-    () => recheckSharedArchive(access, operation),
-    access.file
-  )
-}
-
-async function entryDownload(
-  manifest: ArchiveManifest,
-  path: string,
-  operation: ArchiveOperation,
-  recheck: () => Promise<void>,
-  source: SourceFile
-) {
-  const entry = manifest.entries.find(
-    (entry) => entry.path === path && entry.type === 'file'
-  )
-  if (!entry?.diskPath) throw new ArchiveError('Archive entry not found.', 404)
-  const detected = await sniffType(entry.diskPath)
-  const mimeType = [
-    'image/png',
-    'image/jpeg',
-    'image/gif',
-    'image/webp',
-    'image/avif',
-    'image/bmp',
-  ].includes(detected)
-    ? detected
-    : 'application/octet-stream'
-  await recheck()
-  const response = operation.download(
-    entry.diskPath,
-    basename(entry.path),
-    entry.size,
-    mimeType
-  )
-  await recordAudit({
-    action: 'archive.member.read',
-    category: 'archives',
-    targetType: 'file',
-    targetId: source.id,
-    targetName: source.name,
-    details: { name: entry.path, size: entry.size },
+  return archiveListing(await archiveSourceRef(access.file), {
+    ...options,
+    recheck: () => recheckSharedArchive(access, options.signal),
   })
-  return response
+}
+
+export async function readSharedArchiveEntry(
+  access: SharedArchiveAccess,
+  selector: ArchiveEntrySelector,
+  request: Request,
+  options: { inline: boolean; requester: string }
+) {
+  return archiveEntry(await archiveSourceRef(access.file), selector, {
+    request,
+    requester: options.requester,
+    inline: options.inline,
+    recheck: () => recheckSharedArchive(access, request.signal),
+    audit: memberReadAudit(access.file),
+  })
 }
 
 async function lockPublication(
@@ -351,21 +314,19 @@ function privateOptions(folderId: string | null = null) {
   )
 }
 
+/** Confirm owner access again when serving a read took noticeable time. */
 async function recheckRead(
   actor: ArchiveActor,
   file: SourceFile,
-  operation: ArchiveOperation
+  signal: AbortSignal
 ) {
-  operation.signal.throwIfAborted()
+  signal.throwIfAborted()
   await prisma.$transaction(
     async (tx) => {
       await lockPublication(tx, actor, [file], ['files.read'], privateOptions())
-      operation.signal.throwIfAborted()
+      signal.throwIfAborted()
     },
-    {
-      timeout: operation.transactionTimeout(),
-      maxWait: Math.min(10_000, operation.transactionTimeout()),
-    }
+    { timeout: 10_000, maxWait: 10_000 }
   )
 }
 

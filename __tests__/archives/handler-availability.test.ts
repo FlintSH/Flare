@@ -15,7 +15,7 @@ const services = vi.hoisted(() => ({
   createAccountArchive: vi.fn(),
   extractArchive: vi.fn(),
   listSharedArchive: vi.fn(),
-  downloadSharedArchiveEntry: vi.fn(),
+  readSharedArchiveEntry: vi.fn(),
 }))
 const findSource = vi.hoisted(() => vi.fn())
 
@@ -123,7 +123,7 @@ describe('shared archive handler admission does not starve owner work', () => {
       expect(services.createAccountArchive).toHaveBeenCalledOnce()
       expect(services.extractArchive).toHaveBeenCalledOnce()
       expect(services.listSharedArchive).not.toHaveBeenCalled()
-      expect(services.downloadSharedArchiveEntry).not.toHaveBeenCalled()
+      expect(services.readSharedArchiveEntry).not.toHaveBeenCalled()
     } finally {
       manifest.controller.abort()
       entry.controller.abort()
@@ -189,7 +189,7 @@ describe('shared archive handler admission does not starve owner work', () => {
           status,
         ])
         expect(services.listSharedArchive).not.toHaveBeenCalled()
-        expect(services.downloadSharedArchiveEntry).not.toHaveBeenCalled()
+        expect(services.readSharedArchiveEntry).not.toHaveBeenCalled()
       } finally {
         await Promise.all(running.map((operation) => operation.release()))
       }

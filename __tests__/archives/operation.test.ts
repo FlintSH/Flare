@@ -64,19 +64,18 @@ describe('bounded archive operations', () => {
       vi.useRealTimers()
     }
   })
-  it('keeps a downloaded entry alive until the response finishes, then removes the staging directory', async () => {
+  it('removes the staging directory once the operation finishes', async () => {
     let directory = ''
-    const response = await withArchiveOperation(
-      'download',
+    const result = await withArchiveOperation(
+      'staging',
       new AbortController().signal,
       async (operation) => {
         directory = operation.directory
-        const path = operation.path()
-        await writeFile(path, 'entry')
-        return operation.download(path, 'entry.txt', 5)
+        await writeFile(operation.path(), 'entry')
+        return 'done'
       }
     )
-    expect(await response.text()).toBe('entry')
+    expect(result).toBe('done')
     await expect
       .poll(async () =>
         stat(directory).then(

@@ -78,7 +78,7 @@ const steps = [
     title: 'Look inside before unpacking',
     label: 'Archives',
     src: '/screenshots/archives/share-entry.webp',
-    text: 'Browse shared archive paths and download entries. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
+    text: 'Browse archives of any size and preview images, video, audio, and text inside them without unpacking. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
     link: '/guide/archives',
   },
   {
