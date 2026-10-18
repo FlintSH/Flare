@@ -89,6 +89,17 @@ beforeEach(() => {
 })
 
 describe('archive route audit integration', () => {
+  it('reports a request the browser cancelled as 408, not a server failure', async () => {
+    const { loggers } = await import('@/lib/logger')
+    const response = await archiveRoute(async () => {
+      const cancelled = new Error('The response was aborted.')
+      cancelled.name = 'ResponseAborted'
+      throw cancelled
+    })
+    expect(response.status).toBe(408)
+    expect(loggers.files.error).not.toHaveBeenCalled()
+  })
+
   it('propagates a final masked denial from transaction context to the request outcome', async () => {
     const response = await withAuditRoute(
       async () =>

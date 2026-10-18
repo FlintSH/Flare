@@ -42,6 +42,7 @@ export type ArchiveEntryIssue =
   | 'unsafe-path'
   | 'sparse'
   | 'damaged'
+  | 'incomplete'
 
 /** Shown in previews and returned when an entry with an issue is requested. */
 export const ARCHIVE_ISSUE_MESSAGES: Record<ArchiveEntryIssue, string> = {
@@ -57,6 +58,8 @@ export const ARCHIVE_ISSUE_MESSAGES: Record<ArchiveEntryIssue, string> = {
   sparse:
     'This file is stored as a sparse TAR file, which Flare can’t read. Download the whole archive to open it.',
   damaged: 'This file’s data in the archive is damaged, so it can’t be read.',
+  incomplete:
+    'Flare stopped reading the archive before the end of this file, so its size isn’t known and it can’t be opened here. Download the whole archive to open it.',
 }
 
 export interface ArchiveEntry {

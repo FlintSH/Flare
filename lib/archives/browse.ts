@@ -143,6 +143,7 @@ export async function archiveEntry(
     entry,
     range: options.request.headers.get('range'),
     inline: options.inline,
+    head: options.request.method === 'HEAD',
     release,
     signal,
     // A continuation range (seeking or resuming) is not a new read.

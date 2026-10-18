@@ -136,9 +136,9 @@ export async function scanTar(
         if (size > MAX_METADATA) throw damaged()
         const data = await input.read(padded(size))
         if (!data) throw truncatedArchive()
-        // Global headers apply to later members but cannot rename one.
-        if (typeflag === 'x')
-          pax = { ...pax, ...paxRecords(data.subarray(0, size)) }
+        // Like tar-stream, each extended header replaces the previous one, so
+        // a chain of headers can't accumulate. Global headers are ignored.
+        if (typeflag === 'x') pax = paxRecords(data.subarray(0, size))
         continue
       }
       if (typeflag === 'L' || typeflag === 'K' || typeflag === 'N') {

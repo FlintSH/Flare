@@ -1802,6 +1802,40 @@ suite('archive publication against disposable PostgreSQL', () => {
       await fake.body?.cancel()
     })
 
+    it('answers HEAD requests without holding an entry stream open', async () => {
+      const file = await zipOf('big.zip', [
+        {
+          name: 'big.bin',
+          data: Buffer.alloc(2 * 1024 * 1024, 7),
+          store: true,
+        },
+      ])
+      const head = () =>
+        download.GET(
+          new Request(`http://localhost${entryUrl(file.id, 'big.bin')}`, {
+            method: 'HEAD',
+          }),
+          context(file.id)
+        )
+      // More than the per-account limit of 8 open entry responses.
+      for (let index = 0; index < 10; index++) {
+        const response = await head()
+        expect(response.status).toBe(200)
+        expect(response.body).toBeNull()
+        expect(response.headers.get('content-length')).toBe(
+          String(2 * 1024 * 1024)
+        )
+      }
+      const read = await download.GET(
+        request(entryUrl(file.id, 'big.bin'), undefined, {
+          Range: 'bytes=0-9',
+        }),
+        context(file.id)
+      )
+      expect(read.status).toBe(206)
+      expect(Buffer.from(await read.arrayBuffer())).toEqual(Buffer.alloc(10, 7))
+    })
+
     it('lists a damaged member but refuses to serve its contents', async () => {
       const file = await zipOf('damaged.zip', [
         { name: 'good.txt', data: 'good' },

@@ -208,7 +208,11 @@ export async function archiveRoute(action: () => Promise<unknown>) {
     } else if (error instanceof SyntaxError) {
       status = 400
       message = 'Invalid JSON.'
-    } else if ((error as { name?: string })?.name === 'AbortError') {
+    } else if (
+      ['AbortError', 'ResponseAborted'].includes(
+        (error as { name?: string })?.name ?? ''
+      )
+    ) {
       // The browser left: a closed preview or a seek that replaced a request.
       status = 408
       message = 'Archive request was cancelled.'

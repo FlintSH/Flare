@@ -80,11 +80,11 @@ A listing shows at most **100,000** entries. Listing a TAR, TAR.GZ, or GZIP stop
 
 Flare lists every entry it can read and marks the ones it can't open, instead of rejecting the whole archive:
 
-| Mark    | Meaning                                                                                                                                                                        |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Lock    | The entry is encrypted.                                                                                                                                                        |
-| Link    | A symbolic or hard link, which has no contents of its own.                                                                                                                     |
-| Warning | A compression method Flare can't read (such as Deflate64, BZIP2, LZMA, or XZ inside a ZIP), a sparse TAR file, a special filesystem entry, or a path that escapes the archive. |
+| Mark    | Meaning                                                                                                                                                                                                                                            |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lock    | The entry is encrypted.                                                                                                                                                                                                                            |
+| Link    | A symbolic or hard link, which has no contents of its own.                                                                                                                                                                                         |
+| Warning | A compression method Flare can't read (such as Deflate64, BZIP2, LZMA, or XZ inside a ZIP), a sparse TAR file, a special filesystem entry, a path that escapes the archive, or a GZIP file whose end Flare didn't reach within the listing limits. |
 
 Selecting a marked entry explains the problem. Other entries still open normally.
 

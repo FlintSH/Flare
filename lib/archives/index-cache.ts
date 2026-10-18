@@ -120,9 +120,11 @@ export async function buildArchiveIndex(
   source: ByteSource,
   index: ArchiveIndex,
   name: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  budget: { ms?: number; bytes?: number } = {}
 ) {
-  const deadline = Date.now() + ARCHIVE_BROWSE_LIMITS.scanMs
+  const deadline = Date.now() + (budget.ms ?? ARCHIVE_BROWSE_LIMITS.scanMs)
+  const scanBytes = budget.bytes ?? ARCHIVE_BROWSE_LIMITS.scanBytes
   const context: ScanContext = {
     signal,
     maxEntries: ARCHIVE_BROWSE_LIMITS.entries,
@@ -150,8 +152,7 @@ export async function buildArchiveIndex(
       tick(output) {
         signal.throwIfAborted()
         context.tick()
-        if (output > ARCHIVE_BROWSE_LIMITS.scanBytes)
-          throw new ScanLimitReached('size')
+        if (output > scanBytes) throw new ScanLimitReached('size')
       },
     }
   )
@@ -166,12 +167,15 @@ export async function buildArchiveIndex(
   }
   // A GZIP holds one file; its name follows the archive, as on extraction.
   let size = 0
-  let issue: 'damaged' | undefined
+  let issue: 'damaged' | 'incomplete' | undefined
   try {
     for await (const chunk of decoded) size += chunk.length
   } catch (error) {
-    if (error instanceof ScanLimitReached) index.truncated = error.reason
-    else if (error instanceof ArchiveError && size && !signal.aborted) {
+    if (error instanceof ScanLimitReached) {
+      // The real size is unknown, so never serve the part read as the file.
+      index.truncated = error.reason
+      issue = 'incomplete'
+    } else if (error instanceof ArchiveError && size && !signal.aborted) {
       index.truncated = 'damaged'
       issue = 'damaged'
     } else throw error

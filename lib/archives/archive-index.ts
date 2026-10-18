@@ -163,6 +163,7 @@ const ISSUE_REASONS: Record<ArchiveEntryIssue, string> = {
   'unsafe-path': 'it contains unsafe paths',
   sparse: 'it contains sparse files',
   damaged: 'part of it is damaged',
+  incomplete: 'Flare couldn’t read the whole archive',
 }
 
 /** The strict extractor accepts only stored and deflated ZIP members. */

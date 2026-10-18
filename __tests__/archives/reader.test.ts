@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib'
 import * as tar from 'tar-stream'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   ArchiveIndex,
@@ -12,7 +12,11 @@ import {
 } from '@/lib/archives/archive-index'
 import { openByteSource } from '@/lib/archives/byte-source'
 import { openEntryRange } from '@/lib/archives/entry-reader'
-import { parseByteRange } from '@/lib/archives/entry-response'
+import {
+  IDLE_ENTRY_STREAM_MS,
+  entryResponse,
+  parseByteRange,
+} from '@/lib/archives/entry-response'
 import { GzipSeekIndex, inflateIndexed } from '@/lib/archives/gzip-reader'
 import {
   buildArchiveIndex,
@@ -194,6 +198,38 @@ async function tarBytes(
   pack.finalize()
   await consuming
   return Buffer.concat(chunks)
+}
+
+/** One ustar header block, for header sequences tar writers won't produce. */
+function tarHeader(name: string, typeflag: string, size: number) {
+  const block = Buffer.alloc(512)
+  block.write(name, 0)
+  block.write('0000644\0', 100)
+  block.write(size.toString(8).padStart(11, '0') + '\0', 124)
+  block.write('00000000000\0', 136)
+  block.write(typeflag, 156)
+  block.write('ustar\u000000', 257, 'latin1')
+  block.fill(0x20, 148, 156)
+  let sum = 0
+  for (const byte of block) sum += byte
+  block.write(sum.toString(8).padStart(6, '0') + '\0 ', 148)
+  return block
+}
+
+function paxBlock(records: Record<string, string>) {
+  let data = ''
+  for (const [key, value] of Object.entries(records)) {
+    const body = ` ${key}=${value}\n`
+    let length = body.length + 1
+    while (`${length}${body}`.length !== length) length++
+    data += `${length}${body}`
+  }
+  const bytes = Buffer.from(data)
+  return Buffer.concat([
+    tarHeader('PaxHeader', 'x', bytes.length),
+    bytes,
+    Buffer.alloc((512 - (bytes.length % 512)) % 512),
+  ])
 }
 
 /** Text that compresses well plus incompressible blocks, like real archives. */
@@ -397,6 +433,22 @@ describe('TAR index', () => {
     ).toHaveLength(5)
   })
 
+  it('lets each PAX header replace the previous one, as the extractor does', async () => {
+    const bytes = Buffer.concat([
+      paxBlock({ path: 'renamed-by-first-header.txt' }),
+      ...Array.from({ length: 200 }, (_, index) =>
+        paxBlock({ comment: 'x'.repeat(2000), [`key${index}`]: 'value' })
+      ),
+      tarHeader('real.txt', '0', 4),
+      Buffer.from('real'),
+      Buffer.alloc(508),
+      Buffer.alloc(1024),
+    ])
+    const { index } = await indexOf(bytes, 'tar')
+    expect(index.entries.map((entry) => entry.path)).toEqual(['real.txt'])
+    expect((await read(bytes, 'tar', 'real.txt')).toString()).toBe('real')
+  })
+
   it('keeps the readable entries of a truncated TAR and flags the cut', async () => {
     const bytes = await tarBytes([
       { name: 'one.txt', data: 'one' },
@@ -502,6 +554,34 @@ describe('TAR.GZ and GZIP seeking', () => {
     ).toBe(Buffer.concat([first, second]).subarray(12990, 13020).toString())
   })
 
+  it('refuses to serve a GZIP file cut short by the listing budget', async () => {
+    const compressed = gzipSync(mixedData(1024 * 1024))
+    const source = await openByteSource(remoteStorage(compressed), 'gz')
+    const index = new ArchiveIndex('gzip', source.size)
+    await buildArchiveIndex(
+      source,
+      index,
+      'big.log.gz',
+      new AbortController().signal,
+      { bytes: 64 * 1024 }
+    )
+    expect(index.truncated).toBe('size')
+    expect(index.entries).toEqual([
+      expect.objectContaining({ path: 'big.log', issue: 'incomplete' }),
+    ])
+    await expect(
+      entryResponse({
+        source,
+        index,
+        entry: index.entries[0],
+        range: null,
+        inline: false,
+        release: () => {},
+        signal: new AbortController().signal,
+      })
+    ).rejects.toMatchObject({ status: 415 })
+  })
+
   it('lists what it could read from a truncated TAR.GZ', async () => {
     const tarball = await tarBytes([
       { name: 'a.txt', data: 'a'.repeat(1000) },
@@ -539,6 +619,47 @@ describe('browse helpers', () => {
     expect(normalizeBrowsePath('invoice\u202Etxt.exe').path).toBe(
       'invoice\uFFFDtxt.exe'
     )
+  })
+
+  it('answers HEAD without opening the entry, and releases unread bodies', async () => {
+    const big = randomBytes(2 * 1024 * 1024)
+    const bytes = await tarBytes([{ name: 'big.bin', data: big }])
+    const { index, source } = await indexOf(bytes, 'tar')
+    const entry = index.find('big.bin')!
+    const headRelease = vi.fn()
+    const head = await entryResponse({
+      source,
+      index,
+      entry,
+      range: null,
+      inline: false,
+      head: true,
+      release: headRelease,
+      signal: new AbortController().signal,
+    })
+    expect(head.body).toBeNull()
+    expect(head.headers.get('content-length')).toBe(String(big.length))
+    expect(headRelease).toHaveBeenCalledOnce()
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const release = vi.fn()
+      const unread = await entryResponse({
+        source: (await indexOf(bytes, 'tar')).source,
+        index,
+        entry,
+        range: null,
+        inline: false,
+        release,
+        signal: new AbortController().signal,
+      })
+      expect(unread.body).not.toBeNull()
+      expect(release).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(IDLE_ENTRY_STREAM_MS + 1)
+      await vi.waitFor(() => expect(release).toHaveBeenCalledOnce())
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('parses single byte ranges', () => {

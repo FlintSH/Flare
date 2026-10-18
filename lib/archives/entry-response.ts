@@ -104,6 +104,11 @@ const streams = (processState[streamsKey] ??= {
 
 /** Responses up to this size are read and verified before headers are sent. */
 const BUFFERED_RESPONSE_BYTES = 512 * 1024
+/**
+ * Release a streamed response whose body nobody reads. Media players that
+ * pause simply request the next range when they resume.
+ */
+export const IDLE_ENTRY_STREAM_MS = 60_000
 
 /** Open entry responses per process and per account or IP address. */
 export const ARCHIVE_ENTRY_STREAMS = { total: 64, perRequester: 8 } as const
@@ -150,6 +155,8 @@ export async function entryResponse(options: {
   entry: IndexedEntry
   range: string | null
   inline: boolean
+  /** HEAD: headers only. Next answers HEAD with GET and never reads the body. */
+  head?: boolean
   release: () => void
   signal: AbortSignal
   /** Runs once the response is ready; `start` is the first byte served. */
@@ -196,6 +203,10 @@ export async function entryResponse(options: {
         ? { 'Content-Range': `bytes ${start}-${end - 1}/${entry.size}` }
         : {}),
     }
+    if (options.head) {
+      finish()
+      return new Response(null, { status: range ? 206 : 200, headers })
+    }
     const stream = await openEntryRange(source, index, entry, start, end)
     if (end - start <= BUFFERED_RESPONSE_BYTES) {
       // Small reads (text previews, icons) finish before any header is sent,
@@ -211,17 +222,23 @@ export async function entryResponse(options: {
     }
     signal.throwIfAborted()
     await options.prepared?.(start, end - start)
+    const body = Readable.toWeb(stream) as ReadableStream<Uint8Array>
     const onAbort = () => stream.destroy()
     signal.addEventListener('abort', onAbort, { once: true })
+    // Listen only after the web stream owns the reader, so this listener
+    // never starts the flow itself.
+    let idle = setTimeout(onAbort, IDLE_ENTRY_STREAM_MS)
+    stream.on('data', () => {
+      clearTimeout(idle)
+      idle = setTimeout(onAbort, IDLE_ENTRY_STREAM_MS)
+    })
     stream.once('close', () => {
+      clearTimeout(idle)
       signal.removeEventListener('abort', onAbort)
       finish()
     })
     handed = true
-    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
-      status: range ? 206 : 200,
-      headers,
-    })
+    return new Response(body, { status: range ? 206 : 200, headers })
   } catch (error) {
     if (!handed) finish()
     throw error
