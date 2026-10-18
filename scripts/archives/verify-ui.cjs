@@ -688,6 +688,7 @@ async function additionalChecks(browser, state, fixture) {
   ).toHaveCount(0)
   await shot(errorDemo.page, 'invalid-archive')
   await errorDemo.page.keyboard.press('Escape')
+  await expect(errorDemo.page.getByRole('dialog')).toHaveCount(0)
   // One damaged member does not hide the rest of the archive.
   await browse(errorDemo.page, 'Damaged bundle.zip')
   await errorDemo.page
