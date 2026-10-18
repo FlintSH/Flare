@@ -4,6 +4,7 @@ import type { StorageProvider } from '@/lib/storage'
 import type { RandomAccessFile } from '@/lib/storage/types'
 
 import { ArchiveError } from './errors'
+import { readUpTo } from './stream-slice'
 
 /** Random access to one stored archive without downloading all of it. */
 export interface ByteSource {
@@ -78,7 +79,7 @@ class StorageByteSource implements ByteSource {
     )
     const bytes = this.file
       ? await this.file.read(start, span)
-      : await collect(await this.stream(start, start + span), span)
+      : await readUpTo(await this.stream(start, start + span), span)
     if (bytes.length < length) throw truncatedArchive()
     this.window = { start, bytes }
     return bytes.subarray(0, length)
@@ -98,20 +99,4 @@ class StorageByteSource implements ByteSource {
     this.window = null
     await this.file?.close()
   }
-}
-
-async function collect(stream: Readable, length: number) {
-  const chunks: Buffer[] = []
-  let total = 0
-  try {
-    for await (const chunk of stream) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      chunks.push(buffer)
-      total += buffer.length
-      if (total >= length) break
-    }
-  } finally {
-    stream.destroy()
-  }
-  return Buffer.concat(chunks, total).subarray(0, length)
 }

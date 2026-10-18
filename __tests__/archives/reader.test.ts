@@ -10,6 +10,7 @@ import {
   assessExtraction,
   normalizeBrowsePath,
 } from '@/lib/archives/archive-index'
+import { archiveEntry } from '@/lib/archives/browse'
 import { openByteSource } from '@/lib/archives/byte-source'
 import { openEntryRange } from '@/lib/archives/entry-reader'
 import {
@@ -19,11 +20,16 @@ import {
 } from '@/lib/archives/entry-response'
 import { GzipSeekIndex, inflateIndexed } from '@/lib/archives/gzip-reader'
 import {
+  ARCHIVE_INDEX_CONCURRENCY,
   buildArchiveIndex,
   clearArchiveIndexCache,
   getArchiveIndex,
 } from '@/lib/archives/index-cache'
-import type { ArchiveFormat } from '@/lib/archives/shared'
+import {
+  ARCHIVE_BROWSE_LIMITS,
+  type ArchiveFormat,
+} from '@/lib/archives/shared'
+import { ARCHIVE_IDLE_MS, readUpTo } from '@/lib/archives/stream-slice'
 import { createArchiveUnlock, verifyArchiveUnlock } from '@/lib/archives/unlock'
 import type { StorageProvider } from '@/lib/storage'
 
@@ -433,6 +439,47 @@ describe('TAR index', () => {
     ).toHaveLength(5)
   })
 
+  it('stops a listing at its memory budget instead of growing without bound', async () => {
+    const longName = (index: number) =>
+      `${'nested/'.repeat(40)}file-${index}.txt`
+    const tarball = await tarBytes(
+      Array.from({ length: 60 }, (_, index) => ({
+        name: longName(index),
+        data: 'x',
+      }))
+    )
+    const source = await openByteSource(remoteStorage(tarball), 't')
+    const index = new ArchiveIndex('tar', source.size, 16 * 1024)
+    await buildArchiveIndex(
+      source,
+      index,
+      'deep.tar',
+      new AbortController().signal
+    )
+    expect(index.truncated).toBe('size')
+    expect(index.entries.length).toBeGreaterThan(0)
+    expect(index.entries.length).toBeLessThan(60)
+    expect(index.memoryBytes).toBeLessThanOrEqual(16 * 1024)
+
+    const zip = rawZip(
+      Array.from({ length: 60 }, (_, index) => ({
+        name: Buffer.from(longName(index)),
+        data: Buffer.from('x'),
+      }))
+    )
+    const zipSource = await openByteSource(remoteStorage(zip), 'z')
+    const zipIndex = new ArchiveIndex('zip', zipSource.size, 16 * 1024)
+    await buildArchiveIndex(
+      zipSource,
+      zipIndex,
+      'deep.zip',
+      new AbortController().signal
+    )
+    expect(zipIndex.truncated).toBe('size')
+    expect(zipIndex.memoryBytes).toBeLessThanOrEqual(16 * 1024)
+    expect(zipIndex.listing().extraction.available).toBe(false)
+  })
+
   it('lets each PAX header replace the previous one, as the extractor does', async () => {
     const bytes = Buffer.concat([
       paxBlock({ path: 'renamed-by-first-header.txt' }),
@@ -774,5 +821,114 @@ describe('index cache', () => {
     const done = await getArchiveIndex(ref, { signal, wait: 'complete' })
     expect(done.complete).toBe(true)
     expect(done.index?.entries).toHaveLength(40)
+  })
+})
+
+describe('stalled storage', () => {
+  /** A storage stream that never sends a byte and never closes. */
+  const silent = () =>
+    new Readable({
+      read() {},
+    })
+
+  it('fails a read that stops receiving bytes instead of waiting forever', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const stream = silent()
+      const reading = readUpTo(stream, 10)
+      const outcome = expect(reading).rejects.toMatchObject({ status: 504 })
+      await vi.advanceTimersByTimeAsync(ARCHIVE_IDLE_MS + 1)
+      await outcome
+      expect(stream.destroyed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('releases an entry request whose storage never answers', async () => {
+    const bytes = await tarBytes([
+      { name: 'big.bin', data: randomBytes(1024 * 1024) },
+    ])
+    const storage = remoteStorage(bytes)
+    const ref = {
+      key: 'stalled-entry',
+      storage,
+      path: 'x',
+      name: 'x.tar',
+      format: 'tar' as const,
+    }
+    await getArchiveIndex(ref, {
+      signal: new AbortController().signal,
+      wait: 'complete',
+    })
+    // Storage accepts the request but never responds.
+    storage.getFileStream = () => new Promise(() => {})
+    const read = () =>
+      archiveEntry(
+        ref,
+        { path: 'big.bin' },
+        {
+          request: new Request('http://localhost/entry'),
+          requester: 'stalled-requester',
+          inline: false,
+          recheck: async () => {},
+          audit: async () => {},
+        }
+      )
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      // More stalled requests than one requester may hold at once.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const outcome = expect(read()).rejects.toMatchObject({ status: 504 })
+        await vi.advanceTimersByTimeAsync(ARCHIVE_IDLE_MS + 1)
+        await outcome
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops an indexing job that stalls and frees its slot', async () => {
+    const bytes = await zipBytes([{ name: 'a.txt', data: 'a' }])
+    const stalled = remoteStorage(bytes)
+    stalled.getFileSize = () => new Promise(() => {})
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    })
+    try {
+      const jobs = Array.from({ length: ARCHIVE_INDEX_CONCURRENCY }, (_, i) =>
+        getArchiveIndex(
+          {
+            key: `stalled-job-${i}`,
+            storage: stalled,
+            path: 'x',
+            name: 'x.zip',
+            format: 'zip' as const,
+          },
+          { signal: new AbortController().signal, wait: 'complete' }
+        )
+      )
+      const outcomes = jobs.map((job) =>
+        expect(job).rejects.toMatchObject({ status: 504 })
+      )
+      await vi.advanceTimersByTimeAsync(
+        ARCHIVE_BROWSE_LIMITS.scanMs + ARCHIVE_IDLE_MS + 1
+      )
+      await Promise.all(outcomes)
+    } finally {
+      vi.useRealTimers()
+    }
+    // Both slots are free again: a healthy archive still lists.
+    const healthy = await getArchiveIndex(
+      {
+        key: 'after-stall',
+        storage: remoteStorage(bytes),
+        path: 'x',
+        name: 'x.zip',
+        format: 'zip' as const,
+      },
+      { signal: new AbortController().signal, wait: 'complete' }
+    )
+    expect(healthy.index?.entries).toHaveLength(1)
   })
 })

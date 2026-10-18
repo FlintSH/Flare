@@ -21,6 +21,7 @@ import {
   type ArchiveListingProgress,
   getArchiveFormat,
 } from './shared'
+import { ARCHIVE_IDLE_MS, rejectOnAbort, storageStalled } from './stream-slice'
 
 type BrowseSource = {
   id: string
@@ -82,6 +83,9 @@ export async function archiveListing(
     signal: options.signal,
     wait: options.progress ? PROGRESS_WAIT_MS : 'complete',
   })
+  // Access can change while this request waits for the archive to be read.
+  // Confirm it before returning any entry names, including partial progress.
+  if (!view.cached) await options.recheck()
   if (!view.complete || !view.index) {
     const progress: ArchiveListingProgress = view.index?.progress(
       options.after
@@ -98,8 +102,6 @@ export async function archiveListing(
       { status: 202, headers: { 'Retry-After': '1' } }
     )
   }
-  // Reading the archive took time; confirm access before returning its contents.
-  if (!view.cached) await options.recheck()
   return NextResponse.json({
     data: view.index.listing(options.after),
     success: true,
@@ -127,27 +129,41 @@ export async function archiveEntry(
   const { index, entry, view } = await findArchiveEntry(ref, selector, signal)
   if (!view.cached) await options.recheck()
   const release = reserveEntryStream(options.requester)
-  let source
-  try {
-    source = await openByteSource(ref.storage, ref.path, {
-      size: index.archiveBytes,
-      signal,
+  // Storage reads stop with the request. Preparing the response (opening the
+  // source, detecting media, reading small entries) also has a deadline, so
+  // stalled storage can't hold this request's stream slot.
+  const reading = new AbortController()
+  const stop = () => reading.abort(signal.reason)
+  if (signal.aborted) stop()
+  else signal.addEventListener('abort', stop, { once: true })
+  const deadline = setTimeout(
+    () => reading.abort(storageStalled()),
+    ARCHIVE_IDLE_MS
+  )
+  const prepare = async () =>
+    entryResponse({
+      source: await openByteSource(ref.storage, ref.path, {
+        size: index.archiveBytes,
+        signal: reading.signal,
+      }),
+      index,
+      entry,
+      range: options.request.headers.get('range'),
+      inline: options.inline,
+      head: options.request.method === 'HEAD',
+      release,
+      signal: reading.signal,
+      // A continuation range (seeking or resuming) is not a new read.
+      prepared: (start, length) =>
+        start === 0 ? options.audit(entry, length) : Promise.resolve(),
     })
+  try {
+    return await Promise.race([prepare(), rejectOnAbort(reading.signal)])
   } catch (error) {
     release()
+    if (reading.signal.aborted && !signal.aborted) throw storageStalled()
     throw error
+  } finally {
+    clearTimeout(deadline)
   }
-  return entryResponse({
-    source,
-    index,
-    entry,
-    range: options.request.headers.get('range'),
-    inline: options.inline,
-    head: options.request.method === 'HEAD',
-    release,
-    signal,
-    // A continuation range (seeking or resuming) is not a new read.
-    prepared: (start, length) =>
-      start === 0 ? options.audit(entry, length) : Promise.resolve(),
-  })
 }

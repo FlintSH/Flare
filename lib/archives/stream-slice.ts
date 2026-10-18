@@ -3,6 +3,59 @@ import { crc32 } from 'node:zlib'
 
 import { ArchiveError } from './errors'
 
+/** How long reading archive data may go without receiving any bytes. */
+export const ARCHIVE_IDLE_MS = 60_000
+
+export function storageStalled() {
+  return new ArchiveError(
+    'Storage stopped responding while reading the archive. Try again shortly.',
+    504
+  )
+}
+
+/**
+ * Read up to `limit` bytes. A storage stream that stops sending bytes
+ * without closing fails after {@link ARCHIVE_IDLE_MS} instead of holding
+ * its request, file handle, and stream slot indefinitely.
+ */
+export async function readUpTo(stream: Readable, limit: number) {
+  const chunks: Buffer[] = []
+  let total = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const arm = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => stream.destroy(storageStalled()), ARCHIVE_IDLE_MS)
+  }
+  try {
+    arm()
+    for await (const chunk of stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      chunks.push(buffer)
+      total += buffer.length
+      if (total >= limit) break
+      arm()
+    }
+  } finally {
+    clearTimeout(timer)
+    stream.destroy()
+  }
+  return Buffer.concat(chunks, total).subarray(0, limit)
+}
+
+/**
+ * Settles only when `signal` aborts. Racing work against it frees what the
+ * caller holds even if a storage call ignores cancellation.
+ */
+export function rejectOnAbort(signal: AbortSignal) {
+  return new Promise<never>((_, reject) => {
+    if (signal.aborted) reject(signal.reason)
+    else
+      signal.addEventListener('abort', () => reject(signal.reason), {
+        once: true,
+      })
+  })
+}
+
 export function damagedEntry() {
   return new ArchiveError(
     'This file’s data in the archive is damaged, so it can’t be read.'

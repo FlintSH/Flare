@@ -177,6 +177,10 @@ export async function scanTar(
           index.truncated = 'entries'
           return
         }
+        if (!index.hasRoomFor(normalized.path)) {
+          index.truncated = 'size'
+          return
+        }
         const entry = {
           path: normalized.path,
           type,

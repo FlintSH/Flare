@@ -30,10 +30,22 @@ export interface IndexedEntry extends Omit<ArchiveEntry, 'diskPath'> {
   mediaType?: string | null
 }
 
+/**
+ * Largest estimated in-memory size of one listing, half of the listing cache,
+ * so a finished listing always fits. Listings stop with `truncated: 'size'`.
+ */
+export const ARCHIVE_INDEX_MAX_BYTES = 64 * 1024 ** 2
+
+/** Estimated heap cost of one listed entry. */
+function entryCost(path: string) {
+  return 160 + 2 * path.length
+}
+
 export class ArchiveIndex {
   readonly entries: IndexedEntry[] = []
   private readonly files = new Map<string, number>()
   private extraction: ArchiveExtraction | null = null
+  private entryBytes = 0
   fileCount = 0
   totalBytes = 0
   /** Entries the archive declares; ZIP knows this before every entry is read. */
@@ -50,13 +62,20 @@ export class ArchiveIndex {
 
   constructor(
     readonly format: ArchiveFormat,
-    readonly archiveBytes: number
+    readonly archiveBytes: number,
+    readonly maxBytes = ARCHIVE_INDEX_MAX_BYTES
   ) {
     this.dataEnd = archiveBytes
   }
 
+  /** Whether an entry with this path still fits the listing's memory budget. */
+  hasRoomFor(path: string) {
+    return this.memoryBytes + entryCost(path) <= this.maxBytes
+  }
+
   add(entry: IndexedEntry) {
     this.entries.push(entry)
+    this.entryBytes += entryCost(entry.path)
     if (entry.type !== 'file') return
     // Like common unzip tools, a repeated path refers to its last copy.
     const previous = this.files.get(entry.path)
@@ -72,9 +91,7 @@ export class ArchiveIndex {
   }
 
   get memoryBytes() {
-    let bytes = 256 + (this.gzip?.memoryBytes ?? 0)
-    for (const entry of this.entries) bytes += 160 + 2 * entry.path.length
-    return bytes
+    return 256 + (this.gzip?.memoryBytes ?? 0) + this.entryBytes
   }
 
   private publicEntries(after: number): ArchiveEntry[] {

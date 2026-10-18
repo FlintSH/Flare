@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream'
-import * as zlib from 'node:zlib'
+import { createInflateRaw } from 'node:zlib'
 
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
 import type { ByteSource } from './byte-source'
@@ -45,9 +45,5 @@ export async function openEntryRange(
   const input = compressed
     ? await source.stream(dataOffset, dataOffset + compressed)
     : Readable.from([], { objectMode: false })
-  const decoder =
-    entry.method === 93 && typeof zlib.createZstdDecompress === 'function'
-      ? zlib.createZstdDecompress()
-      : zlib.createInflateRaw()
-  return sliceStream(input, decoder, start, end - start, verify)
+  return sliceStream(input, createInflateRaw(), start, end - start, verify)
 }

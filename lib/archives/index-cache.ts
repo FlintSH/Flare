@@ -9,6 +9,7 @@ import {
   type ArchiveFormat,
   archiveBasename,
 } from './shared'
+import { ARCHIVE_IDLE_MS, rejectOnAbort, storageStalled } from './stream-slice'
 import {
   ChunkTarInput,
   type ScanContext,
@@ -78,6 +79,8 @@ export function clearArchiveIndexCache() {
 
 function remember(key: string, index: ArchiveIndex) {
   const bytes = index.memoryBytes
+  // Listings are bounded while they're built; never let one exceed the cache.
+  if (bytes > ARCHIVE_INDEX_CACHE_BYTES) return
   for (const [oldKey, old] of state.ready) {
     if (state.bytes + bytes <= ARCHIVE_INDEX_CACHE_BYTES) break
     state.ready.delete(oldKey)
@@ -189,24 +192,37 @@ export async function buildArchiveIndex(
   })
 }
 
+async function readArchive(job: IndexJob) {
+  const { signal } = job.controller
+  const source = await openByteSource(job.ref.storage, job.ref.path, {
+    signal,
+  })
+  try {
+    const index = new ArchiveIndex(job.ref.format, source.size)
+    job.index = index
+    await buildArchiveIndex(source, index, job.ref.name, signal)
+    signal.throwIfAborted()
+    index.complete = true
+    return index
+  } finally {
+    await source.close().catch(() => {})
+  }
+}
+
 async function runJob(job: IndexJob) {
   const { signal } = job.controller
   await acquireSlot(signal)
+  // Slow but progressing reads end at the listing budget with a partial
+  // listing; this deadline only stops a read that has stalled entirely.
+  const deadline = setTimeout(
+    () => job.controller.abort(storageStalled()),
+    ARCHIVE_BROWSE_LIMITS.scanMs + ARCHIVE_IDLE_MS
+  )
   try {
-    const source = await openByteSource(job.ref.storage, job.ref.path, {
-      signal,
-    })
-    try {
-      const index = new ArchiveIndex(job.ref.format, source.size)
-      job.index = index
-      await buildArchiveIndex(source, index, job.ref.name, signal)
-      signal.throwIfAborted()
-      index.complete = true
-      return index
-    } finally {
-      await source.close().catch(() => {})
-    }
+    // An aborted job gives up its slot even if a storage call ignores it.
+    return await Promise.race([readArchive(job), rejectOnAbort(signal)])
   } finally {
+    clearTimeout(deadline)
     releaseSlot()
   }
 }

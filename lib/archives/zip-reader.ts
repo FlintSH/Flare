@@ -1,5 +1,4 @@
 import { crc32 } from 'node:zlib'
-import * as zlib from 'node:zlib'
 
 import { type ArchiveIndex, normalizeBrowsePath } from './archive-index'
 import type { ByteSource } from './byte-source'
@@ -14,12 +13,11 @@ const CENTRAL_HEADER = 0x02014b50
 const LOCAL_HEADER = 0x04034b50
 const MAX_U32 = 0xffffffff
 
-/** Methods Flare can stream for previews. Extraction accepts only 0 and 8. */
-export const PREVIEW_ZIP_METHODS = new Set([
-  0,
-  8,
-  ...(typeof zlib.createZstdDecompress === 'function' ? [93] : []),
-])
+/**
+ * Stored and deflated members, as extraction accepts. Others (Zstandard can
+ * demand a 128 MiB window per stream) are listed with a compression issue.
+ */
+export const PREVIEW_ZIP_METHODS = new Set([0, 8])
 
 // IBM PC code page 437, the ZIP default when the UTF-8 flag is absent.
 const CP437 =
@@ -242,6 +240,10 @@ export async function indexZip(
     else if (!directoryEntry && !PREVIEW_ZIP_METHODS.has(method))
       issue ??= 'compression'
     if (normalized.unsafe) issue ??= 'unsafe-path'
+    if (!index.hasRoomFor(normalized.path)) {
+      index.truncated = 'size'
+      break
+    }
     const localOffset = headerOffset + layout.shift
     if (
       !directoryEntry &&

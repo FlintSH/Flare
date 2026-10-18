@@ -1954,6 +1954,50 @@ suite('archive publication against disposable PostgreSQL', () => {
       expect(await entry.text()).toBe('contents of c.txt')
     })
 
+    it('rechecks access before returning listing progress', async () => {
+      const pack = tar.pack()
+      const chunks: Buffer[] = []
+      const consuming = (async () => {
+        for await (const chunk of pack)
+          chunks.push(Buffer.from(chunk as Uint8Array))
+      })()
+      pack.entry({ name: 'secret-plan.txt' }, 'contents')
+      pack.finalize()
+      await consuming
+      const created = await source(
+        'plans.tar.gz',
+        gzipSync(Buffer.concat(chunks))
+      )
+      const file = await prisma.file.update({
+        where: { id: created.id },
+        data: { visibility: 'PUBLIC', password: null },
+      })
+      state.userId = ''
+      let unblock!: () => void
+      const gate = new Promise<void>((resolve) => {
+        unblock = resolve
+      })
+      // The owner makes the archive private while a visitor's request waits.
+      state.onRead = async () => {
+        state.onRead = undefined
+        await prisma.file.update({
+          where: { id: file.id },
+          data: { visibility: 'PRIVATE' },
+        })
+        await gate
+      }
+      try {
+        const pending = await sharedListing.POST(
+          sharedRequest(file.id, { progress: true }),
+          context(file.id)
+        )
+        expect(pending.status).toBe(404)
+        expect(await pending.text()).not.toContain('secret-plan')
+      } finally {
+        unblock()
+      }
+    })
+
     it('unlocks password-protected previews with a scoped cookie, never a URL password', async () => {
       const file = await publicArchive('preview-password')
       state.userId = ''

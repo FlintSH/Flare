@@ -74,17 +74,17 @@ Flare keeps recently read file lists in memory, so reopening an archive is immed
 <Screenshot src="/screenshots/archives/tgz-late-entry.webp" alt="The last file in Render outputs.tar.gz, summary/approved-cut.md, previewed after reading finished" caption="Later previews resume near the file instead of decompressing the archive from the start." />
 :::
 
-A listing shows at most **100,000** entries. Listing a TAR, TAR.GZ, or GZIP stops after **2 minutes**, and a TAR.GZ or GZIP also stops after **64 GiB** of uncompressed data. When either limit is reached, or the archive ends early, a notice above the list says how many entries are shown. Download the archive to see everything.
+A listing shows at most **100,000** entries, and stops early if its file list would need more than **64 MiB** of server memory (for example, many very long paths). Listing a TAR, TAR.GZ, or GZIP stops after **2 minutes**, and a TAR.GZ or GZIP also stops after **64 GiB** of uncompressed data. When any of these limits is reached, or the archive ends early, a notice above the list says how many entries are shown. Download the archive to see everything.
 
 ### When part of an archive can't be opened
 
 Flare lists every entry it can read and marks the ones it can't open, instead of rejecting the whole archive:
 
-| Mark    | Meaning                                                                                                                                                                                                                                            |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lock    | The entry is encrypted.                                                                                                                                                                                                                            |
-| Link    | A symbolic or hard link, which has no contents of its own.                                                                                                                                                                                         |
-| Warning | A compression method Flare can't read (such as Deflate64, BZIP2, LZMA, or XZ inside a ZIP), a sparse TAR file, a special filesystem entry, a path that escapes the archive, or a GZIP file whose end Flare didn't reach within the listing limits. |
+| Mark    | Meaning                                                                                                                                                                                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lock    | The entry is encrypted.                                                                                                                                                                                                                                       |
+| Link    | A symbolic or hard link, which has no contents of its own.                                                                                                                                                                                                    |
+| Warning | A compression method Flare can't read (such as Deflate64, BZIP2, LZMA, XZ, or Zstandard inside a ZIP), a sparse TAR file, a special filesystem entry, a path that escapes the archive, or a GZIP file whose end Flare didn't reach within the listing limits. |
 
 Selecting a marked entry explains the problem. Other entries still open normally.
 
@@ -213,6 +213,7 @@ Browsing and previews read only what they need, so they have much higher limits 
 | Text shown per preview step                           | 256 KiB                                                     |
 | Image shown without choosing **Load preview**         | 50 MiB                                                      |
 | Entry path                                            | 4,096 characters                                            |
+| Server memory for one file list                       | 64 MiB                                                      |
 
 | Extraction and creation                                    | Maximum          |
 | ---------------------------------------------------------- | ---------------- |
@@ -229,7 +230,7 @@ The instance's file-size limit and your remaining quota can impose lower limits 
 
 After the initial header checks, Flare allows **five seconds** to read a share page's small browsing or download request body before authorizing file access. This submission limit does not require the archive itself to transfer in five seconds. If submission times out, retry on a stable connection.
 
-**Supported:** ZIP with stored or deflated entries (and Zstandard entries for previews), ZIP64 and archives with a self-extractor prefix, ustar, PAX, and GNU TAR, TAR.GZ/TGZ, and GZIP, including GZIP files made of several concatenated parts. **RAR, 7z, and split archives are unsupported**; you can still download them. Encrypted entries, links, special filesystem entries, and unsafe paths are listed but can't be opened individually, and archives that contain them can't be extracted. Flare does not execute extracted programs or restore archive filesystem permissions.
+**Supported:** ZIP with stored or deflated entries, ZIP64 and archives with a self-extractor prefix, ustar, PAX, and GNU TAR, TAR.GZ/TGZ, and GZIP, including GZIP files made of several concatenated parts. **RAR, 7z, and split archives are unsupported**; you can still download them. Encrypted entries, links, special filesystem entries, and unsafe paths are listed but can't be opened individually, and archives that contain them can't be extracted. Flare does not execute extracted programs or restore archive filesystem permissions.
 
 ## Troubleshoot an operation
 
@@ -250,6 +251,7 @@ When **Files** detects an account change or replacement sign-in, it closes the p
 | Quota or time limit reached while extracting   | Split the work into smaller archives or selections, or extract locally and upload the files you need.                                                                                         |
 | **Too many archive files are open at once**    | Close another preview or wait for a download to finish, then try again.                                                                                                                       |
 | Busy messages                                  | Flare is reading several archives or running other archive operations. The browser retries a listing automatically; otherwise try again shortly.                                              |
+| **Storage stopped responding**                 | The server's file storage didn't send data for a minute. Try again; if it keeps happening, ask the operator to check the storage service.                                                     |
 | A protected share stops loading previews       | The owner changed the password, or the page was left open without renewing its one-hour unlock (for example, while the computer slept). Reload the share page and enter the current password. |
 
 For contributors, the [archive API](../api/archives) describes exact requests and responses. Operators can review [archive resource requirements](../hosting/storage#archive-processing).

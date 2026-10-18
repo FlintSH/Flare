@@ -6,6 +6,7 @@ import type { ByteSource } from './byte-source'
 import { openEntryRange } from './entry-reader'
 import { ArchiveError } from './errors'
 import { ARCHIVE_ISSUE_MESSAGES } from './shared'
+import { ARCHIVE_IDLE_MS, readUpTo } from './stream-slice'
 
 /** Media a browser may render inline from an archive; never active documents. */
 const INLINE_MEDIA: Record<string, string> = {
@@ -58,21 +59,6 @@ export function parseByteRange(
   return { start, end: Math.min(last + 1, size) }
 }
 
-async function head(stream: Readable, limit: number) {
-  const chunks: Buffer[] = []
-  let total = 0
-  try {
-    for await (const chunk of stream) {
-      chunks.push(chunk as Buffer)
-      total += (chunk as Buffer).length
-      if (total >= limit) break
-    }
-  } finally {
-    stream.destroy()
-  }
-  return Buffer.concat(chunks, total).subarray(0, limit)
-}
-
 /** Detect inline media from the entry's own bytes; the name is never trusted. */
 export async function entryMediaType(
   source: ByteSource,
@@ -83,7 +69,7 @@ export async function entryMediaType(
   const length = Math.min(entry.size, 4100)
   const detected = length
     ? await fileTypeFromBuffer(
-        await head(
+        await readUpTo(
           await openEntryRange(source, index, entry, 0, length),
           length
         )
@@ -108,7 +94,7 @@ const BUFFERED_RESPONSE_BYTES = 512 * 1024
  * Release a streamed response whose body nobody reads. Media players that
  * pause simply request the next range when they resume.
  */
-export const IDLE_ENTRY_STREAM_MS = 60_000
+export const IDLE_ENTRY_STREAM_MS = ARCHIVE_IDLE_MS
 
 /** Open entry responses per process and per account or IP address. */
 export const ARCHIVE_ENTRY_STREAMS = { total: 64, perRequester: 8 } as const
@@ -211,7 +197,7 @@ export async function entryResponse(options: {
     if (end - start <= BUFFERED_RESPONSE_BYTES) {
       // Small reads (text previews, icons) finish before any header is sent,
       // so damage becomes a clear error instead of a cut-off body.
-      const body = await head(stream, end - start)
+      const body = await readUpTo(stream, end - start)
       signal.throwIfAborted()
       await options.prepared?.(start, end - start)
       finish()

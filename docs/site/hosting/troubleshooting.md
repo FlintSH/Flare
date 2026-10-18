@@ -141,6 +141,8 @@ If a TAR.GZ or GZIP listing is slow, that is the one-time decompression pass. It
 
 For `408`, distinguish a shared body that took more than five seconds, a browser that cancelled a request (closing a preview or seeking can do this routinely), and extraction or creation that exceeded 120 seconds. Retry a stalled submission on a stable connection and inspect proxy body timeouts. For slow extraction, inspect application/storage logs, temporary disk capacity, S3 connectivity, and proxy timeouts. Reduce the archive or selection instead of repeatedly submitting the same oversized job. The originals remain unchanged and a failed operation does not publish a partial output set. See [archive resource requirements](./storage#archive-processing).
 
+A `504` on archive requests means storage sent no data for 60 seconds while an entry was being prepared or a listing was read. Check S3 or disk health and connectivity; the request releases its capacity rather than waiting indefinitely.
+
 If previews of a protected shared archive start returning `401` across replicas or after a restart, check that every process has the same stable `NEXTAUTH_SECRET`; archive unlock cookies are signed with a key derived from it.
 
 ## Collect a useful support report
