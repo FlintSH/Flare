@@ -1415,6 +1415,74 @@ describe('stalled storage', () => {
     expect(second).not.toHaveBeenCalled()
   })
 
+  it('closes a two-part read whose next part never opens', async () => {
+    let deliver!: (part: Readable) => void
+    const second = vi.fn(
+      () =>
+        new Promise<Readable>((resolve) => {
+          deliver = resolve
+        })
+    )
+    const joined = concatStreams([
+      async () => Readable.from([Buffer.from('first')]),
+      second,
+    ])
+    joined.resume()
+    await vi.waitFor(() => expect(second).toHaveBeenCalledOnce())
+    // Storage hasn't answered; leaving must still close the stream.
+    joined.destroy()
+    await once(joined, 'close')
+    const late = new Readable({ read() {} })
+    deliver(late)
+    await vi.waitFor(() => expect(late.destroyed).toBe(true))
+  })
+
+  it('releases a download stalled while opening the next GZIP member', async () => {
+    const tarball = await tarBytes([
+      { name: 'first.bin', data: mixedData(3 * 1024 * 1024) },
+      { name: 'spanning.bin', data: mixedData(2 * 1024 * 1024) },
+    ])
+    const spanning = (await indexOf(tarball, 'tar')).index.find('spanning.bin')!
+    const split = spanning.offset + 1024 * 1024
+    const firstMember = gzipSync(tarball.subarray(0, split))
+    const compressed = Buffer.concat([
+      firstMember,
+      gzipSync(tarball.subarray(split)),
+    ])
+    const storage = remoteStorage(compressed)
+    const { index, source } = await indexOf(
+      compressed,
+      'tar.gz',
+      'stall.tar.gz',
+      storage
+    )
+    // Storage accepts the request for the second member and never answers.
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = (...args: Parameters<typeof open>) =>
+      args[1]?.start === firstMember.length
+        ? new Promise(() => {})
+        : open(...args)
+    const release = vi.fn()
+    const leaving = new AbortController()
+    const response = await entryResponse({
+      source,
+      index,
+      entry: index.find('spanning.bin')!,
+      range: null,
+      inline: false,
+      release,
+      signal: leaving.signal,
+    })
+    const reader = response.body!.getReader()
+    let received = 0
+    while (received < split - spanning.offset)
+      received += (await reader.read()).value!.length
+    expect(release).not.toHaveBeenCalled()
+    leaving.abort()
+    await vi.waitFor(() => expect(release).toHaveBeenCalledOnce())
+    reader.releaseLock()
+  })
+
   it('stops decoding as soon as a slice is destroyed mid-skip', async () => {
     const data = mixedData(24 * 1024 * 1024)
     const bytes = rawZip([{ name: Buffer.from('big.bin'), data, method: 8 }])

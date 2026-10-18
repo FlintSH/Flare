@@ -159,15 +159,26 @@ export function sliceStream(
 
 /**
  * Read `parts` one after another as one stream. Each part opens when the one
- * before it ends; destroying the result destroys the part being read.
+ * before it ends. Destroying the result destroys the part being read, or
+ * stops waiting for one still opening, so stalled storage can't keep the
+ * stream from closing.
  */
 export function concatStreams(parts: Array<() => Promise<Readable>>) {
   let current: Readable | null = null
+  let stop!: () => void
+  const stopped = new Promise<null>((resolve) => {
+    stop = () => resolve(null)
+  })
   async function* play() {
     for (const open of parts) {
-      const part = await open()
-      if (readable.destroyed) {
-        part.destroy()
+      const opening = open()
+      const part = await Promise.race([opening, stopped])
+      if (!part || readable.destroyed) {
+        // Close a part that storage delivers after the reader has left.
+        opening.then(
+          (late) => late.destroy(),
+          () => {}
+        )
         return
       }
       current = part
@@ -185,6 +196,7 @@ export function concatStreams(parts: Array<() => Promise<Readable>>) {
   const progress = () => readable.emit(SLICE_PROGRESS)
   const close = readable._destroy
   readable._destroy = function (error, callback) {
+    stop()
     current?.destroy()
     close.call(this, error, callback)
   }
