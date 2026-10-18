@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Real application/server walkthrough using scripts/archives/seed.cjs accounts.
 const assert = require('node:assert/strict')
-const { mkdir, readFile } = require('node:fs/promises')
+const { mkdir, open, readFile, stat } = require('node:fs/promises')
 const path = require('node:path')
 const { gzipSync } = require('node:zlib')
 const archiver = require('archiver')
@@ -27,6 +27,8 @@ if (
   throw new Error(
     'Use a disposable localhost HTTP origin matching NEXTAUTH_URL.'
   )
+const { createLargeFixtures } = require('./large-fixtures.cjs')
+
 const screenshots = process.env.FLARE_ARCHIVE_SCREENSHOTS
 const videos = process.env.FLARE_ARCHIVE_VIDEOS
 const password = 'Archive-demo-only-2026!'
@@ -51,6 +53,40 @@ async function api(
     `${method} ${route}: ${response.status()} ${response.ok() ? '' : await response.text()}`
   )
   return response.json()
+}
+
+/** Upload a large local file through the real chunked upload API. */
+async function chunkedUpload(ctx, filePath, name, mimeType) {
+  const { size } = await stat(filePath)
+  const init = await ctx.request.post(origin + '/api/files/chunks', {
+    headers: { Origin: origin },
+    data: { filename: name, mimeType, size, visibility: 'PRIVATE' },
+  })
+  assert.equal(init.status(), 200, await init.text())
+  const { uploadId } = (await init.json()).data
+  const parts = []
+  const handle = await open(filePath)
+  try {
+    // Match the dashboard: Next.js buffers at most 10 MB of a proxied body.
+    const chunkSize = 5 * 1024 * 1024
+    for (let start = 0, part = 1; start < size; start += chunkSize, part++) {
+      const buffer = Buffer.alloc(Math.min(chunkSize, size - start))
+      await handle.read(buffer, 0, buffer.length, start)
+      const response = await ctx.request.put(
+        origin + `/api/files/chunks/${uploadId}/part/${part}`,
+        { headers: { Origin: origin }, data: buffer }
+      )
+      assert.equal(response.status(), 200, await response.text())
+      parts.push({ ETag: (await response.json()).data.etag, PartNumber: part })
+    }
+  } finally {
+    await handle.close()
+  }
+  const done = await ctx.request.post(
+    origin + `/api/files/chunks/${uploadId}/complete`,
+    { headers: { Origin: origin }, data: { parts } }
+  )
+  assert.equal(done.status(), 200, await done.text())
 }
 
 async function login(browser, account = 'alex') {
@@ -101,10 +137,16 @@ async function fixtures(ctx) {
     .png()
     .toBuffer()
   const zip = await bundle('zip', png)
+  // A wrong checksum damages one member; a cut-off upload loses the index.
   const damaged = Buffer.from(zip)
   const central = damaged.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
   damaged[central + 16] ^= 0xff
   const uploads = [
+    [
+      'Broken upload.zip',
+      'application/zip',
+      zip.subarray(0, Math.floor(zip.length * 0.6)),
+    ],
     ['Field kit.zip', 'application/zip', zip],
     ['Research bundle.tar.gz', 'application/gzip', await bundle('tar.gz', png)],
     [
@@ -281,6 +323,22 @@ async function browseAndExtract(browser, state, fixture) {
   ).toBeEnabled()
   await accessibleDialog(page)
   await shot(page, 'browse')
+  // Arrow keys, Home, and End move focus through the (virtualized) entry list.
+  await page
+    .getByRole('button', { name: 'Open folder drafts', exact: true })
+    .focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(
+    page.getByRole('button', { name: 'Open folder empty', exact: true })
+  ).toBeFocused()
+  await page.keyboard.press('End')
+  await expect(
+    page.getByRole('button', { name: 'Open folder images', exact: true })
+  ).toBeFocused()
+  await page.keyboard.press('Home')
+  await expect(
+    page.getByRole('button', { name: 'Open folder drafts', exact: true })
+  ).toBeFocused()
   await page.getByLabel('Search archive', { exact: true }).fill('README')
   await page
     .getByRole('button', { name: 'Preview guide/README.md', exact: true })
@@ -618,15 +676,42 @@ async function additionalChecks(browser, state, fixture) {
   await mobile.close()
 
   const errorDemo = await demoContext(browser, state, 'errors', false, true)
-  await (await findFile(errorDemo.page, 'Damaged bundle.zip')).click()
+  await (await findFile(errorDemo.page, 'Broken upload.zip')).click()
   await errorDemo.page
     .getByRole('menuitem', { name: 'Browse archive', exact: true })
     .click()
-  await expect(errorDemo.page.getByRole('alert')).toBeVisible()
+  await expect(errorDemo.page.getByRole('alert')).toContainText(
+    'couldn’t find this ZIP archive’s file list'
+  )
+  await expect(
+    errorDemo.page.getByRole('button', { name: 'Retry', exact: true })
+  ).toHaveCount(0)
   await shot(errorDemo.page, 'invalid-archive')
+  await errorDemo.page.keyboard.press('Escape')
+  // One damaged member does not hide the rest of the archive.
+  await browse(errorDemo.page, 'Damaged bundle.zip')
+  await errorDemo.page
+    .getByLabel('Search archive', { exact: true })
+    .fill('checklist')
+  await errorDemo.page
+    .getByRole('button', { name: 'Preview guide/checklist.csv', exact: true })
+    .click()
+  await expect(
+    errorDemo.page.getByLabel('Entry text', { exact: true })
+  ).toContainText('Review copy')
+  await errorDemo.page
+    .getByLabel('Search archive', { exact: true })
+    .fill('README')
+  await errorDemo.page
+    .getByRole('button', { name: 'Preview guide/README.md', exact: true })
+    .click()
+  await expect(errorDemo.page.getByRole('alert')).toContainText(
+    'integrity verification failed'
+  )
+  await shot(errorDemo.page, 'damaged-entry')
   await errorDemo.close()
   results.push(
-    'Mobile browsing/extraction layout and genuine damaged-archive error in light theme'
+    'Mobile browsing/extraction layout; a cut-off ZIP shows a non-retryable error, and one damaged member fails alone in light theme'
   )
 }
 
@@ -667,9 +752,7 @@ async function sharedArchiveChecks(browser, state, fixture) {
   )
   await shot(page, 'share-entry')
   const downloadReady = page.waitForEvent('download')
-  await page
-    .getByRole('button', { name: 'Download entry', exact: true })
-    .click()
+  await page.getByRole('link', { name: 'Download entry', exact: true }).click()
   const download = await downloadReady
   assert.equal(download.suggestedFilename(), 'README.md')
   assert.ok(
@@ -815,8 +898,9 @@ async function sharedArchiveChecks(browser, state, fixture) {
   ).toContainText('A small project handoff')
   await shot(protectedPage, 'share-unlocked')
   const protectedDownloadReady = protectedPage.waitForEvent('download')
+  // The listing set a short-lived unlock cookie; the URL has no password.
   await protectedPage
-    .getByRole('button', { name: 'Download entry', exact: true })
+    .getByRole('link', { name: 'Download entry', exact: true })
     .click()
   const protectedDownload = await protectedDownloadReady
   assert.equal(protectedDownload.suggestedFilename(), 'README.md')
@@ -865,6 +949,227 @@ async function sharedArchiveChecks(browser, state, fixture) {
   )
 }
 
+async function largeArchiveChecks(browser, state) {
+  const large = await createLargeFixtures()
+  try {
+    const uploader = await browser.newContext({ storageState: state })
+    // The light-theme error capture changes this account's preference.
+    await api(uploader, '/api/customization/preferences', 'PATCH', {
+      themeMode: 'inherit',
+    })
+    await chunkedUpload(
+      uploader,
+      large.zip.destination,
+      'Studio handoff.zip',
+      'application/zip'
+    )
+    await chunkedUpload(
+      uploader,
+      large.tgz.destination,
+      'Render outputs.tar.gz',
+      'application/gzip'
+    )
+    await uploader.close()
+
+    const demo = await demoContext(browser, state, 'archive-large-preview')
+    const { page } = demo
+    const ranges = []
+    page.on('response', (response) => {
+      const url = new URL(response.url())
+      if (url.pathname.endsWith('/archive/entry'))
+        ranges.push({
+          status: response.status(),
+          range: response.request().headers().range,
+        })
+    })
+    const opened = Date.now()
+    await browse(page, 'Studio handoff.zip')
+    await expect(
+      page.getByText(
+        new RegExp(`^ZIP · ${large.zip.files.toLocaleString('en-US')} files · `)
+      )
+    ).toBeVisible()
+    const listedMs = Date.now() - opened
+    await expect(
+      page.getByRole('button', { name: 'Extract all', exact: true })
+    ).toBeDisabled()
+    await expect(
+      page.getByText(/Extract all isn’t available because/)
+    ).toBeVisible()
+    await shot(page, 'large-browse')
+
+    await page.getByRole('button', { name: 'Open folder media' }).click()
+    await page
+      .getByRole('button', { name: 'Preview media/share-walkthrough.webm' })
+      .click()
+    const video = page.getByLabel('share-walkthrough.webm video player')
+    await expect(video).toBeVisible()
+    await expect
+      .poll(() => video.evaluate((element) => element.readyState))
+      .toBeGreaterThanOrEqual(1)
+    const seeked = await video.evaluate(
+      (element) =>
+        new Promise((resolve) => {
+          element.addEventListener(
+            'seeked',
+            () => resolve(element.currentTime),
+            {
+              once: true,
+            }
+          )
+          element.currentTime = Math.max(0, element.duration - 2)
+        })
+    )
+    assert.ok(seeked > 0, 'Video should seek inside the archive')
+    assert.ok(
+      ranges.some((entry) => entry.status === 206),
+      'Video previews should use ranged responses'
+    )
+    await shot(page, 'video-preview')
+
+    await page
+      .getByRole('button', { name: 'Preview media/notification.wav' })
+      .click()
+    await expect(page.getByLabel('notification.wav audio player')).toBeVisible()
+
+    await page
+      .getByRole('button', { name: 'Archive root', exact: true })
+      .click()
+    await page.getByRole('button', { name: 'Open folder logs' }).click()
+    await page
+      .getByRole('button', { name: 'Preview logs/server-2026-10-17.log' })
+      .click()
+    await expect(page.getByLabel('Entry text', { exact: true })).toContainText(
+      'request 0 /api/files'
+    )
+    await page.getByRole('button', { name: 'Load more', exact: true }).click()
+    await expect(page.getByText(/Showing the first 512 KB of/)).toBeVisible()
+    await shot(page, 'text-preview-more')
+
+    await page
+      .getByRole('button', { name: 'Archive root', exact: true })
+      .click()
+    await page.getByRole('button', { name: 'Open folder photos' }).click()
+    await page
+      .getByRole('button', { name: 'Open folder photos/2026-10' })
+      .click()
+    const firstPhoto = page
+      .getByRole('list', { name: 'Archive entries' })
+      .getByRole('button')
+      .first()
+    await firstPhoto.click()
+    await expect(page.getByRole('img', { name: /^Preview of / })).toBeVisible()
+    await page.getByRole('button', { name: /^Expand / }).click()
+    await expect(page.getByText(/^1 of \d+$/)).toBeVisible()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByText(/^2 of \d+$/)).toBeVisible()
+    await expect
+      .poll(() =>
+        page
+          .getByRole('dialog')
+          .last()
+          .locator('img')
+          .first()
+          .evaluate((image) => image.complete && image.naturalWidth)
+      )
+      .toBeGreaterThan(0)
+    await shot(page, 'image-gallery')
+    await page.keyboard.press('Escape')
+
+    await page
+      .getByLabel('Search archive', { exact: true })
+      .fill('module-19999')
+    await expect(
+      page.getByRole('button', {
+        name: 'Preview projects/campaign-32/content/module-19999.md',
+      })
+    ).toBeVisible()
+    // End reaches the last of hundreds of virtualized rows and scrolls to it.
+    await page.getByLabel('Search archive', { exact: true }).fill('')
+    await page
+      .getByRole('button', { name: 'Archive root', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: 'Open folder projects', exact: true })
+      .click()
+    await page
+      .getByRole('button', {
+        name: 'Open folder projects/campaign-01',
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole('button', {
+        name: 'Open folder projects/campaign-01/src',
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole('list', { name: 'Archive entries' })
+      .getByRole('button')
+      .first()
+      .focus()
+    await page.keyboard.press('End')
+    const last = page.getByRole('button', {
+      name: 'Preview projects/campaign-01/src/module-19968.ts',
+      exact: true,
+    })
+    await expect(last).toBeFocused()
+    await expect(last).toBeInViewport()
+    await page.keyboard.press('Escape')
+    await demo.close()
+
+    const phone = await demoContext(browser, state, 'large-mobile', true)
+    await browse(phone.page, 'Studio handoff.zip')
+    await phone.page
+      .getByRole('button', { name: 'Open folder media', exact: true })
+      .click()
+    await phone.page
+      .getByRole('button', { name: 'Preview media/share-walkthrough.webm' })
+      .click()
+    await expect(
+      phone.page.getByLabel('share-walkthrough.webm video player')
+    ).toBeInViewport()
+    assert.equal(
+      await phone.page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth
+      ),
+      false
+    )
+    await phone.close()
+
+    const tgzDemo = await demoContext(browser, state, 'archive-large-tgz')
+    const tgz = tgzDemo.page
+    await (await findFile(tgz, 'Render outputs.tar.gz')).click()
+    await tgz
+      .getByRole('menuitem', { name: 'Browse archive', exact: true })
+      .click()
+    await expect(
+      tgz.getByRole('progressbar', { name: 'Archive reading progress' })
+    ).toBeVisible()
+    await shot(tgz, 'tgz-indexing')
+    await expect(tgz.getByText(/^TAR\.GZ · 81 files · /)).toBeVisible({
+      timeout: 120000,
+    })
+    const lateStart = Date.now()
+    await tgz.getByLabel('Search archive', { exact: true }).fill('approved')
+    await tgz
+      .getByRole('button', { name: 'Preview summary/approved-cut.md' })
+      .click()
+    await expect(tgz.getByLabel('Entry text', { exact: true })).toContainText(
+      'The last batch is the approved cut.'
+    )
+    const lateMs = Date.now() - lateStart
+    await shot(tgz, 'tgz-late-entry')
+    await tgzDemo.close()
+    results.push(
+      `Large archives: ${Math.round(large.zip.size / 1024 ** 2)} MiB ZIP with ${large.zip.files} files listed in ${listedMs} ms; video seeking used ranged responses; audio, text Load more, and image gallery previews; a ${Math.round(large.tgz.size / 1024 ** 2)} MiB TAR.GZ showed reading progress, then opened its last entry in ${lateMs} ms`
+    )
+  } finally {
+    await large.cleanup()
+  }
+}
+
 async function main() {
   const browser = await chromium.launch({
     headless: true,
@@ -882,6 +1187,8 @@ async function main() {
       await additionalChecks(browser, state, fixture)
     }
     await sharedArchiveChecks(browser, state, fixture)
+    if (process.env.FLARE_ARCHIVE_LARGE === 'true')
+      await largeArchiveChecks(browser, state)
     console.log(JSON.stringify({ passed: results }, null, 2))
   } catch (error) {
     const pages = browser.contexts().flatMap((context) => context.pages())

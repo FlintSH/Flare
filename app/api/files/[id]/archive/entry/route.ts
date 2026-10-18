@@ -1,6 +1,5 @@
-import { archiveActor, archiveRoute } from '@/lib/archives/http'
-import { withArchiveOperation } from '@/lib/archives/operation'
-import { downloadArchiveEntry } from '@/lib/archives/service'
+import { archiveActor, archiveRoute, entrySelector } from '@/lib/archives/http'
+import { readArchiveEntry } from '@/lib/archives/service'
 import { setAuditTarget, withAuditRoute } from '@/lib/audit'
 
 export const runtime = 'nodejs'
@@ -14,11 +13,13 @@ export async function GET(
       setAuditTarget({ type: 'file', id })
       return archiveRoute(async () => {
         const actor = await archiveActor(request, ['files.read'])
-        const path = new URL(request.url).searchParams.get('path') ?? ''
-        return withArchiveOperation(
-          actor.user.id,
-          request.signal,
-          (operation) => downloadArchiveEntry(actor, id, path, operation)
+        const query = new URL(request.url).searchParams
+        return readArchiveEntry(
+          actor,
+          id,
+          entrySelector(query),
+          request,
+          query.get('disposition') === 'inline'
         )
       })
     },

@@ -1,5 +1,8 @@
-import { archiveActor, archiveRoute } from '@/lib/archives/http'
-import { withArchiveOperation } from '@/lib/archives/operation'
+import {
+  archiveActor,
+  archiveRoute,
+  parseListingQuery,
+} from '@/lib/archives/http'
 import { listArchive } from '@/lib/archives/service'
 import { setAuditTarget, withAuditRoute } from '@/lib/audit'
 
@@ -14,11 +17,14 @@ export async function GET(
       setAuditTarget({ type: 'file', id })
       return archiveRoute(async () => {
         const actor = await archiveActor(request, ['files.read'])
-        return withArchiveOperation(
-          actor.user.id,
-          request.signal,
-          (operation) => listArchive(actor, id, operation)
-        )
+        const query = new URL(request.url).searchParams
+        return listArchive(actor, id, {
+          ...parseListingQuery({
+            progress: query.get('progress') ?? undefined,
+            after: query.get('after') ?? undefined,
+          }),
+          signal: request.signal,
+        })
       })
     },
     {

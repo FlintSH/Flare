@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { createReadStream, createWriteStream } from 'node:fs'
+import { createWriteStream } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Readable, Transform } from 'node:stream'
-import { finished, pipeline } from 'node:stream/promises'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 
 import { loggers } from '@/lib/logger'
 import type { StorageProvider } from '@/lib/storage'
@@ -25,7 +25,6 @@ export class ArchiveOperation {
   private readonly abort: () => void
   private readonly deadline = Date.now() + ARCHIVE_LIMITS.timeoutMs
   private released = false
-  private deferred = false
   directory = ''
 
   constructor(
@@ -100,32 +99,8 @@ export class ArchiveOperation {
     return { diskPath, size }
   }
 
-  download(
-    diskPath: string,
-    name: string,
-    size: number,
-    mimeType = 'application/octet-stream'
-  ) {
-    this.signal.throwIfAborted()
-    const stream = createReadStream(diskPath, { signal: this.signal })
-    this.deferred = true
-    void finished(stream)
-      .catch(() => {})
-      .finally(() => this.release())
-    return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
-      headers: {
-        'Content-Type': mimeType,
-        'Content-Length': String(size),
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, (character) => '%' + character.charCodeAt(0).toString(16))}`,
-        'Cache-Control': 'private, no-store',
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "sandbox; default-src 'none'",
-      },
-    })
-  }
-
-  async release(force = true) {
-    if (this.released || (!force && this.deferred)) return
+  async release() {
+    if (this.released) return
     this.released = true
     clearTimeout(this.timer)
     this.requestSignal.removeEventListener('abort', this.abort)
@@ -156,6 +131,6 @@ export async function withArchiveOperation<T>(
     if (operation.signal.aborted) throw operation.signal.reason
     throw error
   } finally {
-    await operation.release(false)
+    await operation.release()
   }
 }

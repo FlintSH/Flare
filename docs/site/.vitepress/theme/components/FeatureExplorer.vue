@@ -81,7 +81,7 @@ const features = [
   [
     'Organize',
     'Archives',
-    'Browse shared archive entries, or extract and create ZIP/TAR.GZ files in your own library with private defaults or an explicit profile.',
+    'Browse ZIP, TAR, and TAR.GZ archives of any size, preview images, video, audio, and text inside them, or extract and create ZIP/TAR.GZ files in your own library.',
     '/guide/archives',
   ],
   [

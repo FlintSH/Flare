@@ -1,6 +1,7 @@
 import { createReadStream, createWriteStream } from 'fs'
 import {
   mkdir,
+  open,
   readFile,
   readdir,
   rename,
@@ -16,7 +17,7 @@ import { dirname, join } from 'path'
 
 import { validateStoragePath } from '@/lib/security/paths'
 
-import type { RangeOptions, StorageProvider } from '../types'
+import type { RandomAccessFile, RangeOptions, StorageProvider } from '../types'
 
 export class LocalStorageProvider implements StorageProvider {
   readonly kind = 'local' as const
@@ -175,6 +176,36 @@ export class LocalStorageProvider implements StorageProvider {
       if (typeof range.end !== 'undefined') options.end = range.end
     }
     return createReadStream(fullPath, { ...options, signal })
+  }
+
+  async openRandomAccess(path: string): Promise<RandomAccessFile> {
+    const validPath = validateStoragePath(path)
+    const handle = await open(join(process.cwd(), validPath), 'r')
+    try {
+      const { size } = await handle.stat()
+      return {
+        size,
+        async read(position, length) {
+          const buffer = Buffer.alloc(length)
+          let offset = 0
+          while (offset < length) {
+            const { bytesRead } = await handle.read(
+              buffer,
+              offset,
+              length - offset,
+              position + offset
+            )
+            if (!bytesRead) break
+            offset += bytesRead
+          }
+          return buffer.subarray(0, offset)
+        },
+        close: () => handle.close(),
+      }
+    } catch (error) {
+      await handle.close()
+      throw error
+    }
   }
 
   async getFileUrl(path: string): Promise<string> {

@@ -33,6 +33,11 @@ async function seed() {
   config.value.settings.general.ocr = { enabled: false }
   config.value.settings.general.oidc = { enabled: false }
   config.value.settings.general.storage.provider = 'local'
+  // The optional large-archive checks upload multi-gigabyte fixtures.
+  config.value.settings.general.storage.maxUploadSize = {
+    value: 4,
+    unit: 'GB',
+  }
   await prisma.config.update({
     where: { key: 'flare_config' },
     data: { value: config.value },

@@ -5,6 +5,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { gzipSync } from 'node:zlib'
+import * as tar from 'tar-stream'
 import {
   afterAll,
   beforeAll,
@@ -52,6 +54,11 @@ vi.mock('@/lib/storage/target-provider', () => ({
 const storage = {
   kind: 'local' as const,
   target: { provider: 'local' as const },
+  async getFileSize(path: string) {
+    const bytes = state.objects.get(path)
+    if (!bytes) throw new Error('Missing fixture object')
+    return bytes.length
+  },
   async getFileStream(
     path: string,
     range?: { start?: number; end?: number },
@@ -133,6 +140,7 @@ suite('archive publication against disposable PostgreSQL', () => {
     state.version = 1
     shareIp = `archive-test-${randomUUID()}`
     state.objects.clear()
+    ;(await import('@/lib/archives/index-cache')).clearArchiveIndexCache()
     state.targets = []
     state.targetChanged = false
     state.onUpload = undefined
@@ -434,7 +442,8 @@ suite('archive publication against disposable PostgreSQL', () => {
       context(file.id)
     )
     expect(await response.text()).toBe('Hello archive')
-    await waitForArchiveRelease(`share:${file.id}`)
+    // Without a cached index the listing reads storage, then rechecks access.
+    ;(await import('@/lib/archives/index-cache')).clearArchiveIndexCache()
     state.onRead = async () => {
       state.onRead = undefined
       await prisma.file.update({
@@ -908,61 +917,80 @@ suite('archive publication against disposable PostgreSQL', () => {
     ).toBe(0)
   })
 
-  it('shares the 30-per-IP minute budget across manifest and entry endpoints before archive I/O', async () => {
+  it('keeps separate per-IP budgets for shared listings and entry reads before archive I/O', async () => {
+    const { SHARED_ARCHIVE_RATE_LIMITS } =
+      await import('@/lib/archives/sharing')
     state.userId = ''
     state.onRead = vi.fn()
-    for (let index = 0; index < 30; index++) {
-      const response =
-        index % 2
-          ? await sharedDownload.POST(
-              sharedRequest('absent', { path: 'a' }, true),
-              context('absent')
-            )
-          : await sharedListing.POST(sharedRequest('absent'), context('absent'))
-      expect(response.status).toBe(404)
-    }
+    for (let index = 0; index < SHARED_ARCHIVE_RATE_LIMITS.listing; index++)
+      expect(
+        (await sharedListing.POST(sharedRequest('absent'), context('absent')))
+          .status
+      ).toBe(404)
     const blocked = await sharedListing.POST(
       sharedRequest('absent'),
       context('absent')
     )
     expect(blocked.status).toBe(429)
     expect(blocked.headers.get('retry-after')).toBe('60')
+    // Polling a listing never spends the budget that image and video loads use.
+    for (let index = 0; index < SHARED_ARCHIVE_RATE_LIMITS.entry; index++) {
+      const response =
+        index % 2
+          ? await sharedDownload.POST(
+              sharedRequest('absent', { path: 'a' }, true),
+              context('absent')
+            )
+          : await sharedDownload.GET(
+              request(
+                '/api/files/absent/archive/share/entry?path=a',
+                undefined,
+                {
+                  'X-Forwarded-For': shareIp,
+                }
+              ),
+              context('absent')
+            )
+      expect(response.status).toBe(404)
+    }
+    expect(
+      (
+        await sharedDownload.POST(
+          sharedRequest('absent', { path: 'a' }, true),
+          context('absent')
+        )
+      ).status
+    ).toBe(429)
     expect(state.onRead).not.toHaveBeenCalled()
   })
 
-  it('serializes shared work by source file and releases its slot after completion', async () => {
+  it('lets concurrent shared requests join one archive read instead of failing as busy', async () => {
     const file = await publicArchive()
     state.userId = ''
     let unblock!: () => void
     let started!: () => void
-    const staged = new Promise<void>((resolve) => {
+    const reading = new Promise<void>((resolve) => {
       started = resolve
     })
     const gate = new Promise<void>((resolve) => {
       unblock = resolve
     })
     state.onRead = async () => {
+      state.onRead = undefined
       started()
       await gate
     }
     const first = sharedListing.POST(sharedRequest(file.id), context(file.id))
-    await staged
-    try {
-      const second = await sharedDownload.POST(
-        sharedRequest(file.id, { path: 'empty.bin' }, true),
-        context(file.id)
-      )
-      expect(second.status).toBe(429)
-      expect(second.headers.get('retry-after')).toBe('5')
-    } finally {
-      unblock()
-    }
+    await reading
+    const second = sharedDownload.POST(
+      sharedRequest(file.id, { path: 'notes/readme.txt' }, true),
+      context(file.id)
+    )
+    unblock()
     expect((await first).status).toBe(200)
-    state.onRead = undefined
-    expect(
-      (await sharedListing.POST(sharedRequest(file.id), context(file.id)))
-        .status
-    ).toBe(200)
+    const entry = await second
+    expect(entry.status).toBe(200)
+    expect(await entry.text()).toBe('Hello archive')
   })
 
   it('lists and downloads owned entries without exposing temporary paths or modifying the account', async () => {
@@ -1700,4 +1728,253 @@ suite('archive publication against disposable PostgreSQL', () => {
       expect(await prisma.storageDeletion.count()).toBe(2)
     }
   )
+
+  describe('streamed previews', () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64'
+    )
+
+    async function zipOf(
+      name: string,
+      files: { name: string; data: Buffer | string; store?: boolean }[]
+    ) {
+      const { default: archiver } = await import('archiver')
+      const zip = archiver('zip')
+      const chunks: Buffer[] = []
+      const collecting = (async () => {
+        for await (const chunk of zip) chunks.push(Buffer.from(chunk))
+      })()
+      for (const file of files)
+        zip.append(file.data, { name: file.name, store: file.store })
+      await zip.finalize()
+      await collecting
+      return source(name, Buffer.concat(chunks))
+    }
+
+    function entryUrl(id: string, path: string, query = '') {
+      return `/api/files/${id}/archive/entry?path=${encodeURIComponent(path)}${query}`
+    }
+
+    it('serves byte ranges and sniffed inline media without trusting names', async () => {
+      const text = 'abcdefghijklmnopqrstuvwxyz'.repeat(1000)
+      const file = await zipOf('media.zip', [
+        { name: 'docs/alphabet.txt', data: text },
+        { name: 'images/pixel.png', data: png, store: true },
+        { name: 'images/fake.png', data: '<svg onload="alert(1)">' },
+      ])
+      const ranged = await download.GET(
+        request(entryUrl(file.id, 'docs/alphabet.txt'), undefined, {
+          Range: 'bytes=26-51',
+        }),
+        context(file.id)
+      )
+      expect(ranged.status).toBe(206)
+      expect(ranged.headers.get('content-range')).toBe(
+        `bytes 26-51/${text.length}`
+      )
+      expect(ranged.headers.get('accept-ranges')).toBe('bytes')
+      expect(await ranged.text()).toBe('abcdefghijklmnopqrstuvwxyz')
+      const outOfRange = await download.GET(
+        request(entryUrl(file.id, 'docs/alphabet.txt'), undefined, {
+          Range: `bytes=${text.length}-`,
+        }),
+        context(file.id)
+      )
+      expect(outOfRange.status).toBe(416)
+      const image = await download.GET(
+        request(entryUrl(file.id, 'images/pixel.png', '&disposition=inline')),
+        context(file.id)
+      )
+      expect(image.headers.get('content-type')).toBe('image/png')
+      expect(image.headers.get('content-disposition')).toMatch(/^inline;/)
+      expect(image.headers.get('cross-origin-resource-policy')).toBe(
+        'same-origin'
+      )
+      expect(Buffer.from(await image.arrayBuffer()).equals(png)).toBe(true)
+      const fake = await download.GET(
+        request(entryUrl(file.id, 'images/fake.png', '&disposition=inline')),
+        context(file.id)
+      )
+      expect(fake.headers.get('content-type')).toBe('application/octet-stream')
+      expect(fake.headers.get('content-disposition')).toMatch(/^attachment;/)
+      expect(fake.headers.get('content-security-policy')).toContain('sandbox')
+      await fake.body?.cancel()
+    })
+
+    it('lists a damaged member but refuses to serve its contents', async () => {
+      const file = await zipOf('damaged.zip', [
+        { name: 'good.txt', data: 'good' },
+        { name: 'bad.txt', data: 'payload that will be corrupted' },
+      ])
+      const stored = state.objects.get(file.path)!
+      const central = stored.lastIndexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]))
+      stored[central + 16] ^= 0xff
+      const listed = await listing.GET(
+        request(`/api/files/${file.id}/archive`),
+        context(file.id)
+      )
+      expect(listed.status).toBe(200)
+      expect((await listed.json()).data.entries).toHaveLength(2)
+      // Small reads are verified before headers, so the failure is explicit.
+      const bad = await download.GET(
+        request(entryUrl(file.id, 'bad.txt')),
+        context(file.id)
+      )
+      expect(bad.status).toBe(400)
+      expect((await bad.json()).error).toMatch(/integrity verification failed/)
+      const good = await download.GET(
+        request(entryUrl(file.id, 'good.txt')),
+        context(file.id)
+      )
+      expect(await good.text()).toBe('good')
+    })
+
+    it('explains unavailable extraction in the listing and still enforces it on request', async () => {
+      const file = await zipOf(
+        'many.zip',
+        Array.from({ length: 1001 }, (_, index) => ({
+          name: `files/${index}.txt`,
+          data: 'x',
+        }))
+      )
+      const body = await (
+        await listing.GET(
+          request(`/api/files/${file.id}/archive`),
+          context(file.id)
+        )
+      ).json()
+      expect(body.data).toMatchObject({
+        fileCount: 1001,
+        entryCount: 1001,
+        truncated: null,
+        extraction: {
+          available: false,
+          reason: expect.stringContaining('1,000 files and folders'),
+        },
+      })
+      expect((await extract(file.id)).status).toBe(413)
+      const encrypted = await source(
+        'locked.zip',
+        Buffer.from(
+          'UEsDBBQAAQAAAAAAAAAAAAAABQAAAAUAAAAKAAAAc2VjcmV0LnR4dGhlbGxvUEsBAhQDFAABAAAAAAAAAAAAAAAFAAAABQAAAAoAAAAAAAAAAAAAAKSBAAAAAHNlY3JldC50eHRQSwUGAAAAAAEAAQA4AAAALQAAAAAA',
+          'base64'
+        )
+      )
+      const entry = await download.GET(
+        request(entryUrl(encrypted.id, 'secret.txt')),
+        context(encrypted.id)
+      )
+      expect(entry.status).toBe(415)
+      expect((await entry.json()).error).toMatch(/encrypted/)
+    })
+
+    it('reports progress for a slow TAR.GZ and resumes from a cursor', async () => {
+      const pack = tar.pack()
+      const chunks: Buffer[] = []
+      const consuming = (async () => {
+        for await (const chunk of pack)
+          chunks.push(Buffer.from(chunk as Uint8Array))
+      })()
+      for (const name of ['a.txt', 'b.txt', 'c.txt'])
+        pack.entry({ name }, `contents of ${name}`)
+      pack.finalize()
+      await consuming
+      const file = await source(
+        'bundle.tar.gz',
+        gzipSync(Buffer.concat(chunks))
+      )
+      let unblock!: () => void
+      const gate = new Promise<void>((resolve) => {
+        unblock = resolve
+      })
+      state.onRead = async () => {
+        state.onRead = undefined
+        await gate
+      }
+      const pending = await listing.GET(
+        request(`/api/files/${file.id}/archive?progress=1`),
+        context(file.id)
+      )
+      expect(pending.status).toBe(202)
+      expect(pending.headers.get('retry-after')).toBe('1')
+      expect((await pending.json()).data).toMatchObject({
+        status: 'indexing',
+        format: 'tar.gz',
+      })
+      unblock()
+      const done = await listing.GET(
+        request(`/api/files/${file.id}/archive?progress=1&after=1`),
+        context(file.id)
+      )
+      expect(done.status).toBe(200)
+      const body = (await done.json()).data
+      expect(body.entries.map((entry: { path: string }) => entry.path)).toEqual(
+        ['b.txt', 'c.txt']
+      )
+      expect(body.fileCount).toBe(3)
+      const entry = await download.GET(
+        request(entryUrl(file.id, 'c.txt')),
+        context(file.id)
+      )
+      expect(await entry.text()).toBe('contents of c.txt')
+    })
+
+    it('unlocks password-protected previews with a scoped cookie, never a URL password', async () => {
+      const file = await publicArchive('preview-password')
+      state.userId = ''
+      const get = (cookie?: string) =>
+        sharedDownload.GET(
+          request(
+            `/api/files/${file.id}/archive/share/entry?path=notes%2Freadme.txt`,
+            undefined,
+            {
+              'X-Forwarded-For': shareIp,
+              ...(cookie ? { Cookie: cookie } : {}),
+            }
+          ),
+          context(file.id)
+        )
+      expect((await get()).status).toBe(401)
+      const listed = await sharedListing.POST(
+        sharedRequest(file.id, { password: 'preview-password' }),
+        context(file.id)
+      )
+      expect(listed.status).toBe(200)
+      const setCookie = listed.headers.get('set-cookie') ?? ''
+      expect(setCookie).toContain(`Path=/api/files/${file.id}/archive/share`)
+      expect(setCookie).toContain('HttpOnly')
+      expect(setCookie).not.toContain('preview-password')
+      const cookie = setCookie.split(';')[0]
+      const unlocked = await get(cookie)
+      expect(unlocked.status).toBe(200)
+      expect(await unlocked.text()).toBe('Hello archive')
+      // Using the cookie does not renew it; only a submitted password does.
+      const relisted = await sharedListing.POST(
+        sharedRequest(file.id, {}, false, { Cookie: cookie }),
+        context(file.id)
+      )
+      expect(relisted.status).toBe(200)
+      expect(relisted.headers.get('set-cookie')).toBeNull()
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { password: await hash('rotated-password', 4) },
+      })
+      expect((await get(cookie)).status).toBe(401)
+      await prisma.file.update({
+        where: { id: file.id },
+        data: { password: null, visibility: 'PRIVATE' },
+      })
+      expect((await get(cookie)).status).toBe(404)
+      const crossSite = await sharedDownload.GET(
+        request(
+          `/api/files/${file.id}/archive/share/entry?path=notes%2Freadme.txt`,
+          undefined,
+          { 'Sec-Fetch-Site': 'cross-site', Cookie: cookie }
+        ),
+        context(file.id)
+      )
+      expect(crossSite.status).toBe(403)
+    })
+  })
 })

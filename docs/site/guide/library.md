@@ -104,7 +104,7 @@ Open the card's menu for the full action list. On a desktop, preview actions als
 - **Open file:** open its share/viewer page.
 - **Copy link:** copy its share-page URL.
 - **Download file:** save a copy to your device.
-- **Browse archive:** inspect supported archive contents, download an entry, or extract into a new folder. See [archives](./archives).
+- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives).
 - **Edit tags:** add or remove private organizational labels.
 - **Move to folder:** change its library location without changing the file link.
 - **Change visibility:** switch between public and private.

@@ -14,27 +14,52 @@ import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { ArchiveError } from './errors'
 import { archiveBody } from './http'
-import type { ArchiveOperation } from './operation'
-import { ARCHIVE_LIMITS } from './shared'
+import { ARCHIVE_BROWSE_LIMITS } from './shared'
+import {
+  createArchiveUnlock,
+  secureCookies,
+  verifyArchiveUnlock,
+} from './unlock'
 
+const password = z.string().max(1024).optional()
 export const sharedArchiveSchema = z
-  .object({ password: z.string().max(1024).optional() })
+  .object({
+    password,
+    /** Return 202 with progress instead of waiting for a slow listing. */
+    progress: z.boolean().optional(),
+    /** Skip entries the browser already received while polling. */
+    after: z.number().int().min(0).optional(),
+  })
   .strict()
-export const sharedArchiveEntrySchema = sharedArchiveSchema.extend({
-  path: z.string().min(1).max(ARCHIVE_LIMITS.pathLength),
-})
+export const sharedArchiveEntrySchema = z
+  .object({
+    password,
+    path: z.string().min(1).max(ARCHIVE_BROWSE_LIMITS.pathLength),
+  })
+  .strict()
 
 // Share routes can be compiled into separate Next bundles. Keep one budget per
-// process, matching the operation cap, rather than one limiter per route module.
-const limiterKey = Symbol.for('flare.archive.share-rate-limit')
+// process rather than one limiter per route module. Listings poll while a slow
+// archive is read; entry reads include image loads and media seeking.
 const processState = globalThis as typeof globalThis & {
   [key: symbol]: unknown
 }
-const limiter = (processState[limiterKey] ??= new RateLimiterMemory({
-  points: 30,
-  duration: 60,
-  keyPrefix: 'archive-share',
-})) as RateLimiterMemory
+export const SHARED_ARCHIVE_RATE_LIMITS = {
+  listing: 120,
+  entry: 600,
+} as const
+const limiters = (processState[Symbol.for('flare.archive.share-limits')] ??= {
+  listing: new RateLimiterMemory({
+    points: SHARED_ARCHIVE_RATE_LIMITS.listing,
+    duration: 60,
+    keyPrefix: 'archive-share',
+  }),
+  entry: new RateLimiterMemory({
+    points: SHARED_ARCHIVE_RATE_LIMITS.entry,
+    duration: 60,
+    keyPrefix: 'archive-share-entry',
+  }),
+}) as Record<'listing' | 'entry', RateLimiterMemory>
 
 export const SHARED_ARCHIVE_BODY_TIMEOUT_MS = 5_000
 export const SHARED_ARCHIVE_PENDING_BODIES = 32
@@ -42,7 +67,7 @@ const bodyKey = Symbol.for('flare.archive.pending-share-bodies')
 const pendingBodies = (processState[bodyKey] ??=
   new Set<symbol>()) as Set<symbol>
 
-/** Untrusted slow bodies never reserve archive workers or staging directories. */
+/** Untrusted slow bodies never reserve archive reads or indexing work. */
 export async function sharedArchiveBody(request: Request, allowForm = false) {
   if (pendingBodies.size >= SHARED_ARCHIVE_PENDING_BODIES)
     throw new ArchiveError(
@@ -80,14 +105,17 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   }
 }
 
-export async function sharedArchiveGuard(request: Request) {
+export async function sharedArchiveGuard(
+  request: Request,
+  kind: 'listing' | 'entry'
+) {
   if (request.headers.has('authorization'))
     throw new ArchiveError(
       'API credentials cannot authorize shared archives.',
       401
     )
   if (!isSameOriginRequest(request)) throw new ArchiveError('Forbidden', 403)
-  return rateLimit(request, limiter)
+  return rateLimit(request, limiters[kind])
 }
 
 const sharedSourceSelect = {
@@ -106,6 +134,8 @@ export type SharedArchiveAccess = {
   file: SharedSource
   viewer: Viewer
   verifiedPasswordHash: string | null
+  /** This request submitted the file password and it matched. */
+  passwordChecked: boolean
 }
 
 async function currentSession(
@@ -136,9 +166,14 @@ function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
   )
 }
 
+/**
+ * Check a shared archive request. A visitor proves a file password either in
+ * the body or with an unlock cookie issued after an earlier password check.
+ */
 export async function authorizeSharedArchive(
   id: string,
-  password?: string
+  password?: string,
+  unlock: string | null = null
 ): Promise<SharedArchiveAccess> {
   const [file, session] = await Promise.all([
     prisma.file.findUnique({ where: { id }, select: sharedSourceSelect }),
@@ -150,29 +185,56 @@ export async function authorizeSharedArchive(
     session?.user?.id && typeof session.user.sessionVersion === 'number'
       ? { id: session.user.id, sessionVersion: session.user.sessionVersion }
       : null
+  // A valid unlock satisfies only the password; visibility still applies.
+  const unlocked =
+    !password && verifyArchiveUnlock(unlock, file.id, file.password)
   const access = await checkFileAccess(
-    file,
+    unlocked ? { ...file, password: null } : file,
     await currentSession(viewer),
     password
   )
   denied(access)
+  // Only the visitor-password branch actually compares the supplied password.
+  const visitor = access.allowed && !access.isOwner && !access.canModerate
   return {
     file,
     viewer,
-    // Only the visitor-password branch actually compares the supplied password.
-    verifiedPasswordHash:
-      access.allowed && !access.isOwner && !access.canModerate
-        ? file.password
-        : null,
+    verifiedPasswordHash: visitor ? file.password : null,
+    passwordChecked: visitor && !!file.password && !!password,
   }
+}
+
+/**
+ * Issue an unlock cookie when this request checked a submitted visitor
+ * password. Using a cookie never renews it, so it lasts one hour at most.
+ */
+export function withArchiveUnlock(
+  response: Response,
+  access: SharedArchiveAccess,
+  request: Request
+) {
+  if (
+    access.passwordChecked &&
+    access.verifiedPasswordHash &&
+    response.status < 300
+  )
+    response.headers.append(
+      'Set-Cookie',
+      createArchiveUnlock(
+        access.file.id,
+        access.verifiedPasswordHash,
+        secureCookies(request)
+      )
+    )
+  return response
 }
 
 /** No bcrypt or storage I/O while holding locks; recheck the exact verified hash. */
 export async function recheckSharedArchive(
   access: SharedArchiveAccess,
-  operation: ArchiveOperation
+  signal: AbortSignal
 ) {
-  operation.signal.throwIfAborted()
+  signal.throwIfAborted()
   await prisma.$transaction(
     async (tx) => {
       await lockRoleChanges(tx)
@@ -210,11 +272,8 @@ export async function recheckSharedArchive(
         )
       // Expiration is worker-applied throughout sharing. A completed DELETE or
       // SET_PRIVATE is observed above; a scheduled deadline alone is not a ban.
-      operation.signal.throwIfAborted()
+      signal.throwIfAborted()
     },
-    {
-      timeout: operation.transactionTimeout(),
-      maxWait: Math.min(10_000, operation.transactionTimeout()),
-    }
+    { timeout: 10_000, maxWait: 10_000 }
   )
 }

@@ -2,16 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   archiveEntriesAt,
-  archiveEntryUrl,
+  archiveEntryHref,
   archiveFetch,
   archiveFolderCount,
+  archiveListingRequest,
   archiveOutputName,
   archivePreviewKind,
   archiveProfileRequest,
-  archiveReadRequest,
   archiveSelectionSize,
+  buildArchiveTree,
   isArchiveCandidate,
-  isSafeArchiveImage,
+  loadArchiveListing,
   readPreviewBytes,
 } from '@/components/archives/archive-utils'
 
@@ -43,10 +44,32 @@ describe('archive browser navigation', () => {
     expect(archiveEntriesAt(entries, 'project', 'missing')).toEqual([])
   })
 
-  it('encodes entry paths independently from route identifiers', () => {
-    expect(archiveEntryUrl('id/1', 'folder/a #?&ü.txt')).toBe(
-      '/api/files/id%2F1/archive/entry?path=folder%2Fa%20%23%3F%26%C3%BC.txt'
+  it('addresses entries by listing position so member names stay out of URLs', () => {
+    expect(archiveEntryHref('id/1', { kind: 'owner' }, 3)).toBe(
+      '/api/files/id%2F1/archive/entry?entry=3'
     )
+    expect(
+      archiveEntryHref('id/1', { kind: 'share', password: 'x' }, 0, {
+        inline: true,
+      })
+    ).toBe('/api/files/id%2F1/archive/share/entry?entry=0&disposition=inline')
+  })
+
+  it('keeps listing positions for explicit entries, including repeated paths', () => {
+    const tree = buildArchiveTree([
+      { path: 'a/one.txt', type: 'file', size: 1 },
+      { path: 'a/one.txt', type: 'file', size: 2 },
+      { path: 'b/', type: 'directory', size: 0 },
+    ])
+    expect(tree.folderCount).toBe(2)
+    expect(tree.children.get('a')).toEqual([
+      { path: 'a/one.txt', type: 'file', size: 2, position: 1 },
+    ])
+    expect(tree.children.get('')?.find((row) => row.path === 'a')).toEqual({
+      path: 'a',
+      type: 'directory',
+      size: 0,
+    })
   })
 
   it('switches archive output formats without stacking extensions', () => {
@@ -70,47 +93,111 @@ describe('archive browser navigation', () => {
   })
 })
 
-describe('shared archive request transport', () => {
-  it('keeps protected-share credentials and arbitrary entry paths out of request URLs', async () => {
+describe('archive listing transport', () => {
+  it('keeps protected-share credentials in the body and polls with a cursor', async () => {
     const source = { kind: 'share' as const, password: 'demo-only &?+#' }
-    const entryPath = 'folder/a #?&ü.txt'
     const controller = new AbortController()
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('entry'))
+      .mockResolvedValue(new Response('{}'))
     try {
-      for (const path of [undefined, entryPath]) {
-        const request = archiveReadRequest('id/1', source, path)
-        await archiveFetch(request.url, request.body, controller.signal)
-        const [url, options] = fetchSpy.mock.calls.at(-1)!
-        expect(url).toBe(
-          `/api/files/id%2F1/archive/share${path ? '/entry' : ''}`
-        )
-        expect(options?.method).toBe('POST')
-        expect(options?.headers).toEqual({ 'Content-Type': 'application/json' })
-        expect(options?.cache).toBe('no-store')
-        expect(options?.signal).toBe(controller.signal)
-        expect(JSON.parse(options?.body as string)).toEqual({
-          password: source.password,
-          ...(path ? { path } : {}),
-        })
-      }
+      const request = archiveListingRequest('id/1', source, {
+        progress: true,
+        after: 12,
+      })
+      await archiveFetch(request.url, request.body, controller.signal)
+      const [url, options] = fetchSpy.mock.calls.at(-1)!
+      expect(url).toBe('/api/files/id%2F1/archive/share')
+      expect(options?.method).toBe('POST')
+      expect(options?.headers).toEqual({ 'Content-Type': 'application/json' })
+      expect(options?.cache).toBe('no-store')
+      expect(options?.signal).toBe(controller.signal)
+      expect(JSON.parse(options?.body as string)).toEqual({
+        password: source.password,
+        progress: true,
+        after: 12,
+      })
     } finally {
       fetchSpy.mockRestore()
     }
   })
 
   it('uses the shared route without credentials and keeps library reads on owner routes', () => {
-    expect(archiveReadRequest('file', { kind: 'share' })).toEqual({
+    expect(archiveListingRequest('file', { kind: 'share' })).toEqual({
       url: '/api/files/file/archive/share',
       body: {},
     })
-    expect(archiveReadRequest('file', { kind: 'owner' })).toEqual({
+    expect(archiveListingRequest('file', { kind: 'owner' })).toEqual({
       url: '/api/files/file/archive',
     })
-    expect(archiveReadRequest('file', { kind: 'owner' }, 'a b.txt')).toEqual({
-      url: '/api/files/file/archive/entry?path=a%20b.txt',
-    })
+    expect(
+      archiveListingRequest(
+        'file',
+        { kind: 'owner' },
+        { progress: true, after: 5 }
+      )
+    ).toEqual({ url: '/api/files/file/archive?progress=1&after=5' })
+  })
+
+  it('accumulates entries while the server is still reading the archive', async () => {
+    const responses = [
+      Response.json(
+        {
+          success: true,
+          data: {
+            status: 'indexing',
+            format: 'tar.gz',
+            archiveBytes: 100,
+            bytesRead: 40,
+            entries: [{ path: 'a.txt', type: 'file', size: 1 }],
+            entriesFound: 1,
+          },
+        },
+        { status: 202 }
+      ),
+      Response.json({
+        success: true,
+        data: {
+          format: 'tar.gz',
+          entries: [{ path: 'b.txt', type: 'file', size: 2 }],
+          fileCount: 2,
+          totalBytes: 3,
+          archiveBytes: 100,
+          entryCount: 2,
+          truncated: null,
+          extraction: { available: true },
+        },
+      }),
+    ]
+    vi.useFakeTimers()
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => responses.shift()!)
+    try {
+      const updates: string[] = []
+      const loading = loadArchiveListing(
+        'id',
+        { kind: 'owner' },
+        {
+          signal: new AbortController().signal,
+          onUpdate: (update) => updates.push(update.status),
+        }
+      )
+      await vi.advanceTimersByTimeAsync(1000)
+      const listing = await loading
+      expect(updates).toEqual(['indexing'])
+      expect(listing.entries.map((entry) => entry.path)).toEqual([
+        'a.txt',
+        'b.txt',
+      ])
+      expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+        '/api/files/id/archive?progress=1',
+        '/api/files/id/archive?progress=1&after=1',
+      ])
+    } finally {
+      fetchSpy.mockRestore()
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -163,15 +250,14 @@ describe('library-to-archive size units', () => {
 })
 
 describe('safe bounded archive previews', () => {
-  it('treats active document formats as plain text and requires verified raster MIME', () => {
+  it('treats active document formats as plain text and recognizes streamable media', () => {
     expect(archivePreviewKind('untrusted.svg')).toEqual({ type: 'text' })
     expect(archivePreviewKind('index.HTML')).toEqual({ type: 'text' })
+    expect(archivePreviewKind('folder/Makefile')).toEqual({ type: 'text' })
     expect(archivePreviewKind('payload.exe')).toBeNull()
-    expect(isSafeArchiveImage('image/png')).toBe(true)
-    expect(isSafeArchiveImage('image/jpeg; charset=binary')).toBe(true)
-    expect(isSafeArchiveImage('application/octet-stream')).toBe(false)
-    expect(isSafeArchiveImage('image/svg+xml')).toBe(false)
-    expect(isSafeArchiveImage('text/html')).toBe(false)
+    expect(archivePreviewKind('clip.MP4')).toEqual({ type: 'video' })
+    expect(archivePreviewKind('song.flac')).toEqual({ type: 'audio' })
+    expect(archivePreviewKind('photo.jpeg')).toEqual({ type: 'image' })
   })
 
   it('stops and cancels an oversized body without trusting Content-Length', async () => {

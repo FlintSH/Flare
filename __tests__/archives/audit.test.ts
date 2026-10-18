@@ -49,7 +49,7 @@ vi.mock('@/lib/email/policy', () => ({
 vi.mock('@/lib/archives/service', () => ({
   listArchive: state.list,
   listSharedArchive: state.list,
-  downloadSharedArchiveEntry: state.list,
+  readSharedArchiveEntry: state.list,
 }))
 vi.mock('@/lib/archives/operation', () => ({
   withArchiveOperation: async (

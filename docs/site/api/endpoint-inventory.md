@@ -46,12 +46,13 @@ These routes check the file's visibility, password, and an optional **browser se
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs.
 
-Archive share pages use separate read operations under the same file-access rules. Both reject `Authorization` headers, require same-origin requests, and accept file passwords only in the request body. Body reading is limited to 16 KiB, five seconds, and 32 pending reads per process; schema validation and file authorization finish before archive-processing capacity is reserved. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
+Archive share pages use separate read operations under the same file-access rules. They reject `Authorization` headers, require same-origin requests, and accept file passwords only in a request body. A listing that verifies a visitor password sets a one-hour unlock cookie scoped to that file's shared archive routes, which the GET entry route accepts instead of the password. Body reading is limited to 16 KiB, five seconds, and 32 pending reads per process; schema validation and file authorization finish before any archive data is read. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
 
-| Path                                  | Methods | Purpose                                                                                                      |
-| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| `/api/files/{id}/archive/share`       | POST    | Read an accessible archive manifest; JSON `{password?}`. Unprotected public archives allow anonymous access. |
-| `/api/files/{id}/archive/share/entry` | POST    | Download a member; JSON or URL-encoded `{path,password?}` body, with file access checked again.              |
+| Path                                  | Methods | Purpose                                                                                                                                                |
+| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/api/files/{id}/archive/share`       | POST    | Read an accessible archive listing; JSON `{password?, progress?, after?}`. Unprotected public archives allow anonymous access.                         |
+| `/api/files/{id}/archive/share/entry` | GET     | Stream a member by `entry` position or `path`, with `Range` and inline media support; access from the session, public visibility, or an unlock cookie. |
+| `/api/files/{id}/archive/share/entry` | POST    | Download a member; JSON or URL-encoded `{path,password?}` body, with file access checked again.                                                        |
 
 The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access. `/{userUrlId}/{filename}/direct` is a video-only lookup that returns JSON containing a signed storage URL or raw-route fallback after checking access; it does not stream the file itself. An issued S3 URL can remain valid until its own expiry after Flare access settings change. `/{userUrlId}/{filename}` is the rendered share page. `GET /u/{shortCode}` publicly redirects a short link and increments its count.
 
@@ -89,8 +90,8 @@ The following owner-library archive operations require the owner's browser sessi
 
 | Path                              | Methods | Purpose and permission                                                                                                    |
 | --------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `/api/files/{id}/archive`         | GET     | Inspect an owned archive's manifest; `files.read`.                                                                        |
-| `/api/files/{id}/archive/entry`   | GET     | Download one member by its `path` query value; `files.read`.                                                              |
+| `/api/files/{id}/archive`         | GET     | List an owned archive from its index; optional `progress` and `after` for polling a slow read; `files.read`.              |
+| `/api/files/{id}/archive/entry`   | GET     | Stream one member by its `path` or `entry` position, with `Range` and inline media support; `files.read`.                 |
 | `/api/files/{id}/archive/extract` | POST    | Extract into a new wrapper folder; `files.read`, `files.upload`, and `folders.manage`.                                    |
 | `/api/files/archive`              | POST    | Create ZIP or TAR.GZ from owned files; `files.read` and `files.upload`, plus `folders.manage` for a non-null destination. |
 

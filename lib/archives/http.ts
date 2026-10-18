@@ -16,6 +16,7 @@ import { StorageTargetChangedError } from '@/lib/storage/target-provider'
 import { UploadError } from '@/lib/uploads/options'
 
 import { ArchiveError } from './errors'
+import type { ArchiveEntrySelector } from './index-cache'
 import { ARCHIVE_LIMITS } from './shared'
 
 export type ArchiveActor = { user: AuthenticatedUser; sessionVersion: number }
@@ -74,6 +75,30 @@ export const extractArchiveSchema = z
       !!input.profileId,
     'Choose a profile when supplying its revision.'
   )
+
+/**
+ * Read `entry` (a listing position) or `path` from entry request parameters.
+ * Positions keep member names out of URLs that media elements must fetch.
+ */
+export function entrySelector(query: URLSearchParams): ArchiveEntrySelector {
+  const position = query.get('entry')
+  if (position === null) return { path: query.get('path') ?? '' }
+  if (!/^\d{1,9}$/.test(position))
+    throw new ArchiveError('Choose a valid archive entry.', 400)
+  return { position: Number(position) }
+}
+
+/** `progress` opts into 202 polling; `after` skips entries already received. */
+export function parseListingQuery(input: {
+  progress?: unknown
+  after?: unknown
+}) {
+  const after = Number(input.after ?? 0)
+  return {
+    progress: input.progress === true || input.progress === '1',
+    after: Number.isSafeInteger(after) && after > 0 ? after : 0,
+  }
+}
 
 export async function archiveActor(
   request: Request,
@@ -183,6 +208,10 @@ export async function archiveRoute(action: () => Promise<unknown>) {
     } else if (error instanceof SyntaxError) {
       status = 400
       message = 'Invalid JSON.'
+    } else if ((error as { name?: string })?.name === 'AbortError') {
+      // The browser left: a closed preview or a seek that replaced a request.
+      status = 408
+      message = 'Archive request was cancelled.'
     } else if (error instanceof StorageTargetChangedError) {
       status = 409
       message =

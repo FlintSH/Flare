@@ -443,6 +443,7 @@ test('archive guide, API contracts, tour, and recordings are discoverable', asyn
   await expect(
     page.locator('h2#browse-an-archive-shared-with-you')
   ).toBeVisible()
+  await expect(page.locator('h3#large-archives')).toBeVisible()
   const retainedSelection = page.locator(
     '.screenshot-button img[src$="library-archive.webp"]'
   )
@@ -466,6 +467,8 @@ test('archive guide, API contracts, tour, and recordings are discoverable', asyn
   )
   for (const name of [
     'archive-browse-extract.webm',
+    'archive-large-preview.webm',
+    'archive-large-tgz.webm',
     'archive-create.webm',
     'archive-share-browse.webm',
   ]) {

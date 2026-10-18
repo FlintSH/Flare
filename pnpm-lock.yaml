@@ -209,6 +209,9 @@ importers:
       otpauth:
         specifier: ^9.5.2
         version: 9.5.2
+      pako:
+        specifier: ^3.0.2
+        version: 3.0.2
       papaparse:
         specifier: ^5.7.0
         version: 5.7.0
@@ -3903,6 +3906,9 @@ packages:
 
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
+
+  pako@3.0.2:
+    resolution: {integrity: sha512-uBv6IT2aT1A78iU6dpNEbf6+CyhlV/6g9JlJs9kpgjFGFhruIICVRysF/W0SLzXg5+hCl+KroH7e4YUyfEmgLg==}
 
   papaparse@5.7.0:
     resolution: {integrity: sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==}
@@ -8965,6 +8971,8 @@ snapshots:
 
   package-json-from-dist@1.0.1: {}
 
+  pako@3.0.2: {}
+
   papaparse@5.7.0: {}
 
   parent-module@1.0.1:
@@ -9972,7 +9980,7 @@ snapshots:
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.7
-      postcss: 8.5.28
+      postcss: 8.5.29
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:
