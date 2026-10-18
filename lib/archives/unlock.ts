@@ -25,6 +25,12 @@ function unlockKey(): Buffer {
   return (processState[keyState] ??= randomBytes(32)) as Buffer
 }
 
+/**
+ * `passwordHash` is the file's stored bcrypt hash, used only as a version so a
+ * password change revokes outstanding cookies. No plaintext password reaches
+ * this MAC, the cookie never contains the hash, and the result is never stored
+ * or used to verify a password, so a fast keyed MAC is appropriate here.
+ */
 function signature(fileId: string, passwordHash: string, expires: number) {
   return createHmac('sha256', unlockKey())
     .update(`${fileId}\n${passwordHash}\n${expires}`)
