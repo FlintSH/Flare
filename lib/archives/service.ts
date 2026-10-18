@@ -8,11 +8,15 @@ import type { z } from 'zod'
 import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { getEmailConfig } from '@/lib/email/config'
+import { requiresEmailVerification } from '@/lib/email/policy'
 import { folderNameSchema } from '@/lib/folders/schema'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import {
+  PermissionError,
+  getUserAccess,
   lockRoleChanges,
   requireActorPermission,
 } from '@/lib/permissions/server'
@@ -57,7 +61,11 @@ import {
   type ArchiveManifest,
   getArchiveFormat,
 } from './shared'
-import { type SharedArchiveAccess, recheckSharedArchive } from './sharing'
+import {
+  type SharedArchiveAccess,
+  confirmSharedArchive,
+  recheckSharedArchive,
+} from './sharing'
 
 const sourceSelect = {
   id: true,
@@ -174,7 +182,9 @@ export async function listArchive(
   setAuditTarget({ type: 'file', id: file.id, name: file.name })
   return archiveListing(await archiveSourceRef(file), {
     ...options,
+    requester: `user:${actor.user.id}`,
     recheck: () => recheckRead(actor, file, options.signal),
+    confirm: () => confirmRead(actor, file, options.signal),
   })
 }
 
@@ -198,11 +208,12 @@ export async function readArchiveEntry(
 
 export async function listSharedArchive(
   access: SharedArchiveAccess,
-  options: ListingOptions
+  options: ListingOptions & { requester: string }
 ) {
   return archiveListing(await archiveSourceRef(access.file), {
     ...options,
     recheck: () => recheckSharedArchive(access, options.signal),
+    confirm: () => confirmSharedArchive(access, options.signal),
   })
 }
 
@@ -328,6 +339,44 @@ async function recheckRead(
     },
     { timeout: 10_000, maxWait: 10_000 }
   )
+}
+
+/**
+ * The rules {@link recheckRead} enforces, read without locks, for listing
+ * progress polls. They arrive every second while an archive is read and
+ * shouldn't queue behind role changes or uploads that lock the account.
+ */
+async function confirmRead(
+  actor: ArchiveActor,
+  file: SourceFile,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted()
+  const [user, email, access, current] = await Promise.all([
+    prisma.user.findUnique({ where: { id: actor.user.id } }),
+    getEmailConfig(),
+    getUserAccess(actor.user.id),
+    prisma.file.findFirst({
+      where: { id: file.id, userId: actor.user.id },
+      select: sourceSelect,
+    }),
+  ])
+  if (!user || requiresEmailVerification(user, email))
+    throw new PermissionError('Your account no longer has access')
+  if (!hasPermission(access, 'files.read'))
+    throw new PermissionError('You no longer have permission for this action')
+  if (user.sessionVersion !== actor.sessionVersion)
+    throw new ArchiveError('Sign in again before creating files.', 401)
+  if (
+    !current ||
+    current.path !== file.path ||
+    JSON.stringify(current.storageTarget) !== JSON.stringify(file.storageTarget)
+  )
+    throw new ArchiveError(
+      'A source file changed or was removed. Refresh and try again.',
+      409
+    )
+  signal.throwIfAborted()
 }
 
 /** Early resource check; locked finalization still enforces current limits atomically. */

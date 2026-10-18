@@ -141,8 +141,11 @@ export function ArchiveBrowserContent({
   const [directory, setDirectory] = useState('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<ArchiveRow | null>(null)
-  const [focusIndex, setFocusIndex] = useState<number | null>(null)
-  const [lightbox, setLightbox] = useState<number | null>(null)
+  // A snapshot, so entries arriving during a read can't shift the viewer.
+  const [gallery, setGallery] = useState<{
+    images: (ArchiveRow & { position: number })[]
+    index: number
+  } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const sourceKind = source.kind
@@ -238,23 +241,23 @@ export function ArchiveBrowserContent({
     overscan: 8,
   })
 
-  useEffect(() => {
-    if (focusIndex === null) return
-    virtualizer.scrollToIndex(focusIndex, { align: 'auto' })
-    const frame = requestAnimationFrame(() =>
-      scrollRef.current
-        ?.querySelector<HTMLButtonElement>(`[data-row="${focusIndex}"]`)
-        ?.focus({ preventScroll: true })
-    )
-    return () => cancelAnimationFrame(frame)
-  }, [focusIndex, virtualizer])
-
   function openDirectory(path: string) {
     setDirectory(path)
     setSearch('')
     setSelected(null)
-    setFocusIndex(null)
     scrollRef.current?.scrollTo({ top: 0 })
+  }
+
+  /** Scroll a row into view, then focus it once the list has rendered it. */
+  function focusRow(index: number, frames = 3) {
+    virtualizer.scrollToIndex(index, { align: 'auto' })
+    requestAnimationFrame(() => {
+      const row = scrollRef.current?.querySelector<HTMLButtonElement>(
+        `[data-row="${index}"]`
+      )
+      if (row) row.focus({ preventScroll: true })
+      else if (frames > 1) focusRow(index, frames - 1)
+    })
   }
 
   function choose(row: ArchiveRow) {
@@ -286,7 +289,7 @@ export function ArchiveBrowserContent({
               : null
     if (next === null || last < 0) return
     event.preventDefault()
-    setFocusIndex(next)
+    focusRow(next)
   }
 
   const listing = state.status === 'ready' ? state.listing : null
@@ -422,10 +425,7 @@ export function ArchiveBrowserContent({
             />
             <Input
               value={search}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setFocusIndex(null)
-              }}
+              onChange={(event) => setSearch(event.target.value)}
               aria-label="Search archive"
               placeholder="Search files and folders in this archive"
               className="pl-9 pr-10"
@@ -571,16 +571,17 @@ export function ArchiveBrowserContent({
                   file={file}
                   source={source}
                   entry={selectedEntry}
-                  onExpandImage={() =>
-                    setLightbox(
-                      Math.max(
-                        0,
-                        images.findIndex(
-                          (image) => image.path === selectedEntry.path
-                        )
-                      )
+                  onExpandImage={() => {
+                    const index = images.findIndex(
+                      (image) => image.path === selectedEntry.path
                     )
-                  }
+                    // A search or folder change can hide the selected image.
+                    setGallery(
+                      index >= 0
+                        ? { images, index }
+                        : { images: [selectedEntry], index: 0 }
+                    )
+                  }}
                 />
               ) : (
                 <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -596,9 +597,9 @@ export function ArchiveBrowserContent({
           </div>
         </>
       )}
-      {lightbox !== null && images[lightbox] && (
+      {gallery && (
         <ImageLightbox
-          images={images.map((image) => ({
+          images={gallery.images.map((image) => ({
             id: `${image.position}`,
             name: archiveEntryName(image.path),
             subtitle: image.path,
@@ -607,12 +608,12 @@ export function ArchiveBrowserContent({
             }),
             downloadUrl: archiveEntryHref(file.id, source, image.position),
           }))}
-          index={lightbox}
+          index={gallery.index}
           onIndexChange={(index) => {
-            setLightbox(index)
-            setSelected(images[index])
+            setGallery({ ...gallery, index })
+            setSelected(gallery.images[index])
           }}
-          onClose={() => setLightbox(null)}
+          onClose={() => setGallery(null)}
         />
       )}
     </div>

@@ -80,21 +80,33 @@ function checksumValid(block: Buffer) {
   return expected === unsigned || expected === signed
 }
 
+type PaxRecords = Map<string, string>
+
+/**
+ * Parse "<length> <key>=<value>\n" records the way tar-stream does, so the
+ * listing and extraction agree. Parsing stops at the first record without
+ * "=", which also keeps it linear: an accepted record is always longer than
+ * the length field scanned to find it.
+ */
 function paxRecords(data: Buffer) {
-  const records: Record<string, string> = {}
+  const records: PaxRecords = new Map()
   let offset = 0
   while (offset < data.length) {
-    const space = data.indexOf(0x20, offset)
-    if (space < 0) break
-    const length = Number(data.toString('latin1', offset, space))
-    if (!Number.isSafeInteger(length) || length <= 0) break
+    let space = data.indexOf(0x20, offset)
+    if (space < 0) space = data.length
+    const length = parseInt(data.toString('utf8', offset, space), 10)
+    if (!length) break
     const record = data.toString('utf8', space + 1, offset + length - 1)
     const equals = record.indexOf('=')
-    if (equals > 0) records[record.slice(0, equals)] = record.slice(equals + 1)
+    if (equals < 0) break
+    records.set(record.slice(0, equals), record.slice(equals + 1))
     offset += length
   }
   return records
 }
+
+const hasSparseKey = (records: PaxRecords) =>
+  [...records.keys()].some((key) => /sparse/i.test(key))
 
 const padded = (size: number) => size + ((512 - (size % 512)) % 512)
 
@@ -104,7 +116,14 @@ export async function scanTar(
   index: ArchiveIndex,
   context: ScanContext
 ) {
-  let pax: Record<string, string> = {}
+  // Like tar-stream, each extended header replaces the previous one and sits
+  // over the global header in effect, so a chain of headers can't accumulate.
+  let global: { records: PaxRecords; sparse: boolean } | null = null
+  let pax: {
+    records: PaxRecords
+    global: PaxRecords | null
+    sparse: boolean
+  } | null = null
   let longName: string | null = null
   let ended = false
   let current: { entry: { issue?: ArchiveEntryIssue } } | null = null
@@ -136,9 +155,15 @@ export async function scanTar(
         if (size > MAX_METADATA) throw damaged()
         const data = await input.read(padded(size))
         if (!data) throw truncatedArchive()
-        // Like tar-stream, each extended header replaces the previous one, so
-        // a chain of headers can't accumulate. Global headers are ignored.
-        if (typeflag === 'x') pax = paxRecords(data.subarray(0, size))
+        const records = paxRecords(data.subarray(0, size))
+        const sparse = hasSparseKey(records)
+        if (typeflag === 'g') global = { records, sparse }
+        else
+          pax = {
+            records,
+            global: global?.records ?? null,
+            sparse: sparse || !!global?.sparse,
+          }
         continue
       }
       if (typeflag === 'L' || typeflag === 'K' || typeflag === 'N') {
@@ -148,17 +173,22 @@ export async function scanTar(
         if (typeflag !== 'K') longName = text(data, 0, size)
         continue
       }
+      // tar-stream applies PAX values, including globals, only to a member
+      // with its own extended header, and ignores empty ones.
+      const paxValue = (key: string) =>
+        pax &&
+        (pax.records.has(key) ? pax.records.get(key) : pax.global?.get(key))
       let name = text(block, 0, 100)
       if (ustar && block[345]) name = `${text(block, 345, 155)}/${name}`
-      name = pax.path ?? longName ?? name
-      if (pax.size !== undefined) {
-        const declared = Number(pax.size)
+      name = paxValue('path') || longName || name
+      const paxSize = paxValue('size')
+      if (paxSize) {
+        const declared = parseInt(paxSize, 10)
         if (!Number.isSafeInteger(declared) || declared < 0) throw damaged()
         size = declared
       }
-      const sparse =
-        typeflag === 'S' || Object.keys(pax).some((key) => /sparse/i.test(key))
-      pax = {}
+      const sparse = typeflag === 'S' || !!pax?.sparse
+      pax = null
       longName = null
       let type: 'file' | 'directory' = 'file'
       let issue: ArchiveEntryIssue | undefined

@@ -339,6 +339,14 @@ async function browseAndExtract(browser, state, fixture) {
   await expect(
     page.getByRole('button', { name: 'Open folder drafts', exact: true })
   ).toBeFocused()
+  // Returning to the row the keys reached last time still moves focus.
+  await page
+    .getByRole('button', { name: 'Open folder images', exact: true })
+    .focus()
+  await page.keyboard.press('Home')
+  await expect(
+    page.getByRole('button', { name: 'Open folder drafts', exact: true })
+  ).toBeFocused()
   await page.getByLabel('Search archive', { exact: true }).fill('README')
   await page
     .getByRole('button', { name: 'Preview guide/README.md', exact: true })
@@ -359,6 +367,14 @@ async function browseAndExtract(browser, state, fixture) {
     480
   )
   await shot(page, 'image-preview')
+  // Expanding works even after a search hides the selected image's row.
+  await page.getByLabel('Search archive', { exact: true }).fill('README')
+  await page.getByRole('button', { name: 'Expand flare-icon.png' }).click()
+  await expect(page.getByText(/^1 of 1$/)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(
+    page.getByRole('button', { name: 'Close image viewer' })
+  ).toHaveCount(0)
   // The preview stays beside the entry list; extraction always uses the whole archive.
   await page.getByLabel('Search archive', { exact: true }).fill('')
   await page.getByRole('button', { name: 'Extract all', exact: true }).click()

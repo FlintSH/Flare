@@ -76,17 +76,23 @@ export async function archiveListing(
     progress: boolean
     after: number
     signal: AbortSignal
+    /** Account or IP address, for the per-requester indexing limit. */
+    requester: string
+    /** Locked access check, for the finished listing. */
     recheck: () => Promise<void>
+    /** Lock-free access check, for progress polls. */
+    confirm: () => Promise<void>
   }
 ) {
   const view = await getArchiveIndex(ref, {
     signal: options.signal,
     wait: options.progress ? PROGRESS_WAIT_MS : 'complete',
+    requester: options.requester,
   })
   // Access can change while this request waits for the archive to be read.
   // Confirm it before returning any entry names, including partial progress.
-  if (!view.cached) await options.recheck()
   if (!view.complete || !view.index) {
+    await options.confirm()
     const progress: ArchiveListingProgress = view.index?.progress(
       options.after
     ) ?? {
@@ -102,10 +108,18 @@ export async function archiveListing(
       { status: 202, headers: { 'Retry-After': '1' } }
     )
   }
-  return NextResponse.json({
-    data: view.index.listing(options.after),
-    success: true,
-  })
+  if (!view.cached) await options.recheck()
+  if (options.after)
+    return NextResponse.json({
+      data: view.index.listing(options.after),
+      success: true,
+    })
+  // Blob parts share the encoded listing instead of copying it.
+  return new Response(
+    new Blob(['{"data":', view.index.listingJson(), ',"success":true}'], {
+      type: 'application/json',
+    })
+  )
 }
 
 /** Stream one file entry, honoring a single `Range` and inline media. */
@@ -126,7 +140,10 @@ export async function archiveEntry(
   )
     throw new ArchiveError('Choose a valid archive entry.', 400)
   const { signal } = options.request
-  const { index, entry, view } = await findArchiveEntry(ref, selector, signal)
+  const { index, entry, view } = await findArchiveEntry(ref, selector, {
+    signal,
+    requester: options.requester,
+  })
   if (!view.cached) await options.recheck()
   const release = reserveEntryStream(options.requester)
   // Storage reads stop with the request. Preparing the response (opening the

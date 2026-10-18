@@ -27,6 +27,11 @@ export const ARCHIVE_BROWSE_LIMITS = {
   scanMs: 120_000,
   /** Uncompressed bytes read while listing one TAR.GZ or GZIP. */
   scanBytes: 64 * 1024 ** 3,
+  /**
+   * Decoded bytes Flare discards to reach a position in compressed data. A
+   * deeper byte range gets the whole file instead; a deeper file can't open.
+   */
+  discardBytes: 1024 ** 3,
   /** Longest entry path served; longer listed names are shortened and flagged. */
   pathLength: 4096,
   textPreviewBytes: 256 * 1024,
