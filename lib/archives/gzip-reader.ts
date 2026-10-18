@@ -15,7 +15,7 @@ import {
 
 import type { ByteSource } from './byte-source'
 import { ArchiveError } from './errors'
-import { sliceStream } from './stream-slice'
+import { concatStreams, sliceStream } from './stream-slice'
 
 const WINDOW = 32 * 1024
 const INPUT_CHUNK = 64 * 1024
@@ -44,8 +44,11 @@ export interface GzipCheckpoint {
  */
 export class GzipSeekIndex {
   readonly checkpoints: GzipCheckpoint[] = []
-  /** Set when a second gzip member appears; block points cover only the first. */
-  firstMemberOutput: number | null = null
+  /**
+   * Where the second gzip member starts. Block points decode only the first
+   * member, so this point is kept apart from the spaced, thinned checkpoints.
+   */
+  secondMember: GzipCheckpoint | null = null
 
   constructor(
     private span = 8 * 1024 ** 2,
@@ -54,6 +57,11 @@ export class GzipSeekIndex {
 
   get memoryBytes() {
     return this.checkpoints.length * (WINDOW + 64)
+  }
+
+  /** Uncompressed size of the first member when more members follow. */
+  get firstMemberOutput() {
+    return this.secondMember?.output ?? null
   }
 
   shouldAdd(output: number) {
@@ -83,28 +91,22 @@ export class GzipSeekIndex {
   }
 
   /**
-   * Where to resume decoding `[start, end)`; null means the start of the file.
-   * A block point decodes only the first member, so a range that runs past it
-   * needs a member start instead.
+   * The closest point to resume decoding at `start`; null means the start of
+   * the file. A block point can't reach past the first member, so a later
+   * `start` resumes from a member start instead.
    */
-  resumeFor(start: number, end: number): GzipCheckpoint | null {
-    if (!this.checkpoints.length) return null
-    const point = this.before(start)
-    if (point.output > start) return null
-    if (point.member) return point
-    return this.firstMemberOutput === null || end <= this.firstMemberOutput
-      ? point
-      : null
+  resumeFor(start: number): GzipCheckpoint | null {
+    let point = this.checkpoints.length ? this.before(start) : null
+    if (point && point.output > start) point = null
+    const second = this.secondMember
+    if (second && start >= second.output && !point?.member) return second
+    return point
   }
 }
 
-/** Decoded bytes discarded before `start` when reading `[start, end)`. */
-export function gzipDiscard(
-  seek: GzipSeekIndex | null,
-  start: number,
-  end: number
-) {
-  return start - (seek?.resumeFor(start, end)?.output ?? 0)
+/** Decoded bytes discarded to reach `start`. */
+export function gzipDiscard(seek: GzipSeekIndex | null, start: number) {
+  return start - (seek?.resumeFor(start)?.output ?? 0)
 }
 
 function damagedStream() {
@@ -143,14 +145,14 @@ export async function* inflateIndexed(
           // Anything but another gzip member is trailing padding; stop there.
           if (carry[0] !== 0x1f || carry[1] !== 0x8b) return
           if (zlibInflateReset(stream) !== Z_OK) throw damagedStream()
-          seek.firstMemberOutput ??= totalOut
-          if (seek.shouldAdd(totalOut))
-            seek.add({
-              input: totalIn,
-              output: totalOut,
-              window: null,
-              member: true,
-            })
+          const memberStart: GzipCheckpoint = {
+            input: totalIn,
+            output: totalOut,
+            window: null,
+            member: true,
+          }
+          seek.secondMember ??= memberStart
+          if (seek.shouldAdd(totalOut)) seek.add(memberStart)
           betweenMembers = false
         }
         const piece = carry.subarray(0, INPUT_CHUNK)
@@ -224,7 +226,7 @@ export async function openGzipRange(
   end: number
 ): Promise<Readable> {
   if (end <= start) return Readable.from([], { objectMode: false })
-  const point = seek?.resumeFor(start, end) ?? null
+  const point = seek?.resumeFor(start) ?? null
   if (!point || point.member) {
     // Node's gunzip continues across concatenated members in order.
     return sliceStream(
@@ -234,10 +236,25 @@ export async function openGzipRange(
       end - start
     )
   }
-  return sliceStream(
-    await source.stream(point.input, source.size),
-    createInflateRaw(point.window ? { dictionary: point.window } : undefined),
-    start - point.output,
-    end - start
-  )
+  const second = seek?.secondMember
+  const fromBlock = async (until: number) =>
+    sliceStream(
+      await source.stream(point.input, second?.input ?? source.size),
+      createInflateRaw(point.window ? { dictionary: point.window } : undefined),
+      start - point.output,
+      until - start
+    )
+  if (!second || end <= second.output) return fromBlock(end)
+  // The range runs past the first member: finish that member from the block
+  // point, then continue from the second member's header.
+  return concatStreams([
+    () => fromBlock(second.output),
+    async () =>
+      sliceStream(
+        await source.stream(second.input, source.size),
+        createGunzip(),
+        0,
+        end - second.output
+      ),
+  ])
 }

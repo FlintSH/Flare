@@ -19,7 +19,12 @@ import {
   entryResponse,
   parseByteRange,
 } from '@/lib/archives/entry-response'
-import { GzipSeekIndex, inflateIndexed } from '@/lib/archives/gzip-reader'
+import {
+  GzipSeekIndex,
+  gzipDiscard,
+  inflateIndexed,
+  openGzipRange,
+} from '@/lib/archives/gzip-reader'
 import {
   ARCHIVE_INDEX_CONCURRENCY,
   ARCHIVE_INDEX_FAILURE_MS,
@@ -35,6 +40,7 @@ import {
 import {
   ARCHIVE_IDLE_MS,
   SLICE_PROGRESS,
+  concatStreams,
   readUpTo,
 } from '@/lib/archives/stream-slice'
 import { createArchiveUnlock, verifyArchiveUnlock } from '@/lib/archives/unlock'
@@ -638,7 +644,6 @@ describe('TAR.GZ and GZIP seeking', () => {
     expect(output).toBe(data.length)
     expect(seek.checkpoints.length).toBeGreaterThan(5)
     const source = await openByteSource(remoteStorage(compressed), 'gz')
-    const { openGzipRange } = await import('@/lib/archives/gzip-reader')
     for (const start of [0, 777_777, 2_500_001, 4_000_000, data.length - 10]) {
       const chunks: Buffer[] = []
       for await (const chunk of await openGzipRange(
@@ -793,7 +798,8 @@ describe('TAR.GZ and GZIP seeking', () => {
       { name: 'after.txt', data: 'after' },
     ])
     const spanning = (await indexOf(tarball, 'tar')).index.find('spanning.bin')!
-    // A member boundary inside an entry leaves only the file start to resume.
+    // The first member is shorter than the 8 MiB checkpoint spacing, so the
+    // only point before spanning.bin is the start of the file.
     const split = spanning.offset + 1024 * 1024
     const compressed = Buffer.concat([
       gzipSync(tarball.subarray(0, split)),
@@ -826,8 +832,92 @@ describe('TAR.GZ and GZIP seeking', () => {
       expect(deep.headers.get('content-length')).toBe(String(first.length))
       expect(Buffer.from(await deep.arrayBuffer()).equals(first)).toBe(true)
     })
-    // Within the default limit, the same requests are served directly.
-    expect((await respond('spanning.bin', null)).status).toBe(200)
+    // Within the default limit, the entry is read across the member boundary.
+    const whole = await respond('spanning.bin', null)
+    expect(whole.status).toBe(200)
+    expect(
+      Buffer.from(await whole.arrayBuffer()).equals(
+        tarball.subarray(spanning.offset, spanning.offset + spanning.size)
+      )
+    ).toBe(true)
+  })
+
+  it('keeps the second member start even right after a block checkpoint', async () => {
+    const small = 'This file starts in the second gzip member.'
+    const tarball = await tarBytes([
+      { name: 'big.bin', data: mixedData(9 * 1024 * 1024) },
+      { name: 'small.txt', data: small },
+    ])
+    // Split just before small.txt's header, about 1 MiB after the block
+    // checkpoint near 8 MiB: too close for the checkpoint spacing.
+    const split =
+      (await indexOf(tarball, 'tar')).index.find('small.txt')!.offset - 512
+    const compressed = Buffer.concat([
+      gzipSync(tarball.subarray(0, split)),
+      gzipSync(tarball.subarray(split)),
+    ])
+    const { index, source } = await indexOf(compressed, 'tar.gz')
+    expect(index.gzip!.checkpoints.some((point) => point.member)).toBe(false)
+    expect(index.gzip!.secondMember).toMatchObject({ output: split })
+    const respond = (range: string | null) =>
+      entryResponse({
+        source,
+        index,
+        entry: index.find('small.txt')!,
+        range,
+        inline: false,
+        release: () => {},
+        signal: new AbortController().signal,
+      })
+    await withDiscardLimit(1024 * 1024, async () => {
+      const whole = await respond(null)
+      expect(whole.status).toBe(200)
+      expect(await whole.text()).toBe(small)
+      const part = await respond('bytes=5-8')
+      expect(part.status).toBe(206)
+      expect(await part.text()).toBe(small.slice(5, 9))
+    })
+  })
+
+  it('reads a range across the first member boundary from a nearby block point', async () => {
+    const first = mixedData(3 * 1024 * 1024)
+    const second = mixedData(1024 * 1024)
+    const firstMember = gzipSync(first)
+    const compressed = Buffer.concat([firstMember, gzipSync(second)])
+    const seek = new GzipSeekIndex(256 * 1024)
+    for await (const _chunk of inflateIndexed(
+      Readable.from([compressed]),
+      seek,
+      { consumed() {}, tick() {} }
+    )) {
+      // Index the whole stream.
+    }
+    expect(seek.secondMember).toMatchObject({
+      input: firstMember.length,
+      output: first.length,
+    })
+    const start = first.length - 1000
+    const end = first.length + 5000
+    expect(gzipDiscard(seek, start)).toBeLessThan(1024 * 1024)
+    const storage = remoteStorage(compressed)
+    const starts: number[] = []
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = async (...args: Parameters<typeof open>) => {
+      starts.push(args[1]?.start ?? 0)
+      return open(...args)
+    }
+    const source = await openByteSource(storage, 'gz')
+    const chunks: Buffer[] = []
+    for await (const chunk of await openGzipRange(source, seek, start, end))
+      chunks.push(chunk as Buffer)
+    expect(
+      Buffer.concat(chunks).equals(
+        Buffer.concat([first, second]).subarray(start, end)
+      )
+    ).toBe(true)
+    // A block point inside the first member, then the second member's header.
+    expect(starts).toEqual([seek.resumeFor(start)!.input, firstMember.length])
+    expect(starts[0]).toBeGreaterThan(0)
   })
 
   it('ignores a deep byte range in a deflated ZIP entry', async () => {
@@ -1306,6 +1396,23 @@ describe('stalled storage', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('stops a two-part read as soon as it is destroyed', async () => {
+    const first = new Readable({ read() {} })
+    const second = vi.fn(async () => Readable.from([Buffer.from('second')]))
+    const joined = concatStreams([async () => first, second])
+    const progress = vi.fn()
+    joined.on(SLICE_PROGRESS, progress)
+    first.push(Buffer.from('first'))
+    joined.resume()
+    await once(joined, 'data')
+    first.emit(SLICE_PROGRESS)
+    expect(progress).toHaveBeenCalledOnce()
+    joined.destroy()
+    expect(first.destroyed).toBe(true)
+    await once(joined, 'close')
+    expect(second).not.toHaveBeenCalled()
   })
 
   it('stops decoding as soon as a slice is destroyed mid-skip', async () => {

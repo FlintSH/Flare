@@ -165,8 +165,7 @@ export async function entryResponse(options: {
     const issue = entryIssueError(entry)
     if (issue) throw issue
     const { discardBytes } = ARCHIVE_BROWSE_LIMITS
-    if (discardedBefore(index, entry, 0, entry.size) > discardBytes)
-      throw tooFarIn()
+    if (discardedBefore(index, entry, 0) > discardBytes) throw tooFarIn()
     let range = parseByteRange(options.range, entry.size)
     const common = {
       'Accept-Ranges': 'bytes',
@@ -184,10 +183,7 @@ export async function entryResponse(options: {
     }
     // A range deep in compressed data costs decoding everything before it.
     // HTTP lets a server ignore Range, so send the whole file instead.
-    if (
-      range &&
-      discardedBefore(index, entry, range.start, range.end) > discardBytes
-    )
+    if (range && discardedBefore(index, entry, range.start) > discardBytes)
       range = null
     const mediaType = options.inline
       ? await entryMediaType(source, index, entry)

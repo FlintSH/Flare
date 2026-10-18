@@ -143,7 +143,7 @@ For `408`, distinguish a shared body that took more than five seconds, a browser
 
 A `504` on archive requests means preparing an entry response took more than 60 seconds, or storage sent no data for 60 seconds while a listing was read. Check S3 or disk health and connectivity; the request releases its capacity rather than waiting indefinitely.
 
-A `413` with "This file is too far into a compressed archive for Flare to read" means that opening the entry would require decompressing more than 1 GiB before its first byte. It is rare and mostly affects GZIP files built from several members, where a member boundary splits an entry deep in the file. Download the whole archive to open that entry. Seeking more than 1 GiB into a compressed (deflated) ZIP entry sends the entry from its start instead, so a media player may not be able to jump that far; archives that store media uncompressed seek anywhere.
+A `413` with "This file is too far into a compressed archive for Flare to read" means that opening the entry would require decompressing more than 1 GiB before its first byte. Common compressors leave resume points much closer together, so this takes an unusual or crafted file. Download the whole archive to open that entry. Seeking more than 1 GiB into a compressed (deflated) ZIP entry sends the entry from its start instead, so a media player may not be able to jump that far; archives that store media uncompressed seek anywhere.
 
 If previews of a protected shared archive start returning `401` across replicas or after a restart, check that every process has the same stable `NEXTAUTH_SECRET`; archive unlock cookies are signed with a key derived from it.
 

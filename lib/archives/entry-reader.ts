@@ -15,12 +15,11 @@ import { zipDataOffset } from './zip-reader'
 export function discardedBefore(
   index: ArchiveIndex,
   entry: IndexedEntry,
-  start: number,
-  end: number
+  start: number
 ) {
   if (index.format === 'tar') return 0
   if (index.format === 'zip') return entry.method === 0 ? 0 : start
-  return gzipDiscard(index.gzip, entry.offset + start, entry.offset + end)
+  return gzipDiscard(index.gzip, entry.offset + start)
 }
 
 /**

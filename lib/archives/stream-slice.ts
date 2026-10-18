@@ -156,3 +156,37 @@ export function sliceStream(
   }
   return readable
 }
+
+/**
+ * Read `parts` one after another as one stream. Each part opens when the one
+ * before it ends; destroying the result destroys the part being read.
+ */
+export function concatStreams(parts: Array<() => Promise<Readable>>) {
+  let current: Readable | null = null
+  async function* play() {
+    for (const open of parts) {
+      const part = await open()
+      if (readable.destroyed) {
+        part.destroy()
+        return
+      }
+      current = part
+      part.on(SLICE_PROGRESS, progress)
+      try {
+        for await (const chunk of part) yield chunk as Buffer
+      } finally {
+        part.off(SLICE_PROGRESS, progress)
+        part.destroy()
+        current = null
+      }
+    }
+  }
+  const readable = Readable.from(play(), { objectMode: false })
+  const progress = () => readable.emit(SLICE_PROGRESS)
+  const close = readable._destroy
+  readable._destroy = function (error, callback) {
+    current?.destroy()
+    close.call(this, error, callback)
+  }
+  return readable
+}
