@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { createGunzip, createInflateRaw } from 'node:zlib'
 import {
   ZStream,
@@ -18,24 +19,32 @@ import { sliceStream } from './stream-slice'
 
 const WINDOW = 32 * 1024
 const INPUT_CHUNK = 64 * 1024
+/** Let other requests run after about this much decoded output. */
+const YIELD_BYTES = 1024 * 1024
 
 export interface GzipCheckpoint {
-  /** Compressed byte where a deflate block starts on a byte boundary. */
+  /**
+   * Compressed byte where decoding can resume: a deflate block that starts on
+   * a byte boundary, or the header of a later gzip member.
+   */
   input: number
-  /** Uncompressed position of that block. */
+  /** Uncompressed position at that byte. */
   output: number
-  /** The 32 KiB of output preceding the block; null at the stream start. */
+  /** The 32 KiB of output preceding a block; null at a stream or member start. */
   window: Buffer | null
+  /** A gzip member header, read with gunzip, which also crosses later members. */
+  member?: boolean
 }
 
 /**
  * Access points that let a TAR.GZ or GZIP be read from the middle, in the
  * spirit of zlib's zran example. Only byte-aligned block boundaries are kept,
- * so Node's native inflater can resume with just a dictionary.
+ * so Node's native inflater can resume with just a dictionary. Files made of
+ * several gzip members also get an access point at member starts.
  */
 export class GzipSeekIndex {
   readonly checkpoints: GzipCheckpoint[] = []
-  /** Set when a second gzip member appears; later output is read in order. */
+  /** Set when a second gzip member appears; block points cover only the first. */
   firstMemberOutput: number | null = null
 
   constructor(
@@ -72,6 +81,30 @@ export class GzipSeekIndex {
     }
     return this.checkpoints[low]
   }
+
+  /**
+   * Where to resume decoding `[start, end)`; null means the start of the file.
+   * A block point decodes only the first member, so a range that runs past it
+   * needs a member start instead.
+   */
+  resumeFor(start: number, end: number): GzipCheckpoint | null {
+    if (!this.checkpoints.length) return null
+    const point = this.before(start)
+    if (point.output > start) return null
+    if (point.member) return point
+    return this.firstMemberOutput === null || end <= this.firstMemberOutput
+      ? point
+      : null
+  }
+}
+
+/** Decoded bytes discarded before `start` when reading `[start, end)`. */
+export function gzipDiscard(
+  seek: GzipSeekIndex | null,
+  start: number,
+  end: number
+) {
+  return start - (seek?.resumeFor(start, end)?.output ?? 0)
 }
 
 function damagedStream() {
@@ -82,7 +115,8 @@ function damagedStream() {
 
 /**
  * Inflate a gzip stream once, yielding its output and recording access points.
- * Concatenated gzip members are read in full; access points cover the first.
+ * Concatenated gzip members are read in full. Decoding runs on the main
+ * thread, so it pauses briefly every {@link YIELD_BYTES} for other requests.
  */
 export async function* inflateIndexed(
   input: AsyncIterable<Buffer>,
@@ -95,6 +129,7 @@ export async function* inflateIndexed(
   stream.avail_out = 0
   let totalIn = 0
   let totalOut = 0
+  let sinceYield = 0
   let betweenMembers = false
   let carry: Buffer = Buffer.alloc(0)
   try {
@@ -109,6 +144,13 @@ export async function* inflateIndexed(
           if (carry[0] !== 0x1f || carry[1] !== 0x8b) return
           if (zlibInflateReset(stream) !== Z_OK) throw damagedStream()
           seek.firstMemberOutput ??= totalOut
+          if (seek.shouldAdd(totalOut))
+            seek.add({
+              input: totalIn,
+              output: totalOut,
+              window: null,
+              member: true,
+            })
           betweenMembers = false
         }
         const piece = carry.subarray(0, INPUT_CHUNK)
@@ -132,6 +174,11 @@ export async function* inflateIndexed(
           hooks.consumed(totalIn)
           if (produced)
             yield Buffer.from(window.subarray(outputStart, stream.next_out))
+          sinceYield += produced
+          if (sinceYield >= YIELD_BYTES) {
+            sinceYield = 0
+            await nextTurn()
+          }
           if (result === Z_STREAM_END) {
             betweenMembers = true
             break
@@ -177,26 +224,20 @@ export async function openGzipRange(
   end: number
 ): Promise<Readable> {
   if (end <= start) return Readable.from([], { objectMode: false })
-  const checkpoint =
-    seek?.checkpoints.length &&
-    (seek.firstMemberOutput === null || end <= seek.firstMemberOutput)
-      ? seek.before(start)
-      : null
-  if (!checkpoint) {
-    // Concatenated members: Node's gunzip continues across them in order.
+  const point = seek?.resumeFor(start, end) ?? null
+  if (!point || point.member) {
+    // Node's gunzip continues across concatenated members in order.
     return sliceStream(
-      await source.stream(0, source.size),
+      await source.stream(point?.input ?? 0, source.size),
       createGunzip(),
-      start,
+      start - (point?.output ?? 0),
       end - start
     )
   }
   return sliceStream(
-    await source.stream(checkpoint.input, source.size),
-    createInflateRaw(
-      checkpoint.window ? { dictionary: checkpoint.window } : undefined
-    ),
-    start - checkpoint.output,
+    await source.stream(point.input, source.size),
+    createInflateRaw(point.window ? { dictionary: point.window } : undefined),
+    start - point.output,
     end - start
   )
 }

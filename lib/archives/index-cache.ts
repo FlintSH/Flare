@@ -35,8 +35,13 @@ export const ARCHIVE_INDEX_CACHE_BYTES = 128 * 1024 ** 2
 /** Indexes being built at once per process; more wait in a short queue. */
 export const ARCHIVE_INDEX_CONCURRENCY = 2
 const QUEUED_INDEXES = 32
+/** Unfinished indexes one account or IP address may have started at once. */
+export const ARCHIVE_INDEX_JOBS_PER_REQUESTER = 4
 /** Stop an unfinished index nobody has asked about recently. */
 const ABANDONED_MS = 30_000
+/** Answer requests for an archive that just failed without reading it again. */
+export const ARCHIVE_INDEX_FAILURE_MS = 30_000
+const REMEMBERED_FAILURES = 1000
 
 class IndexJob {
   readonly controller = new AbortController()
@@ -46,8 +51,13 @@ class IndexJob {
   error: unknown = null
   lastSeen = Date.now()
   waiters = 0
+  /** Abandoned or cleared: its failure says nothing about the archive. */
+  dropped = false
 
-  constructor(readonly ref: ArchiveSourceRef) {}
+  constructor(
+    readonly ref: ArchiveSourceRef,
+    readonly requester: string
+  ) {}
 }
 
 interface CacheState {
@@ -56,6 +66,7 @@ interface CacheState {
   jobs: Map<string, IndexJob>
   running: number
   queue: Array<{ start: () => void; signal: AbortSignal }>
+  failed: Map<string, { error: unknown; until: number }>
 }
 
 const stateKey = Symbol.for('flare.archive.index-cache')
@@ -68,13 +79,39 @@ const state = (processState[stateKey] ??= {
   jobs: new Map(),
   running: 0,
   queue: [],
+  failed: new Map(),
 }) as CacheState
+// State from before a development reload may predate newer fields.
+state.failed ??= new Map()
 
 export function clearArchiveIndexCache() {
-  for (const job of state.jobs.values())
+  for (const job of state.jobs.values()) {
+    job.dropped = true
     job.controller.abort(new ArchiveError('Archive cache cleared.', 503))
+  }
   state.ready.clear()
   state.bytes = 0
+  state.failed.clear()
+}
+
+function rememberFailure(key: string, error: unknown) {
+  const now = Date.now()
+  // Oldest first: drop what expired, then anything over the cap.
+  for (const [oldKey, old] of state.failed) {
+    if (old.until > now && state.failed.size < REMEMBERED_FAILURES) break
+    state.failed.delete(oldKey)
+  }
+  // Re-inserting keeps the map ordered by expiry.
+  state.failed.delete(key)
+  state.failed.set(key, { error, until: now + ARCHIVE_INDEX_FAILURE_MS })
+}
+
+function recentFailure(key: string) {
+  const failed = state.failed.get(key)
+  if (!failed) return null
+  if (failed.until > Date.now()) return failed.error
+  state.failed.delete(key)
+  return null
 }
 
 function remember(key: string, index: ArchiveIndex) {
@@ -139,6 +176,7 @@ export async function buildArchiveIndex(
     return indexZip(source, index, {
       entries: ARCHIVE_BROWSE_LIMITS.entries,
       directoryBytes: ARCHIVE_BROWSE_LIMITS.centralDirectoryBytes,
+      signal,
     })
   if (index.format === 'tar')
     return scanTar(new SourceTarInput(source, index), index, context)
@@ -227,19 +265,29 @@ async function runJob(job: IndexJob) {
   }
 }
 
-function startJob(ref: ArchiveSourceRef) {
+function startJob(ref: ArchiveSourceRef, requester: string) {
   if (state.jobs.size >= ARCHIVE_INDEX_CONCURRENCY + QUEUED_INDEXES)
     throw new ArchiveError(
       'Flare is reading several archives right now. Try again shortly.',
       429
     )
-  const job = new IndexJob(ref)
+  let started = 0
+  for (const other of state.jobs.values())
+    if (other.requester === requester) started++
+  if (started >= ARCHIVE_INDEX_JOBS_PER_REQUESTER)
+    throw new ArchiveError(
+      'You’re opening several archives at once. Wait for one to finish loading, then try again.',
+      429
+    )
+  const job = new IndexJob(ref, requester)
   state.jobs.set(ref.key, job)
   const watchdog = setInterval(() => {
-    if (!job.waiters && Date.now() - job.lastSeen > ABANDONED_MS)
+    if (!job.waiters && Date.now() - job.lastSeen > ABANDONED_MS) {
+      job.dropped = true
       job.controller.abort(
         new ArchiveError('Nobody is waiting for this archive anymore.', 408)
       )
+    }
   }, 5_000)
   watchdog.unref?.()
   job.promise = runJob(job)
@@ -252,6 +300,7 @@ function startJob(ref: ArchiveSourceRef) {
         job.error = job.controller.signal.aborted
           ? job.controller.signal.reason
           : error
+        if (!job.dropped) rememberFailure(ref.key, job.error)
         throw job.error
       }
     )
@@ -301,7 +350,12 @@ export interface ArchiveIndexView {
  */
 export async function getArchiveIndex(
   ref: ArchiveSourceRef,
-  options: { signal: AbortSignal; wait: number | 'complete' }
+  options: {
+    signal: AbortSignal
+    wait: number | 'complete'
+    /** Account or IP address that would start a new job. */
+    requester: string
+  }
 ): Promise<ArchiveIndexView> {
   const ready = state.ready.get(ref.key)
   if (ready) {
@@ -310,7 +364,12 @@ export async function getArchiveIndex(
     state.ready.set(ref.key, ready)
     return { index: ready.index, complete: true, cached: true }
   }
-  const job = state.jobs.get(ref.key) ?? startJob(ref)
+  let job = state.jobs.get(ref.key)
+  if (!job) {
+    const failure = recentFailure(ref.key)
+    if (failure) throw failure
+    job = startJob(ref, options.requester)
+  }
   job.lastSeen = Date.now()
   job.waiters++
   try {
@@ -337,12 +396,12 @@ function select(index: ArchiveIndex | null, selector: ArchiveEntrySelector) {
 export async function findArchiveEntry(
   ref: ArchiveSourceRef,
   selector: ArchiveEntrySelector,
-  signal: AbortSignal
+  options: { signal: AbortSignal; requester: string }
 ) {
-  let view = await getArchiveIndex(ref, { signal, wait: 0 })
+  let view = await getArchiveIndex(ref, { ...options, wait: 0 })
   let entry = select(view.index, selector)
   if (!entry && !view.complete) {
-    view = await getArchiveIndex(ref, { signal, wait: 'complete' })
+    view = await getArchiveIndex(ref, { ...options, wait: 'complete' })
     entry = select(view.index, selector)
   }
   if (!entry || !view.index)

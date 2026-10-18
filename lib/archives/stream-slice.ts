@@ -14,6 +14,12 @@ export function storageStalled() {
 }
 
 /**
+ * Emitted by {@link sliceStream} for every decoded chunk, including chunks it
+ * skips, so a long seek toward a range counts as activity rather than a stall.
+ */
+export const SLICE_PROGRESS = 'progress'
+
+/**
  * Read up to `limit` bytes. A storage stream that stops sending bytes
  * without closing fails after {@link ARCHIVE_IDLE_MS} instead of holding
  * its request, file handle, and stream slot indefinitely.
@@ -26,6 +32,7 @@ export async function readUpTo(stream: Readable, limit: number) {
     clearTimeout(timer)
     timer = setTimeout(() => stream.destroy(storageStalled()), ARCHIVE_IDLE_MS)
   }
+  stream.on(SLICE_PROGRESS, arm)
   try {
     arm()
     for await (const chunk of stream) {
@@ -37,6 +44,7 @@ export async function readUpTo(stream: Readable, limit: number) {
     }
   } finally {
     clearTimeout(timer)
+    stream.off(SLICE_PROGRESS, arm)
     stream.destroy()
   }
   return Buffer.concat(chunks, total).subarray(0, limit)
@@ -92,6 +100,7 @@ export function sliceStream(
     let held: Buffer | null = null
     try {
       for await (const received of output) {
+        readable.emit(SLICE_PROGRESS)
         let chunk = received as Buffer
         if (verify) {
           checksum = crc32(chunk, checksum)
@@ -136,5 +145,14 @@ export function sliceStream(
       decoder?.destroy()
     }
   }
-  return Readable.from(slice(), { objectMode: false })
+  const readable = Readable.from(slice(), { objectMode: false })
+  const close = readable._destroy
+  // The generator sees a return only between chunks it yields, so stop the
+  // decoder first; otherwise a long skip keeps running after the reader left.
+  readable._destroy = function (error, callback) {
+    input.destroy()
+    decoder?.destroy()
+    close.call(this, error, callback)
+  }
+  return readable
 }

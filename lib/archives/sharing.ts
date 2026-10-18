@@ -229,6 +229,33 @@ export function withArchiveUnlock(
   return response
 }
 
+/** The source must still be shared the same way and unchanged. */
+async function assertSharedSource(
+  access: SharedArchiveAccess,
+  file: SharedSource | null,
+  session: () => Promise<SessionInfo>
+) {
+  if (!file) throw new ArchiveError('Archive not found.', 404)
+  const checkedFile = {
+    ...file,
+    password:
+      file.password === access.verifiedPasswordHash ? null : file.password,
+  }
+  denied(await checkFileAccess(checkedFile, await session()))
+  if (
+    file.userId !== access.file.userId ||
+    file.name !== access.file.name ||
+    file.path !== access.file.path ||
+    file.mimeType !== access.file.mimeType ||
+    JSON.stringify(file.storageTarget) !==
+      JSON.stringify(access.file.storageTarget)
+  )
+    throw new ArchiveError(
+      'The source archive changed. Refresh and try again.',
+      409
+    )
+}
+
 /** No bcrypt or storage I/O while holding locks; recheck the exact verified hash. */
 export async function recheckSharedArchive(
   access: SharedArchiveAccess,
@@ -246,34 +273,31 @@ export async function recheckSharedArchive(
         where: { id: access.file.id },
         select: sharedSourceSelect,
       })
-      if (!file) throw new ArchiveError('Archive not found.', 404)
-      const checkedFile = {
-        ...file,
-        password:
-          file.password === access.verifiedPasswordHash ? null : file.password,
-      }
-      denied(
-        await checkFileAccess(
-          checkedFile,
-          await currentSession(access.viewer, tx)
-        )
+      await assertSharedSource(access, file, () =>
+        currentSession(access.viewer, tx)
       )
-      if (
-        file.userId !== access.file.userId ||
-        file.name !== access.file.name ||
-        file.path !== access.file.path ||
-        file.mimeType !== access.file.mimeType ||
-        JSON.stringify(file.storageTarget) !==
-          JSON.stringify(access.file.storageTarget)
-      )
-        throw new ArchiveError(
-          'The source archive changed. Refresh and try again.',
-          409
-        )
       // Expiration is worker-applied throughout sharing. A completed DELETE or
       // SET_PRIVATE is observed above; a scheduled deadline alone is not a ban.
       signal.throwIfAborted()
     },
     { timeout: 10_000, maxWait: 10_000 }
   )
+}
+
+/**
+ * The same rules as {@link recheckSharedArchive}, read without locks. Partial
+ * listings are polled every second and shouldn't queue behind role or file
+ * writes; the finished listing and every file read use the locked recheck.
+ */
+export async function confirmSharedArchive(
+  access: SharedArchiveAccess,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted()
+  const file = await prisma.file.findUnique({
+    where: { id: access.file.id },
+    select: sharedSourceSelect,
+  })
+  await assertSharedSource(access, file, () => currentSession(access.viewer))
+  signal.throwIfAborted()
 }

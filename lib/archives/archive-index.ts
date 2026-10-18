@@ -36,15 +36,19 @@ export interface IndexedEntry extends Omit<ArchiveEntry, 'diskPath'> {
  */
 export const ARCHIVE_INDEX_MAX_BYTES = 64 * 1024 ** 2
 
-/** Estimated heap cost of one listed entry. */
+/**
+ * Estimated memory for one listed entry: the entry object, plus its share of
+ * the finished listing's encoded JSON, which is kept for repeat visits.
+ */
 function entryCost(path: string) {
-  return 160 + 2 * path.length
+  return 240 + 5 * path.length
 }
 
 export class ArchiveIndex {
   readonly entries: IndexedEntry[] = []
   private readonly files = new Map<string, number>()
   private extraction: ArchiveExtraction | null = null
+  private encoded: Blob | null = null
   private entryBytes = 0
   fileCount = 0
   totalBytes = 0
@@ -91,7 +95,7 @@ export class ArchiveIndex {
   }
 
   get memoryBytes() {
-    return 256 + (this.gzip?.memoryBytes ?? 0) + this.entryBytes
+    return 2048 + (this.gzip?.memoryBytes ?? 0) + this.entryBytes
   }
 
   private publicEntries(after: number): ArchiveEntry[] {
@@ -114,6 +118,16 @@ export class ArchiveIndex {
       truncated: this.truncated,
       extraction: this.extraction ?? assessExtraction(this),
     }
+  }
+
+  /**
+   * The complete listing as JSON, encoded once. Repeat visits to a large
+   * archive then cost no serialization work.
+   */
+  listingJson() {
+    if (!this.complete) throw new Error('The archive listing is incomplete.')
+    this.encoded ??= new Blob([JSON.stringify(this.listing())])
+    return this.encoded
   }
 
   progress(after = 0): ArchiveListingProgress {

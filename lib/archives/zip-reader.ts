@@ -1,3 +1,4 @@
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { crc32 } from 'node:zlib'
 
 import { type ArchiveIndex, normalizeBrowsePath } from './archive-index'
@@ -12,6 +13,8 @@ const ZIP64_EOCD = 0x06064b50
 const CENTRAL_HEADER = 0x02014b50
 const LOCAL_HEADER = 0x04034b50
 const MAX_U32 = 0xffffffff
+/** Central directory entries parsed between pauses for other requests. */
+const YIELD_ENTRIES = 2000
 
 /**
  * Stored and deflated members, as extraction accepts. Others (Zstandard can
@@ -149,7 +152,7 @@ function splitArchive() {
 export async function indexZip(
   source: ByteSource,
   index: ArchiveIndex,
-  limits: { entries: number; directoryBytes: number }
+  limits: { entries: number; directoryBytes: number; signal?: AbortSignal }
 ) {
   const layout = await locate(source)
   index.entryCount = layout.entryCount
@@ -159,6 +162,11 @@ export async function indexZip(
   index.bytesRead = readable
   let offset = 0
   for (let count = 0; count < layout.entryCount; count++) {
+    // Parsing runs on the main thread; let other requests in now and then.
+    if (count && count % YIELD_ENTRIES === 0) {
+      await nextTurn()
+      limits.signal?.throwIfAborted()
+    }
     if (index.entries.length >= limits.entries) {
       index.truncated = 'entries'
       break
