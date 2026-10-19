@@ -306,11 +306,24 @@ async function findFile(page, name) {
   return menu
 }
 
+/**
+ * Choose Browse archive from a file's menu. A library search can replace the
+ * file's card just after it appears, closing a menu opened from it, so the
+ * menu is opened again until the choice goes through.
+ */
+async function chooseBrowseArchive(page, name) {
+  const item = page.getByRole('menuitem', {
+    name: 'Browse archive',
+    exact: true,
+  })
+  await expect(async () => {
+    if (!(await item.isVisible())) await (await findFile(page, name)).click()
+    await item.click({ timeout: 5000 })
+  }).toPass({ timeout: 45000 })
+}
+
 async function browse(page, name) {
-  await (await findFile(page, name)).click()
-  await page
-    .getByRole('menuitem', { name: 'Browse archive', exact: true })
-    .click()
+  await chooseBrowseArchive(page, name)
   await expect(page.getByLabel('Search archive', { exact: true })).toBeVisible()
 }
 
@@ -339,6 +352,14 @@ async function browseAndExtract(browser, state, fixture) {
   await expect(
     page.getByRole('button', { name: 'Open folder drafts', exact: true })
   ).toBeFocused()
+  // Returning to the row the keys reached last time still moves focus.
+  await page
+    .getByRole('button', { name: 'Open folder images', exact: true })
+    .focus()
+  await page.keyboard.press('Home')
+  await expect(
+    page.getByRole('button', { name: 'Open folder drafts', exact: true })
+  ).toBeFocused()
   await page.getByLabel('Search archive', { exact: true }).fill('README')
   await page
     .getByRole('button', { name: 'Preview guide/README.md', exact: true })
@@ -359,6 +380,28 @@ async function browseAndExtract(browser, state, fixture) {
     480
   )
   await shot(page, 'image-preview')
+  // Expanding works even after a search hides the selected image's row.
+  await page.getByLabel('Search archive', { exact: true }).fill('README')
+  await page.getByRole('button', { name: 'Expand flare-icon.png' }).click()
+  const viewer = page.getByRole('dialog', { name: 'flare-icon.png' })
+  await expect(viewer.getByText(/^1 of 1$/)).toBeVisible()
+  // Radix hands Escape to a new dialog only after the dialog beneath it
+  // re-renders, which turns off that dialog's pointer events; its Escape
+  // listener goes in the effects that follow.
+  await expect(
+    page.locator('[role="dialog"]').filter({ hasText: 'Browse archive' })
+  ).toHaveCSS('pointer-events', 'none')
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      )
+  )
+  await page.keyboard.press('Escape')
+  await expect(
+    page.getByRole('button', { name: 'Close image viewer' })
+  ).toHaveCount(0)
+  await expect(page.getByLabel('Search archive', { exact: true })).toBeVisible()
   // The preview stays beside the entry list; extraction always uses the whole archive.
   await page.getByLabel('Search archive', { exact: true }).fill('')
   await page.getByRole('button', { name: 'Extract all', exact: true }).click()
@@ -676,10 +719,7 @@ async function additionalChecks(browser, state, fixture) {
   await mobile.close()
 
   const errorDemo = await demoContext(browser, state, 'errors', false, true)
-  await (await findFile(errorDemo.page, 'Broken upload.zip')).click()
-  await errorDemo.page
-    .getByRole('menuitem', { name: 'Browse archive', exact: true })
-    .click()
+  await chooseBrowseArchive(errorDemo.page, 'Broken upload.zip')
   await expect(errorDemo.page.getByRole('alert')).toContainText(
     'couldn’t find this ZIP archive’s file list'
   )
@@ -1141,10 +1181,7 @@ async function largeArchiveChecks(browser, state) {
 
     const tgzDemo = await demoContext(browser, state, 'archive-large-tgz')
     const tgz = tgzDemo.page
-    await (await findFile(tgz, 'Render outputs.tar.gz')).click()
-    await tgz
-      .getByRole('menuitem', { name: 'Browse archive', exact: true })
-      .click()
+    await chooseBrowseArchive(tgz, 'Render outputs.tar.gz')
     await expect(
       tgz.getByRole('progressbar', { name: 'Archive reading progress' })
     ).toBeVisible()

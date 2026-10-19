@@ -3,10 +3,10 @@ import { Readable } from 'node:stream'
 
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
 import type { ByteSource } from './byte-source'
-import { openEntryRange } from './entry-reader'
+import { discardedBefore, openEntryRange } from './entry-reader'
 import { ArchiveError } from './errors'
-import { ARCHIVE_ISSUE_MESSAGES } from './shared'
-import { ARCHIVE_IDLE_MS, readUpTo } from './stream-slice'
+import { ARCHIVE_BROWSE_LIMITS, ARCHIVE_ISSUE_MESSAGES } from './shared'
+import { ARCHIVE_IDLE_MS, SLICE_PROGRESS, readUpTo } from './stream-slice'
 
 /** Media a browser may render inline from an archive; never active documents. */
 const INLINE_MEDIA: Record<string, string> = {
@@ -37,6 +37,13 @@ export function entryIssueError(entry: IndexedEntry) {
   return entry.issue
     ? new ArchiveError(ARCHIVE_ISSUE_MESSAGES[entry.issue], 415)
     : null
+}
+
+function tooFarIn() {
+  return new ArchiveError(
+    'This file is too far into a compressed archive for Flare to read. Download the whole archive to open it.',
+    413
+  )
 }
 
 /** One satisfiable byte range, or null to send the whole entry. */
@@ -157,7 +164,9 @@ export async function entryResponse(options: {
   try {
     const issue = entryIssueError(entry)
     if (issue) throw issue
-    const range = parseByteRange(options.range, entry.size)
+    const { discardBytes } = ARCHIVE_BROWSE_LIMITS
+    if (discardedBefore(index, entry, 0) > discardBytes) throw tooFarIn()
+    let range = parseByteRange(options.range, entry.size)
     const common = {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, no-store',
@@ -172,6 +181,10 @@ export async function entryResponse(options: {
         headers: { ...common, 'Content-Range': `bytes */${entry.size}` },
       })
     }
+    // A range deep in compressed data costs decoding everything before it.
+    // HTTP lets a server ignore Range, so send the whole file instead.
+    if (range && discardedBefore(index, entry, range.start) > discardBytes)
+      range = null
     const mediaType = options.inline
       ? await entryMediaType(source, index, entry)
       : null
@@ -214,10 +227,12 @@ export async function entryResponse(options: {
     // Listen only after the web stream owns the reader, so this listener
     // never starts the flow itself.
     let idle = setTimeout(onAbort, IDLE_ENTRY_STREAM_MS)
-    stream.on('data', () => {
+    const active = () => {
       clearTimeout(idle)
       idle = setTimeout(onAbort, IDLE_ENTRY_STREAM_MS)
-    })
+    }
+    stream.on('data', active)
+    stream.on(SLICE_PROGRESS, active)
     stream.once('close', () => {
       clearTimeout(idle)
       signal.removeEventListener('abort', onAbort)

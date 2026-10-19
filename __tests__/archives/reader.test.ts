@@ -1,5 +1,6 @@
 import archiver from 'archiver'
 import { randomBytes } from 'node:crypto'
+import { once } from 'node:events'
 import { Readable } from 'node:stream'
 import { crc32, deflateRawSync, gzipSync } from 'node:zlib'
 import * as tar from 'tar-stream'
@@ -10,7 +11,7 @@ import {
   assessExtraction,
   normalizeBrowsePath,
 } from '@/lib/archives/archive-index'
-import { archiveEntry } from '@/lib/archives/browse'
+import { archiveEntry, archiveListing } from '@/lib/archives/browse'
 import { openByteSource } from '@/lib/archives/byte-source'
 import { openEntryRange } from '@/lib/archives/entry-reader'
 import {
@@ -18,9 +19,16 @@ import {
   entryResponse,
   parseByteRange,
 } from '@/lib/archives/entry-response'
-import { GzipSeekIndex, inflateIndexed } from '@/lib/archives/gzip-reader'
+import {
+  GzipSeekIndex,
+  gzipDiscard,
+  inflateIndexed,
+  openGzipRange,
+} from '@/lib/archives/gzip-reader'
 import {
   ARCHIVE_INDEX_CONCURRENCY,
+  ARCHIVE_INDEX_FAILURE_MS,
+  ARCHIVE_INDEX_JOBS_PER_REQUESTER,
   buildArchiveIndex,
   clearArchiveIndexCache,
   getArchiveIndex,
@@ -29,7 +37,12 @@ import {
   ARCHIVE_BROWSE_LIMITS,
   type ArchiveFormat,
 } from '@/lib/archives/shared'
-import { ARCHIVE_IDLE_MS, readUpTo } from '@/lib/archives/stream-slice'
+import {
+  ARCHIVE_IDLE_MS,
+  SLICE_PROGRESS,
+  concatStreams,
+  readUpTo,
+} from '@/lib/archives/stream-slice'
 import { createArchiveUnlock, verifyArchiveUnlock } from '@/lib/archives/unlock'
 import type { StorageProvider } from '@/lib/storage'
 
@@ -222,7 +235,7 @@ function tarHeader(name: string, typeflag: string, size: number) {
   return block
 }
 
-function paxBlock(records: Record<string, string>) {
+function paxBlock(records: Record<string, string>, typeflag = 'x') {
   let data = ''
   for (const [key, value] of Object.entries(records)) {
     const body = ` ${key}=${value}\n`
@@ -232,10 +245,25 @@ function paxBlock(records: Record<string, string>) {
   }
   const bytes = Buffer.from(data)
   return Buffer.concat([
-    tarHeader('PaxHeader', 'x', bytes.length),
+    tarHeader('PaxHeader', typeflag, bytes.length),
     bytes,
     Buffer.alloc((512 - (bytes.length % 512)) % 512),
   ])
+}
+
+/** Member names as the extractor's TAR parser reads them. */
+async function tarStreamNames(bytes: Buffer) {
+  const extract = tar.extract()
+  const names: string[] = []
+  const reading = (async () => {
+    for await (const entry of extract) {
+      names.push(entry.header.name)
+      entry.resume()
+    }
+  })()
+  extract.end(bytes)
+  await reading
+  return names
 }
 
 /** Text that compresses well plus incompressible blocks, like real archives. */
@@ -251,6 +279,29 @@ function mixedData(size: number) {
     total += part.length
   }
   return Buffer.concat(parts).subarray(0, size)
+}
+
+/** Chunks delivered through promises only, never giving timers a turn. */
+async function* withoutTurns(bytes: Buffer, size = 64 * 1024) {
+  for (let offset = 0; offset < bytes.length; offset += size)
+    yield bytes.subarray(offset, offset + size)
+}
+
+/** Where member `index` of concatenated buffers starts. */
+function offsetOf(parts: Buffer[], index: number) {
+  return parts.slice(0, index).reduce((total, part) => total + part.length, 0)
+}
+
+/** Run with a smaller decoded-byte discard limit. */
+async function withDiscardLimit<T>(bytes: number, run: () => Promise<T>) {
+  const limits = ARCHIVE_BROWSE_LIMITS as { discardBytes: number }
+  const original = limits.discardBytes
+  limits.discardBytes = bytes
+  try {
+    return await run()
+  } finally {
+    limits.discardBytes = original
+  }
 }
 
 afterEach(() => clearArchiveIndexCache())
@@ -480,6 +531,29 @@ describe('TAR index', () => {
     expect(zipIndex.listing().extraction.available).toBe(false)
   })
 
+  it('lets timers run while it parses a large central directory', async () => {
+    const bytes = rawZip(
+      Array.from({ length: 10_000 }, (_, index) => ({
+        name: Buffer.from(`file-${index}.txt`),
+        data: Buffer.alloc(0),
+      }))
+    )
+    const source = await openByteSource(localStorage(bytes), 'zip')
+    const index = new ArchiveIndex('zip', source.size)
+    let firedAt: number | null = null
+    const timer = setTimeout(() => (firedAt = index.entries.length), 0)
+    await buildArchiveIndex(
+      source,
+      index,
+      'many.zip',
+      new AbortController().signal
+    )
+    clearTimeout(timer)
+    expect(index.entries).toHaveLength(10_000)
+    expect(firedAt).not.toBeNull()
+    expect(firedAt!).toBeLessThan(10_000)
+  })
+
   it('lets each PAX header replace the previous one, as the extractor does', async () => {
     const bytes = Buffer.concat([
       paxBlock({ path: 'renamed-by-first-header.txt' }),
@@ -494,6 +568,46 @@ describe('TAR index', () => {
     const { index } = await indexOf(bytes, 'tar')
     expect(index.entries.map((entry) => entry.path)).toEqual(['real.txt'])
     expect((await read(bytes, 'tar', 'real.txt')).toString()).toBe('real')
+  })
+
+  it('parses hostile PAX length fields in linear time', async () => {
+    // A record without "=" ends parsing, as in tar-stream, instead of
+    // advancing one byte at a time through a long zero-padded length.
+    const records = Buffer.from(`${'0'.repeat(600_000)}1 path=never.txt\n`)
+    const bytes = Buffer.concat([
+      tarHeader('PaxHeader', 'x', records.length),
+      records,
+      Buffer.alloc((512 - (records.length % 512)) % 512),
+      tarHeader('real.txt', '0', 4),
+      Buffer.from('real'),
+      Buffer.alloc(508),
+      Buffer.alloc(1024),
+    ])
+    const started = performance.now()
+    const { index } = await indexOf(bytes, 'tar')
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(index.entries.map((entry) => entry.path)).toEqual(['real.txt'])
+    expect(await tarStreamNames(bytes)).toEqual(['real.txt'])
+  })
+
+  it('applies global and empty PAX values the way the extractor does', async () => {
+    const bytes = Buffer.concat([
+      paxBlock({ path: 'from-global.txt', comment: 'abc123' }, 'g'),
+      paxBlock({ comment: 'own extended header' }),
+      tarHeader('header-name.txt', '0', 0),
+      tarHeader('no-extended-header.txt', '0', 0),
+      paxBlock({ path: '' }),
+      tarHeader('empty-pax-path.txt', '0', 0),
+      Buffer.alloc(1024),
+    ])
+    const names = await tarStreamNames(bytes)
+    expect(names).toEqual([
+      'from-global.txt',
+      'no-extended-header.txt',
+      'empty-pax-path.txt',
+    ])
+    const { index } = await indexOf(bytes, 'tar')
+    expect(index.entries.map((entry) => entry.path)).toEqual(names)
   })
 
   it('keeps the readable entries of a truncated TAR and flags the cut', async () => {
@@ -530,7 +644,6 @@ describe('TAR.GZ and GZIP seeking', () => {
     expect(output).toBe(data.length)
     expect(seek.checkpoints.length).toBeGreaterThan(5)
     const source = await openByteSource(remoteStorage(compressed), 'gz')
-    const { openGzipRange } = await import('@/lib/archives/gzip-reader')
     for (const start of [0, 777_777, 2_500_001, 4_000_000, data.length - 10]) {
       const chunks: Buffer[] = []
       for await (const chunk of await openGzipRange(
@@ -627,6 +740,228 @@ describe('TAR.GZ and GZIP seeking', () => {
         signal: new AbortController().signal,
       })
     ).rejects.toMatchObject({ status: 415 })
+  })
+
+  it('resumes later gzip members from their own start', async () => {
+    const tarball = await tarBytes(
+      Array.from({ length: 12 }, (_, index) => ({
+        name: `part${index}.bin`,
+        data: mixedData(1024 * 1024),
+      }))
+    )
+    // Like bgzip: many independent members, each with its own header.
+    const members: Buffer[] = []
+    for (let offset = 0; offset < tarball.length; offset += 512 * 1024)
+      members.push(gzipSync(tarball.subarray(offset, offset + 512 * 1024)))
+    const compressed = Buffer.concat(members)
+    const storage = remoteStorage(compressed)
+    const starts: number[] = []
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = async (...args: Parameters<typeof open>) => {
+      starts.push(args[1]?.start ?? 0)
+      return open(...args)
+    }
+    const { index, source } = await indexOf(
+      compressed,
+      'tar.gz',
+      'parts.tar.gz',
+      storage
+    )
+    expect(index.gzip?.checkpoints.some((point) => point.member)).toBe(true)
+    const entry = index.find('part11.bin')!
+    const chunks: Buffer[] = []
+    for await (const chunk of await openEntryRange(
+      source,
+      index,
+      entry,
+      0,
+      entry.size
+    ))
+      chunks.push(chunk as Buffer)
+    expect(
+      Buffer.concat(chunks).equals(
+        tarball.subarray(entry.offset, entry.offset + entry.size)
+      )
+    ).toBe(true)
+    // Gunzip started at a later member header rather than at byte 0.
+    expect(starts.at(-1)).toBeGreaterThan(0)
+    expect(members.some((_, i) => starts.at(-1) === offsetOf(members, i))).toBe(
+      true
+    )
+  })
+
+  it('refuses files too deep to reach and ignores deep byte ranges', async () => {
+    const first = mixedData(3 * 1024 * 1024)
+    const tarball = await tarBytes([
+      { name: 'first.bin', data: first },
+      { name: 'spanning.bin', data: mixedData(2 * 1024 * 1024) },
+      { name: 'after.txt', data: 'after' },
+    ])
+    const spanning = (await indexOf(tarball, 'tar')).index.find('spanning.bin')!
+    // The first member is shorter than the 8 MiB checkpoint spacing, so the
+    // only point before spanning.bin is the start of the file.
+    const split = spanning.offset + 1024 * 1024
+    const compressed = Buffer.concat([
+      gzipSync(tarball.subarray(0, split)),
+      gzipSync(tarball.subarray(split)),
+    ])
+    const { index, source } = await indexOf(compressed, 'tar.gz')
+    const respond = (path: string, range: string | null) =>
+      entryResponse({
+        source,
+        index,
+        entry: index.find(path)!,
+        range,
+        inline: false,
+        release: () => {},
+        signal: new AbortController().signal,
+      })
+    await withDiscardLimit(1024 * 1024, async () => {
+      await expect(respond('spanning.bin', null)).rejects.toMatchObject({
+        status: 413,
+        message: expect.stringContaining('Download the whole archive'),
+      })
+      const near = await respond('first.bin', 'bytes=0-9')
+      expect(near.status).toBe(206)
+      expect(Buffer.from(await near.arrayBuffer())).toEqual(
+        first.subarray(0, 10)
+      )
+      const deep = await respond('first.bin', 'bytes=2097152-2097161')
+      expect(deep.status).toBe(200)
+      expect(deep.headers.get('content-range')).toBeNull()
+      expect(deep.headers.get('content-length')).toBe(String(first.length))
+      expect(Buffer.from(await deep.arrayBuffer()).equals(first)).toBe(true)
+    })
+    // Within the default limit, the entry is read across the member boundary.
+    const whole = await respond('spanning.bin', null)
+    expect(whole.status).toBe(200)
+    expect(
+      Buffer.from(await whole.arrayBuffer()).equals(
+        tarball.subarray(spanning.offset, spanning.offset + spanning.size)
+      )
+    ).toBe(true)
+  })
+
+  it('keeps the second member start even right after a block checkpoint', async () => {
+    const small = 'This file starts in the second gzip member.'
+    const tarball = await tarBytes([
+      { name: 'big.bin', data: mixedData(9 * 1024 * 1024) },
+      { name: 'small.txt', data: small },
+    ])
+    // Split just before small.txt's header, about 1 MiB after the block
+    // checkpoint near 8 MiB: too close for the checkpoint spacing.
+    const split =
+      (await indexOf(tarball, 'tar')).index.find('small.txt')!.offset - 512
+    const compressed = Buffer.concat([
+      gzipSync(tarball.subarray(0, split)),
+      gzipSync(tarball.subarray(split)),
+    ])
+    const { index, source } = await indexOf(compressed, 'tar.gz')
+    expect(index.gzip!.checkpoints.some((point) => point.member)).toBe(false)
+    expect(index.gzip!.secondMember).toMatchObject({ output: split })
+    const respond = (range: string | null) =>
+      entryResponse({
+        source,
+        index,
+        entry: index.find('small.txt')!,
+        range,
+        inline: false,
+        release: () => {},
+        signal: new AbortController().signal,
+      })
+    await withDiscardLimit(1024 * 1024, async () => {
+      const whole = await respond(null)
+      expect(whole.status).toBe(200)
+      expect(await whole.text()).toBe(small)
+      const part = await respond('bytes=5-8')
+      expect(part.status).toBe(206)
+      expect(await part.text()).toBe(small.slice(5, 9))
+    })
+  })
+
+  it('reads a range across the first member boundary from a nearby block point', async () => {
+    const first = mixedData(3 * 1024 * 1024)
+    const second = mixedData(1024 * 1024)
+    const firstMember = gzipSync(first)
+    const compressed = Buffer.concat([firstMember, gzipSync(second)])
+    const seek = new GzipSeekIndex(256 * 1024)
+    for await (const _chunk of inflateIndexed(
+      Readable.from([compressed]),
+      seek,
+      { consumed() {}, tick() {} }
+    )) {
+      // Index the whole stream.
+    }
+    expect(seek.secondMember).toMatchObject({
+      input: firstMember.length,
+      output: first.length,
+    })
+    const start = first.length - 1000
+    const end = first.length + 5000
+    expect(gzipDiscard(seek, start)).toBeLessThan(1024 * 1024)
+    const storage = remoteStorage(compressed)
+    const starts: number[] = []
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = async (...args: Parameters<typeof open>) => {
+      starts.push(args[1]?.start ?? 0)
+      return open(...args)
+    }
+    const source = await openByteSource(storage, 'gz')
+    const chunks: Buffer[] = []
+    for await (const chunk of await openGzipRange(source, seek, start, end))
+      chunks.push(chunk as Buffer)
+    expect(
+      Buffer.concat(chunks).equals(
+        Buffer.concat([first, second]).subarray(start, end)
+      )
+    ).toBe(true)
+    // A block point inside the first member, then the second member's header.
+    expect(starts).toEqual([seek.resumeFor(start)!.input, firstMember.length])
+    expect(starts[0]).toBeGreaterThan(0)
+  })
+
+  it('ignores a deep byte range in a deflated ZIP entry', async () => {
+    const data = mixedData(3 * 1024 * 1024)
+    const { index, source } = await indexOf(
+      rawZip([{ name: Buffer.from('big.bin'), data, method: 8 }]),
+      'zip'
+    )
+    const respond = (range: string) =>
+      entryResponse({
+        source,
+        index,
+        entry: index.find('big.bin')!,
+        range,
+        inline: false,
+        release: () => {},
+        signal: new AbortController().signal,
+      })
+    await withDiscardLimit(1024 * 1024, async () => {
+      const near = await respond('bytes=1000-1999')
+      expect(near.status).toBe(206)
+      expect(Buffer.from(await near.arrayBuffer())).toEqual(
+        data.subarray(1000, 2000)
+      )
+      const deep = await respond('bytes=2097152-')
+      expect(deep.status).toBe(200)
+      expect(Buffer.from(await deep.arrayBuffer()).equals(data)).toBe(true)
+    })
+  })
+
+  it('lets timers run while it decodes a large stream', async () => {
+    const compressed = gzipSync(mixedData(8 * 1024 * 1024))
+    let output = 0
+    let firedAt: number | null = null
+    const timer = setTimeout(() => (firedAt = output), 0)
+    for await (const chunk of inflateIndexed(
+      withoutTurns(compressed),
+      new GzipSeekIndex(),
+      { consumed() {}, tick() {} }
+    ))
+      output += chunk.length
+    clearTimeout(timer)
+    expect(firedAt).not.toBeNull()
+    expect(firedAt!).toBeLessThan(output)
   })
 
   it('lists what it could read from a truncated TAR.GZ', async () => {
@@ -777,12 +1112,16 @@ describe('index cache', () => {
     }
     const signal = new AbortController().signal
     const [first, second] = await Promise.all([
-      getArchiveIndex(ref, { signal, wait: 'complete' }),
-      getArchiveIndex(ref, { signal, wait: 'complete' }),
+      getArchiveIndex(ref, { signal, wait: 'complete', requester: 'test' }),
+      getArchiveIndex(ref, { signal, wait: 'complete', requester: 'test' }),
     ])
     expect(first.index).toBe(second.index)
     const requests = stats.requests
-    const third = await getArchiveIndex(ref, { signal, wait: 'complete' })
+    const third = await getArchiveIndex(ref, {
+      signal,
+      wait: 'complete',
+      requester: 'test',
+    })
     expect(third.cached).toBe(true)
     expect(stats.requests).toBe(requests)
   })
@@ -816,11 +1155,164 @@ describe('index cache', () => {
       format: 'tar.gz' as const,
     }
     const signal = new AbortController().signal
-    const early = await getArchiveIndex(ref, { signal, wait: 5 })
+    const early = await getArchiveIndex(ref, {
+      signal,
+      wait: 5,
+      requester: 'test',
+    })
     expect(early.complete).toBe(false)
-    const done = await getArchiveIndex(ref, { signal, wait: 'complete' })
+    const done = await getArchiveIndex(ref, {
+      signal,
+      wait: 'complete',
+      requester: 'test',
+    })
     expect(done.complete).toBe(true)
     expect(done.index?.entries).toHaveLength(40)
+  })
+})
+
+describe('index cache limits', () => {
+  /** Storage that accepts a request and never answers. */
+  function hangingRef(key: string) {
+    const storage = remoteStorage(Buffer.alloc(0))
+    storage.getFileSize = () => new Promise(() => {})
+    return {
+      key,
+      storage,
+      path: 'x',
+      name: 'x.tar.gz',
+      format: 'tar.gz' as const,
+    }
+  }
+
+  it('encodes a finished listing once and reuses it', async () => {
+    const bytes = await zipBytes([
+      { name: 'a.txt', data: 'a' },
+      { name: 'dir/b.txt', data: 'b' },
+    ])
+    const ref = {
+      key: 'encoded-listing',
+      storage: remoteStorage(bytes),
+      path: 'x',
+      name: 'x.zip',
+      format: 'zip' as const,
+    }
+    const list = (after = 0) =>
+      archiveListing(ref, {
+        progress: false,
+        after,
+        signal: new AbortController().signal,
+        requester: 'test',
+        recheck: async () => {},
+        confirm: async () => {},
+      })
+    const first = await list()
+    expect(first.headers.get('content-type')).toBe('application/json')
+    const body = await first.json()
+    expect(body).toEqual({
+      success: true,
+      data: expect.objectContaining({
+        format: 'zip',
+        fileCount: 2,
+        entries: [
+          { path: 'a.txt', type: 'file', size: 1 },
+          { path: 'dir/b.txt', type: 'file', size: 1 },
+        ],
+      }),
+    })
+    expect(await (await list()).json()).toEqual(body)
+    expect((await (await list(1)).json()).data.entries).toEqual([
+      { path: 'dir/b.txt', type: 'file', size: 1 },
+    ])
+    const { index } = await getArchiveIndex(ref, {
+      signal: new AbortController().signal,
+      wait: 'complete',
+      requester: 'test',
+    })
+    expect(index!.listingJson()).toBe(index!.listingJson())
+  })
+
+  it('remembers a failed index briefly instead of reading it again', async () => {
+    const stats = { requests: 0, bytes: 0 }
+    const ref = {
+      key: 'failed-listing',
+      storage: remoteStorage(Buffer.alloc(4096, 7), stats),
+      path: 'x',
+      name: 'x.tar',
+      format: 'tar' as const,
+    }
+    const list = () =>
+      getArchiveIndex(ref, {
+        signal: new AbortController().signal,
+        wait: 'complete',
+        requester: 'test',
+      })
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await expect(list()).rejects.toThrow(/isn’t a readable TAR/)
+      const requests = stats.requests
+      await expect(list()).rejects.toThrow(/isn’t a readable TAR/)
+      expect(stats.requests).toBe(requests)
+      vi.advanceTimersByTime(ARCHIVE_INDEX_FAILURE_MS + 1)
+      await expect(list()).rejects.toThrow(/isn’t a readable TAR/)
+      expect(stats.requests).toBeGreaterThan(requests)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts over after an abandoned index instead of repeating its error', async () => {
+    const ref = hangingRef('abandoned-listing')
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'Date',
+      ],
+    })
+    try {
+      const options = {
+        signal: new AbortController().signal,
+        wait: 0,
+        requester: 'test',
+      }
+      const look = async () => {
+        const view = getArchiveIndex(ref, options)
+        await vi.advanceTimersByTimeAsync(1)
+        return view
+      }
+      expect((await look()).complete).toBe(false)
+      // Nobody asks again, so the job stops itself.
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect((await look()).complete).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('limits how many archives one requester can start reading at once', async () => {
+    const options = (requester: string) => ({
+      signal: new AbortController().signal,
+      wait: 0,
+      requester,
+    })
+    for (let index = 0; index < ARCHIVE_INDEX_JOBS_PER_REQUESTER; index++)
+      await getArchiveIndex(hangingRef(`busy-${index}`), options('ip:one'))
+    await expect(
+      getArchiveIndex(hangingRef('busy-extra'), options('ip:one'))
+    ).rejects.toMatchObject({
+      status: 429,
+      message: expect.stringContaining('several archives at once'),
+    })
+    // Joining a job someone already started costs nothing.
+    await expect(
+      getArchiveIndex(hangingRef('busy-0'), options('ip:one'))
+    ).resolves.toMatchObject({ complete: false })
+    await expect(
+      getArchiveIndex(hangingRef('busy-extra'), options('ip:two'))
+    ).resolves.toMatchObject({ complete: false })
   })
 })
 
@@ -860,6 +1352,7 @@ describe('stalled storage', () => {
     await getArchiveIndex(ref, {
       signal: new AbortController().signal,
       wait: 'complete',
+      requester: 'test',
     })
     // Storage accepts the request but never responds.
     storage.getFileStream = () => new Promise(() => {})
@@ -888,6 +1381,141 @@ describe('stalled storage', () => {
     }
   })
 
+  it('counts decoding toward a range as activity, not a stall', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const stream = silent()
+      const reading = readUpTo(stream, 4)
+      // Twice the idle limit passes while the slice skips toward its range.
+      for (let step = 0; step < 4; step++) {
+        await vi.advanceTimersByTimeAsync(ARCHIVE_IDLE_MS / 2)
+        stream.emit(SLICE_PROGRESS)
+      }
+      stream.push(Buffer.from('done'))
+      await expect(reading).resolves.toEqual(Buffer.from('done'))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops a two-part read as soon as it is destroyed', async () => {
+    const first = new Readable({ read() {} })
+    const second = vi.fn(async () => Readable.from([Buffer.from('second')]))
+    const joined = concatStreams([async () => first, second])
+    const progress = vi.fn()
+    joined.on(SLICE_PROGRESS, progress)
+    first.push(Buffer.from('first'))
+    joined.resume()
+    await once(joined, 'data')
+    first.emit(SLICE_PROGRESS)
+    expect(progress).toHaveBeenCalledOnce()
+    joined.destroy()
+    expect(first.destroyed).toBe(true)
+    await once(joined, 'close')
+    expect(second).not.toHaveBeenCalled()
+  })
+
+  it('closes a two-part read whose next part never opens', async () => {
+    let deliver!: (part: Readable) => void
+    const second = vi.fn(
+      () =>
+        new Promise<Readable>((resolve) => {
+          deliver = resolve
+        })
+    )
+    const joined = concatStreams([
+      async () => Readable.from([Buffer.from('first')]),
+      second,
+    ])
+    joined.resume()
+    await vi.waitFor(() => expect(second).toHaveBeenCalledOnce())
+    // Storage hasn't answered; leaving must still close the stream.
+    joined.destroy()
+    await once(joined, 'close')
+    const late = new Readable({ read() {} })
+    deliver(late)
+    await vi.waitFor(() => expect(late.destroyed).toBe(true))
+  })
+
+  it('releases a download stalled while opening the next GZIP member', async () => {
+    const tarball = await tarBytes([
+      { name: 'first.bin', data: mixedData(3 * 1024 * 1024) },
+      { name: 'spanning.bin', data: mixedData(2 * 1024 * 1024) },
+    ])
+    const spanning = (await indexOf(tarball, 'tar')).index.find('spanning.bin')!
+    const split = spanning.offset + 1024 * 1024
+    const firstMember = gzipSync(tarball.subarray(0, split))
+    const compressed = Buffer.concat([
+      firstMember,
+      gzipSync(tarball.subarray(split)),
+    ])
+    const storage = remoteStorage(compressed)
+    const { index, source } = await indexOf(
+      compressed,
+      'tar.gz',
+      'stall.tar.gz',
+      storage
+    )
+    // Storage accepts the request for the second member and never answers.
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = (...args: Parameters<typeof open>) =>
+      args[1]?.start === firstMember.length
+        ? new Promise(() => {})
+        : open(...args)
+    const release = vi.fn()
+    const leaving = new AbortController()
+    const response = await entryResponse({
+      source,
+      index,
+      entry: index.find('spanning.bin')!,
+      range: null,
+      inline: false,
+      release,
+      signal: leaving.signal,
+    })
+    const reader = response.body!.getReader()
+    let received = 0
+    while (received < split - spanning.offset)
+      received += (await reader.read()).value!.length
+    expect(release).not.toHaveBeenCalled()
+    leaving.abort()
+    await vi.waitFor(() => expect(release).toHaveBeenCalledOnce())
+    reader.releaseLock()
+  })
+
+  it('stops decoding as soon as a slice is destroyed mid-skip', async () => {
+    const data = mixedData(24 * 1024 * 1024)
+    const bytes = rawZip([{ name: Buffer.from('big.bin'), data, method: 8 }])
+    const storage = remoteStorage(bytes)
+    const opened: Readable[] = []
+    const open = storage.getFileStream.bind(storage)
+    storage.getFileStream = async (...args: Parameters<typeof open>) => {
+      const stream = await open(...args)
+      opened.push(stream)
+      return stream
+    }
+    const { index, source } = await indexOf(bytes, 'zip', 'big.zip', storage)
+    const stream = await openEntryRange(
+      source,
+      index,
+      index.find('big.bin')!,
+      data.length - 10,
+      data.length
+    )
+    const input = opened.at(-1)!
+    let progress = 0
+    stream.on(SLICE_PROGRESS, () => progress++)
+    stream.resume()
+    await once(stream, SLICE_PROGRESS)
+    stream.destroy()
+    // The storage stream stops now, not after the skip reaches its range.
+    expect(input.destroyed).toBe(true)
+    await once(stream, 'close')
+    const seen = progress
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(progress).toBe(seen)
+  })
+
   it('stops an indexing job that stalls and frees its slot', async () => {
     const bytes = await zipBytes([{ name: 'a.txt', data: 'a' }])
     const stalled = remoteStorage(bytes)
@@ -905,7 +1533,11 @@ describe('stalled storage', () => {
             name: 'x.zip',
             format: 'zip' as const,
           },
-          { signal: new AbortController().signal, wait: 'complete' }
+          {
+            signal: new AbortController().signal,
+            wait: 'complete',
+            requester: 'test',
+          }
         )
       )
       const outcomes = jobs.map((job) =>
@@ -927,7 +1559,11 @@ describe('stalled storage', () => {
         name: 'x.zip',
         format: 'zip' as const,
       },
-      { signal: new AbortController().signal, wait: 'complete' }
+      {
+        signal: new AbortController().signal,
+        wait: 'complete',
+        requester: 'test',
+      }
     )
     expect(healthy.index?.entries).toHaveLength(1)
   })

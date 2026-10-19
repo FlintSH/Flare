@@ -1998,6 +1998,99 @@ suite('archive publication against disposable PostgreSQL', () => {
       }
     })
 
+    async function slowTarGz(name: string) {
+      const pack = tar.pack()
+      const chunks: Buffer[] = []
+      const consuming = (async () => {
+        for await (const chunk of pack)
+          chunks.push(Buffer.from(chunk as Uint8Array))
+      })()
+      pack.entry({ name: 'secret-plan.txt' }, 'contents')
+      pack.finalize()
+      await consuming
+      return source(name, gzipSync(Buffer.concat(chunks)))
+    }
+
+    it.each(['role', 'session', 'source'] as const)(
+      'confirms the owner %s before returning listing progress',
+      async (change) => {
+        const file = await slowTarGz('owner-plans.tar.gz')
+        let unblock!: () => void
+        const gate = new Promise<void>((resolve) => {
+          unblock = resolve
+        })
+        state.onRead = async () => {
+          state.onRead = undefined
+          if (change === 'role')
+            await prisma.role.update({
+              where: { systemKey: 'everyone' },
+              data: { permissions: [] },
+            })
+          if (change === 'session')
+            await prisma.user.update({
+              where: { id: 'archive-owner' },
+              data: { sessionVersion: { increment: 1 } },
+            })
+          if (change === 'source')
+            await prisma.file.delete({ where: { id: file.id } })
+          await gate
+        }
+        try {
+          const pending = await listing.GET(
+            request(`/api/files/${file.id}/archive?progress=1`),
+            context(file.id)
+          )
+          expect(pending.status).toBe(
+            { role: 403, session: 401, source: 409 }[change]
+          )
+        } finally {
+          unblock()
+        }
+      }
+    )
+
+    it('answers listing progress while a role change holds its lock', async () => {
+      const { lockRoleChanges } = await import('@/lib/permissions/server')
+      const file = await slowTarGz('busy-plans.tar.gz')
+      let unblock!: () => void
+      const gate = new Promise<void>((resolve) => {
+        unblock = resolve
+      })
+      state.onRead = async () => {
+        state.onRead = undefined
+        await gate
+      }
+      let release!: () => void
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let locked!: () => void
+      const lockTaken = new Promise<void>((resolve) => {
+        locked = resolve
+      })
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await lockRoleChanges(tx)
+          locked()
+          await held
+        },
+        { timeout: 20_000 }
+      )
+      await lockTaken
+      try {
+        // Progress polls use a lock-free check, so they don't queue here.
+        const pending = await listing.GET(
+          request(`/api/files/${file.id}/archive?progress=1`),
+          context(file.id)
+        )
+        expect(pending.status).toBe(202)
+      } finally {
+        release()
+        unblock()
+        await holder
+      }
+    })
+
     it('unlocks password-protected previews with a scoped cookie, never a URL password', async () => {
       const file = await publicArchive('preview-password')
       state.userId = ''

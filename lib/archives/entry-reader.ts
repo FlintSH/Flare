@@ -3,9 +3,24 @@ import { createInflateRaw } from 'node:zlib'
 
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
 import type { ByteSource } from './byte-source'
-import { openGzipRange } from './gzip-reader'
+import { gzipDiscard, openGzipRange } from './gzip-reader'
 import { sliceStream } from './stream-slice'
 import { zipDataOffset } from './zip-reader'
+
+/**
+ * Decoded bytes {@link openEntryRange} discards before `start`: a deflated ZIP
+ * entry decodes from its first byte, and a gzip stream from the closest
+ * access point. TAR and stored ZIP data is read directly.
+ */
+export function discardedBefore(
+  index: ArchiveIndex,
+  entry: IndexedEntry,
+  start: number
+) {
+  if (index.format === 'tar') return 0
+  if (index.format === 'zip') return entry.method === 0 ? 0 : start
+  return gzipDiscard(index.gzip, entry.offset + start)
+}
 
 /**
  * Open `[start, end)` of an entry's uncompressed bytes. A whole-member read of

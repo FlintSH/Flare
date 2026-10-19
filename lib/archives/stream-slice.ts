@@ -14,6 +14,12 @@ export function storageStalled() {
 }
 
 /**
+ * Emitted by {@link sliceStream} for every decoded chunk, including chunks it
+ * skips, so a long seek toward a range counts as activity rather than a stall.
+ */
+export const SLICE_PROGRESS = 'progress'
+
+/**
  * Read up to `limit` bytes. A storage stream that stops sending bytes
  * without closing fails after {@link ARCHIVE_IDLE_MS} instead of holding
  * its request, file handle, and stream slot indefinitely.
@@ -26,6 +32,7 @@ export async function readUpTo(stream: Readable, limit: number) {
     clearTimeout(timer)
     timer = setTimeout(() => stream.destroy(storageStalled()), ARCHIVE_IDLE_MS)
   }
+  stream.on(SLICE_PROGRESS, arm)
   try {
     arm()
     for await (const chunk of stream) {
@@ -37,6 +44,7 @@ export async function readUpTo(stream: Readable, limit: number) {
     }
   } finally {
     clearTimeout(timer)
+    stream.off(SLICE_PROGRESS, arm)
     stream.destroy()
   }
   return Buffer.concat(chunks, total).subarray(0, limit)
@@ -92,6 +100,7 @@ export function sliceStream(
     let held: Buffer | null = null
     try {
       for await (const received of output) {
+        readable.emit(SLICE_PROGRESS)
         let chunk = received as Buffer
         if (verify) {
           checksum = crc32(chunk, checksum)
@@ -136,5 +145,60 @@ export function sliceStream(
       decoder?.destroy()
     }
   }
-  return Readable.from(slice(), { objectMode: false })
+  const readable = Readable.from(slice(), { objectMode: false })
+  const close = readable._destroy
+  // The generator sees a return only between chunks it yields, so stop the
+  // decoder first; otherwise a long skip keeps running after the reader left.
+  readable._destroy = function (error, callback) {
+    input.destroy()
+    decoder?.destroy()
+    close.call(this, error, callback)
+  }
+  return readable
+}
+
+/**
+ * Read `parts` one after another as one stream. Each part opens when the one
+ * before it ends. Destroying the result destroys the part being read, or
+ * stops waiting for one still opening, so stalled storage can't keep the
+ * stream from closing.
+ */
+export function concatStreams(parts: Array<() => Promise<Readable>>) {
+  let current: Readable | null = null
+  let stop!: () => void
+  const stopped = new Promise<null>((resolve) => {
+    stop = () => resolve(null)
+  })
+  async function* play() {
+    for (const open of parts) {
+      const opening = open()
+      const part = await Promise.race([opening, stopped])
+      if (!part || readable.destroyed) {
+        // Close a part that storage delivers after the reader has left.
+        opening.then(
+          (late) => late.destroy(),
+          () => {}
+        )
+        return
+      }
+      current = part
+      part.on(SLICE_PROGRESS, progress)
+      try {
+        for await (const chunk of part) yield chunk as Buffer
+      } finally {
+        part.off(SLICE_PROGRESS, progress)
+        part.destroy()
+        current = null
+      }
+    }
+  }
+  const readable = Readable.from(play(), { objectMode: false })
+  const progress = () => readable.emit(SLICE_PROGRESS)
+  const close = readable._destroy
+  readable._destroy = function (error, callback) {
+    stop()
+    current?.destroy()
+    close.call(this, error, callback)
+  }
+  return readable
 }
