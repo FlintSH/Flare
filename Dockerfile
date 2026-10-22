@@ -1,5 +1,5 @@
 # Stage 1: Dependencies  
-FROM node:lts AS deps
+FROM node@sha256:032e78d7e54e352129831743737e3a83171d9cc5b5896f411649c597ce0b11ea AS deps
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN npm ci
 RUN npx prisma generate
 
 # Stage 2: Builder
-FROM node:lts AS builder
+FROM node@sha256:032e78d7e54e352129831743737e3a83171d9cc5b5896f411649c597ce0b11ea AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -26,7 +26,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # Stage 3: Runner
-FROM node:lts AS runner
+FROM node@sha256:032e78d7e54e352129831743737e3a83171d9cc5b5896f411649c597ce0b11ea AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

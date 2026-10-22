@@ -1,0 +1,68 @@
+name: Verify and publish older Flare incident image
+
+on:
+  push:
+    branches: [incident/older-flare-runtime-20261021]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: older-flare-incident-image
+  cancel-in-progress: false
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build isolated AMD64 candidate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: flare-incident-candidate:local
+          labels: |
+            org.opencontainers.image.source=https://github.com/FlintSH/Flare
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.base.digest=sha256:032e78d7e54e352129831743737e3a83171d9cc5b5896f411649c597ce0b11ea
+
+      - name: Verify exact packaged runtime and native image processing
+        run: docker run --rm -i --entrypoint node flare-incident-candidate:local < .github/scripts/verify-incident-image.cjs
+
+      - name: Verify inherited startup with isolated PostgreSQL fixtures
+        run: bash .github/scripts/smoke-incident-image.sh flare-incident-candidate:local
+
+      - name: Login to Docker Hub after candidate passes
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publish the tested image under a commit-specific incident tag
+        env:
+          INCIDENT_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image_tag="flintsh/flare:incident-20261021-legacy-${INCIDENT_COMMIT}"
+          tested_id=$(docker inspect -f '{{.Id}}' flare-incident-candidate:local)
+          docker tag flare-incident-candidate:local "$image_tag"
+          docker push "$image_tag"
+          docker image rm "$image_tag" >/dev/null
+          docker pull "$image_tag"
+          published_id=$(docker inspect -f '{{.Id}}' "$image_tag")
+          test "$tested_id" = "$published_id"
+          published_digest=$(docker inspect -f '{{index .RepoDigests 0}}' "$image_tag")
+          {
+            echo "Verified and published the exact tested image."
+            echo "Source commit: ${INCIDENT_COMMIT}"
+            echo "Image: ${published_digest}"
+            echo "Image configuration: ${published_id}"
+            echo "No production database or credential was supplied to the fixture tests."
+          } >> "$GITHUB_STEP_SUMMARY"
