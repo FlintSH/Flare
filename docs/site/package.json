@@ -21,7 +21,7 @@
     "@playwright/test": "1.63.0",
     "axe-core": "4.13.0",
     "diff": "9.0.0",
-    "markdown-it": "14.3.2",
+    "markdown-it": "14.3.3",
     "prettier": "3.9.9",
     "sanitize-html": "2.18.0",
     "sharp": "0.35.5",
