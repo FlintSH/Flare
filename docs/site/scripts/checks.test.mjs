@@ -166,3 +166,36 @@ test('coverage gate requires docs in the feature commit, not a later follow-up',
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('build check decodes each HTML entity in a link exactly once', async () => {
+  const dist = await mkdtemp(resolve(tmpdir(), 'flare-docs-build-'))
+  const check = () =>
+    spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL('./check-build.mjs', import.meta.url))],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, DOCS_DIST: dist, DOCS_BASE: '/' },
+      }
+    )
+  try {
+    await writeFile(resolve(dist, 'docs-versions.json'), '{}\n')
+    await writeFile(resolve(dist, 'a&quot;b.html'), '<h1 id="top">A</h1>\n')
+    await writeFile(resolve(dist, "it's.html"), '<h1>B</h1>\n')
+    await writeFile(
+      resolve(dist, 'index.html'),
+      '<a href="./a&amp;quot;b.html#top">A</a> <a href="./it&#39;s.html">B</a>\n'
+    )
+    const decodedOnce = check()
+    assert.equal(decodedOnce.status, 0, decodedOnce.stderr)
+    await writeFile(
+      resolve(dist, 'index.html'),
+      '<a href="./a&quot;b.html">A</a>\n'
+    )
+    const quoted = check()
+    assert.equal(quoted.status, 1)
+    assert.match(quoted.stderr, /index\.html: missing \.\/a"b\.html/)
+  } finally {
+    await rm(dist, { recursive: true, force: true })
+  }
+})
