@@ -121,7 +121,11 @@ DOCS_BASE=/flare/ npm test
 
 Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. Use Node.js 24 and the pnpm version in the root `package.json`; install with `pnpm install --frozen-lockfile` and `npm ci --prefix docs/site`. Check both dependency trees with `pnpm audit` and `npm audit --prefix docs/site` before a release. A clean audit describes the advisories known at that time, not a guarantee against future findings.
 
-The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress. Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
+The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress.
+
+Later security floors raise that proxy stack's `basic-ftp` to 6.2.3 or later, because `get-uri` 8 still requests the vulnerable 5.x line. They also keep `ip-address` and Vitest's Vite on patched releases, because `pnpm update ip-address vite` leaves both at their locked vulnerable versions. Tailwind CSS 3 requires `postcss-selector-parser` 6.x. Keep it on 6.1.5 or later, the maintainers' backport of the 7.1.6 parser fix, rather than forcing 7.x onto Tailwind 3. Until advisory GHSA-rj75-hqrm-r3gf lists 6.1.5 as patched, `pnpm audit` and Dependabot still report it.
+
+Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
 
 ## Database permission and avatar regression tests
 
