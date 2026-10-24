@@ -23,12 +23,12 @@
     "diff": "9.0.0",
     "markdown-it": "14.3.3",
     "prettier": "3.9.9",
-    "sanitize-html": "2.18.0",
+    "sanitize-html": "2.18.1",
     "sharp": "0.35.5",
     "vitepress": "1.6.4",
     "vue": "3.5.43"
   },
   "overrides": {
-    "vite": "6.4.3"
+    "vite": "6.4.5"
   }
 }

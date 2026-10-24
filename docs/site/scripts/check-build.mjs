@@ -23,11 +23,10 @@ for (const file of files) {
   if (/^(test-results|playwright-report)\//.test(relative(dist, file)))
     errors.add(`Test artifacts must not be published: ${relative(dist, file)}`)
 }
+// Decode in one pass so an escaped entity such as `&amp;quot;` stays `&quot;`.
+const entities = { '&amp;': '&', '&#39;': "'", '&quot;': '"' }
 const decode = (value) =>
-  value
-    .replaceAll('&amp;', '&')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&quot;', '"')
+  value.replace(/&(?:amp|#39|quot);/g, (entity) => entities[entity])
 for (const file of pages) {
   const html = await readFile(file, 'utf8')
   for (const match of html.matchAll(/\b(?:href|src|poster)="([^"]+)"/g)) {
