@@ -160,8 +160,7 @@ export async function requireUploadMetadata(
   return metadata
 }
 
-const initSchema = uploadRequestOptionsSchema
-  .innerType()
+const initSchema = uploadRequestOptionsSchema.out
   .extend({
     filename: z.string().min(1).max(255),
     mimeType: z.string().min(1).max(255),
@@ -238,8 +237,7 @@ export async function initializeChunkUpload(
   return { uploadId, fileKey: destination.filePath }
 }
 
-const completeSchema = uploadRequestOptionsSchema
-  .innerType()
+const completeSchema = uploadRequestOptionsSchema.out
   .extend({
     uploadId: z.string().optional(),
     parts: z

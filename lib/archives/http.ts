@@ -14,6 +14,7 @@ import { PermissionError, getUserAccess } from '@/lib/permissions/server'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { StorageTargetChangedError } from '@/lib/storage/target-provider'
 import { UploadError } from '@/lib/uploads/options'
+import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
 import { ArchiveError } from './errors'
 import type { ArchiveEntrySelector } from './index-cache'
@@ -44,7 +45,7 @@ export const createArchiveSchema = z
     format: z.enum(['zip', 'tar.gz']),
     folderId: folderIdSchema.nullable(),
     profileId: z.string().min(1).max(100).nullable().optional(),
-    profileRevision: z.string().datetime({ offset: true }).optional(),
+    profileRevision: isoDateTimeWithOffset.optional(),
     profileEffectiveRevision: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
@@ -62,7 +63,7 @@ export const extractArchiveSchema = z
     folderId: folderIdSchema.nullable(),
     name: folderNameSchema,
     profileId: z.string().min(1).max(100).nullable().optional(),
-    profileRevision: z.string().datetime({ offset: true }).optional(),
+    profileRevision: isoDateTimeWithOffset.optional(),
     profileEffectiveRevision: z
       .string()
       .regex(/^[a-f0-9]{64}$/)

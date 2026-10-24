@@ -41,7 +41,7 @@ export const emailConfigSchema = z.object({
       ca: z.string().max(65536).default(''),
       timeoutSeconds: z.number().int().min(3).max(120).default(15),
     })
-    .default({}),
+    .prefault({}),
   fromName: line.default('Flare'),
   fromAddress: address.default(''),
   replyTo: address.default(''),
@@ -52,7 +52,7 @@ export const emailConfigSchema = z.object({
       tokenMinutes: z.number().int().min(5).max(120).default(30),
       rotateUploadToken: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   verification: z
     .object({
       mode: z
@@ -68,13 +68,13 @@ export const emailConfigSchema = z.object({
       trustOidc: z.boolean().default(false),
       tokenHours: z.number().int().min(1).max(168).default(24),
     })
-    .default({}),
+    .prefault({}),
   changes: z
     .object({
       enabled: z.boolean().default(true),
       requireOldEmail: z.boolean().default(false),
     })
-    .default({}),
+    .prefault({}),
   limits: z
     .object({
       resendSeconds: z.number().int().min(30).max(3600).default(60),
@@ -82,7 +82,7 @@ export const emailConfigSchema = z.object({
       ipPerHour: z.number().int().min(1).max(1000).default(20),
       dailyLimit: z.number().int().min(1).max(100000).default(500),
     })
-    .default({}),
+    .prefault({}),
   delivery: z
     .object({
       maxAttempts: z.number().int().min(1).max(10).default(3),
@@ -90,7 +90,7 @@ export const emailConfigSchema = z.object({
       concurrency: z.number().int().min(1).max(10).default(2),
       retentionDays: z.number().int().min(1).max(90).default(14),
     })
-    .default({}),
+    .prefault({}),
   branding: z
     .object({
       instanceName: line.default('Flare'),
@@ -113,7 +113,7 @@ export const emailConfigSchema = z.object({
         .default('Confirm your new email address'),
       introText: z.string().max(2000).default(''),
     })
-    .default({}),
+    .prefault({}),
 })
 
 export type EmailConfig = z.infer<typeof emailConfigSchema>

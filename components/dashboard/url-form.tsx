@@ -52,7 +52,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
     } catch (failure) {
       setError(
         failure instanceof z.ZodError
-          ? failure.errors[0].message
+          ? failure.issues[0].message
           : failure instanceof Error
             ? failure.message
             : 'Could not create a short link. Please try again.'

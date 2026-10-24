@@ -184,7 +184,7 @@ export const customizationSchema = z
   .object({
     version: z.literal(1).default(1),
     revision: z.number().int().nonnegative().default(0),
-    published: appearanceDocumentSchema.default(DEFAULT_APPEARANCE),
+    published: appearanceDocumentSchema.prefault(DEFAULT_APPEARANCE),
     draft: appearanceDocumentSchema.nullable().default(null),
     previous: appearanceDocumentSchema.nullable().default(null),
     publishedAt: z.string().datetime().nullable().default(null),

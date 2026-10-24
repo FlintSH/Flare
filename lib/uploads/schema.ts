@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
+
 export const expirationSchema = z.enum([
   'DISABLED',
   'HOUR',
@@ -58,8 +60,7 @@ export type UploadProfileView = {
 
 export const uploadRequestOptionsSchema = z.preprocess(
   discardLegacyCopyFormat,
-  uploadProfileOptionsSchema
-    .innerType()
+  uploadProfileOptionsSchema.out
     .extend({
       profileId: z.string().min(1).max(100).nullable().optional(),
       folderId: z.string().min(1).max(128).nullable().optional(),
@@ -72,7 +73,7 @@ export const uploadRequestOptionsSchema = z.preprocess(
         )
         .nullable()
         .optional(),
-      expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+      expiresAt: isoDateTimeWithOffset.nullable().optional(),
     })
     .strict()
 )

@@ -33,8 +33,8 @@ import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 
 const flameshotFormSchema = z.object({
-  useWayland: z.boolean().default(false),
-  useCompositor: z.boolean().default(false),
+  useWayland: z.boolean(),
+  useCompositor: z.boolean(),
 })
 
 export function FlameshotTool() {

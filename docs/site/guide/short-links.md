@@ -56,10 +56,10 @@ For a custom integration, use a [named API token](../api/authentication) with `u
 
 ## Troubleshooting
 
-| Problem                              | Next step                                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Address rejected                     | Include the full `https://` or `http://` address and check for spaces or malformed characters.               |
-| Link goes to the wrong page          | Check the original URL in the table. Create a replacement if it was entered incorrectly.                     |
-| Short link no longer opens           | Check that it still exists and that the instance's domain is reachable.                                      |
-| Short link opens a destination error | The redirect may be working while the target page is unavailable or requires sign-in. Test the original URL. |
-| Your list fails to load              | Use the retry control or reload after checking your connection. A load failure is not a successful deletion. |
+| Problem                              | Next step                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Address rejected                     | Include the full `https://` or `http://` address and check for spaces or malformed characters. Other schemes, such as `ftp://`, show **Only HTTP and HTTPS URLs are allowed**. |
+| Link goes to the wrong page          | Check the original URL in the table. Create a replacement if it was entered incorrectly.                                                                                       |
+| Short link no longer opens           | Check that it still exists and that the instance's domain is reachable.                                                                                                        |
+| Short link opens a destination error | The redirect may be working while the target page is unavailable or requires sign-in. Test the original URL.                                                                   |
+| Your list fails to load              | Use the retry control or reload after checking your connection. A load failure is not a successful deletion.                                                                   |

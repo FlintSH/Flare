@@ -34,14 +34,12 @@ import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 
 const spectacleFormSchema = z.object({
-  scriptType: z.enum(['screenshot', 'recording']).default('screenshot'),
-  useWayland: z.boolean().default(false),
-  includePointer: z.boolean().default(false),
-  captureMode: z
-    .enum(['fullscreen', 'current', 'activewindow', 'region'])
-    .default('region'),
-  recordingMode: z.enum(['fullscreen', 'current', 'region']).default('region'),
-  delay: z.number().min(0).max(10000).default(0),
+  scriptType: z.enum(['screenshot', 'recording']),
+  useWayland: z.boolean(),
+  includePointer: z.boolean(),
+  captureMode: z.enum(['fullscreen', 'current', 'activewindow', 'region']),
+  recordingMode: z.enum(['fullscreen', 'current', 'region']),
+  delay: z.number().min(0).max(10000),
 })
 
 export function SpectacleTool() {

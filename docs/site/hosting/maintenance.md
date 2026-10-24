@@ -97,7 +97,7 @@ docker compose logs --tail=150 flare
 docker compose ps
 ```
 
-The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
+The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. Settings you saved keep their values; settings sections added by a newer release, such as email, single sign-on, invite limits, and appearance, start with their defaults. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
