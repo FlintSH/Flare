@@ -22,7 +22,14 @@ export const FILE_PASSWORD_ATTEMPTS = {
 /** Correct passwords are remembered briefly so media ranges skip bcrypt. */
 const VERIFIED_TTL_MS = 10 * 60_000
 const MAX_VERIFIED = 1_000
-const MAX_BUCKETS = 10_000
+/**
+ * Counters per client address can be evicted when their table is full, which
+ * only resets that address. Live counters per file never are: they bound
+ * guessing from rotating addresses, so a full table pauses checks for new
+ * files instead of forgetting one.
+ */
+const MAX_FILE_BUCKETS = 10_000
+const MAX_REQUESTER_BUCKETS = 10_000
 
 type Bucket = {
   resetAt: number
@@ -32,7 +39,8 @@ type Bucket = {
 }
 type State = {
   key: Buffer
-  buckets: Map<string, Bucket>
+  files: Map<string, Bucket>
+  requesters: Map<string, Bucket>
   verified: Map<string, number>
 }
 
@@ -43,9 +51,11 @@ const processState = globalThis as typeof globalThis & {
 }
 const state = (processState[stateKey] ??= {
   key: randomBytes(32),
-  buckets: new Map(),
   verified: new Map(),
 }) as State
+// A process can keep state created by an earlier module version (dev reloads).
+state.files ??= new Map()
+state.requesters ??= new Map()
 
 // A keyed digest of a non-secret value, such as a client address, so the
 // value itself is never kept in the maps below.
@@ -68,54 +78,79 @@ function kdf(secret: string, salt: string) {
   )
 }
 
-const fileKey = (fileId: string) => `file:${fileId}`
 const requesterKey = (fileId: string, requester: string) =>
-  `requester:${fileId}:${digest('requester', requester)}`
+  `${fileId}:${digest('requester', requester)}`
 
-function liveBucket(key: string, now: number) {
-  const bucket = state.buckets.get(key)
+type Scope = {
+  table: Map<string, Bucket>
+  key: string
+  limit: number
+}
+
+function liveBucket({ table, key }: Scope, now: number) {
+  const bucket = table.get(key)
   if (bucket && bucket.resetAt <= now) {
-    state.buckets.delete(key)
+    table.delete(key)
     return undefined
   }
   return bucket
 }
 
-function makeRoom(now: number) {
-  if (state.buckets.size < MAX_BUCKETS) return
-  for (const [key, bucket] of state.buckets)
-    if (bucket.resetAt <= now) state.buckets.delete(key)
+/** Whether `table` has room for one more counter, evicting if it may. */
+function makeRoom(table: Map<string, Bucket>, now: number) {
+  const max = table === state.files ? MAX_FILE_BUCKETS : MAX_REQUESTER_BUCKETS
+  if (table.size < max) return true
+  for (const [key, bucket] of table)
+    if (bucket.resetAt <= now) table.delete(key)
+  if (table.size < max) return true
+  if (table === state.files) return false
   // Oldest windows go first; they are also the closest to expiring.
-  for (const key of state.buckets.keys()) {
-    if (state.buckets.size < MAX_BUCKETS) break
-    state.buckets.delete(key)
+  for (const key of table.keys()) {
+    if (table.size < max) break
+    table.delete(key)
   }
+  return true
 }
 
-function ensureBucket(key: string, now: number) {
-  let bucket = liveBucket(key, now)
+function ensureBucket(scope: Scope, now: number) {
+  let bucket = liveBucket(scope, now)
   if (!bucket) {
-    makeRoom(now)
+    if (!makeRoom(scope.table, now)) return undefined
     bucket = {
       resetAt: now + FILE_PASSWORD_ATTEMPTS.windowMs,
       failures: new Set(),
       pending: new Map(),
     }
-    state.buckets.set(key, bucket)
+    scope.table.set(scope.key, bucket)
   }
   return bucket
 }
 
+// The file's own counter comes first, so a full file table refuses a check
+// before anything is recorded for it.
 function scopes(fileId: string, requester: string | null) {
-  const list: { key: string; limit: number }[] = [
-    { key: fileKey(fileId), limit: FILE_PASSWORD_ATTEMPTS.perFile },
+  const list: Scope[] = [
+    {
+      table: state.files,
+      key: fileId,
+      limit: FILE_PASSWORD_ATTEMPTS.perFile,
+    },
   ]
   if (requester)
     list.push({
+      table: state.requesters,
       key: requesterKey(fileId, requester),
       limit: FILE_PASSWORD_ATTEMPTS.perRequester,
     })
   return list
+}
+
+/** When the oldest live file counter expires, freeing room for another. */
+function fileTableRoomAt(now: number) {
+  let resetAt = Infinity
+  for (const bucket of state.files.values())
+    if (bucket.resetAt > now) resetAt = Math.min(resetAt, bucket.resetAt)
+  return resetAt === Infinity ? now + 1000 : resetAt
 }
 
 function retryAfter(resetAt: number, now: number) {
@@ -132,9 +167,9 @@ export function filePasswordBlock(
   now = Date.now()
 ): { retryAfterSeconds: number } | null {
   let resetAt = 0
-  for (const { key, limit } of scopes(fileId, requester)) {
-    const bucket = liveBucket(key, now)
-    if (bucket && bucket.failures.size >= limit)
+  for (const scope of scopes(fileId, requester)) {
+    const bucket = liveBucket(scope, now)
+    if (bucket && bucket.failures.size >= scope.limit)
       resetAt = Math.max(resetAt, bucket.resetAt)
   }
   return resetAt ? retryAfter(resetAt, now) : null
@@ -163,20 +198,22 @@ export function admitFilePasswordAttempt(
 ): FilePasswordAdmission {
   const limits = scopes(fileId, requester)
   let resetAt = 0
-  for (const { key, limit } of limits) {
-    const bucket = liveBucket(key, now)
+  for (const scope of limits) {
+    const bucket = liveBucket(scope, now)
     if (!bucket) continue
     let used = bucket.failures.size
     for (const pending of bucket.pending.keys())
       if (!bucket.failures.has(pending)) used++
     const known = bucket.failures.has(attempt) || bucket.pending.has(attempt)
-    if (bucket.failures.size >= limit || (!known && used >= limit))
+    if (bucket.failures.size >= scope.limit || (!known && used >= scope.limit))
       resetAt = Math.max(resetAt, bucket.resetAt)
   }
   if (resetAt) return { admitted: false, ...retryAfter(resetAt, now) }
 
-  for (const { key } of limits) {
-    const bucket = ensureBucket(key, now)
+  for (const scope of limits) {
+    const bucket = ensureBucket(scope, now)
+    if (!bucket)
+      return { admitted: false, ...retryAfter(fileTableRoomAt(now), now) }
     bucket.pending.set(attempt, (bucket.pending.get(attempt) ?? 0) + 1)
   }
   let settled = false
@@ -186,16 +223,17 @@ export function admitFilePasswordAttempt(
       if (settled) return
       settled = true
       const at = Date.now()
-      for (const { key, limit } of limits) {
-        const bucket = state.buckets.get(key)
+      for (const scope of limits) {
+        const bucket = scope.table.get(scope.key)
         if (bucket) {
           const remaining = (bucket.pending.get(attempt) ?? 1) - 1
           if (remaining > 0) bucket.pending.set(attempt, remaining)
           else bucket.pending.delete(attempt)
         }
         if (!correct) {
-          const live = ensureBucket(key, at)
-          if (live.failures.size < limit) live.failures.add(attempt)
+          const live = ensureBucket(scope, at)
+          if (live && live.failures.size < scope.limit)
+            live.failures.add(attempt)
         }
       }
       if (correct) clearFilePasswordFailures(fileId, requester)
@@ -208,7 +246,7 @@ export function clearFilePasswordFailures(
   fileId: string,
   requester: string | null
 ) {
-  if (requester) state.buckets.delete(requesterKey(fileId, requester))
+  if (requester) state.requesters.delete(requesterKey(fileId, requester))
 }
 
 // The stored hash is part of the key, so changing or removing the file's

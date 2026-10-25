@@ -2,7 +2,11 @@ import { hashSync } from 'bcryptjs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { type FileAccessInfo, checkFileAccess } from '@/lib/files/access'
-import { FILE_PASSWORD_ATTEMPTS } from '@/lib/files/password-attempts'
+import {
+  FILE_PASSWORD_ATTEMPTS,
+  admitFilePasswordAttempt,
+  filePasswordBlock,
+} from '@/lib/files/password-attempts'
 
 const bcrypt = vi.hoisted(() => ({ compare: vi.fn() }))
 vi.mock('bcryptjs', async (importOriginal) => {
@@ -354,5 +358,50 @@ describe('verified file password cache', () => {
     expect(
       await checkFileAccess(file, null, password, visitor(null))
     ).toMatchObject({ reason: 'password_rate_limited', status: 429 })
+  })
+})
+
+// These fill the shared tables, so they stay at the end of the file.
+describe('attempt table capacity', () => {
+  function wrongGuess(
+    fileId: string,
+    requester: string | null,
+    attempt: string,
+    now = Date.now()
+  ) {
+    const admission = admitFilePasswordAttempt(fileId, requester, attempt, now)
+    if (admission.admitted) admission.settle(false)
+    return admission
+  }
+
+  it('keeps a file count while rotating addresses fill the address table', () => {
+    const fileId = `password-limit-${++sequence}`
+    for (let i = 0; i < FILE_PASSWORD_ATTEMPTS.perFile - 1; i++)
+      wrongGuess(fileId, `198.51.100.${i}`, `guess-${i}`)
+    // Repeating a counted guess from new addresses adds address counters
+    // without adding to the file's count, until the address table is full.
+    for (let i = 0; i < 10_050; i++)
+      wrongGuess(fileId, `rotating-${i}`, 'guess-0')
+    wrongGuess(fileId, 'rotating-last', 'guess-new')
+    expect(filePasswordBlock(fileId, '192.0.2.1')).not.toBeNull()
+  })
+
+  it('pauses checks for another file rather than forget a live count', () => {
+    // An hour on, every counter from the earlier cases has expired.
+    const later = Date.now() + 60 * 60_000
+    for (let i = 0; i < 10_000; i++)
+      expect(wrongGuess(`capacity-${i}`, null, 'wrong', later).admitted).toBe(
+        true
+      )
+    const refused = admitFilePasswordAttempt('capacity-new', null, 'x', later)
+    expect(refused).toEqual({
+      admitted: false,
+      retryAfterSeconds: FILE_PASSWORD_ATTEMPTS.windowMs / 1000,
+    })
+    // Files already being counted keep accepting checks.
+    expect(wrongGuess('capacity-0', null, 'another', later).admitted).toBe(true)
+    // Once the oldest windows end, new files are counted again.
+    const after = later + FILE_PASSWORD_ATTEMPTS.windowMs + 1
+    expect(wrongGuess('capacity-new', null, 'x', after).admitted).toBe(true)
   })
 })
