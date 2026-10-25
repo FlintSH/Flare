@@ -6,8 +6,8 @@ I currently maintain security updates for:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 3.x.x   | :white_check_mark: |
+| < 3.0   | :x:                |
 
 # DO NOT OPEN AI GENERATED SECURITY ADVISORIES IN THIS REPOSITORY
 

@@ -101,6 +101,19 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Upgrading from 3.0 to 3.0.1
+
+Flare 3.0.1 is a security release. Use the normal backup and upgrade steps above. There are no database migrations, and nobody is signed out unless you change `NEXTAUTH_SECRET`. Then work through the items that apply to your installation:
+
+- **You started Flare with the repository's `docker-compose.yml`.** Follow [Upgrade from the earlier repository Compose file](./docker#upgrade-from-the-earlier-repository-compose-file) first. If port 5432 was reachable from outside the host, treat the database and everything in it as exposed: change the database password, replace `NEXTAUTH_SECRET` as described in [Startup logs warn about NEXTAUTH_SECRET](./troubleshooting#startup-logs-warn-about-nextauth-secret), and review accounts and roles.
+- **A CDN or caching proxy sits in front of Flare.** Purge everything cached under `/api/files/` once, with a prefix or wildcard purge rather than that single URL. Earlier releases sent [protected videos as publicly cacheable](./reverse-proxy#keep-access-decisions-in-flare) and [thumbnails without the sandbox policy](#sandboxed-image-previews).
+- **You use S3 storage and people you don't fully trust can upload.** In earlier releases, a chunked upload's name could make that account's data export write a file anywhere the app could write, including over its own code. Updating recreates the app container, which discards anything written outside your volumes. Search [Audit log](/admin/audit) for `..` to find uploads whose names contained path segments. If you find any, rotate `NEXTAUTH_SECRET`, the database password, and your S3 keys.
+- **You gave `appearance.manage` to someone who isn't an administrator.** Review appearance changes as described in [Legacy colors and favicon](/admin/appearance#legacy-colors-and-favicon). Unsafe saved values are ignored and removed the next time settings are saved.
+- **File passwords.** New passwords need at least 8 characters, and existing ones keep working until they're changed. Repeated wrong guesses now pause a file's password checks; see [Incorrect password attempts](/guide/sharing#incorrect-password-attempts).
+- **Optional settings.** `FLARE_AUDIT_RETENTION_DAYS` limits how long audit events are kept, and `FLARE_CLIENT_IP_HEADER` names one header your edge sets to the client address. See [Core environment variables](./configuration#core-environment-variables).
+
+Going back to 3.0.0 needs only the old image, because 3.0.1 doesn't change the database. It brings the fixed vulnerabilities back.
+
 ### Sandboxed image previews
 
 Earlier builds served `/api/files/{id}/thumbnail` without the sandbox policy that raw links use. Anyone allowed to upload could store an SVG whose script ran on your Flare origin when someone opened that thumbnail URL directly, with the visitor's session. Updated builds send `Content-Security-Policy: sandbox` on every thumbnail. No data migration or setting change is needed.
