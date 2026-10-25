@@ -108,21 +108,24 @@ export async function parseSingleFileUpload({
 
       const mimeType = info.mimeType || 'application/octet-stream'
 
+      // Listen before any await: busboy can reach the limit while the
+      // destination is still being resolved, and a missed event would store
+      // the cut-off file as if it were complete.
+      fileStream.on('limit', () => {
+        limitHit = quotaIsBinding ? 'quota' : 'size'
+        // Abort the in-progress storage write and stop reading the client.
+        fileStream.destroy(new Error('FILE_SIZE_LIMIT'))
+        nodeStream.unpipe(bb)
+        nodeStream.destroy()
+        filePromise
+          .catch(() => {})
+          .then(() => finish({ upload: null, fields, limitHit }))
+      })
+
       filePromise = (async () => {
         const destination = await resolveDestination({
           filename: info.filename || 'file',
           mimeType,
-        })
-
-        fileStream.on('limit', () => {
-          limitHit = quotaIsBinding ? 'quota' : 'size'
-          // Abort the in-progress storage write and stop reading the client.
-          fileStream.destroy(new Error('FILE_SIZE_LIMIT'))
-          nodeStream.unpipe(bb)
-          nodeStream.destroy()
-          filePromise
-            .catch(() => {})
-            .then(() => finish({ upload: null, fields, limitHit }))
         })
 
         const { size } = await storageProvider.uploadStream(

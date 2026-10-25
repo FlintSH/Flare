@@ -137,6 +137,8 @@ Multipart filenames are read as UTF-8, which is what browsers, curl, and most HT
 
 If Flare rejects an upload after reading the filename but before storing the bytes, for example because of its name or upload options, it answers at once with the error and discards the rest of the request body. Earlier builds could leave such a request waiting with no response until the client timed out.
 
+A multipart upload that exceeds the maximum file size or the remaining quota always returns `413`. Earlier builds could miss the limit when it was reached before Flare had prepared the upload's destination, which is likely when little quota remains and the request arrives quickly. They then stored the first part of the file and returned success: with 1 KB of quota left, a 64 KB upload was saved as a 1,024-byte file. Check recent uploads from accounts close to their quota if the file sizes look wrong.
+
 ## List and search files
 
 **`GET /api/files`** · Scope: **`files:read`**

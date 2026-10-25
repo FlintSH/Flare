@@ -43,16 +43,28 @@ function parse(
     urlPath: string
     displayName: string
     urlSafeName: string
-  }>
+  }>,
+  options: {
+    storageProvider?: StorageProvider
+    maxBytes?: number
+    quotaLimitBytes?: number
+  } = {}
 ) {
   return parseSingleFileUpload({
     req: request(payload),
-    storageProvider: storage,
-    maxBytes: 1024 * 1024,
-    quotaLimitBytes: Infinity,
+    storageProvider: options.storageProvider ?? storage,
+    maxBytes: options.maxBytes ?? 1024 * 1024,
+    quotaLimitBytes: options.quotaLimitBytes ?? Infinity,
     resolveDestination,
   })
 }
+
+const destination = async ({ filename }: { filename: string }) => ({
+  filePath: 'uploads/owner/key/file.bin',
+  urlPath: '/owner/file.bin',
+  displayName: filename,
+  urlSafeName: 'file.bin',
+})
 
 describe('multipart uploads', () => {
   it('keeps a UTF-8 filename instead of reading it as Latin-1', async () => {
@@ -103,4 +115,38 @@ describe('multipart uploads', () => {
     ).rejects.toThrow('Invalid filename.')
     expect(Date.now() - started).toBeLessThan(2_000)
   }, 10_000)
+
+  it('fails promptly when storage rejects the bytes', async () => {
+    const failing = {
+      uploadStream: async (stream: Readable) => {
+        for await (const _chunk of stream) throw new Error('bucket unavailable')
+        return { size: 0 }
+      },
+    } as unknown as StorageProvider
+    const started = Date.now()
+    await expect(
+      parse(
+        multipart(Buffer.from('report.txt'), 'x'.repeat(256 * 1024)),
+        destination,
+        { storageProvider: failing }
+      )
+    ).rejects.toThrow('bucket unavailable')
+    expect(Date.now() - started).toBeLessThan(2_000)
+  }, 10_000)
+
+  it.each([
+    ['size', { maxBytes: 1024, quotaLimitBytes: Infinity }],
+    ['quota', { maxBytes: 1024 * 1024, quotaLimitBytes: 1024 }],
+  ] as const)(
+    'reports the %s limit instead of an error',
+    async (limitHit, limits) => {
+      const result = await parse(
+        multipart(Buffer.from('big.bin'), 'x'.repeat(64 * 1024)),
+        destination,
+        limits
+      )
+      expect(result).toMatchObject({ upload: null, limitHit })
+    },
+    10_000
+  )
 })
