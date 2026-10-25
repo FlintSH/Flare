@@ -77,6 +77,8 @@ An upload crosses several independent limits: browser/tool behavior, CDN or tunn
 
 Flare defaults to a **100 MB** maximum file size, calculated in binary units. The nginx example leaves extra room above that for a multipart request. If you increase the application limit, increase the proxy ceiling to fit the largest request you intend to accept. Chunking can reduce the size of individual requests, but direct upload clients still send their whole file in one request.
 
+Builds before this fix cut every API request body off at 10 MB inside Flare itself, whatever the proxy allowed. Next.js copies a request's body when middleware runs for it and keeps only the first 10 MB of the copy the route reads. A direct upload larger than that failed with `500` and "Upload could not be completed.", and a chunk part between 10 MB and 64 MiB was stored short, which corrupted the assembled file. Browser uploads were unaffected because the dashboard sends 5 MiB parts. Middleware no longer runs for `/api` routes, so request bodies reach them whole, up to your configured limits. Re-upload any file that was assembled from parts larger than 10 MB by a client other than the dashboard.
+
 ## Keep access decisions in Flare
 
 Send file routes to the application. Do not publish the uploads directory as an unrestricted static directory; doing that would bypass the visibility and password checks on Flare's file routes. Similarly, do not add blanket shared caching for authenticated APIs, account pages, or protected file responses.
