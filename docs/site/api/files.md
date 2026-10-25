@@ -133,6 +133,12 @@ Maximum file size and quota are operator settings, not fixed API constants. Flar
 
 The server checks detected file bytes against the claimed MIME type. A successful file-ready event means the upload was committed; optional OCR may finish later. Ordinary multipart uploads have no idempotency-key parameter: retrying after a lost response can create another file.
 
+Multipart filenames are read as UTF-8, which is what browsers, curl, and most HTTP libraries send, so `café 日本語.png` is stored as written. A client can instead declare the encoding with an RFC 5987 `filename*` parameter, such as `filename*=UTF-8''caf%C3%A9.png`. Builds before this change decoded a plain `filename` as Latin-1, so names with non-ASCII characters were stored garbled; those files keep their stored names.
+
+If Flare rejects an upload after reading the filename but before storing the bytes, for example because of its name or upload options, it answers at once with the error and discards the rest of the request body. Earlier builds could leave such a request waiting with no response until the client timed out.
+
+A multipart upload that exceeds the maximum file size or the remaining quota always returns `413`. Flare stops reading the body as soon as either limit is reached and keeps none of the file, even when the limit is reached before Flare has started writing to storage. Earlier builds could miss the limit when it was reached before Flare had prepared the upload's destination, which is likely when little quota remains and the request arrives quickly. They then stored the first part of the file and returned success: with 1 KB of quota left, a 64 KB upload was saved as a 1,024-byte file. Check recent uploads from accounts close to their quota if the file sizes look wrong.
+
 ## List and search files
 
 **`GET /api/files`** · Scope: **`files:read`**
