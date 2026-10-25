@@ -69,9 +69,9 @@ A local file-open failure or failed view-counter write returns `500` and closes 
 | `200`  | `{ success: false, error, retryAfter? }`                      | Reading failed. The error never includes storage or recognition details. Flare reads the image again only after 5 minutes; until then `retryAfter` gives seconds. |
 | `202`  | `{ success: false, status: "processing", error, retryAfter }` | The request waited 60 seconds. Reading continues, and a later request returns the saved text.                                                                     |
 | `429`  | `{ success: false, error, retryAfter }`                       | The requester started 20 readings in the last 10 minutes: per account when signed in, otherwise per client address.                                               |
-| `503`  | `{ success: false, error, retryAfter }`                       | Ten requests are already waiting for the queue.                                                                                                                   |
+| `503`  | `{ success: false, error, retryAfter }`                       | Ten new images are already waiting to be read, or 30 requests are already waiting for results, counting requests that joined an image being read.                 |
 
-`202`, `429`, and `503` also send `Retry-After` in seconds. Joining work that is already queued and reading saved text don't count toward the limit. Limits and queue state are per process and reset when Flare restarts.
+`202`, `429`, and `503` also send `Retry-After` in seconds. A requester is charged only when its request starts reading an image. Joining work that is already queued, several simultaneous requests for one image (charged once), and reading saved text don't count toward the limit, and a request refused with `503` is never charged. The 30-request cap bounds the connections OCR can hold open for up to 60 seconds each, even when many visitors wait for one popular image. Limits and queue state are per process and reset when Flare restarts.
 
 ## Dashboard account routes requiring a browser session
 

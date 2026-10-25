@@ -31,7 +31,12 @@ import {
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
-import { OcrDialog, requestOcr } from '@/components/shared/ocr-dialog'
+import {
+  OcrDialog,
+  type OcrDialogState,
+  ocrDialogState,
+  requestOcr,
+} from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -255,27 +260,23 @@ export function FileCard({
     setIsLoadingOcr(true)
     setOcrError(null)
     setOcrNotice(null)
+    // Busy, limited, still-running and failed requests are all shown in the
+    // dialog with a way to ask again, including a retry that never arrived.
+    const show = (state: OcrDialogState) => {
+      setOcrText(state.text)
+      setOcrConfidence(state.confidence)
+      setOcrNotice(state.notice)
+      setOcrError(state.error)
+      setCanRetryOcr(state.canRetry)
+      setIsOcrDialogOpen(true)
+    }
     try {
       const outcome = await requestOcr(`/api/files/${file.id}/ocr`, signal)
       if (signal.aborted) return
-      // Busy, limited, and still-running results are shown in the dialog
-      // with a way to ask again.
-      setOcrText(outcome.kind === 'text' ? outcome.text : null)
-      setOcrConfidence(outcome.kind === 'text' ? outcome.confidence : null)
-      setOcrNotice(outcome.kind === 'pending' ? outcome.message : null)
-      setOcrError(outcome.kind === 'error' ? outcome.message : null)
-      setCanRetryOcr(
-        outcome.kind === 'pending' ||
-          (outcome.kind === 'error' && outcome.canRetry)
-      )
-      setIsOcrDialogOpen(true)
+      show(ocrDialogState(outcome))
     } catch {
       if (signal.aborted) return
-      toast({
-        title: 'Couldn’t extract text',
-        description: 'Please try again.',
-        variant: 'destructive',
-      })
+      show(ocrDialogState(null))
     } finally {
       if (!signal.aborted) setIsLoadingOcr(false)
     }

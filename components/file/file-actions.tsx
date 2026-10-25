@@ -13,7 +13,12 @@ import {
   ScanText,
 } from 'lucide-react'
 
-import { OcrDialog, requestOcr } from '@/components/shared/ocr-dialog'
+import {
+  OcrDialog,
+  type OcrDialogState,
+  ocrDialogState,
+  requestOcr,
+} from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
 import { useFileActions } from '@/hooks/use-file-actions'
@@ -117,6 +122,14 @@ export function FileActions({
     }
   }
 
+  const applyOcrState = (state: OcrDialogState) => {
+    setOcrText(state.text)
+    setOcrConfidence(state.confidence)
+    setOcrNotice(state.notice)
+    setOcrError(state.error)
+    setCanRetryOcr(state.canRetry)
+  }
+
   const handleOcr = async () => {
     if (!fileId) {
       toast({
@@ -138,20 +151,9 @@ export function FileActions({
         : ''
       const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
 
-      const outcome = await requestOcr(sanitizeUrl(ocrUrl))
-      setOcrText(outcome.kind === 'text' ? outcome.text : null)
-      setOcrConfidence(outcome.kind === 'text' ? outcome.confidence : null)
-      setOcrNotice(outcome.kind === 'pending' ? outcome.message : null)
-      setOcrError(outcome.kind === 'error' ? outcome.message : null)
-      setCanRetryOcr(
-        outcome.kind === 'pending' ||
-          (outcome.kind === 'error' && outcome.canRetry)
-      )
+      applyOcrState(ocrDialogState(await requestOcr(sanitizeUrl(ocrUrl))))
     } catch {
-      setOcrError('Couldn’t extract text. Please try again.')
-      setCanRetryOcr(true)
-      setOcrText(null)
-      setOcrConfidence(null)
+      applyOcrState(ocrDialogState(null))
     } finally {
       setIsLoadingOcr(false)
     }

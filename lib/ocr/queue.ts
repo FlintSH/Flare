@@ -13,8 +13,14 @@ interface OCRTask {
   audit?: Omit<AuditContext, 'pending'>
 }
 
-/** On-demand requests that may wait for the recognition slot at once, per process. */
-export const OCR_WAITING_REQUEST_LIMIT = 10
+/** New on-demand recognitions that may be queued at once, per process. */
+export const OCR_QUEUED_REQUEST_LIMIT = 10
+/**
+ * Requests that may wait for a result at once, per process, including ones
+ * that join an image already being read. Each holds a connection for up to
+ * the wait limit, so this bounds what OCR can tie up even for one popular image.
+ */
+export const OCR_WAITING_REQUEST_LIMIT = 30
 /**
  * How long an on-demand request waits before answering that recognition is
  * still running. Below common proxy timeouts, such as Cloudflare's 100 seconds.
@@ -34,12 +40,17 @@ export type OCRRequestOutcome =
   | { status: 'limited'; retryAfterSeconds: number }
   | { status: 'failed-recently'; retryAfterMs: number }
 
+/** A spent budget point, or how long to wait when the budget is used up. */
+export type OCRAdmission =
+  { retryAfterSeconds: number } | { refund: () => Promise<void> | void }
+
 interface OCRRequestOptions {
   /**
-   * Called only when this request would start new recognition, never when it
-   * joins queued work. Returns seconds to wait, or null to proceed.
+   * Charges the requester. Called only when this request is about to start
+   * new recognition, never when it joins queued work, and refunded if it
+   * ends up joining work that appeared meanwhile.
    */
-  admit?: () => Promise<number | null>
+  admit?: () => Promise<OCRAdmission>
   waitMs?: number
 }
 
@@ -55,6 +66,10 @@ class OCRQueue {
   private activeProcesses: number = 0
   // Queued or running work by file, so every caller shares one recognition.
   private inFlight = new Map<string, Promise<OCRResult>>()
+  // A file whose first request is being charged. Others for it wait and join.
+  private admissions = new Map<string, Promise<void>>()
+  private queuedRequests = 0
+  private reservedRequests = 0
   private waitingRequests = 0
   private failures = new Map<string, number>()
 
@@ -95,38 +110,92 @@ class OCRQueue {
     task: OCRTask,
     { admit, waitMs = OCR_REQUEST_WAIT_MS }: OCRRequestOptions = {}
   ): Promise<OCRRequestOutcome> {
-    let done = this.inFlight.get(task.fileId)
-    if (!done) {
+    // Every waiting request holds a place, including ones joining work.
+    if (this.waitingRequests >= OCR_WAITING_REQUEST_LIMIT)
+      return { status: 'busy' }
+    this.waitingRequests++
+    try {
+      const found = await this.workFor(task, admit)
+      if (!('work' in found)) return found
+
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const waited = new Promise<'pending'>((resolve) => {
+        timer = setTimeout(() => resolve('pending'), waitMs)
+      })
+      try {
+        const outcome = await Promise.race([found.work, waited])
+        return outcome === 'pending'
+          ? { status: 'pending' }
+          : { status: 'done', result: outcome }
+      } finally {
+        clearTimeout(timer)
+      }
+    } finally {
+      this.waitingRequests--
+    }
+  }
+
+  /**
+   * The work this request waits for: existing work for the file, or new work
+   * it was charged for. The queue place is reserved before charging, and one
+   * request per file is charged at a time, so nobody pays for work they
+   * didn't start or for a request the queue then refuses. The work is
+   * wrapped because an async function would otherwise wait for it.
+   */
+  private async workFor(
+    task: OCRTask,
+    admit: OCRRequestOptions['admit']
+  ): Promise<{ work: Promise<OCRResult> } | OCRRequestOutcome> {
+    for (;;) {
+      const existing = this.inFlight.get(task.fileId)
+      if (existing) return { work: existing }
+      const admission = this.admissions.get(task.fileId)
+      if (admission) {
+        await admission
+        continue
+      }
       const failedAt = this.failures.get(task.fileId)
       if (failedAt !== undefined) {
         const retryAfterMs = failedAt + OCR_FAILURE_COOLDOWN_MS - Date.now()
         if (retryAfterMs > 0) return { status: 'failed-recently', retryAfterMs }
         this.failures.delete(task.fileId)
       }
-      if (this.waitingRequests >= OCR_WAITING_REQUEST_LIMIT)
+      // A reservation can also go straight to a free recognition slot.
+      const startable = Math.max(
+        0,
+        this.concurrentLimit - this.activeProcesses - this.queue.length
+      )
+      if (
+        this.queuedRequests + this.reservedRequests >=
+        OCR_QUEUED_REQUEST_LIMIT + startable
+      )
         return { status: 'busy' }
-      const retryAfterSeconds = await admit?.()
-      if (retryAfterSeconds) return { status: 'limited', retryAfterSeconds }
-      // Another request may have queued this file or filled the queue meanwhile.
-      done = this.inFlight.get(task.fileId)
-      if (!done) {
-        if (this.waitingRequests >= OCR_WAITING_REQUEST_LIMIT)
-          return { status: 'busy' }
-        done = this.enqueue(task, true)
-      }
-    }
 
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const waited = new Promise<'pending'>((resolve) => {
-      timer = setTimeout(() => resolve('pending'), waitMs)
-    })
-    try {
-      const outcome = await Promise.race([done, waited])
-      return outcome === 'pending'
-        ? { status: 'pending' }
-        : { status: 'done', result: outcome }
-    } finally {
-      clearTimeout(timer)
+      this.reservedRequests++
+      let release!: () => void
+      this.admissions.set(
+        task.fileId,
+        new Promise<void>((resolve) => (release = resolve))
+      )
+      try {
+        const charge = admit ? await admit() : null
+        if (charge && 'retryAfterSeconds' in charge)
+          return {
+            status: 'limited',
+            retryAfterSeconds: charge.retryAfterSeconds,
+          }
+        // Upload processing can queue the same file while this is charged.
+        const queued = this.inFlight.get(task.fileId)
+        if (queued) {
+          await charge?.refund()
+          return { work: queued }
+        }
+        return { work: this.enqueue(task, true) }
+      } finally {
+        this.reservedRequests--
+        this.admissions.delete(task.fileId)
+        release()
+      }
     }
   }
 
@@ -137,7 +206,7 @@ class OCRQueue {
     let settle!: (result: OCRResult) => void
     const done = new Promise<OCRResult>((resolve) => (settle = resolve))
     this.inFlight.set(task.fileId, done)
-    if (onDemand) this.waitingRequests++
+    if (onDemand) this.queuedRequests++
 
     const context = auditContext.getStore()
     this.queue.push({
@@ -177,7 +246,7 @@ class OCRQueue {
     ) {
       const task = this.queue.shift()
       if (!task) continue
-      if (task.onDemand) this.waitingRequests--
+      if (task.onDemand) this.queuedRequests--
 
       this.activeProcesses++
 

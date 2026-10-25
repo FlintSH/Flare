@@ -48,6 +48,38 @@ export async function requestOcr(
   }
 }
 
+export type OcrDialogState = {
+  text: string | null
+  confidence: number | null
+  notice: string | null
+  error: string | null
+  canRetry: boolean
+}
+
+/**
+ * What the dialog shows for an outcome. `null` means the request itself
+ * failed, for example on a network error, which can always be retried.
+ */
+export function ocrDialogState(outcome: OcrOutcome | null): OcrDialogState {
+  if (!outcome)
+    return {
+      text: null,
+      confidence: null,
+      notice: null,
+      error: 'Couldn’t extract text. Please try again.',
+      canRetry: true,
+    }
+  return {
+    text: outcome.kind === 'text' ? outcome.text : null,
+    confidence: outcome.kind === 'text' ? outcome.confidence : null,
+    notice: outcome.kind === 'pending' ? outcome.message : null,
+    error: outcome.kind === 'error' ? outcome.message : null,
+    canRetry:
+      outcome.kind === 'pending' ||
+      (outcome.kind === 'error' && outcome.canRetry),
+  }
+}
+
 interface OcrDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
