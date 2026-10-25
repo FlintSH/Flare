@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Workflow actions are pinned to full commit SHAs with a version comment.
+  # Dependabot doesn't raise security alerts for SHA-pinned actions, so these
+  # monthly updates are what keeps the pins current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
