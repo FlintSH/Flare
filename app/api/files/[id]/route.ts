@@ -5,6 +5,10 @@ import { z } from 'zod'
 
 import { recordAudit, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import {
+  filePasswordIssue,
+  newFilePasswordSchema,
+} from '@/lib/files/password-policy'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
 import { getStorageProvider } from '@/lib/storage'
@@ -20,12 +24,12 @@ async function handlePATCH(
     const body = await request.json()
     const schema = z.object({
       visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-      password: z.string().nullable().optional(),
+      password: newFilePasswordSchema.nullable().optional(),
     })
     const result = schema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
-        { error: 'Invalid request body' },
+        { error: filePasswordIssue(result.error) ?? 'Invalid request body' },
         { status: 400 }
       )
     }

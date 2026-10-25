@@ -31,6 +31,10 @@ import {
 import { useSession } from 'next-auth/react'
 
 import { UserEmailControls } from '@/components/email/user-email-controls'
+import {
+  FilePasswordHint,
+  filePasswordFieldProps,
+} from '@/components/file/file-password-hint'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { RoleBadges } from '@/components/roles/role-badges'
 import {
@@ -91,6 +95,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { filePasswordHint } from '@/lib/files/password-policy'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 import { formatFileSize } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -261,6 +266,7 @@ function FileSettingsDialog({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (password && filePasswordHint(password)) return
     setIsSubmitting(true)
     try {
       await onSave(visibility, password || undefined)
@@ -318,11 +324,24 @@ function FileSettingsDialog({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Leave empty for no password"
+                {...filePasswordFieldProps(
+                  'password-protection-hint',
+                  password
+                )}
+              />
+              <FilePasswordHint
+                id="password-protection-hint"
+                password={password}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting || Boolean(password && filePasswordHint(password))
+              }
+            >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>

@@ -54,6 +54,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
+import { filePasswordHint } from '@/lib/files/password-policy'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 import { sanitizeUrl } from '@/lib/utils/url'
@@ -98,6 +99,7 @@ export function FileCard({
   const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [password, setPassword] = useState('')
+  const passwordHint = password ? filePasswordHint(password) : null
   const [file, setFile] = useState(() => {
     const { password: legacyPassword, ...metadata } = initialFile
     return {
@@ -735,6 +737,7 @@ export function FileCard({
           <form
             onSubmit={(event) => {
               event.preventDefault()
+              if (passwordHint) return
               if (password || file.hasPassword) void handlePasswordUpdate()
             }}
             className="space-y-5"
@@ -751,11 +754,20 @@ export function FileCard({
                 disabled={mutation === 'password'}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter a password"
+                aria-invalid={Boolean(passwordHint)}
+                aria-describedby={`password-hint-${file.id}`}
               />
-              <p className="text-xs leading-5 text-muted-foreground">
-                {file.hasPassword
-                  ? 'Leave this empty to remove the current password.'
-                  : 'Anyone you share this file with will need this password.'}
+              <p
+                id={`password-hint-${file.id}`}
+                className={cn(
+                  'text-xs leading-5',
+                  passwordHint ? 'text-destructive' : 'text-muted-foreground'
+                )}
+              >
+                {passwordHint ??
+                  (file.hasPassword
+                    ? 'Use at least 8 characters, or leave this empty to remove the current password.'
+                    : 'Use at least 8 characters. Anyone you share this file with will need this password.')}
               </p>
             </div>
             <DialogFooter>
@@ -770,7 +782,9 @@ export function FileCard({
               <Button
                 type="submit"
                 disabled={
-                  mutation === 'password' || (!password && !file.hasPassword)
+                  mutation === 'password' ||
+                  (!password && !file.hasPassword) ||
+                  Boolean(passwordHint)
                 }
               >
                 {mutation === 'password' && (

@@ -1,6 +1,7 @@
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { filePasswordIssue } from '@/lib/files/password-policy'
 import { FolderError, validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -257,7 +258,10 @@ export function uploadErrorResponse(error: unknown): Response {
   )
     return Response.json({ error: error.message }, { status: error.status })
   if (error && typeof error === 'object' && 'issues' in error)
-    return Response.json({ error: 'Invalid upload options.' }, { status: 400 })
+    return Response.json(
+      { error: filePasswordIssue(error) ?? 'Invalid upload options.' },
+      { status: 400 }
+    )
   loggers.files.error(
     'Upload request failed',
     error instanceof Error ? error : new Error('Unknown upload error')

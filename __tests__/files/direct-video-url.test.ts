@@ -13,7 +13,10 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: mocks.findUnique } },
 }))
-vi.mock('@/lib/files/access', () => ({ checkFileAccess: mocks.access }))
+vi.mock('@/lib/files/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/files/access')>()),
+  checkFileAccess: mocks.access,
+}))
 vi.mock('@/lib/files/resolve', () => ({ resolveFileUrlPath: mocks.resolve }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({ getPublicUrl: mocks.publicUrl }),
@@ -53,7 +56,12 @@ describe('direct video playback URL', () => {
     expect(playback.pathname).toBe('/owner/preview.webm/raw')
     expect([...playback.searchParams]).toEqual([['password', password]])
     expect(playback.hash).toBe('')
-    expect(mocks.access).toHaveBeenCalledWith(expect.anything(), null, password)
+    expect(mocks.access).toHaveBeenCalledWith(
+      expect.anything(),
+      null,
+      password,
+      { requester: 'unknown' }
+    )
   })
 
   it('does not disclose a playback URL when file access is denied', async () => {

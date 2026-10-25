@@ -21,6 +21,10 @@ import {
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import {
+  FilePasswordHint,
+  filePasswordFieldProps,
+} from '@/components/file/file-password-hint'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Button } from '@/components/ui/button'
@@ -36,6 +40,7 @@ import {
 } from '@/components/ui/select'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
+import { filePasswordHint } from '@/lib/files/password-policy'
 import { folderPath } from '@/lib/folders/navigation'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -343,7 +348,9 @@ export function UploadForm({
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Leave empty for no password"
+              {...filePasswordFieldProps('upload-password-hint', password)}
             />
+            <FilePasswordHint id="upload-password-hint" password={password} />
           </div>
         </PermissionGate>
         <div className="space-y-2">
@@ -409,7 +416,8 @@ export function UploadForm({
             files.length === 0 ||
             isUploading ||
             unavailableFolder ||
-            (!!folderId && foldersLoading)
+            (!!folderId && foldersLoading) ||
+            Boolean(password && filePasswordHint(password))
           }
         >
           {isUploading ? (

@@ -27,7 +27,8 @@ vi.mock('@/lib/database/prisma', () => ({
 vi.mock('@/lib/auth', () => ({
   getAccessSession: async () => ({ user: { id: 'owner' } }),
 }))
-vi.mock('@/lib/files/access', () => ({
+vi.mock('@/lib/files/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/files/access')>()),
   checkFileAccess: mocks.checkFileAccess,
 }))
 vi.mock('@/lib/storage', () => ({

@@ -45,7 +45,22 @@ Add a password in the upload form, or use **Files → file menu → Add password
 
 <Screenshot src="/screenshots/workspace/share-protected.png" alt="Password-protected share page asking a visitor to unlock the file" caption="A protected public file asks visitors for its password before showing the content." />
 
+A new file password needs **at least 8 characters** and at most 72 bytes; most emoji and some accented characters use more than one byte. The forms explain the rule as you type and keep the save button disabled until it is met. Passwords set before this rule existed keep working until you change them.
+
 Changing a password changes what future access checks accept. It cannot remove a copy that somebody already downloaded. For a temporary handoff, combine a password with an expiration.
+
+### Incorrect password attempts
+
+To stop someone guessing a password, Flare pauses new password checks for a file after too many different incorrect passwords within 15 minutes:
+
+- **10 from one network address.** Only that address is paused. Other visitors can still unlock the file.
+- **100 from all visitors together.** Everyone is paused until the 15 minutes end. This limits guessing spread across many addresses.
+
+A paused visitor sees **Too Many Attempts** and how many minutes to wait. During a pause Flare does not check new passwords, so even the right one is refused. The exception is an address that unlocked the file in the last 10 minutes: it keeps access, so someone already watching a video is not interrupted by other people's guessing. The pause ends on its own. Entering the same wrong password again does not count as another attempt, and a correct password clears that address's count. The file's owner and accounts with `content.read` never need the password.
+
+The counts are kept in the running Flare process: restarting Flare clears them, and separate replicas count separately. Per-address counting relies on the client address that your reverse proxy forwards. Without forwarded addresses, as when the app port is exposed directly, only the 100-attempt limit applies. Operators can check this in [client addresses](../hosting/reverse-proxy#client-addresses-in-session-history).
+
+A password slows guessing but is not encryption. Use a long, unusual password for sensitive files, and share it separately from the link.
 
 If you need to stop public access while keeping your copy, set the file to **Private**. Removing password protection from a public file makes it accessible without a password.
 

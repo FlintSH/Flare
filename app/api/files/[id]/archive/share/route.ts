@@ -9,6 +9,7 @@ import {
 } from '@/lib/archives/sharing'
 import { readArchiveUnlock } from '@/lib/archives/unlock'
 import { setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { requestIp } from '@/lib/auth/security/shared'
 import { getClientIp } from '@/lib/security/rate-limit'
 
 export const runtime = 'nodejs'
@@ -29,7 +30,8 @@ export async function POST(
         const access = await authorizeSharedArchive(
           id,
           input.password,
-          readArchiveUnlock(request)
+          readArchiveUnlock(request),
+          requestIp(request.headers)
         )
         const response = await listSharedArchive(access, {
           ...parseListingQuery(input),

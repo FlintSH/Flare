@@ -6,8 +6,9 @@ import { Readable } from 'stream'
 
 import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
@@ -154,10 +155,15 @@ async function handleGET(
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
-    const access = await checkFileAccess(file, session, providedPassword)
+    const access = await checkFileAccess(file, session, providedPassword, {
+      requester: requestIp(req.headers),
+    })
     if (!access.allowed) {
       setAuditOutcome('denied')
-      return new Response(null, { status: access.status })
+      return new Response(null, {
+        status: access.status,
+        headers: fileAccessDeniedHeaders(access),
+      })
     }
 
     const storageProvider = await getStorageProvider()

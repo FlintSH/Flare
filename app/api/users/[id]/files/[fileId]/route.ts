@@ -5,6 +5,10 @@ import { z } from 'zod'
 
 import { recordAudit, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import {
+  filePasswordIssue,
+  newFilePasswordSchema,
+} from '@/lib/files/password-policy'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
@@ -111,13 +115,13 @@ async function handlePATCH(
     const parsed = z
       .object({
         visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-        password: z.string().max(256).nullable().optional(),
+        password: newFilePasswordSchema.nullable().optional(),
       })
       .strict()
       .safeParse(body)
     if (!parsed.success)
       return NextResponse.json(
-        { error: 'Invalid file settings' },
+        { error: filePasswordIssue(parsed.error) ?? 'Invalid file settings' },
         { status: 400 }
       )
     const { visibility, password } = parsed.data

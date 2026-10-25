@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 
 import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -42,12 +43,17 @@ async function handleGET(
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
-    const access = await checkFileAccess(file, session, providedPassword)
+    const access = await checkFileAccess(file, session, providedPassword, {
+      requester: requestIp(request.headers),
+    })
     if (!access.allowed) {
       setAuditOutcome('denied')
       return new NextResponse(null, {
         status: access.status,
-        headers: { 'Cache-Control': 'private, no-store' },
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
 

@@ -13,11 +13,12 @@ import { Label } from '@/components/ui/label'
 import { detectArchiveFormat } from '@/lib/archives/shared'
 import { recordAudit } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
 import { shareMetadataText } from '@/lib/customization/sharing'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkFileAccess, retryAfterMinutes } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -113,7 +114,9 @@ export async function generateMetadata({
     return {}
   }
 
-  const access = await checkFileAccess(file, session, providedPassword)
+  const access = await checkFileAccess(file, session, providedPassword, {
+    requester: requestIp(headersList),
+  })
   if (!access.allowed) {
     return {
       title: `Protected File - ${appearance.brand.name}`,
@@ -244,7 +247,8 @@ export default async function FilePage({
   const access = await checkFileAccess(
     serializedFile,
     session,
-    providedPassword
+    providedPassword,
+    { requester: requestIp(await headers()) }
   )
 
   await recordAudit({
@@ -266,16 +270,26 @@ export default async function FilePage({
       notFound()
     }
 
-    const title =
-      access.reason === 'password_invalid'
+    const limited = access.reason === 'password_rate_limited'
+    const title = limited
+      ? 'Too Many Attempts'
+      : access.reason === 'password_invalid'
         ? 'Incorrect Password'
         : 'Password Protected File'
-    const description =
-      access.reason === 'password_invalid'
+    const description = limited
+      ? 'Password checks for this file are paused'
+      : access.reason === 'password_invalid'
         ? 'The password you entered is incorrect'
         : 'This file requires a password to access'
     const buttonText =
-      access.reason === 'password_invalid' ? 'Try Again' : 'Access File'
+      access.reason === 'password_invalid' || limited
+        ? 'Try Again'
+        : 'Access File'
+    const problem = limited
+      ? `Too many incorrect passwords were entered for this file. Wait ${retryAfterMinutes(access)} min, then try again.`
+      : access.reason === 'password_invalid'
+        ? 'That password didn’t match. Check with the sender and try again.'
+        : null
 
     return (
       <PublicState
@@ -295,21 +309,17 @@ export default async function FilePage({
               placeholder="Enter the password from the sender"
               className="h-11"
               aria-invalid={access.reason === 'password_invalid'}
-              aria-describedby={
-                access.reason === 'password_invalid'
-                  ? 'share-password-error'
-                  : undefined
-              }
+              aria-describedby={problem ? 'share-password-error' : undefined}
               required
               autoFocus
             />
-            {access.reason === 'password_invalid' && (
+            {problem && (
               <p
                 id="share-password-error"
                 role="alert"
                 className="text-sm text-foreground"
               >
-                That password didn’t match. Check with the sender and try again.
+                {problem}
               </p>
             )}
           </div>
