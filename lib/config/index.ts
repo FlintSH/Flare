@@ -3,6 +3,12 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import {
+  LEGACY_COLOR_MESSAGE,
+  legacyAppearanceUpdateSchema,
+  legacyColors,
+  legacyTheme,
+} from '@/lib/customization/legacy-appearance'
+import {
   DEFAULT_CUSTOMIZATION,
   customizationSchema,
 } from '@/lib/customization/schema'
@@ -92,9 +98,11 @@ export const configSchema = z.object({
         .prefault({}),
     }),
     appearance: z.object({
-      theme: z.string(),
+      // Both values reach inline page markup. Unsafe saved values are dropped
+      // rather than rejected, so an old configuration can still be read.
+      theme: z.unknown().transform(legacyTheme).prefault('dark'),
       favicon: z.string().nullable(),
-      customColors: z.record(z.string(), z.string()),
+      customColors: z.unknown().transform(legacyColors).prefault({}),
     }),
     advanced: z.object({
       customCSS: z.string(),
@@ -246,11 +254,22 @@ type ConfigUpdate = {
   }
 }
 
+/** A submitted setting was rejected; the message is safe to show to the person saving. */
+export class ConfigValidationError extends Error {}
+
 export async function updateConfig(
   newConfig: ConfigUpdate,
   authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
   validateSaved?: (tx: Prisma.TransactionClient) => Promise<void>
 ): Promise<FlareConfig> {
+  const appearance = newConfig.settings?.appearance
+  if (appearance) {
+    const submitted = legacyAppearanceUpdateSchema.safeParse(appearance)
+    if (!submitted.success)
+      throw new ConfigValidationError(
+        submitted.error.issues[0]?.message ?? LEGACY_COLOR_MESSAGE
+      )
+  }
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`

@@ -13,6 +13,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import {
+  LEGACY_COLOR_MESSAGE,
+  legacyColorValue,
+} from '@/lib/customization/legacy-appearance'
+
 interface ColorConfig {
   background: string
   foreground: string
@@ -52,38 +57,6 @@ function hslToHex(h: number, s: number, l: number): string {
       .padStart(2, '0')
   }
   return `#${f(0)}${f(8)}${f(4)}`
-}
-
-function hexToHSL(hex: string): string {
-  hex = hex.replace('#', '')
-
-  const r = parseInt(hex.substring(0, 2), 16) / 255
-  const g = parseInt(hex.substring(2, 4), 16) / 255
-  const b = parseInt(hex.substring(4, 6), 16) / 255
-
-  const cmin = Math.min(r, g, b)
-  const cmax = Math.max(r, g, b)
-  const delta = cmax - cmin
-  let h = 0
-  let s = 0
-  let l = 0
-
-  if (delta === 0) h = 0
-  else if (cmax === r) h = ((g - b) / delta) % 6
-  else if (cmax === g) h = (b - r) / delta + 2
-  else h = (r - g) / delta + 4
-
-  h = Math.round(h * 60)
-  if (h < 0) h += 360
-
-  l = (cmax + cmin) / 2
-
-  s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1))
-
-  s = +(s * 100).toFixed(1)
-  l = +(l * 100).toFixed(1)
-
-  return `${h} ${s}% ${l}%`
 }
 
 function parseColor(color: string): string {
@@ -152,6 +125,9 @@ function SimpleThemeCustomizer({
   livePreview = true,
 }: ThemeCustomizerProps) {
   const [baseHue, setBaseHue] = useState(222.2)
+  const [invalid, setInvalid] = useState<
+    Partial<Record<keyof ColorConfig, boolean>>
+  >({})
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
     foreground: '',
@@ -206,6 +182,7 @@ function SimpleThemeCustomizer({
         document.documentElement.style.setProperty(`--${cssKey}`, value)
       })
 
+    setInvalid({})
     onColorChange(newColors)
   }
 
@@ -217,29 +194,23 @@ function SimpleThemeCustomizer({
       })
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
+    setInvalid({})
 
     onColorChange(DEFAULT_COLORS)
   }
 
   const updatePreview = (key: keyof ColorConfig, value: string) => {
-    let cssValue = value
-    if (value.startsWith('#')) {
-      cssValue = hexToHSL(value)
-    } else if (value.includes(' ')) {
-      const [h, s, l] = value
-        .split(' ')
-        .map((v) => parseFloat(v.replace('%', '')))
-      if (!isNaN(h) && !isNaN(s) && !isNaN(l)) {
-        cssValue = `${h} ${s}% ${l}%`
-      }
-    }
+    setColors((prev) => ({ ...prev, [key]: value }))
+    // Save only values the server accepts, stored as an HSL triplet even
+    // when picked as hex. Keep the typed text visible until it is valid.
+    const cssValue = legacyColorValue(value)
+    setInvalid((prev) => ({ ...prev, [key]: !cssValue }))
+    if (!cssValue) return
 
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     if (livePreview)
       document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
-    setColors((prev) => ({ ...prev, [key]: value }))
-
-    onColorChange({ [key]: value })
+    onColorChange({ [key]: cssValue })
   }
 
   const handleColorChange = (key: keyof ColorConfig, value: string) => {
@@ -247,7 +218,7 @@ function SimpleThemeCustomizer({
   }
 
   const renderColorInput = (key: keyof ColorConfig, label: string) => (
-    <div key={key} className="grid gap-2">
+    <div key={key} className="grid content-start gap-2">
       <Label htmlFor={key}>{label}</Label>
       <div className="flex gap-2">
         <Input
@@ -261,8 +232,20 @@ function SimpleThemeCustomizer({
           value={colors[key] || DEFAULT_COLORS[key]}
           onChange={(e) => handleColorChange(key, e.target.value)}
           placeholder={`${label} color`}
+          aria-label={`${label} value`}
+          aria-invalid={invalid[key] || undefined}
+          aria-describedby={invalid[key] ? `${key}-error` : undefined}
+          className={invalid[key] ? 'border-destructive' : undefined}
         />
       </div>
+      {invalid[key] && (
+        <p
+          id={`${key}-error`}
+          className="text-[0.8rem] font-medium text-destructive"
+        >
+          {LEGACY_COLOR_MESSAGE} This value isn&apos;t saved.
+        </p>
+      )}
     </div>
   )
 

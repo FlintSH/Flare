@@ -662,6 +662,91 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     ).toBe('new-bucket')
   })
 
+  it('keeps delegated classic appearance values out of page markup', async () => {
+    const { DEFAULT_CONFIG, getConfig } = await import('@/lib/config')
+    const { initialThemeStyles } =
+      await import('@/components/theme/initial-theme-styles')
+    const initial = structuredClone(DEFAULT_CONFIG)
+    // Values an earlier build accepted and stored without validation.
+    Object.assign(initial.settings.appearance, {
+      theme: 'dark"</script><script>document.title=1</script>',
+      customColors: {
+        ...initial.settings.appearance.customColors,
+        primary:
+          '#fff} body{background:url(https://attacker.test/beacon)} :root{--x:#000',
+        accent: '#ff0000',
+        'x;}</style><script>': '1 1% 1%',
+      },
+    })
+    await prisma.config.create({
+      data: { key: 'flare_config', value: initial },
+    })
+    const designer = await role('Designer', ['appearance.manage'], 30)
+    await assign('member', designer.id)
+    authentication.userId = 'member'
+    authentication.permissions = ['appearance.manage']
+    const settings = await import('@/app/api/settings/route')
+    function patch(appearance: unknown) {
+      return settings.PATCH(
+        new Request('http://localhost/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: { appearance } }),
+        })
+      )
+    }
+
+    const saved = await getConfig()
+    expect(saved.settings.appearance.theme).toBe('dark')
+    expect(saved.settings.appearance.customColors).toEqual({
+      ...DEFAULT_CONFIG.settings.appearance.customColors,
+      primary: undefined,
+      accent: '0.0 100.0% 50.0%',
+    })
+    const css = initialThemeStyles(saved)
+    expect(css).not.toMatch(/[<>{}]attacker|attacker\.test|<\/?s/)
+    expect(css).toContain('--primary: 210 40% 98%;')
+    expect(css).toContain('--accent: 0.0 100.0% 50.0%;')
+
+    for (const appearance of [
+      { customColors: { primary: '1 1% 1%;}</style><script>x()</script>' } },
+      {
+        customColors: {
+          primary: '#fff} body{background:url(https://attacker.test/b)}',
+        },
+      },
+      { customColors: { 'x;}body{color:red': '1 1% 1%' } },
+      { customColors: { primary: '400 50% 50%' } },
+      { theme: 'dark"</script><script>x()</script>' },
+    ]) {
+      const response = await patch(appearance)
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toMatch(
+        /^(Classic colors must be HSL values|Classic color names start|Choose dark, light, or system)/
+      )
+    }
+    const before = (
+      await prisma.config.findUniqueOrThrow({ where: { key: 'flare_config' } })
+    ).value
+    expect(before).toEqual(JSON.parse(JSON.stringify(initial)))
+
+    // Hex from the color picker is stored in the HSL form the theme expects,
+    // and saving drops the unsafe values an earlier build kept.
+    expect(
+      (await patch({ theme: 'light', customColors: { primary: '#1e293b' } }))
+        .status
+    ).toBe(200)
+    const stored = (
+      await prisma.config.findUniqueOrThrow({ where: { key: 'flare_config' } })
+    ).value as unknown as typeof initial
+    expect(stored.settings.appearance.theme).toBe('light')
+    expect(stored.settings.appearance.customColors).toEqual({
+      ...DEFAULT_CONFIG.settings.appearance.customColors,
+      primary: '217.2 32.6% 17.5%',
+      accent: '0.0 100.0% 50.0%',
+    })
+  })
+
   it('blocks disabling or replacing the sole administrator’s OIDC sign-in provider', async () => {
     const { DEFAULT_CONFIG } = await import('@/lib/config')
     const initial = structuredClone(DEFAULT_CONFIG)
