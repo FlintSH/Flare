@@ -136,10 +136,10 @@ Every `uses:` reference in `.github/workflows/` names a full commit SHA, followe
 To add or change an action by hand, resolve the release tag to its commit and pin that, keeping the version comment:
 
 ```sh
-gh api repos/actions/checkout/git/ref/tags/v4.4.0 --jq '.object.sha'
+gh api repos/actions/checkout/git/ref/tags/v4.4.0 --jq '.object'
 ```
 
-If the result's `object.type` is `tag` rather than `commit`, the tag is annotated: resolve once more with `gh api repos/<owner>/<repo>/git/tags/<sha> --jq '.object.sha'`.
+The result shows the target's `sha` and `type`. Pin a `commit` SHA directly. If `type` is `tag`, the tag is annotated: resolve once more with `gh api repos/<owner>/<repo>/git/tags/<sha> --jq '.object.sha'`.
 
 ## Database permission and avatar regression tests
 
