@@ -26,6 +26,8 @@ Certificate verification stays enabled. For a private relay with a custom certif
 
 Saved SMTP passwords are write-only in the settings view. Leaving the password input empty preserves the existing password; the explicit clear action removes it. Keep the active encryption key stable across deployments.
 
+Saved email settings, including the access policy, apply from the next request without a restart, on every replica. Values set through the environment change only when the app is recreated; see [environment-managed configuration](#environment-managed-configuration).
+
 ## Choose an access policy
 
 | Verification mode          | New accounts                                                         | Existing accounts                                            |
