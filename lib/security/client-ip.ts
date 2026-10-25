@@ -28,10 +28,62 @@ export function parseClientAddress(value: string | null | undefined) {
     candidate = candidate.slice(0, candidate.lastIndexOf(':'))
   const version = isIP(candidate)
   if (!version) return null
-  // One client, one key: dual-stack listeners report IPv4 clients this way.
-  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(candidate)
-  if (version === 6 && mapped && isIP(mapped[1]) === 4) return mapped[1]
-  return version === 6 ? candidate.toLowerCase() : candidate
+  return version === 6 ? canonicalIPv6(candidate) : candidate
+}
+
+/** The eight 16-bit groups of an address that `isIP` accepted as IPv6. */
+function ipv6Groups(address: string): number[] {
+  let text = address.toLowerCase()
+  const zone = text.indexOf('%')
+  if (zone !== -1) text = text.slice(0, zone)
+  // A trailing dotted IPv4 part stands for the last two groups.
+  const dotted = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text)
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number)
+    text =
+      text.slice(0, dotted.index) +
+      `${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`
+  }
+  const groups = (part: string) =>
+    part ? part.split(':').map((group) => parseInt(group, 16)) : []
+  const gap = text.indexOf('::')
+  if (gap === -1) return groups(text)
+  const head = groups(text.slice(0, gap))
+  const tail = groups(text.slice(gap + 2))
+  return [...head, ...Array(8 - head.length - tail.length).fill(0), ...tail]
+}
+
+/**
+ * One key per client, however the address was written: an IPv4-mapped
+ * address (`::ffff:203.0.113.9`, `::ffff:cb00:7109`, or written out in full)
+ * becomes the IPv4 address that dual-stack listeners report it as, and other
+ * IPv6 addresses use the RFC 5952 text form. Zone indexes are dropped.
+ */
+function canonicalIPv6(address: string): string {
+  const groups = ipv6Groups(address)
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff)
+    return [
+      groups[6] >> 8,
+      groups[6] & 255,
+      groups[7] >> 8,
+      groups[7] & 255,
+    ].join('.')
+  // Compress the longest run of two or more zero groups, the first if tied.
+  let start = -1
+  let length = 0
+  for (let index = 0; index < 8;) {
+    let end = index
+    while (end < 8 && groups[end] === 0) end++
+    if (end - index >= 2 && end - index > length) {
+      start = index
+      length = end - index
+    }
+    index = end === index ? index + 1 : end
+  }
+  const text = groups.map((group) => group.toString(16))
+  return start === -1
+    ? text.join(':')
+    : `${text.slice(0, start).join(':')}::${text.slice(start + length).join(':')}`
 }
 
 function firstEntry(value: string | null) {

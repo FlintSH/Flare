@@ -92,7 +92,7 @@ Behind a proxy, every connection reaches Flare from the proxy itself, so Flare r
 1. `X-Real-IP`, when it holds an IPv4 or IPv6 address.
 2. Otherwise the first entry of `X-Forwarded-For`.
 
-Values that are not addresses are skipped. Brackets and ports are removed, so `[2001:db8::1]:443` counts as `2001:db8::1` and `203.0.113.9:51234` as `203.0.113.9`, and an IPv4-mapped address such as `::ffff:203.0.113.9` counts as `203.0.113.9`. Requests that carry no usable address share a single limit with each other, and their sessions and login history show no address.
+Values that are not addresses are skipped. Brackets and ports are removed, so `[2001:db8::1]:443` counts as `2001:db8::1` and `203.0.113.9:51234` as `203.0.113.9`, and an IPv4-mapped address counts as its IPv4 address however it is written, so `::ffff:203.0.113.9`, `::ffff:cb00:7109`, and `0:0:0:0:0:ffff:203.0.113.9` all count as `203.0.113.9`. Other IPv6 addresses are compared in their standard shortest form, so `2001:0db8:0:0:0:0:0:1` and `2001:db8::1` are the same client. Requests that carry no usable address share a single limit with each other, and their sessions and login history show no address.
 
 Both headers contain whatever your proxy forwards, so configure the edge to **set or overwrite** them, as the Caddy and nginx examples above do. A widely copied nginx line, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`, appends the real address to any `X-Forwarded-For` value the client sent, which leaves the client's own value first. Flare reads `X-Real-IP` before `X-Forwarded-For` for that reason: set `X-Real-IP` to `$remote_addr` and never pass a client-supplied one through. Clients that can reach the application port directly can send either header themselves.
 

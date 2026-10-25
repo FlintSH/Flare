@@ -104,6 +104,29 @@ describe('client address precedence', () => {
       expect(getClientIp(request({ 'x-forwarded-for': value }))).toBe(expected)
     }
   })
+
+  it('gives every spelling of one address the same key', () => {
+    const cases: [string, string][] = [
+      // IPv4-mapped IPv6, however it is written, is the IPv4 client.
+      ['::ffff:cb00:7109', real],
+      ['::FFFF:CB00:7109', real],
+      ['0:0:0:0:0:ffff:203.0.113.9', real],
+      ['0000:0000:0000:0000:0000:ffff:cb00:7109', real],
+      ['[::ffff:cb00:7109]:443', real],
+      // Other IPv6 addresses use the RFC 5952 form.
+      ['2001:0db8:0000:0000:0000:0000:0000:0001', '2001:db8::1'],
+      ['2001:DB8::0:1', '2001:db8::1'],
+      ['2001:db8:0:0:1:0:0:1', '2001:db8::1:0:0:1'],
+      ['2001:db8:0:1:1:1:1:1', '2001:db8:0:1:1:1:1:1'],
+      ['fe80::1%eth0', 'fe80::1'],
+      ['0:0:0:0:0:0:0:1', '::1'],
+      ['::', '::'],
+      // IPv4-compatible (deprecated) is not IPv4-mapped.
+      ['::203.0.113.9', '::cb00:7109'],
+    ]
+    for (const [value, expected] of cases)
+      expect(getClientIp(request({ 'x-real-ip': value }))).toBe(expected)
+  })
 })
 
 describe('rate limit keys', () => {
