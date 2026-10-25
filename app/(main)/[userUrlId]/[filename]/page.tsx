@@ -244,12 +244,10 @@ export default async function FilePage({
 
   const serializedFile = prepareFileProps(file)
 
-  const access = await checkFileAccess(
-    serializedFile,
-    session,
-    providedPassword,
-    { requester: requestIp(await headers()) }
-  )
+  // Check the database record itself; the serialized copy is for rendering.
+  const access = await checkFileAccess(file, session, providedPassword, {
+    requester: requestIp(await headers()),
+  })
 
   await recordAudit({
     action: 'file.view',

@@ -47,30 +47,23 @@ const state = (processState[stateKey] ??= {
   verified: new Map(),
 }) as State
 
-// Keyed digests keep raw passwords and client addresses out of memory maps.
-function digest(...parts: string[]) {
+// A keyed digest of a non-secret value, such as a client address, so the
+// value itself is never kept in the maps below.
+function digest(label: string, value: string) {
   return createHmac('sha256', state.key)
-    .update(parts.join('\0'))
+    .update(`${label}\0${value}`)
     .digest('base64url')
 }
 
-// Submitted passwords go through a memory-hard KDF rather than a fast hash.
-// These parameters take about 2 ms, far less than the bcrypt check they save.
+// Submitted passwords and stored hashes go only through a memory-hard KDF,
+// never a fast hash. These parameters take about 2 ms, far less than the
+// bcrypt check they save; `salt` comes from non-secret context.
 const PASSWORD_KDF: ScryptOptions = { N: 1024, r: 8, p: 1 }
 
-/**
- * `secrets` are the submitted password and, where it matters, the stored
- * hash; only the KDF sees them. `context` is non-secret and salts the result.
- */
-function passwordDigest(secrets: string[], ...context: string[]) {
+function kdf(secret: string, salt: string) {
   return new Promise<string>((resolve, reject) =>
-    scrypt(
-      secrets.join('\0'),
-      Buffer.from(digest('password', ...context)),
-      32,
-      PASSWORD_KDF,
-      (error, key) =>
-        error ? reject(error) : resolve(key.toString('base64url'))
+    scrypt(secret, Buffer.from(salt), 32, PASSWORD_KDF, (error, key) =>
+      error ? reject(error) : resolve(key.toString('base64url'))
     )
   )
 }
@@ -149,7 +142,7 @@ export function filePasswordBlock(
 
 /** Identifies one submitted password for one file, without keeping it. */
 export function filePasswordAttempt(fileId: string, password: string) {
-  return passwordDigest([password], 'attempt', fileId)
+  return kdf(password, digest('attempt', fileId))
 }
 
 export type FilePasswordAdmission =
@@ -227,7 +220,10 @@ export function verifiedFilePasswordKey(
   password: string,
   requester: string | null
 ) {
-  return passwordDigest([password, hash], 'verified', fileId, requester ?? '')
+  return kdf(
+    `${password}\0${hash}`,
+    digest('verified', `${fileId}\0${requester ?? ''}`)
+  )
 }
 
 export function isVerifiedFilePassword(key: string, now = Date.now()) {
