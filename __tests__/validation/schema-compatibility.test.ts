@@ -15,17 +15,28 @@ describe('schema behavior kept across the Zod 4 upgrade', () => {
       '2026-10-24T22:08:27+0200',
       '2026-10-24T22:08:27.5-0730',
       '2026-10-24T22:08+02:00',
+      '2026-10-24T22:08+0200',
+      '2026-10-24T22:08:27-2359',
       '2028-02-29T00:00Z',
-    ])
+    ]) {
       expect(isoDateTimeWithOffset.safeParse(value).success, value).toBe(true)
+      // Accepted values must convert to real dates before they reach a query.
+      expect(Number.isNaN(Date.parse(value)), value).toBe(false)
+    }
     for (const value of [
       '2026-10-24T22:08:27',
       '2026-10-24',
       '2026-02-29T00:00:00Z',
       '2026-10-24T24:00:00Z',
       '2026-10-24T22:08:27+02',
+      '2026-10-24T22:08:27+24:00',
+      '2026-10-24T22:08:27+02:60',
+      '2026-10-24T22:08:27-2400',
     ])
       expect(isoDateTimeWithOffset.safeParse(value).success, value).toBe(false)
+    expect(
+      auditQuerySchema.safeParse({ from: '2026-10-24T22:08:27+24:00' }).success
+    ).toBe(false)
 
     expect(
       uploadRequestOptionsSchema.parse({
