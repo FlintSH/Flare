@@ -139,6 +139,24 @@ describe('configuration revision cache', () => {
     expect(db.row).toMatchObject({ id: 'created' })
   })
 
+  it('parses again with a reloaded schema, as after a development reload', async () => {
+    saved((config) => (config.settings.appearance.theme = 'light'), 'row-h')
+    await getConfig()
+    await getConfig()
+    // A reloaded module has a new schema; the process-wide cache survives it.
+    vi.resetModules()
+    const reloaded = await import('@/lib/config')
+    expect(reloaded.configSchema).not.toBe(configSchema)
+    const parse = vi.spyOn(reloaded.configSchema, 'parse')
+
+    const config = await reloaded.getConfig()
+
+    expect(parse).toHaveBeenCalledTimes(1)
+    expect(config.settings.appearance.theme).toBe('light')
+    expect(await reloaded.getConfig()).toBe(config)
+    expect(parse).toHaveBeenCalledTimes(1)
+  })
+
   it('does not re-parse an invalid saved configuration on every call', async () => {
     db.row = { id: 'row-g', xmin: '1', value: { version: 1 } }
     const parse = vi.spyOn(configSchema, 'parse')

@@ -228,6 +228,8 @@ type CachedConfigRow = ConfigRevision & {
   value: unknown
   parsed?: FlareConfig
   parseError?: unknown
+  /** The schema that produced `parsed` or `parseError`. */
+  schema?: unknown
 }
 type ConfigCacheState = {
   row?: CachedConfigRow
@@ -317,6 +319,13 @@ export async function readSavedConfigRow(): Promise<CachedConfigRow | null> {
 }
 
 function parseSavedConfig(row: CachedConfigRow): FlareConfig {
+  // The cache outlives a development reload of this module, which brings a new
+  // schema. Results from another schema are stale even if the row isn't.
+  if (row.schema !== configSchema) {
+    row.parsed = undefined
+    row.parseError = undefined
+    row.schema = configSchema
+  }
   if (row.parsed) return row.parsed
   // The same saved value always fails the same way; report it without re-parsing.
   if (row.parseError) throw row.parseError

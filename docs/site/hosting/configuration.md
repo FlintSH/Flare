@@ -17,7 +17,7 @@ Flare separates server connection details from instance preferences. Configure P
 
 For email, precedence is **environment or secret file → saved value → default**. Removing an override reveals the saved fallback; the override is not copied into the database. Other settings do not have an equivalent generic environment mapping.
 
-Saved settings apply from the next request without a restart. Each request checks the saved configuration's revision in PostgreSQL and reuses the settings it already read only while that revision is unchanged. A change saved through another replica, written by a maintenance script, or edited directly in the database is therefore seen on the next request too. Storage is the exception: a Flare process keeps its storage connection until that same process saves a storage change, so restart any other replicas after changing storage settings.
+Saved settings apply from the next request without a restart. Each request checks the saved configuration's revision in PostgreSQL and reuses the settings it already read only while that revision is unchanged and Flare's own code hasn't been reloaded, as happens in development. A change saved through another replica, written by a maintenance script, or edited directly in the database is therefore seen on the next request too. Storage is the exception: a Flare process keeps its storage connection until that same process saves a storage change, so restart any other replicas after changing storage settings.
 
 ## Core environment variables
 
