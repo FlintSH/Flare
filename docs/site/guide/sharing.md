@@ -68,6 +68,8 @@ If you need to stop public access while keeping your copy, set the file to **Pri
 
 Browser preview support is separate from upload support. If a preview fails, try downloading the file and opening it in an appropriate application. A share page expanded image viewer shows that shared image; it does not reveal the owner's surrounding library.
 
+Flare never lets an uploaded file run as part of its own site. Raw links, file paths under `/api/files/`, and image previews are served in a browser sandbox, so an HTML page, SVG drawing, or other active document opened from a Flare link cannot run scripts, read the viewer's Flare session, or act on their behalf. SVG images still display; only their scripts are blocked. This protects people who open a link, including administrators reviewing other accounts' uploads.
+
 A public archive exposes its member paths and bytes to authorized recipients through the [archive browser](./archives#browse-an-archive-shared-with-you), even if those files originally had private links or Flare passwords. Protected public archives require the file password before browsing or entry downloads; a private archive remains unavailable to other ordinary users even if they know its password. Share-page browsing does not add files to an account or offer extraction. [Archive creation](./archives#create-an-archive-from-selected-files) defaults to private and does not embed source sharing controls or encrypt the result. An explicitly selected public upload profile can make the new archive public immediately; review its contents and the profile summary before confirming.
 
 ## Share pages, raw links, and downloads

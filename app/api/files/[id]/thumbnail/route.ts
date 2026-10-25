@@ -54,10 +54,13 @@ async function handleGET(
     const storageProvider = await getStorageProvider()
     const fileStream = await storageProvider.getFileStream(file.path)
 
-    // Just serve the original image - let the browser/CSS handle sizing
+    // Just serve the original image - let the browser/CSS handle sizing.
+    // The stored type is client-supplied and can be an active document such
+    // as SVG, so a direct visit must not run script on the Flare origin.
     return new NextResponse(fileStream as unknown as BodyInit, {
       headers: {
         'Content-Type': file.mimeType,
+        'Content-Security-Policy': 'sandbox',
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control':
           file.visibility === 'PRIVATE' || file.password
