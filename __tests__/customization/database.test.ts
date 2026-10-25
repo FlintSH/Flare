@@ -600,6 +600,92 @@ suite('customization contracts against disposable PostgreSQL', () => {
     ).rejects.toMatchObject({ status: 409 })
   })
 
+  it('names chunked and multipart uploads from the last path component only', async () => {
+    const urlId = `customization-names-${randomUUID()}`
+    routeRoots.add(`uploads/${urlId}`)
+    await prisma.user.update({ where: { id: 'owner-one' }, data: { urlId } })
+    const text = 'A chunked upload whose filename contains a path'
+    const { data, metadata } = await startChunk(text, {
+      filename: '../../../public/re\u0000port\n.html',
+    })
+    expect(metadata.filename).toBe('report.html')
+    expect(metadata.fileKey).toMatch(
+      new RegExp(`^uploads/${urlId}/[0-9a-f-]{36}/report\\.html$`)
+    )
+    const part = await storage.uploadPart(
+      metadata.fileKey,
+      metadata.s3UploadId,
+      1,
+      Buffer.from(text)
+    )
+    const chunkRoutes = await import('@/app/api/files/chunks/route')
+    const completed = await chunkRoutes.PUT(
+      jsonRequest(
+        '/api/files/chunks',
+        {
+          uploadId: data.uploadId,
+          parts: [{ ETag: part.ETag, PartNumber: 1 }],
+        },
+        'PUT'
+      )
+    )
+    expect(completed.status).toBe(200)
+    expect(
+      (
+        await prisma.file.findFirstOrThrow({
+          where: { path: metadata.fileKey },
+        })
+      ).name
+    ).toBe('report.html')
+
+    const windows = await startChunk(text, {
+      filename: 'C:\\Users\\me\\Pictures\\shot.png',
+    })
+    expect(windows.metadata.filename).toBe('shot.png')
+
+    for (const filename of ['..', 'folder/', 'C:\\Users\\..', '\u0000\u001f']) {
+      const response = await chunkRoutes.POST(
+        jsonRequest('/api/files/chunks', {
+          filename,
+          mimeType: 'text/plain',
+          size: 4,
+        })
+      )
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ error: 'Invalid filename.' })
+    }
+
+    // Multipart clients can send RFC 5987 names with a path and control
+    // characters; busboy keeps the last component, Flare drops the rest.
+    const fileRoutes = await import('@/app/api/files/route')
+    const boundary = 'flare-name-fixture'
+    const multipart = await fileRoutes.POST(
+      new Request('http://localhost/api/files', {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        },
+        body: [
+          `--${boundary}`,
+          `Content-Disposition: form-data; name="file"; filename*=UTF-8''sub%2Fmul%00ti%0A.txt`,
+          'Content-Type: text/plain',
+          '',
+          text,
+          `--${boundary}--`,
+          '',
+        ].join('\r\n'),
+      })
+    )
+    expect(multipart.status).toBe(200)
+    expect(
+      (
+        await prisma.file.findFirstOrThrow({
+          where: { userId: 'owner-one', name: { startsWith: 'mul' } },
+        })
+      ).name
+    ).toBe('multi.txt')
+  })
+
   it.each(['markdown', 'html', 'raw', 'download'])(
     'uses share-page links for legacy %s profiles through multipart and both chunk completion APIs',
     async (copyFormat) => {

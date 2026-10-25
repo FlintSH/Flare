@@ -149,16 +149,18 @@ To free space, download anything you need and delete unwanted files. Switching f
 
 ## Export your data
 
-Choose **Export All Data** under **Profile → Your data**. Flare prepares a ZIP download and shows preparation and download progress. Keep the page open while it works, and allow enough disk space on your device.
+Choose **Export All Data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Keep the page open until the download finishes, and allow enough disk space on your device. Leaving the page stops the export on the server too.
 
 The archive contains:
 
 - `user-data.json` with basic account details, file metadata, saved OCR text, and shortened URLs with click counts.
-- Available uploaded files under `files/`, grouped by upload date.
+- Available uploaded files under `files/`, in one folder per upload date (`files/2026-10-01/report.pdf`). Entries use each file's display name.
+
+Two files with the same name from the same day both appear. The older one keeps the plain name and the others get a number before the extension: `report.pdf`, `report (2).pdf`, `report (3).pdf`. Names that differ only in capitals, such as `Report.PDF` and `report.pdf`, count as the same name, because Windows and macOS would otherwise overwrite one with the other when extracting.
 
 This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, the passkey requirement, active-session records, login history, or instance audit events. Export profile recipes separately if you want to keep those settings.
 
-Inspect the archive and open important files before deleting their originals. Files that are missing from storage or cannot be retrieved can be skipped during export. If an expected file is absent, download it individually if possible and ask the administrator to check storage.
+Inspect the archive and open important files before deleting their originals. A file that storage cannot open, for example because it is missing, is skipped and the rest of the export continues. If storage fails partway through a file, the download stops with an error rather than saving an archive with a cut-off file; start the export again. If an expected file is absent, or an export keeps failing, download the file individually if possible and ask the administrator to check storage.
 
 ## Integrations and connected tools
 

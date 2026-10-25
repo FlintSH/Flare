@@ -2,6 +2,7 @@ import busboy from 'busboy'
 import { Readable } from 'node:stream'
 
 import type { StorageProvider } from '@/lib/storage'
+import { uploadDisplayName } from '@/lib/uploads/display-name'
 
 export type UploadLimit = 'size' | 'quota' | null
 
@@ -107,7 +108,7 @@ export async function parseSingleFileUpload({
 
       filePromise = (async () => {
         const destination = await resolveDestination({
-          filename: info.filename || 'file',
+          filename: uploadDisplayName(info.filename) ?? 'file',
           mimeType,
         })
 

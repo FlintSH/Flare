@@ -16,7 +16,7 @@ Local storage writes beneath the application's `uploads` directory: **`/app/uplo
 
 Use local storage when one server has enough disk and you want the fewest moving parts. File previews and downloads stream through the Flare app, so server disk speed and network bandwidth influence transfers. The app supports range reads for media seeking.
 
-The temporary directory is separate: `/app/tmp` contains in-progress upload state and local multipart parts. Leave it writable with enough free space. Stopping the app during a large upload can require the user to restart that upload.
+The temporary directory is separate: `/app/tmp` contains in-progress upload state and local multipart parts. Leave it writable with enough free space. Stopping the app during a large upload can require the user to restart that upload. Personal [data exports](/guide/account#export-your-data) don't use it: they stream each file from storage straight into the download, one file at a time, for both local and S3 storage.
 
 ## S3-compatible storage
 
