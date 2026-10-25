@@ -42,7 +42,7 @@ These routes check the file's visibility, password, and an optional **browser se
 | `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling.                                                 |
 | `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value; POST accepts password JSON. S3 storage can redirect after access validation. |
 | `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image.                                                        |
-| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text, processing it if necessary, after access validation.                                                         |
+| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)).                |
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs.
 
@@ -59,6 +59,19 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
 
 A local file-open failure or failed view-counter write returns `500` and closes the acquired storage stream. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
+
+### OCR request limits
+
+`GET /api/files/{id}/ocr` returns saved text immediately as `200` with `{ success, text, confidence }`. Text that isn't saved yet is read through the same queue as automatic OCR, one image at a time per Flare process, and requests for an image that is already queued wait for that work. Responses other than saved text:
+
+| Status | Body                                                          | Meaning                                                                                                                                                           |
+| ------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | `{ success: false, error, retryAfter? }`                      | Reading failed. The error never includes storage or recognition details. Flare reads the image again only after 5 minutes; until then `retryAfter` gives seconds. |
+| `202`  | `{ success: false, status: "processing", error, retryAfter }` | The request waited 60 seconds. Reading continues, and a later request returns the saved text.                                                                     |
+| `429`  | `{ success: false, error, retryAfter }`                       | The requester started 20 readings in the last 10 minutes: per account when signed in, otherwise per client address.                                               |
+| `503`  | `{ success: false, error, retryAfter }`                       | Ten requests are already waiting for the queue.                                                                                                                   |
+
+`202`, `429`, and `503` also send `Retry-After` in seconds. Joining work that is already queued and reading saved text don't count toward the limit. Limits and queue state are per process and reset when Flare restarts.
 
 ## Dashboard account routes requiring a browser session
 

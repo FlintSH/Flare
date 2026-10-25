@@ -31,7 +31,7 @@ import {
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
-import { OcrDialog } from '@/components/shared/ocr-dialog'
+import { OcrDialog, requestOcr } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -116,6 +116,8 @@ export function FileCard({
   const [ocrText, setOcrText] = useState<string | null>(null)
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
+  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
+  const [canRetryOcr, setCanRetryOcr] = useState(false)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -252,26 +254,26 @@ export function FileCard({
     if (signal.aborted) return
     setIsLoadingOcr(true)
     setOcrError(null)
+    setOcrNotice(null)
     try {
-      const response = await fetch(`/api/files/${file.id}/ocr`, { signal })
-      const data = await response.json()
+      const outcome = await requestOcr(`/api/files/${file.id}/ocr`, signal)
       if (signal.aborted) return
-      if (!response.ok) throw new Error(data.error || 'Failed to process OCR')
-      if (!data.success) {
-        setOcrError(data.error || 'There was an error processing the image')
-        setOcrText(null)
-        setOcrConfidence(null)
-      } else {
-        setOcrText(data.text)
-        setOcrConfidence(data.confidence)
-      }
+      // Busy, limited, and still-running results are shown in the dialog
+      // with a way to ask again.
+      setOcrText(outcome.kind === 'text' ? outcome.text : null)
+      setOcrConfidence(outcome.kind === 'text' ? outcome.confidence : null)
+      setOcrNotice(outcome.kind === 'pending' ? outcome.message : null)
+      setOcrError(outcome.kind === 'error' ? outcome.message : null)
+      setCanRetryOcr(
+        outcome.kind === 'pending' ||
+          (outcome.kind === 'error' && outcome.canRetry)
+      )
       setIsOcrDialogOpen(true)
-    } catch (error) {
+    } catch {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t extract text',
-        description:
-          error instanceof Error ? error.message : 'Please try again.',
+        description: 'Please try again.',
         variant: 'destructive',
       })
     } finally {
@@ -910,8 +912,11 @@ export function FileCard({
       <OcrDialog
         isOpen={isOcrDialogOpen}
         onOpenChange={setIsOcrDialogOpen}
+        isLoading={isLoadingOcr}
         text={ocrText}
         error={ocrError}
+        notice={ocrNotice}
+        onRetry={canRetryOcr ? () => void handleFetchOcr() : undefined}
         confidence={ocrConfidence}
         filename={file.name}
       />

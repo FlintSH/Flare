@@ -1,6 +1,6 @@
 'use client'
 
-import { Copy } from 'lucide-react'
+import { Copy, RotateCw } from 'lucide-react'
 
 import { Icons } from '@/components/shared/icons'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,41 @@ import {
 
 import { useToast } from '@/hooks/use-toast'
 
+export type OcrOutcome =
+  | { kind: 'text'; text: string; confidence: number | null }
+  /** Recognition continues on the server; asking again later returns the text. */
+  | { kind: 'pending'; message: string }
+  | { kind: 'error'; message: string; canRetry: boolean }
+
+/** Request OCR text and describe the result, including busy and limit responses. */
+export async function requestOcr(
+  url: string,
+  signal?: AbortSignal
+): Promise<OcrOutcome> {
+  const response = await fetch(url, { signal })
+  const data = await response.json().catch(() => null)
+  const message = typeof data?.error === 'string' ? data.error : null
+  if (response.status === 202)
+    return {
+      kind: 'pending',
+      message:
+        message ??
+        'Flare is still reading this image. Check again in a moment.',
+    }
+  if (response.ok && data?.success)
+    return {
+      kind: 'text',
+      text: data.text ?? '',
+      confidence: data.confidence ?? null,
+    }
+  return {
+    kind: 'error',
+    message: message ?? 'Couldn’t extract text. Please try again.',
+    // Access errors need a password or permission, not another attempt.
+    canRetry: response.ok || ![400, 401, 403, 404].includes(response.status),
+  }
+}
+
 interface OcrDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -21,6 +56,10 @@ interface OcrDialogProps {
   confidence?: number | null
   filename?: string
   isLoading?: boolean
+  /** A neutral status, such as recognition that is still running. */
+  notice?: string | null
+  /** Shown with errors and notices when another attempt can help. */
+  onRetry?: () => void
 }
 
 export function OcrDialog({
@@ -31,6 +70,8 @@ export function OcrDialog({
   text,
   confidence,
   filename,
+  notice,
+  onRetry,
 }: OcrDialogProps) {
   const { toast } = useToast()
 
@@ -59,12 +100,41 @@ export function OcrDialog({
               <Icons.spinner className="h-6 w-6 animate-spin" />
             </div>
           ) : error ? (
-            <div className="relative rounded-xl bg-destructive/10 border border-destructive/20 backdrop-blur-sm p-4">
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-destructive/5 via-transparent to-destructive/10" />
-              <div className="relative text-sm text-destructive flex items-center space-x-2">
-                <Icons.alertCircle className="h-4 w-4 flex-shrink-0" />
-                <span>{error}</span>
+            <div className="space-y-4">
+              <div
+                role="alert"
+                className="relative rounded-xl bg-destructive/10 border border-destructive/20 backdrop-blur-sm p-4"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-destructive/5 via-transparent to-destructive/10" />
+                <div className="relative text-sm text-destructive flex items-center space-x-2">
+                  <Icons.alertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
               </div>
+              {onRetry && (
+                <Button variant="outline" className="w-full" onClick={onRetry}>
+                  <RotateCw className="h-4 w-4 mr-2" />
+                  Try again
+                </Button>
+              )}
+            </div>
+          ) : notice ? (
+            <div className="space-y-4">
+              <div
+                role="status"
+                className="relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm p-4"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
+                <p className="relative text-muted-foreground text-sm">
+                  {notice}
+                </p>
+              </div>
+              {onRetry && (
+                <Button variant="outline" className="w-full" onClick={onRetry}>
+                  <RotateCw className="h-4 w-4 mr-2" />
+                  Check again
+                </Button>
+              )}
             </div>
           ) : !text ? (
             <div className="relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm p-4">

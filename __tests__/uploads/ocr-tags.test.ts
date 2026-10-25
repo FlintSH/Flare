@@ -1,9 +1,17 @@
-import { GET } from '@/app/api/files/[id]/ocr/route'
 import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { processImageOCR } from '@/lib/ocr'
-import { processImageOCRTask } from '@/lib/ocr/processor'
+// The OCR queue remembers in-flight work and recent failures per process, so
+// each test loads a fresh copy of the route and queue.
+let GET: typeof import('@/app/api/files/[id]/ocr/route').GET
+let ocrQueue: typeof import('@/lib/ocr').ocrQueue
+let processImageOCRTask: typeof import('@/lib/ocr/processor').processImageOCRTask
+
+async function processImageOCR(filePath: string, fileId: string) {
+  const outcome = await ocrQueue.request({ filePath, fileId })
+  if (outcome.status !== 'done') throw new Error(outcome.status)
+  return outcome.result
+}
 
 const mocks = vi.hoisted(() => ({
   file: {
@@ -38,10 +46,9 @@ vi.mock('@/lib/storage', () => ({
 vi.mock('@/lib/tags/service', () => ({
   applyAutomaticTags: mocks.applyAutomaticTags,
 }))
-vi.mock('@/lib/ocr/queue', () => ({ ocrQueue: {} }))
 vi.mock('@/lib/logger', () => ({
   loggers: {
-    ocr: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    ocr: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
     files: { error: vi.fn() },
   },
 }))
@@ -73,7 +80,11 @@ function newFile() {
 }
 let file = newFile()
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules()
+  ;({ GET } = await import('@/app/api/files/[id]/ocr/route'))
+  ;({ ocrQueue } = await import('@/lib/ocr'))
+  ;({ processImageOCRTask } = await import('@/lib/ocr/processor'))
   vi.resetAllMocks()
   vi.useFakeTimers()
   vi.setSystemTime(now)
@@ -173,6 +184,10 @@ describe('tags after OCR', () => {
     await expect(processImageOCR('image.png', 'file')).resolves.toMatchObject({
       success: false,
     })
+    // The route reports a failure without the underlying error.
+    const response = await getOcr()
+    expect(await response.json()).toMatchObject({ success: false })
+    expect(mocks.recognize).toHaveBeenCalledTimes(1)
     expect(mocks.applyAutomaticTags).not.toHaveBeenCalled()
     expect(file.ocrTagsPendingAt).toBeNull()
   })

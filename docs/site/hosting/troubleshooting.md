@@ -123,6 +123,8 @@ With `audit.read`, filter [Audit log](/admin/audit) for the relevant file and pr
 
 Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
 
+Each Flare process reads one image at a time. Automatic OCR after upload and **Extract text** requests share that queue, so a burst of uploads delays manual requests and the reverse. A request waits up to 60 seconds and then answers `202` while reading continues. At most ten requests wait at once; more get `503`. Each account, or client address for anonymous visitors, can start 20 readings per 10 minutes before getting `429`. After a failed reading, Flare waits 5 minutes before trying that image again. All of this state is in memory: a restart clears it, and queued work that hadn't finished is not resumed. Ask for **Extract text** again after a restart. Correct client addresses depend on your [proxy configuration](/hosting/reverse-proxy).
+
 ## Audit activity is missing
 
 Open [Audit log](/admin/audit), clear the filters, and widen the time range. History starts with the session/audit migration; earlier activity is not backfilled. Confirm the caller has `audit.read`, then check PostgreSQL availability, migration status, disk space, and application diagnostics for audit-write failures. Create one disposable file and refresh the log to test current ingestion. Most audit writes are best effort, so a missing event is not proof that an operation failed or never happened. Account deletion’s per-file evidence is transactional and rolls back deletion if the insert fails.

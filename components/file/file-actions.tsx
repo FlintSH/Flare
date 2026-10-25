@@ -13,7 +13,7 @@ import {
   ScanText,
 } from 'lucide-react'
 
-import { OcrDialog } from '@/components/shared/ocr-dialog'
+import { OcrDialog, requestOcr } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
 import { useFileActions } from '@/hooks/use-file-actions'
@@ -42,6 +42,8 @@ export function FileActions({
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
   const [ocrText, setOcrText] = useState<string | null>(null)
   const [ocrError, setOcrError] = useState<string | null>(null)
+  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
+  const [canRetryOcr, setCanRetryOcr] = useState(false)
   const [isLoadingOcr, setIsLoadingOcr] = useState(false)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
@@ -128,6 +130,7 @@ export function FileActions({
     try {
       setIsLoadingOcr(true)
       setOcrError(null)
+      setOcrNotice(null)
       setIsOcrDialogOpen(true)
       const sanitizedFileId = DOMPurify.sanitize(fileId)
       const passwordParam = verifiedPassword
@@ -135,30 +138,18 @@ export function FileActions({
         : ''
       const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
 
-      const response = await fetch(sanitizeUrl(ocrUrl))
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to process OCR')
-      }
-
-      const data = await response.json()
-
-      if (!data.success) {
-        setOcrError(data.error || 'There was an error processing the image')
-        setOcrText(null)
-        setOcrConfidence(null)
-      } else {
-        setOcrText(data.text)
-        setOcrConfidence(data.confidence)
-        setOcrError(null)
-      }
-    } catch (error) {
-      setOcrError(
-        error instanceof Error
-          ? error.message
-          : 'Couldn’t extract text. Please try again.'
+      const outcome = await requestOcr(sanitizeUrl(ocrUrl))
+      setOcrText(outcome.kind === 'text' ? outcome.text : null)
+      setOcrConfidence(outcome.kind === 'text' ? outcome.confidence : null)
+      setOcrNotice(outcome.kind === 'pending' ? outcome.message : null)
+      setOcrError(outcome.kind === 'error' ? outcome.message : null)
+      setCanRetryOcr(
+        outcome.kind === 'pending' ||
+          (outcome.kind === 'error' && outcome.canRetry)
       )
+    } catch {
+      setOcrError('Couldn’t extract text. Please try again.')
+      setCanRetryOcr(true)
       setOcrText(null)
       setOcrConfidence(null)
     } finally {
@@ -239,6 +230,8 @@ export function FileActions({
         onOpenChange={setIsOcrDialogOpen}
         isLoading={isLoadingOcr}
         error={ocrError}
+        notice={ocrNotice}
+        onRetry={canRetryOcr ? () => void handleOcr() : undefined}
         text={ocrText}
         confidence={ocrConfidence}
       />
