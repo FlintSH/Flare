@@ -342,6 +342,41 @@ describe('profile data export from S3 storage', () => {
     expect(getProgress('export-owner')).toBe(0)
   })
 
+  it('stops when the client leaves before reading any of the response', async () => {
+    let source: Readable | undefined
+    const { provider, opened } = s3Provider({}, (path) => {
+      if (path !== 'uploads/o/1/large.bin') return undefined
+      source = new Readable({
+        read() {
+          setTimeout(() => this.push(randomBytes(64 * 1024)), 2)
+        },
+      })
+      return source
+    })
+    state.provider = provider
+    state.files = [
+      exportFile('large.bin', 'uploads/o/1/large.bin'),
+      exportFile('later.bin', 'uploads/o/2/later.bin'),
+    ]
+
+    // Leaving before the response starts, as a reload can, means nothing
+    // ever reads or cancels the body. Only the request signal reports it.
+    const client = new AbortController()
+    const response = await GET(
+      new Request('https://flare.test/api/profile/export', {
+        signal: client.signal,
+      })
+    )
+    expect(response.status).toBe(200)
+    await delay(20)
+    client.abort()
+    await delay(50)
+
+    expect(source?.destroyed).toBe(true)
+    expect(opened).toEqual(['uploads/o/1/large.bin'])
+    expect(getProgress('export-owner')).toBe(0)
+  })
+
   it('reads one storage object at a time, at the pace of the download', async () => {
     const size = 8 * 1024 * 1024
     const pulled: Record<string, number> = {}

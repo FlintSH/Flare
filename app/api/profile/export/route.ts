@@ -10,11 +10,10 @@ import { finished } from 'node:stream/promises'
 import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { loggers } from '@/lib/logger'
-import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
-import { uploadDisplayName } from '@/lib/uploads/display-name'
 import { clearProgress, updateProgress } from '@/lib/utils'
 
 const logger = loggers.users
@@ -50,29 +49,6 @@ type UserData = {
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
-
-/**
- * Gives each file its own entry. Extraction on Windows and macOS is
- * case-insensitive, so `Report.PDF` and `report.pdf` also count as a clash.
- */
-function entryNames() {
-  const used = new Set<string>()
-  return (file: Pick<FileData, 'name' | 'uploadedAt'>) => {
-    const folder = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
-    // Older chunked uploads could save a path as the name; keep its last part.
-    const name = sanitizeDisplayName(uploadDisplayName(file.name) ?? '')
-    const dot = name.lastIndexOf('.')
-    const stem = dot > 0 ? name.slice(0, dot) : name
-    const extension = dot > 0 ? name.slice(dot) : ''
-    for (let copy = 1; ; copy++) {
-      const entry = `${folder}/${copy === 1 ? name : `${stem} (${copy})${extension}`}`
-      if (!used.has(entry.toLowerCase())) {
-        used.add(entry.toLowerCase())
-        return entry
-      }
-    }
-  }
-}
 
 // Local uploads predate the storage provider's path checks, so keep the
 // original lookup: an absolute path first, then the app's uploads directory.
@@ -117,7 +93,8 @@ async function openFile(
 function exportArchive(
   userId: string,
   userData: UserData,
-  storageProvider: StorageProvider
+  storageProvider: StorageProvider,
+  signal: AbortSignal
 ) {
   const archive = archiver('zip', {
     zlib: { level: 9 },
@@ -172,12 +149,16 @@ function exportArchive(
   // `close` after `end` is a finished download; without `end`, the reader
   // went away or the archive failed.
   archive.on('close', () => settle())
+  // A client that leaves before the response starts, as a reload can, never
+  // reads or cancels the body. The request signal still reports it.
+  if (signal.aborted) settle()
+  else signal.addEventListener('abort', () => settle(), { once: true })
 
   archive.append(JSON.stringify(userData, null, 2), {
     name: 'user-data.json',
   })
 
-  const nextEntryName = entryNames()
+  const nextEntryName = exportEntryNamer()
   void (async () => {
     for (const file of userData.files) {
       if (abort.signal.aborted) return
@@ -289,7 +270,12 @@ async function handleGET(req: Request) {
       'no-store, no-cache, must-revalidate, proxy-revalidate'
     )
 
-    const archive = exportArchive(userId, userDataForExport, storageProvider)
+    const archive = exportArchive(
+      userId,
+      userDataForExport,
+      storageProvider,
+      req.signal
+    )
     return new Response(Readable.toWeb(archive) as ReadableStream<Uint8Array>, {
       headers,
     })

@@ -149,7 +149,7 @@ To free space, download anything you need and delete unwanted files. Switching f
 
 ## Export your data
 
-Choose **Export All Data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Keep the page open until the download finishes, and allow enough disk space on your device. Leaving the page stops the export on the server too.
+Choose **Export All Data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
 
 The archive contains:
 
