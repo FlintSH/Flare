@@ -220,17 +220,125 @@ export async function initConfig(): Promise<FlareConfig> {
   }
 }
 
+const CONFIG_KEY = 'flare_config'
+
+type ConfigRevision = { id: string; xmin: string }
+type CachedConfigRow = ConfigRevision & {
+  /** The saved JSON as read, deep-frozen. Parse it; never edit it. */
+  value: unknown
+  parsed?: FlareConfig
+  parseError?: unknown
+}
+type ConfigCacheState = {
+  row?: CachedConfigRow
+  /** One revision query for the calls made in the same event-loop turn. */
+  revision?: Promise<ConfigRevision | undefined>
+  /** One value read for concurrent calls that found the same new revision. */
+  loading?: ConfigRevision & { promise: Promise<CachedConfigRow | null> }
+}
+
+// One copy per process, shared by every route bundle that loads this module.
+const stateKey = Symbol.for('flare.config.saved-row')
+const processState = globalThis as typeof globalThis & {
+  [stateKey]?: ConfigCacheState
+}
+const cache = (processState[stateKey] ??= {})
+
+function sameRevision(
+  current: ConfigRevision | undefined,
+  revision: ConfigRevision
+) {
+  return current?.id === revision.id && current.xmin === revision.xmin
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const child of Object.values(value)) deepFreeze(child)
+  }
+  return value
+}
+
+async function queryRevision(): Promise<ConfigRevision | undefined> {
+  const [revision] = await prisma.$queryRaw<ConfigRevision[]>`
+    SELECT "id", xmin::text AS "xmin" FROM "Config" WHERE "key" = ${CONFIG_KEY}
+  `
+  return revision
+}
+
+/**
+ * The row ID plus PostgreSQL's xmin, which every committed write changes,
+ * whichever process or replica made it. Calls made in the same event-loop turn,
+ * such as the components of one page, share one query that starts after all of
+ * them, so its answer still includes every write committed before any of
+ * those calls.
+ */
+function currentRevision() {
+  cache.revision ??= new Promise((resolve, reject) =>
+    setImmediate(() => {
+      cache.revision = undefined
+      queryRevision().then(resolve, reject)
+    })
+  )
+  return cache.revision
+}
+
+async function readValue(): Promise<CachedConfigRow | null> {
+  // Read the value with its own revision. A write that lands after the
+  // revision check is then caught by the next check rather than hidden.
+  const [row] = await prisma.$queryRaw<(ConfigRevision & { value: unknown })[]>`
+    SELECT "id", xmin::text AS "xmin", "value" FROM "Config" WHERE "key" = ${CONFIG_KEY}
+  `
+  if (!row) return null
+  const next = { id: row.id, xmin: row.xmin, value: deepFreeze(row.value) }
+  cache.row = next
+  return next
+}
+
+/**
+ * The saved configuration row, reusing the previous read while its revision
+ * matches, so a saved change is seen on the next call without an expiry time
+ * or explicit invalidation. Database errors propagate.
+ */
+export async function readSavedConfigRow(): Promise<CachedConfigRow | null> {
+  const revision = await currentRevision()
+  if (!revision) {
+    cache.row = undefined
+    return null
+  }
+  if (cache.row && sameRevision(cache.row, revision)) return cache.row
+  if (!cache.loading || !sameRevision(cache.loading, revision)) {
+    const promise: Promise<CachedConfigRow | null> = readValue().finally(() => {
+      if (cache.loading?.promise === promise) cache.loading = undefined
+    })
+    cache.loading = { ...revision, promise }
+  }
+  return cache.loading.promise
+}
+
+function parseSavedConfig(row: CachedConfigRow): FlareConfig {
+  if (row.parsed) return row.parsed
+  // The same saved value always fails the same way; report it without re-parsing.
+  if (row.parseError) throw row.parseError
+  try {
+    // Shared by every caller until the row changes, so make it read-only.
+    row.parsed = deepFreeze(configSchema.parse(row.value))
+    return row.parsed
+  } catch (error) {
+    row.parseError = error
+    throw error
+  }
+}
+
 export async function getConfig(): Promise<FlareConfig> {
   try {
-    const config = await prisma.config.findUnique({
-      where: { key: 'flare_config' },
-    })
+    const row = await readSavedConfigRow()
 
-    if (!config) {
+    if (!row) {
       return initConfig()
     }
 
-    return configSchema.parse(config.value)
+    return parseSavedConfig(row)
   } catch (error) {
     logger.warn('Could not access database for config, using default', {
       error,
