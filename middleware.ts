@@ -71,5 +71,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Never run for /api: those handlers own their session and bearer checks
+  // (see above). When middleware runs, Next.js also clones the request body
+  // and cuts it off at 10 MB, which broke larger uploads and chunk parts.
+  matcher: ['/((?!api/|_next/static|_next/image|favicon.ico).*)'],
 }
