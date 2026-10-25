@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ChevronDown } from 'lucide-react'
 
@@ -12,6 +12,11 @@ import {
 } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+import {
+  LEGACY_COLOR_MESSAGE,
+  legacyColorValue,
+} from '@/lib/customization/legacy-appearance'
 
 interface ColorConfig {
   background: string
@@ -52,38 +57,6 @@ function hslToHex(h: number, s: number, l: number): string {
       .padStart(2, '0')
   }
   return `#${f(0)}${f(8)}${f(4)}`
-}
-
-function hexToHSL(hex: string): string {
-  hex = hex.replace('#', '')
-
-  const r = parseInt(hex.substring(0, 2), 16) / 255
-  const g = parseInt(hex.substring(2, 4), 16) / 255
-  const b = parseInt(hex.substring(4, 6), 16) / 255
-
-  const cmin = Math.min(r, g, b)
-  const cmax = Math.max(r, g, b)
-  const delta = cmax - cmin
-  let h = 0
-  let s = 0
-  let l = 0
-
-  if (delta === 0) h = 0
-  else if (cmax === r) h = ((g - b) / delta) % 6
-  else if (cmax === g) h = (b - r) / delta + 2
-  else h = (r - g) / delta + 4
-
-  h = Math.round(h * 60)
-  if (h < 0) h += 360
-
-  l = (cmax + cmin) / 2
-
-  s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1))
-
-  s = +(s * 100).toFixed(1)
-  l = +(l * 100).toFixed(1)
-
-  return `${h} ${s}% ${l}%`
 }
 
 function parseColor(color: string): string {
@@ -152,6 +125,15 @@ function SimpleThemeCustomizer({
   livePreview = true,
 }: ThemeCustomizerProps) {
   const [baseHue, setBaseHue] = useState(222.2)
+  // Text typed into a value field, kept apart from the saved colors so the
+  // stored HSL form never replaces it mid-edit. `left` marks a draft whose
+  // field has lost focus, so errors wait until someone finishes typing.
+  const [drafts, setDrafts] = useState<
+    Partial<Record<keyof ColorConfig, { text: string; left: boolean }>>
+  >({})
+  // Set while this component's own change comes back as initialColors. Any
+  // other new palette, such as Discard, replaces text still being edited.
+  const ownChange = useRef(false)
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
     foreground: '',
@@ -184,6 +166,8 @@ function SimpleThemeCustomizer({
         ...colors,
         ...initialColors,
       }))
+      if (ownChange.current) ownChange.current = false
+      else setDrafts({})
     }
   }, [initialColors])
 
@@ -206,6 +190,8 @@ function SimpleThemeCustomizer({
         document.documentElement.style.setProperty(`--${cssKey}`, value)
       })
 
+    setDrafts({})
+    ownChange.current = true
     onColorChange(newColors)
   }
 
@@ -217,54 +203,85 @@ function SimpleThemeCustomizer({
       })
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
-
+    setDrafts({})
+    ownChange.current = true
     onColorChange(DEFAULT_COLORS)
   }
 
-  const updatePreview = (key: keyof ColorConfig, value: string) => {
-    let cssValue = value
-    if (value.startsWith('#')) {
-      cssValue = hexToHSL(value)
-    } else if (value.includes(' ')) {
-      const [h, s, l] = value
-        .split(' ')
-        .map((v) => parseFloat(v.replace('%', '')))
-      if (!isNaN(h) && !isNaN(s) && !isNaN(l)) {
-        cssValue = `${h} ${s}% ${l}%`
-      }
-    }
-
+  // Save only values the server accepts, stored as an HSL triplet even when
+  // entered as hex.
+  const applyColor = (key: keyof ColorConfig, value: string) => {
+    const cssValue = legacyColorValue(value)
+    if (!cssValue) return
+    setColors((prev) => ({ ...prev, [key]: cssValue }))
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     if (livePreview)
       document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
-    setColors((prev) => ({ ...prev, [key]: value }))
-
-    onColorChange({ [key]: value })
+    ownChange.current = true
+    onColorChange({ [key]: cssValue })
   }
 
-  const handleColorChange = (key: keyof ColorConfig, value: string) => {
-    updatePreview(key, value)
+  const clearDraft = (key: keyof ColorConfig) =>
+    setDrafts(({ [key]: _draft, ...rest }) => rest)
+
+  const handlePickerChange = (key: keyof ColorConfig, value: string) => {
+    clearDraft(key)
+    applyColor(key, value)
   }
 
-  const renderColorInput = (key: keyof ColorConfig, label: string) => (
-    <div key={key} className="grid gap-2">
-      <Label htmlFor={key}>{label}</Label>
-      <div className="flex gap-2">
-        <Input
-          id={key}
-          type="color"
-          value={parseColor(colors[key] || DEFAULT_COLORS[key])}
-          className="w-12 p-1 h-9"
-          onChange={(e) => handleColorChange(key, e.target.value)}
-        />
-        <Input
-          value={colors[key] || DEFAULT_COLORS[key]}
-          onChange={(e) => handleColorChange(key, e.target.value)}
-          placeholder={`${label} color`}
-        />
+  const handleTextChange = (key: keyof ColorConfig, text: string) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: { text, left: prev[key]?.left ?? false },
+    }))
+    applyColor(key, text)
+  }
+
+  // A finished valid entry shows its saved form. Invalid text stays, with
+  // its error, until it is fixed or replaced.
+  const handleTextBlur = (key: keyof ColorConfig) => {
+    const draft = drafts[key]
+    if (!draft) return
+    if (legacyColorValue(draft.text)) clearDraft(key)
+    else setDrafts((prev) => ({ ...prev, [key]: { ...draft, left: true } }))
+  }
+
+  const renderColorInput = (key: keyof ColorConfig, label: string) => {
+    const draft = drafts[key]
+    const invalid = !!draft?.left && !legacyColorValue(draft.text)
+    return (
+      <div key={key} className="grid content-start gap-2">
+        <Label htmlFor={key}>{label}</Label>
+        <div className="flex gap-2">
+          <Input
+            id={key}
+            type="color"
+            value={parseColor(colors[key] || DEFAULT_COLORS[key])}
+            className="w-12 p-1 h-9"
+            onChange={(e) => handlePickerChange(key, e.target.value)}
+          />
+          <Input
+            value={draft?.text ?? (colors[key] || DEFAULT_COLORS[key])}
+            onChange={(e) => handleTextChange(key, e.target.value)}
+            onBlur={() => handleTextBlur(key)}
+            placeholder={`${label} color`}
+            aria-label={`${label} value`}
+            aria-invalid={invalid || undefined}
+            aria-describedby={invalid ? `${key}-error` : undefined}
+            className={invalid ? 'border-destructive' : undefined}
+          />
+        </div>
+        {invalid && (
+          <p
+            id={`${key}-error`}
+            className="text-[0.8rem] font-medium text-destructive"
+          >
+            {LEGACY_COLOR_MESSAGE} This value isn&apos;t saved.
+          </p>
+        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-4">

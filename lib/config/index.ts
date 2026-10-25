@@ -3,6 +3,13 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import {
+  LEGACY_COLOR_MESSAGE,
+  MAX_LEGACY_COLORS,
+  legacyAppearanceUpdateSchema,
+  legacyColors,
+  legacyTheme,
+} from '@/lib/customization/legacy-appearance'
+import {
   DEFAULT_CUSTOMIZATION,
   customizationSchema,
 } from '@/lib/customization/schema'
@@ -92,9 +99,11 @@ export const configSchema = z.object({
         .prefault({}),
     }),
     appearance: z.object({
-      theme: z.string(),
+      // Both values reach inline page markup. Unsafe saved values are dropped
+      // rather than rejected, so an old configuration can still be read.
+      theme: z.unknown().transform(legacyTheme).prefault('dark'),
       favicon: z.string().nullable(),
-      customColors: z.record(z.string(), z.string()),
+      customColors: z.unknown().transform(legacyColors).prefault({}),
     }),
     advanced: z.object({
       customCSS: z.string(),
@@ -246,11 +255,22 @@ type ConfigUpdate = {
   }
 }
 
+/** A submitted setting was rejected; the message is safe to show to the person saving. */
+export class ConfigValidationError extends Error {}
+
 export async function updateConfig(
   newConfig: ConfigUpdate,
   authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
   validateSaved?: (tx: Prisma.TransactionClient) => Promise<void>
 ): Promise<FlareConfig> {
+  const appearance = newConfig.settings?.appearance
+  if (appearance) {
+    const submitted = legacyAppearanceUpdateSchema.safeParse(appearance)
+    if (!submitted.success)
+      throw new ConfigValidationError(
+        submitted.error.issues[0]?.message ?? LEGACY_COLOR_MESSAGE
+      )
+  }
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
@@ -331,6 +351,17 @@ export async function updateConfig(
           },
         },
       }
+
+      // Submitted colors merge into the saved palette. Reject a merge past the
+      // cap, which reads would otherwise trim without telling anyone.
+      if (
+        newConfig.settings?.appearance?.customColors &&
+        Object.keys(mergedConfig.settings.appearance.customColors).length >
+          MAX_LEGACY_COLORS
+      )
+        throw new ConfigValidationError(
+          `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
+        )
 
       const validatedConfig = configSchema.parse(mergedConfig)
 

@@ -181,7 +181,7 @@ For `PATCH /api/settings`, send a partial `{ "settings": { ... } }` body. Every 
 
 Whether Everyone can create invites is stored on the Everyone role, not in settings. Change it with `PUT /api/settings/invites`, which needs `settings.security` and the caller's own `invites.create`; see [invite contracts](./invites#change-who-can-invite).
 
-Empty/unknown sections do not grant an escape from these checks. Custom CSS/head HTML can execute code in the instance browser context and therefore requires Administrator. The legacy whole-settings `POST /api/settings` operation also requires Administrator. Email and the appearance studio retain their dedicated routes. Reading settings does not grant permission to write any section; writing a section does not authorize replacing the whole configuration.
+Empty/unknown sections do not grant an escape from these checks. Custom CSS/head HTML can execute code in the instance browser context and therefore requires Administrator. `settings.appearance` accepts only `dark`, `light`, or `system` for `theme` and HSL or hex values for `customColors`, because both are written into every page; other values return `400` with a message such as `Classic colors must be HSL values such as 222.2 84% 4.9% or hex colors such as #1e293b.` See [saved appearance fields](/hosting/configuration#saved-appearance-fields). The legacy whole-settings `POST /api/settings` operation also requires Administrator. Email and the appearance studio retain their dedicated routes. Reading settings does not grant permission to write any section; writing a section does not authorize replacing the whole configuration.
 
 ## Tokens, events, and compatibility
 
