@@ -15,8 +15,8 @@ const logger = loggers.config
 export const configSchema = z.object({
   version: z.string(),
   settings: z.object({
-    customization: customizationSchema.default({}),
-    email: emailConfigSchema.default({}),
+    customization: customizationSchema.prefault({}),
+    email: emailConfigSchema.prefault({}),
     general: z.object({
       setup: z.object({
         completed: z.boolean().default(false),
@@ -38,7 +38,7 @@ export const configSchema = z.object({
             usesPerInvite: z.number().int().min(1).max(100).default(1),
             lifetimeDays: z.number().int().min(1).max(365).default(30),
           })
-          .default({}),
+          .prefault({}),
       }),
       storage: z.object({
         provider: z.enum(['local', 's3']).default('local'),
@@ -89,12 +89,12 @@ export const configSchema = z.object({
           requireEmailVerified: z.boolean().default(true),
           enforceSso: z.boolean().default(false),
         })
-        .default({}),
+        .prefault({}),
     }),
     appearance: z.object({
       theme: z.string(),
       favicon: z.string().nullable(),
-      customColors: z.record(z.string()),
+      customColors: z.record(z.string(), z.string()),
     }),
     advanced: z.object({
       customCSS: z.string(),

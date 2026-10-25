@@ -53,7 +53,7 @@ A role has this shape; this example is demonstration data:
 | `position`    | `1` by default; integer from 1 through 1,000,000. Higher is above. |
 | `permissions` | Empty array by default; unique keys from the permission catalog.   |
 
-PATCH accepts a nonempty subset of these fields. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`.
+PATCH accepts a nonempty subset of these fields and leaves omitted fields unchanged; the defaults above apply only when creating a role. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`.
 
 `systemKey` identifies the built-in roles and is server-owned. The initial Admin role can be renamed, recolored, reordered, edited, or deleted subject to the administrator recovery safeguard. Permission checks use its grants, not its system key or name.
 

@@ -54,7 +54,7 @@ export function parseUploadFields(
   fields: Record<string, string>
 ): UploadRequestOptions {
   const values: Record<string, unknown> = {}
-  for (const key of Object.keys(uploadRequestOptionsSchema.innerType().shape)) {
+  for (const key of Object.keys(uploadRequestOptionsSchema.out.shape)) {
     if (fields[key] === undefined) continue
     if (key === 'tagIds') {
       try {
@@ -136,7 +136,7 @@ export async function resolveUploadOptions(
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.innerType().shape
+      uploadProfileOptionsSchema.out.shape
     ) as (keyof typeof profileOptions)[]) {
       if (request[key] !== undefined && !sameOption(request[key], bound[key]))
         throw new UploadError(
@@ -206,7 +206,7 @@ export function applyUploadOverrides(
     )
   if (user.apiToken?.profileId) {
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.innerType().shape
+      uploadProfileOptionsSchema.out.shape
     ) as (keyof typeof resolved)[]) {
       if (
         key in request &&

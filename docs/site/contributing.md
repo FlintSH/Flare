@@ -127,6 +127,8 @@ Later security floors raise that proxy stack's `basic-ftp` to 6.2.3 or later, be
 
 Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
 
+Flare validates with Zod 4, which differs from Zod 3 in ways the type checker does not always catch. `.default()` returns its value without parsing it, so use `.prefault()` when an object default should fill its nested defaults. Defaults also apply inside optional fields, so build update schemas from fields without create defaults; otherwise `.partial()` resets every omitted field. API timestamps that accept offsets use `isoDateTimeWithOffset` from `lib/utils/iso-datetime.ts`, which keeps Zod 3's forms (`+0200` offsets and optional seconds) for existing clients. Messages without custom text use Zod 4's default wording. Form resolvers need `@hookform/resolvers` 5.1 or later.
+
 ## Database permission and avatar regression tests
 
 The role/cleanup and avatar race suites require **two separate disposable PostgreSQL databases**. Create them on a loopback server with names beginning `flare_roles_test_` and `flare_avatar_test_`. Use a local test database role allowed to apply migrations and manage fixture tables. Both suites clear fixture tables in their dedicated databases. Do not use an application or browser-demo database for these tests.

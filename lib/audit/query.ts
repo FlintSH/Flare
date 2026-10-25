@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
+import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
+
 const filter = z.string().trim().max(200).optional()
 export const auditQuerySchema = z
   .object({
@@ -11,8 +13,8 @@ export const auditQuerySchema = z
     actorId: filter,
     targetId: filter,
     requestId: filter,
-    from: z.string().datetime({ offset: true }).optional(),
-    to: z.string().datetime({ offset: true }).optional(),
+    from: isoDateTimeWithOffset.optional(),
+    to: isoDateTimeWithOffset.optional(),
     page: z.coerce.number().int().min(1).max(100000).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })

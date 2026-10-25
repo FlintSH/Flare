@@ -20,8 +20,8 @@ export const challengeResponseSchema = z.object({
       id: z.string().min(1).max(2048),
       rawId: z.string(),
       type: z.literal('public-key'),
-      response: z.record(z.unknown()),
-      clientExtensionResults: z.record(z.unknown()),
+      response: z.record(z.string(), z.unknown()),
+      clientExtensionResults: z.record(z.string(), z.unknown()),
     })
     .passthrough(),
 })
