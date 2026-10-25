@@ -258,6 +258,17 @@ describe('file content cache headers', () => {
         cache: 'private, no-store',
       })
     })
+
+    it.each([undefined, 'not-the-password'])(
+      'does not let a cache store a password denial (password: %s)',
+      async (attempt) => {
+        file.password = passwordHash
+        expect(await cacheControl(rawRequest({ password: attempt }))).toEqual({
+          status: 401,
+          cache: 'private, no-store',
+        })
+      }
+    )
   })
 
   describe('/api/files/{id}/download', () => {
@@ -301,5 +312,43 @@ describe('file content cache headers', () => {
         cache: null,
       })
     })
+
+    it.each(['GET', 'POST'] as const)(
+      'does not let a cache store a private-file denial (%s)',
+      async (method) => {
+        file.visibility = 'PRIVATE'
+        expect(await cacheControl(downloadRequest({ method }))).toEqual({
+          status: 404,
+          cache: 'private, no-store',
+        })
+      }
+    )
+
+    it.each([
+      ['GET', undefined],
+      ['GET', 'not-the-password'],
+      ['POST', undefined],
+      ['POST', 'not-the-password'],
+    ] as const)(
+      'does not let a cache store a password denial (%s, password: %s)',
+      async (method, attempt) => {
+        file.password = passwordHash
+        expect(
+          await cacheControl(downloadRequest({ method, password: attempt }))
+        ).toEqual({ status: 401, cache: 'private, no-store' })
+      }
+    )
+  })
+
+  describe('/api/files/{path} denials', () => {
+    it.each([undefined, 'not-the-password'])(
+      'does not let a cache store a password denial (password: %s)',
+      async (attempt) => {
+        file.password = passwordHash
+        expect(
+          await cacheControl(contentRequest({ password: attempt }))
+        ).toEqual({ status: 401, cache: 'private, no-store' })
+      }
+    )
   })
 })
