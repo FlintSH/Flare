@@ -149,4 +149,47 @@ describe('multipart uploads', () => {
     },
     10_000
   )
+
+  it.each([
+    ['size', { maxBytes: 1024, quotaLimitBytes: Infinity }],
+    ['quota', { maxBytes: 1024 * 1024, quotaLimitBytes: 1024 }],
+  ] as const)(
+    'reports the %s limit reached while the destination is still being chosen',
+    async (limitHit, limits) => {
+      let stored = false
+      const watched = {
+        uploadStream: async (stream: Readable) => {
+          stored = true
+          return storage.uploadStream(stream, '', '')
+        },
+      } as unknown as StorageProvider
+      const result = await parse(
+        multipart(Buffer.from('big.bin'), 'x'.repeat(64 * 1024)),
+        async (info) => {
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          return destination(info)
+        },
+        { ...limits, storageProvider: watched }
+      )
+      expect(result).toMatchObject({ upload: null, limitHit })
+      expect(stored).toBe(false)
+    },
+    10_000
+  )
+
+  it('reports a limit reached before storage starts reading', async () => {
+    // Local storage creates the directory before it reads the stream.
+    const slow = {
+      uploadStream: async (stream: Readable) => {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return storage.uploadStream(stream, '', '')
+      },
+    } as unknown as StorageProvider
+    const result = await parse(
+      multipart(Buffer.from('big.bin'), 'x'.repeat(64 * 1024)),
+      destination,
+      { maxBytes: 1024, storageProvider: slow }
+    )
+    expect(result).toMatchObject({ upload: null, limitHit: 'size' })
+  }, 10_000)
 })

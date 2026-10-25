@@ -75,7 +75,7 @@ These controls always copy the plain share-page URL. They do not include a passw
 
 ## Size limits and larger files
 
-The selection area shows the maximum allowed file size. Your account may also have a total storage quota, visible under **Profile → Your data**. A file can fit the per-file limit and still exceed your remaining quota.
+The selection area shows the maximum allowed file size. Your account may also have a total storage quota, visible under **Profile → Your data**. A file can fit the per-file limit and still exceed your remaining quota. A file over either limit is refused as a whole: Flare shows a size or quota message, and none of the file is saved or counted against your quota.
 
 The browser automatically uses chunked transfers for files larger than 10 MiB. You do not need to split files yourself. Keep the tab open: this uploader does not offer a resume-after-browser-restart interface.
 

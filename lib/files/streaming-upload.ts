@@ -110,7 +110,10 @@ export async function parseSingleFileUpload({
 
       // Listen before any await: busboy can reach the limit while the
       // destination is still being resolved, and a missed event would store
-      // the cut-off file as if it were complete.
+      // the cut-off file as if it were complete. The stream can also be
+      // destroyed before storage listens, so it always has an error listener;
+      // failures surface through the limit, busboy, or storage instead.
+      fileStream.on('error', () => {})
       fileStream.on('limit', () => {
         limitHit = quotaIsBinding ? 'quota' : 'size'
         // Abort the in-progress storage write and stop reading the client.
@@ -127,6 +130,8 @@ export async function parseSingleFileUpload({
           filename: info.filename || 'file',
           mimeType,
         })
+        // Nothing is written for an upload that already hit a limit or failed.
+        if (limitHit || settled) return
 
         const { size } = await storageProvider.uploadStream(
           fileStream,
