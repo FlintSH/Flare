@@ -125,8 +125,11 @@ function SimpleThemeCustomizer({
   livePreview = true,
 }: ThemeCustomizerProps) {
   const [baseHue, setBaseHue] = useState(222.2)
-  const [invalid, setInvalid] = useState<
-    Partial<Record<keyof ColorConfig, boolean>>
+  // Text typed into a value field, kept apart from the saved colors so the
+  // stored HSL form never replaces it mid-edit. `left` marks a draft whose
+  // field has lost focus, so errors wait until someone finishes typing.
+  const [drafts, setDrafts] = useState<
+    Partial<Record<keyof ColorConfig, { text: string; left: boolean }>>
   >({})
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
@@ -182,7 +185,7 @@ function SimpleThemeCustomizer({
         document.documentElement.style.setProperty(`--${cssKey}`, value)
       })
 
-    setInvalid({})
+    setDrafts({})
     onColorChange(newColors)
   }
 
@@ -194,60 +197,84 @@ function SimpleThemeCustomizer({
       })
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
-    setInvalid({})
+    setDrafts({})
 
     onColorChange(DEFAULT_COLORS)
   }
 
-  const updatePreview = (key: keyof ColorConfig, value: string) => {
-    setColors((prev) => ({ ...prev, [key]: value }))
-    // Save only values the server accepts, stored as an HSL triplet even
-    // when picked as hex. Keep the typed text visible until it is valid.
+  // Save only values the server accepts, stored as an HSL triplet even when
+  // entered as hex.
+  const applyColor = (key: keyof ColorConfig, value: string) => {
     const cssValue = legacyColorValue(value)
-    setInvalid((prev) => ({ ...prev, [key]: !cssValue }))
     if (!cssValue) return
-
+    setColors((prev) => ({ ...prev, [key]: cssValue }))
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     if (livePreview)
       document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
     onColorChange({ [key]: cssValue })
   }
 
-  const handleColorChange = (key: keyof ColorConfig, value: string) => {
-    updatePreview(key, value)
+  const clearDraft = (key: keyof ColorConfig) =>
+    setDrafts(({ [key]: _draft, ...rest }) => rest)
+
+  const handlePickerChange = (key: keyof ColorConfig, value: string) => {
+    clearDraft(key)
+    applyColor(key, value)
   }
 
-  const renderColorInput = (key: keyof ColorConfig, label: string) => (
-    <div key={key} className="grid content-start gap-2">
-      <Label htmlFor={key}>{label}</Label>
-      <div className="flex gap-2">
-        <Input
-          id={key}
-          type="color"
-          value={parseColor(colors[key] || DEFAULT_COLORS[key])}
-          className="w-12 p-1 h-9"
-          onChange={(e) => handleColorChange(key, e.target.value)}
-        />
-        <Input
-          value={colors[key] || DEFAULT_COLORS[key]}
-          onChange={(e) => handleColorChange(key, e.target.value)}
-          placeholder={`${label} color`}
-          aria-label={`${label} value`}
-          aria-invalid={invalid[key] || undefined}
-          aria-describedby={invalid[key] ? `${key}-error` : undefined}
-          className={invalid[key] ? 'border-destructive' : undefined}
-        />
+  const handleTextChange = (key: keyof ColorConfig, text: string) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [key]: { text, left: prev[key]?.left ?? false },
+    }))
+    applyColor(key, text)
+  }
+
+  // A finished valid entry shows its saved form. Invalid text stays, with
+  // its error, until it is fixed or replaced.
+  const handleTextBlur = (key: keyof ColorConfig) => {
+    const draft = drafts[key]
+    if (!draft) return
+    if (legacyColorValue(draft.text)) clearDraft(key)
+    else setDrafts((prev) => ({ ...prev, [key]: { ...draft, left: true } }))
+  }
+
+  const renderColorInput = (key: keyof ColorConfig, label: string) => {
+    const draft = drafts[key]
+    const invalid = !!draft?.left && !legacyColorValue(draft.text)
+    return (
+      <div key={key} className="grid content-start gap-2">
+        <Label htmlFor={key}>{label}</Label>
+        <div className="flex gap-2">
+          <Input
+            id={key}
+            type="color"
+            value={parseColor(colors[key] || DEFAULT_COLORS[key])}
+            className="w-12 p-1 h-9"
+            onChange={(e) => handlePickerChange(key, e.target.value)}
+          />
+          <Input
+            value={draft?.text ?? (colors[key] || DEFAULT_COLORS[key])}
+            onChange={(e) => handleTextChange(key, e.target.value)}
+            onBlur={() => handleTextBlur(key)}
+            placeholder={`${label} color`}
+            aria-label={`${label} value`}
+            aria-invalid={invalid || undefined}
+            aria-describedby={invalid ? `${key}-error` : undefined}
+            className={invalid ? 'border-destructive' : undefined}
+          />
+        </div>
+        {invalid && (
+          <p
+            id={`${key}-error`}
+            className="text-[0.8rem] font-medium text-destructive"
+          >
+            {LEGACY_COLOR_MESSAGE} This value isn&apos;t saved.
+          </p>
+        )}
       </div>
-      {invalid[key] && (
-        <p
-          id={`${key}-error`}
-          className="text-[0.8rem] font-medium text-destructive"
-        >
-          {LEGACY_COLOR_MESSAGE} This value isn&apos;t saved.
-        </p>
-      )}
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-4">

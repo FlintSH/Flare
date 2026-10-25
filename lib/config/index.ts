@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import {
   LEGACY_COLOR_MESSAGE,
+  MAX_LEGACY_COLORS,
   legacyAppearanceUpdateSchema,
   legacyColors,
   legacyTheme,
@@ -350,6 +351,17 @@ export async function updateConfig(
           },
         },
       }
+
+      // Submitted colors merge into the saved palette. Reject a merge past the
+      // cap, which reads would otherwise trim without telling anyone.
+      if (
+        newConfig.settings?.appearance?.customColors &&
+        Object.keys(mergedConfig.settings.appearance.customColors).length >
+          MAX_LEGACY_COLORS
+      )
+        throw new ConfigValidationError(
+          `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
+        )
 
       const validatedConfig = configSchema.parse(mergedConfig)
 

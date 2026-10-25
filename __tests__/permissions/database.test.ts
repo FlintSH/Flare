@@ -749,6 +749,59 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     })
   })
 
+  it('rejects classic colors that would grow the saved palette past the cap', async () => {
+    const { DEFAULT_CONFIG, getConfig } = await import('@/lib/config')
+    const { MAX_LEGACY_COLORS } =
+      await import('@/lib/customization/legacy-appearance')
+    await prisma.config.create({
+      data: { key: 'flare_config', value: structuredClone(DEFAULT_CONFIG) },
+    })
+    const settings = await import('@/app/api/settings/route')
+    const saved = Object.keys(DEFAULT_CONFIG.settings.appearance.customColors)
+    function added(count: number) {
+      return Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [
+          `extra${index}`,
+          '1 1% 1%',
+        ])
+      )
+    }
+    function patch(customColors: Record<string, string>) {
+      return settings.PATCH(
+        new Request('http://localhost/api/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: { appearance: { customColors } } }),
+        })
+      )
+    }
+
+    // Each map is valid alone, but merged with the saved palette it is one
+    // color over the cap.
+    const over = await patch(added(MAX_LEGACY_COLORS - saved.length + 1))
+    expect(over.status).toBe(400)
+    expect((await over.json()).error).toBe(
+      `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
+    )
+    expect((await getConfig()).settings.appearance.customColors).toEqual(
+      DEFAULT_CONFIG.settings.appearance.customColors
+    )
+
+    const full = added(MAX_LEGACY_COLORS - saved.length)
+    expect((await patch(full)).status).toBe(200)
+    const stored = (
+      await prisma.config.findUniqueOrThrow({ where: { key: 'flare_config' } })
+    ).value as unknown as typeof DEFAULT_CONFIG
+    expect(stored.settings.appearance.customColors).toEqual({
+      ...DEFAULT_CONFIG.settings.appearance.customColors,
+      ...full,
+    })
+    // Changing colors already saved still works on a full palette.
+    expect((await patch({ primary: '#1e293b' })).status).toBe(200)
+    expect((await patch({ extra0: '#ff0000' })).status).toBe(200)
+    expect((await patch({ another: '1 1% 1%' })).status).toBe(400)
+  })
+
   it('blocks disabling or replacing the sole administrator’s OIDC sign-in provider', async () => {
     const { DEFAULT_CONFIG } = await import('@/lib/config')
     const initial = structuredClone(DEFAULT_CONFIG)
