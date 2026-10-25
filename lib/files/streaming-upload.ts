@@ -66,6 +66,9 @@ export async function parseSingleFileUpload({
     const bb = busboy({
       headers: { 'content-type': contentType },
       limits: { files: 1, fileSize: effectiveLimit },
+      // Browsers and curl send the filename as raw UTF-8; busboy assumes
+      // Latin-1 unless told otherwise. `filename*` still declares its own.
+      defParamCharset: 'utf8',
     })
 
     const fields: Record<string, string> = {}
@@ -131,7 +134,12 @@ export async function parseSingleFileUpload({
         upload = { ...destination, mimeType, size }
       })()
 
-      filePromise.catch(() => {})
+      // An unread file stream stalls the whole request, so a failure before or
+      // during storage ends the parse now and lets the rest of the body drain.
+      filePromise.catch((error) => {
+        fileStream.resume()
+        fail(error as Error)
+      })
     })
 
     bb.on('error', (error) => fail(error as Error))
