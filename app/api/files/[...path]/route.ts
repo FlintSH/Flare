@@ -116,7 +116,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ): Promise<Response> {
   return withAuditRoute(async () => handleGET(request, { params }), {
-    action: 'file.read',
+    // The downloads counter is not a separate change event, so the request
+    // event records whether this was a download.
+    action:
+      new URL(request.url).searchParams.get('download') === 'true'
+        ? 'file.download'
+        : 'file.read',
     category: 'files',
     route: '/api/files/[...path]',
   })(request)

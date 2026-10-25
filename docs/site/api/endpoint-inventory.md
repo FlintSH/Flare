@@ -39,7 +39,7 @@ These routes check the file's visibility, password, and an optional **browser se
 
 | Path                        | Methods   | Purpose                                                                                                                            |
 | --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling.                                                 |
+| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.               |
 | `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value; POST accepts password JSON. S3 storage can redirect after access validation. |
 | `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image.                                                        |
 | `/api/files/{id}/ocr`       | GET       | Fetch image OCR text, processing it if necessary, after access validation.                                                         |
