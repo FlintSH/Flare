@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 
 import archiver from 'archiver'
-import { existsSync } from 'node:fs'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { once } from 'node:events'
+import { ReadStream, createReadStream, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { finished } from 'node:stream/promises'
 
 import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { loggers } from '@/lib/logger'
-import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
 import { clearProgress, updateProgress } from '@/lib/utils'
@@ -48,10 +50,154 @@ type UserData = {
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
+// Local uploads predate the storage provider's path checks, so keep the
+// original lookup: an absolute path first, then the app's uploads directory.
+function localFilePath(path: string): string | null {
+  const absolutePath = join('/', path)
+  if (existsSync(absolutePath)) return absolutePath
+  const workspacePath = join(
+    process.cwd(),
+    'uploads',
+    path.split('uploads/')[1] || ''
+  )
+  return existsSync(workspacePath) ? workspacePath : null
+}
+
+async function openFile(
+  storageProvider: StorageProvider,
+  file: FileData,
+  signal: AbortSignal
+): Promise<Readable> {
+  if (storageProvider.kind === 's3')
+    return storageProvider.getFileStream(file.path, undefined, signal)
+  const path = localFilePath(file.path)
+  if (!path) throw new Error(`File not found: ${file.path}`)
+  const stream = createReadStream(path, { signal })
+  // Report a missing or unreadable file now, while it can still be skipped.
+  if (stream instanceof ReadStream && stream.pending) {
+    try {
+      await once(stream, 'open', { signal })
+    } catch (error) {
+      stream.destroy()
+      throw error
+    }
+  }
+  return stream
+}
+
+/**
+ * Streams the export as it is read. Files are opened one at a time when the
+ * archive reaches them, so nothing is staged on disk or buffered whole, and a
+ * slow download slows storage reads instead of filling memory.
+ */
+function exportArchive(
+  userId: string,
+  userData: UserData,
+  storageProvider: StorageProvider,
+  signal: AbortSignal
+) {
+  const archive = archiver('zip', {
+    zlib: { level: 9 },
+  })
+  const abort = new AbortController()
+  let source: Readable | null = null
+  let settled = false
+  let written = 0
+  const total = userData.files.length
+
+  // Runs once: after a cancelled download, a storage or archive failure, or
+  // when the archive has been read to the end.
+  const settle = (error?: Error) => {
+    if (settled) return
+    settled = true
+    if (!error && archive.readableEnded) {
+      updateProgress(userId, 100)
+      return
+    }
+    if (!error) logger.info('Data export download ended before it finished')
+    // Close the open file before aborting, so a cancelled download is not
+    // also reported as a storage stream error.
+    source?.destroy()
+    abort.abort(error ?? new Error('The export download was cancelled'))
+    archive.abort()
+    // Errors the response so the client sees a failed download, never a
+    // silently truncated archive.
+    if (error) archive.destroy(error)
+    clearProgress(userId)
+  }
+
+  archive.on('warning', (err) => {
+    if (err.code === 'ENOENT') {
+      logger.warn('Archive warning', { error: err.message })
+    } else {
+      logger.error('Archive error', err as Error)
+    }
+  })
+  archive.on('error', (err) => {
+    if (settled) return
+    // Next.js cancels the body with ResponseAborted when the client leaves.
+    if (err.name === 'AbortError' || err.name === 'ResponseAborted')
+      return settle()
+    logger.error('Data export failed:', err as Error)
+    settle(err)
+  })
+  archive.on('entry', (entry) => {
+    if (!entry.name.startsWith('files/')) return
+    written++
+    updateProgress(userId, Math.min(99, Math.floor((written / total) * 100)))
+  })
+  // `close` after `end` is a finished download; without `end`, the reader
+  // went away or the archive failed.
+  archive.on('close', () => settle())
+  // A client that leaves before the response starts, as a reload can, never
+  // reads or cancels the body. The request signal still reports it.
+  if (signal.aborted) settle()
+  else signal.addEventListener('abort', () => settle(), { once: true })
+
+  archive.append(JSON.stringify(userData, null, 2), {
+    name: 'user-data.json',
+  })
+
+  const nextEntryName = exportEntryNamer()
+  void (async () => {
+    for (const file of userData.files) {
+      if (abort.signal.aborted) return
+      const name = nextEntryName(file)
+      let opened: Readable
+      try {
+        opened = await openFile(storageProvider, file, abort.signal)
+      } catch (error) {
+        if (abort.signal.aborted) return
+        logger.error(
+          `Skipping a file storage could not open: ${file.path}`,
+          error as Error
+        )
+        continue
+      }
+      if (abort.signal.aborted) {
+        opened.destroy()
+        return
+      }
+      source = opened
+      // archiver reads sources through its own PassThrough and never sees
+      // their errors. A file that fails part-way fails the whole download.
+      opened.on('error', (error) => {
+        if (source === opened) settle(error)
+      })
+      archive.append(opened, { name, date: new Date(file.uploadedAt) })
+      // Open the next file only after archiver has read this one.
+      await finished(opened)
+      source = null
+    }
+    if (!abort.signal.aborted) await archive.finalize()
+  })().catch((error) => {
+    if (!abort.signal.aborted) settle(error as Error)
+  })
+
+  return archive
+}
+
 async function handleGET(req: Request) {
-  let exportDir: string | null = null
-  let totalFiles = 0
-  let successfulFiles = 0
   let userId: string | null = null
 
   try {
@@ -59,21 +205,6 @@ async function handleGET(req: Request) {
     if (response) return response
 
     userId = user.id
-
-    updateProgress(userId, 0)
-
-    const timestamp = Date.now()
-    exportDir = join(process.cwd(), 'tmp', 'exports', `${userId}_${timestamp}`)
-    await mkdir(exportDir, { recursive: true })
-
-    const storageProvider = await getStorageProvider()
-    const isS3Storage = storageProvider.kind === 's3'
-
-    if (isS3Storage) {
-      logger.info('Using S3 storage provider for file exports')
-    } else {
-      logger.info('Using local storage provider for file exports')
-    }
 
     const userData = await prisma.user.findUnique({
       where: { id: userId },
@@ -95,6 +226,8 @@ async function handleGET(req: Request) {
             isPaste: true,
             path: true,
           },
+          // The oldest copy of a repeated name keeps the plain entry name.
+          orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
         },
         shortenedUrls: {
           select: {
@@ -111,6 +244,10 @@ async function handleGET(req: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    const storageProvider = await getStorageProvider()
+    logger.info(`Using ${storageProvider.kind} storage for a data export`)
+    updateProgress(userId, 0)
+
     const userDataForExport: UserData = {
       id: userData.id,
       name: userData.name,
@@ -121,9 +258,7 @@ async function handleGET(req: Request) {
       shortenedUrls: userData.shortenedUrls,
     }
 
-    const userDataPath = join(exportDir, 'user-data.json')
-    await writeFile(userDataPath, JSON.stringify(userDataForExport, null, 2))
-
+    const timestamp = Date.now()
     const headers = new Headers()
     headers.set('Content-Type', 'application/zip')
     headers.set(
@@ -135,175 +270,18 @@ async function handleGET(req: Request) {
       'no-store, no-cache, must-revalidate, proxy-revalidate'
     )
 
-    const { readable, writable } = new TransformStream()
-
-    const archive = archiver('zip', {
-      zlib: { level: 9 },
+    const archive = exportArchive(
+      userId,
+      userDataForExport,
+      storageProvider,
+      req.signal
+    )
+    return new Response(Readable.toWeb(archive) as ReadableStream<Uint8Array>, {
+      headers,
     })
-
-    archive.on('warning', (err) => {
-      if (err.code === 'ENOENT') {
-        logger.warn('Archive warning', { error: err.message })
-      } else {
-        logger.error('Archive error', err as Error)
-      }
-    })
-
-    archive.on('error', (err) => {
-      logger.error('Archive error:', err as Error)
-    })
-
-    const writer = writable.getWriter()
-
-    archive.on('data', async (chunk) => {
-      await writer.write(chunk)
-    })
-
-    archive.on('end', async () => {
-      try {
-        await writer.close()
-      } catch (err) {
-        logger.error('Error closing writer:', err as Error)
-      }
-    })
-
-    archive.file(userDataPath, { name: 'user-data.json' })
-    ;(async () => {
-      try {
-        totalFiles = userData.files.length
-        updateProgress(userId, 0)
-
-        if (totalFiles === 0) {
-          archive.finalize()
-          return
-        }
-
-        for (const file of userData.files) {
-          try {
-            let fileData: Buffer | null = null
-            let filePath: string | null = null
-
-            if (isS3Storage) {
-              try {
-                fileData = await getFileContentFromStorage(
-                  storageProvider,
-                  file.path
-                )
-
-                filePath = join(exportDir, file.name)
-                await writeFile(filePath, fileData)
-              } catch (downloadErr) {
-                logger.error(
-                  `Error downloading file from S3: ${file.path}`,
-                  downloadErr as Error
-                )
-                logger.info(`Skipping file: ${file.name} (${file.path})`)
-                continue
-              }
-            } else {
-              const absolutePath = join('/', file.path)
-              const workspacePath = join(
-                process.cwd(),
-                'uploads',
-                file.path.split('uploads/')[1] || ''
-              )
-
-              if (existsSync(absolutePath)) {
-                filePath = absolutePath
-              } else if (existsSync(workspacePath)) {
-                filePath = workspacePath
-              } else {
-                logger.error(
-                  'File not found',
-                  new Error(`File not found: ${file.path}`)
-                )
-                continue
-              }
-            }
-
-            if (filePath) {
-              const safeName = sanitizeDisplayName(file.name)
-              const zipPath = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}/${safeName}`
-              try {
-                archive.file(filePath, { name: zipPath })
-                successfulFiles++
-
-                const progress = Math.round(
-                  (successfulFiles / totalFiles) * 100
-                )
-                if (userId) {
-                  updateProgress(userId, progress)
-                }
-              } catch (archiveErr) {
-                logger.error(
-                  `Error adding file to archive: ${file.name}`,
-                  archiveErr as Error
-                )
-              }
-
-              if (isS3Storage && filePath.startsWith(exportDir)) {
-                try {
-                  await rm(filePath)
-                } catch (cleanupErr) {
-                  logger.debug(`Error cleaning up temp file: ${filePath}`, {
-                    error: cleanupErr,
-                  })
-                }
-              }
-            }
-          } catch (error) {
-            logger.error(
-              `Error adding file ${file.name} to archive:`,
-              error as Error
-            )
-          }
-        }
-
-        try {
-          await archive.finalize()
-        } catch (error) {
-          logger.error('Error finalizing archive:', error as Error)
-        }
-
-        setTimeout(async () => {
-          try {
-            if (exportDir) {
-              await rm(exportDir, { recursive: true })
-              logger.info(
-                `Export cleanup completed. ${successfulFiles}/${totalFiles} files were exported successfully.`
-              )
-            }
-          } catch (cleanupError) {
-            logger.error(
-              'Error cleaning up export directory:',
-              cleanupError as Error
-            )
-          }
-        }, 5000)
-      } catch (error) {
-        logger.error('File processing error:', error as Error)
-        try {
-          await writer.close()
-        } catch (closeErr) {
-          logger.error('Error closing writer after error:', closeErr as Error)
-        }
-      }
-    })()
-
-    return new Response(readable, { headers })
   } catch (error) {
     if (userId) {
       clearProgress(userId)
-    }
-    if (exportDir) {
-      try {
-        await rm(exportDir, { recursive: true })
-      } catch (cleanupError) {
-        logger.error(
-          'Error cleaning up export directory:',
-          cleanupError as Error
-        )
-      }
     }
 
     logger.error('Data export error:', error as Error)
@@ -311,28 +289,6 @@ async function handleGET(req: Request) {
       { error: 'Internal server error' },
       { status: 500 }
     )
-  }
-}
-
-async function getFileContentFromStorage(
-  storageProvider: StorageProvider,
-  filePath: string
-): Promise<Buffer> {
-  try {
-    const fileStream = await storageProvider.getFileStream(filePath)
-    const chunks: Buffer[] = []
-
-    for await (const chunk of fileStream) {
-      chunks.push(Buffer.from(chunk))
-    }
-
-    return Buffer.concat(chunks)
-  } catch (error) {
-    logger.error(
-      `Failed to retrieve file from storage: ${filePath}`,
-      error as Error
-    )
-    throw error
   }
 }
 

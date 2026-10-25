@@ -7,7 +7,7 @@ import { recordAudit, setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { getUniqueFilename } from '@/lib/files/filename'
+import { urlSafeFilename } from '@/lib/files/filename'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
@@ -27,11 +27,9 @@ export async function prepareUploadDestination(
   filename: string,
   options: ResolvedUploadOptions
 ) {
-  const { urlSafeName, displayName } = await getUniqueFilename(
-    `uploads/${user.urlId}`,
-    filename,
-    options.randomizeFileUrls
-  )
+  const displayName = filename
+  // A taken URL gets its suffix when the upload is published, under the lock.
+  const urlSafeName = urlSafeFilename(filename, options.randomizeFileUrls)
   if (!urlSafeName || urlSafeName.includes('/') || urlSafeName.includes('\\'))
     throw new UploadError('Invalid filename.')
   setAuditTarget({ type: 'file', name: displayName })

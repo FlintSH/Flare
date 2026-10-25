@@ -1,130 +1,42 @@
 import { nanoid } from 'nanoid'
-import { join } from 'path'
 
-import { prisma } from '@/lib/database/prisma'
+// The part after the last dot is an extension only when it looks like one.
+// Anything else, such as `notes 2026.10.25 final`, stays part of the name.
+const EXTENSION = /^[A-Za-z0-9]{1,16}$/
 
-function validateAndNormalizePath(basePath: string, filename: string): string {
-  const normalizedBase = basePath.replace(/\\/g, '/').replace(/\/+/g, '/')
-  const normalizedFilename = filename.replace(/\\/g, '/').replace(/\/+/g, '/')
+function splitExtension(name: string): { stem: string; extension: string } {
+  const dot = name.lastIndexOf('.')
+  const candidate = dot > 0 ? name.slice(dot + 1) : ''
+  return EXTENSION.test(candidate)
+    ? { stem: name.slice(0, dot), extension: candidate.toLowerCase() }
+    : { stem: name, extension: '' }
+}
 
-  if (normalizedBase.includes('..') || normalizedFilename.includes('..')) {
-    throw new Error('Invalid path: Directory traversal not allowed')
-  }
-
-  let cleanBase = normalizedBase
-  while (cleanBase.startsWith('/')) {
-    cleanBase = cleanBase.slice(1)
-  }
-  while (cleanBase.endsWith('/')) {
-    cleanBase = cleanBase.slice(0, -1)
-  }
-
-  let cleanFilename = normalizedFilename
-  while (cleanFilename.startsWith('/')) {
-    cleanFilename = cleanFilename.slice(1)
-  }
-  while (cleanFilename.endsWith('/')) {
-    cleanFilename = cleanFilename.slice(0, -1)
-  }
-
-  const fullPath = join(cleanBase, cleanFilename)
-  if (!fullPath.startsWith(cleanBase)) {
-    throw new Error('Invalid path: Path traversal detected')
-  }
-
-  return fullPath
+function withExtension(base: string, extension: string): string {
+  return extension ? `${base}.${extension}` : base
 }
 
 export function generateRandomFileName(originalName: string): string {
-  const extension = originalName.includes('.')
-    ? originalName.split('.').pop()
-    : ''
-
-  const randomId = nanoid(6)
-
-  return extension ? `${randomId}.${extension.toLowerCase()}` : randomId
+  return withExtension(nanoid(6), splitExtension(originalName).extension)
 }
 
-export async function getUniqueFilename(
-  basePath: string,
+/**
+ * The filename part of a new file's URL: lowercase ASCII letters, digits and
+ * hyphens, plus a recognized extension. A name with no ASCII letters or digits
+ * gets a random base instead of a bare dot-file such as `.png`.
+ *
+ * Uniqueness is not decided here. Publication (lib/uploads/finalize.ts) checks
+ * the URL under the owner's row lock and adds a suffix when it is taken.
+ */
+export function urlSafeFilename(
   originalName: string,
   randomize: boolean = false
-): Promise<{ urlSafeName: string; displayName: string }> {
-  if (!basePath || !originalName) {
-    throw new Error('Base path and original name are required')
-  }
-
-  const displayName = originalName
-
-  if (randomize) {
-    const randomName = generateRandomFileName(originalName)
-
-    let exists = true
-    let finalRandomName = randomName
-    let attempts = 0
-
-    while (exists && attempts < 5) {
-      const normalizedPath = validateAndNormalizePath(basePath, finalRandomName)
-
-      exists =
-        (await prisma.file.findFirst({
-          where: {
-            path: normalizedPath,
-          },
-        })) !== null
-
-      if (!exists) break
-
-      finalRandomName = generateRandomFileName(originalName)
-      attempts++
-    }
-
-    return {
-      urlSafeName: finalRandomName,
-      displayName,
-    }
-  }
-
-  const extension = originalName.includes('.')
-    ? originalName.split('.').pop()
-    : ''
-  const baseNameWithoutExt = originalName.includes('.')
-    ? originalName.slice(0, originalName.lastIndexOf('.'))
-    : originalName
-
-  let urlSafeName = baseNameWithoutExt
+): string {
+  if (randomize) return generateRandomFileName(originalName)
+  const { stem, extension } = splitExtension(originalName)
+  const base = stem
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-
-  if (extension) {
-    urlSafeName += '.' + extension.toLowerCase()
-  }
-
-  let counter = 0
-  let finalUrlSafeName = urlSafeName
-  let exists = true
-
-  while (exists) {
-    const normalizedPath = validateAndNormalizePath(basePath, finalUrlSafeName)
-
-    exists =
-      (await prisma.file.findFirst({
-        where: {
-          path: normalizedPath,
-        },
-      })) !== null
-
-    if (!exists) break
-
-    counter++
-    finalUrlSafeName = extension
-      ? `${baseNameWithoutExt}-${counter}.${extension}`
-      : `${baseNameWithoutExt}-${counter}`
-  }
-
-  return {
-    urlSafeName: finalUrlSafeName,
-    displayName,
-  }
+  return withExtension(base || nanoid(6), extension)
 }

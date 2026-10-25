@@ -3,6 +3,13 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import {
+  LEGACY_COLOR_MESSAGE,
+  MAX_LEGACY_COLORS,
+  legacyAppearanceUpdateSchema,
+  legacyColors,
+  legacyTheme,
+} from '@/lib/customization/legacy-appearance'
+import {
   DEFAULT_CUSTOMIZATION,
   customizationSchema,
 } from '@/lib/customization/schema'
@@ -92,9 +99,11 @@ export const configSchema = z.object({
         .prefault({}),
     }),
     appearance: z.object({
-      theme: z.string(),
+      // Both values reach inline page markup. Unsafe saved values are dropped
+      // rather than rejected, so an old configuration can still be read.
+      theme: z.unknown().transform(legacyTheme).prefault('dark'),
       favicon: z.string().nullable(),
-      customColors: z.record(z.string(), z.string()),
+      customColors: z.unknown().transform(legacyColors).prefault({}),
     }),
     advanced: z.object({
       customCSS: z.string(),
@@ -220,17 +229,134 @@ export async function initConfig(): Promise<FlareConfig> {
   }
 }
 
+const CONFIG_KEY = 'flare_config'
+
+type ConfigRevision = { id: string; xmin: string }
+type CachedConfigRow = ConfigRevision & {
+  /** The saved JSON as read, deep-frozen. Parse it; never edit it. */
+  value: unknown
+  parsed?: FlareConfig
+  parseError?: unknown
+  /** The schema that produced `parsed` or `parseError`. */
+  schema?: unknown
+}
+type ConfigCacheState = {
+  row?: CachedConfigRow
+  /** One revision query for the calls made in the same event-loop turn. */
+  revision?: Promise<ConfigRevision | undefined>
+  /** One value read for concurrent calls that found the same new revision. */
+  loading?: ConfigRevision & { promise: Promise<CachedConfigRow | null> }
+}
+
+// One copy per process, shared by every route bundle that loads this module.
+const stateKey = Symbol.for('flare.config.saved-row')
+const processState = globalThis as typeof globalThis & {
+  [stateKey]?: ConfigCacheState
+}
+const cache = (processState[stateKey] ??= {})
+
+function sameRevision(
+  current: ConfigRevision | undefined,
+  revision: ConfigRevision
+) {
+  return current?.id === revision.id && current.xmin === revision.xmin
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const child of Object.values(value)) deepFreeze(child)
+  }
+  return value
+}
+
+async function queryRevision(): Promise<ConfigRevision | undefined> {
+  const [revision] = await prisma.$queryRaw<ConfigRevision[]>`
+    SELECT "id", xmin::text AS "xmin" FROM "Config" WHERE "key" = ${CONFIG_KEY}
+  `
+  return revision
+}
+
+/**
+ * The row ID plus PostgreSQL's xmin, which every committed write changes,
+ * whichever process or replica made it. Calls made in the same event-loop turn,
+ * such as the components of one page, share one query that starts after all of
+ * them, so its answer still includes every write committed before any of
+ * those calls.
+ */
+function currentRevision() {
+  cache.revision ??= new Promise((resolve, reject) =>
+    setImmediate(() => {
+      cache.revision = undefined
+      queryRevision().then(resolve, reject)
+    })
+  )
+  return cache.revision
+}
+
+async function readValue(): Promise<CachedConfigRow | null> {
+  // Read the value with its own revision. A write that lands after the
+  // revision check is then caught by the next check rather than hidden.
+  const [row] = await prisma.$queryRaw<(ConfigRevision & { value: unknown })[]>`
+    SELECT "id", xmin::text AS "xmin", "value" FROM "Config" WHERE "key" = ${CONFIG_KEY}
+  `
+  if (!row) return null
+  const next = { id: row.id, xmin: row.xmin, value: deepFreeze(row.value) }
+  cache.row = next
+  return next
+}
+
+/**
+ * The saved configuration row, reusing the previous read while its revision
+ * matches, so a saved change is seen on the next call without an expiry time
+ * or explicit invalidation. Database errors propagate.
+ */
+export async function readSavedConfigRow(): Promise<CachedConfigRow | null> {
+  const revision = await currentRevision()
+  if (!revision) {
+    cache.row = undefined
+    return null
+  }
+  if (cache.row && sameRevision(cache.row, revision)) return cache.row
+  if (!cache.loading || !sameRevision(cache.loading, revision)) {
+    const promise: Promise<CachedConfigRow | null> = readValue().finally(() => {
+      if (cache.loading?.promise === promise) cache.loading = undefined
+    })
+    cache.loading = { ...revision, promise }
+  }
+  return cache.loading.promise
+}
+
+function parseSavedConfig(row: CachedConfigRow): FlareConfig {
+  // The cache outlives a development reload of this module, which brings a new
+  // schema. Results from another schema are stale even if the row isn't.
+  if (row.schema !== configSchema) {
+    row.parsed = undefined
+    row.parseError = undefined
+    row.schema = configSchema
+  }
+  if (row.parsed) return row.parsed
+  // The same saved value always fails the same way; report it without re-parsing.
+  if (row.parseError) throw row.parseError
+  try {
+    // Shared by every caller until the row changes, so make it read-only.
+    row.parsed = deepFreeze(configSchema.parse(row.value))
+    return row.parsed
+  } catch (error) {
+    row.parseError = error
+    throw error
+  }
+}
+
 export async function getConfig(): Promise<FlareConfig> {
   try {
-    const config = await prisma.config.findUnique({
-      where: { key: 'flare_config' },
-    })
+    const row = await readSavedConfigRow()
 
-    if (!config) {
+    if (!row) {
       return initConfig()
     }
 
-    return configSchema.parse(config.value)
+    return parseSavedConfig(row)
   } catch (error) {
     logger.warn('Could not access database for config, using default', {
       error,
@@ -246,11 +372,22 @@ type ConfigUpdate = {
   }
 }
 
+/** A submitted setting was rejected; the message is safe to show to the person saving. */
+export class ConfigValidationError extends Error {}
+
 export async function updateConfig(
   newConfig: ConfigUpdate,
   authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
   validateSaved?: (tx: Prisma.TransactionClient) => Promise<void>
 ): Promise<FlareConfig> {
+  const appearance = newConfig.settings?.appearance
+  if (appearance) {
+    const submitted = legacyAppearanceUpdateSchema.safeParse(appearance)
+    if (!submitted.success)
+      throw new ConfigValidationError(
+        submitted.error.issues[0]?.message ?? LEGACY_COLOR_MESSAGE
+      )
+  }
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
@@ -331,6 +468,17 @@ export async function updateConfig(
           },
         },
       }
+
+      // Submitted colors merge into the saved palette. Reject a merge past the
+      // cap, which reads would otherwise trim without telling anyone.
+      if (
+        newConfig.settings?.appearance?.customColors &&
+        Object.keys(mergedConfig.settings.appearance.customColors).length >
+          MAX_LEGACY_COLORS
+      )
+        throw new ConfigValidationError(
+          `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
+        )
 
       const validatedConfig = configSchema.parse(mergedConfig)
 

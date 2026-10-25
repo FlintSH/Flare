@@ -2,6 +2,7 @@ import busboy from 'busboy'
 import { Readable } from 'node:stream'
 
 import type { StorageProvider } from '@/lib/storage'
+import { uploadDisplayName } from '@/lib/uploads/display-name'
 
 export type UploadLimit = 'size' | 'quota' | null
 
@@ -66,6 +67,9 @@ export async function parseSingleFileUpload({
     const bb = busboy({
       headers: { 'content-type': contentType },
       limits: { files: 1, fileSize: effectiveLimit },
+      // Browsers and curl send the filename as raw UTF-8; busboy assumes
+      // Latin-1 unless told otherwise. `filename*` still declares its own.
+      defParamCharset: 'utf8',
     })
 
     const fields: Record<string, string> = {}
@@ -105,22 +109,30 @@ export async function parseSingleFileUpload({
 
       const mimeType = info.mimeType || 'application/octet-stream'
 
+      // Listen before any await: busboy can reach the limit while the
+      // destination is still being resolved, and a missed event would store
+      // the cut-off file as if it were complete. The stream can also be
+      // destroyed before storage listens, so it always has an error listener;
+      // failures surface through the limit, busboy, or storage instead.
+      fileStream.on('error', () => {})
+      fileStream.on('limit', () => {
+        limitHit = quotaIsBinding ? 'quota' : 'size'
+        // Abort the in-progress storage write and stop reading the client.
+        fileStream.destroy(new Error('FILE_SIZE_LIMIT'))
+        nodeStream.unpipe(bb)
+        nodeStream.destroy()
+        filePromise
+          .catch(() => {})
+          .then(() => finish({ upload: null, fields, limitHit }))
+      })
+
       filePromise = (async () => {
         const destination = await resolveDestination({
-          filename: info.filename || 'file',
+          filename: uploadDisplayName(info.filename) ?? 'file',
           mimeType,
         })
-
-        fileStream.on('limit', () => {
-          limitHit = quotaIsBinding ? 'quota' : 'size'
-          // Abort the in-progress storage write and stop reading the client.
-          fileStream.destroy(new Error('FILE_SIZE_LIMIT'))
-          nodeStream.unpipe(bb)
-          nodeStream.destroy()
-          filePromise
-            .catch(() => {})
-            .then(() => finish({ upload: null, fields, limitHit }))
-        })
+        // Nothing is written for an upload that already hit a limit or failed.
+        if (limitHit || settled) return
 
         const { size } = await storageProvider.uploadStream(
           fileStream,
@@ -131,7 +143,12 @@ export async function parseSingleFileUpload({
         upload = { ...destination, mimeType, size }
       })()
 
-      filePromise.catch(() => {})
+      // An unread file stream stalls the whole request, so a failure before or
+      // during storage ends the parse now and lets the rest of the body drain.
+      filePromise.catch((error) => {
+        fileStream.resume()
+        fail(error as Error)
+      })
     })
 
     bb.on('error', (error) => fail(error as Error))

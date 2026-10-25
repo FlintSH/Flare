@@ -4,14 +4,14 @@ import { getToken } from 'next-auth/jwt'
 
 import { loggers } from '@/lib/logger'
 
-import { FILE_URL_PATTERN } from './constants'
+import { isFileUrlPath } from './constants'
 
 const logger = loggers.middleware
 
 export async function checkAuthentication(
   request: NextRequest
 ): Promise<NextResponse | null> {
-  if (FILE_URL_PATTERN.test(request.nextUrl.pathname)) {
+  if (isFileUrlPath(request.nextUrl.pathname)) {
     return null
   }
 

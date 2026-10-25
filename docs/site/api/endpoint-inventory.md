@@ -39,14 +39,16 @@ These routes check the file's visibility, password, and an optional **browser se
 
 | Path                        | Methods   | Purpose                                                                                                                            |
 | --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling.                                                 |
+| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.               |
 | `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value; POST accepts password JSON. S3 storage can redirect after access validation. |
 | `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image.                                                        |
-| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text, processing it if necessary, after access validation.                                                         |
+| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)).                |
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs. After 10 different incorrect passwords for a file from one client address, or 100 from all addresses, within 15 minutes, these routes, downloads, and shared-archive reads answer `429` with `Retry-After` in seconds until the window ends, even for the correct password, unless that address unlocked the file in the last 10 minutes. Repeating an identical wrong password does not count again. See [incorrect password attempts](/guide/sharing#incorrect-password-attempts).
 
 Archive share pages use separate read operations under the same file-access rules. They reject `Authorization` headers, require same-origin requests, and accept file passwords only in a request body. A listing that verifies a visitor password sets a one-hour unlock cookie scoped to that file's shared archive routes, which the GET entry route accepts instead of the password. Body reading is limited to 16 KiB, five seconds, and 32 pending reads per process; schema validation and file authorization finish before any archive data is read. They do not grant extraction or library access. See [archive API contracts](./archives#share-page-routes) for schemas and limits.
+
+Inline content responses from `/{userUrlId}/{filename}/raw`, `/api/files/{path}`, and `/api/files/{id}/thumbnail` send `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` with the stored `Content-Type`. A browser that opens one of these URLs directly renders the document in a sandbox with an opaque origin, so stored HTML, SVG, and XML cannot run script or make credentialed requests as Flare. `<img>` and `<video>` elements still display the bytes. Downloads use attachment disposition. Builds before this change sent thumbnails without the sandbox policy; see the [upgrade note](/hosting/maintenance#sandboxed-image-previews).
 
 | Path                                  | Methods | Purpose                                                                                                                                                |
 | ------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -59,6 +61,19 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
 
 A local file-open failure or failed view-counter write returns `500` and closes the acquired storage stream. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
+
+### OCR request limits
+
+`GET /api/files/{id}/ocr` returns saved text immediately as `200` with `{ success, text, confidence }`. Text that isn't saved yet is read through the same queue as automatic OCR, one image at a time per Flare process, and requests for an image that is already queued wait for that work. Responses other than saved text:
+
+| Status | Body                                                          | Meaning                                                                                                                                                           |
+| ------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200`  | `{ success: false, error, retryAfter? }`                      | Reading failed. The error never includes storage or recognition details. Flare reads the image again only after 5 minutes; until then `retryAfter` gives seconds. |
+| `202`  | `{ success: false, status: "processing", error, retryAfter }` | The request waited 60 seconds. Reading continues, and a later request returns the saved text.                                                                     |
+| `429`  | `{ success: false, error, retryAfter }`                       | The requester started 20 readings in the last 10 minutes: per account when signed in, otherwise per client address.                                               |
+| `503`  | `{ success: false, error, retryAfter }`                       | Ten new images are already waiting to be read, or 30 requests are already waiting for results, counting requests that joined an image being read.                 |
+
+`202`, `429`, and `503` also send `Retry-After` in seconds. A requester is charged only when its request starts reading an image. Joining work that is already queued, several simultaneous requests for one image (charged once), and reading saved text don't count toward the limit, and a request refused with `503` is never charged. The 30-request cap bounds the connections OCR can hold open for up to 60 seconds each, even when many visitors wait for one popular image. Limits and queue state are per process and reset when Flare restarts.
 
 ## Dashboard account routes requiring a browser session
 
@@ -151,7 +166,7 @@ These routes use `requireAuth`, whose compatibility path accepts a browser sessi
 | --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/profile`              | PUT, DELETE       | Update the account, or delete it with `profile.update`; password/plain-email updates additionally require browser-session identity proof. DELETE returns `204` after account removal and durable storage-cleanup work commit. |
 | `/api/profile/upload-token` | GET, POST         | Read or regenerate the legacy account upload credential.                                                                                                                                                                      |
-| `/api/profile/export`       | GET               | Export account data/files.                                                                                                                                                                                                    |
+| `/api/profile/export`       | GET               | Stream a ZIP of account data and stored files; the [account guide](/guide/account#export-your-data) describes its layout, entry names, and cancellation.                                                                      |
 | `/api/files/{id}/expiry`    | GET, POST, DELETE | Inspect, schedule, or cancel expiration for an owned file.                                                                                                                                                                    |
 | `/api/folders`              | GET, POST         | List or create folders.                                                                                                                                                                                                       |
 | `/api/folders/{id}`         | PATCH, DELETE     | Rename/move or delete an owned folder.                                                                                                                                                                                        |

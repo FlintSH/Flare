@@ -1,6 +1,8 @@
 import { fileTypeFromBuffer } from 'file-type'
 import { Readable } from 'node:stream'
 
+import { parseByteRange as parseSingleByteRange } from '@/lib/http/byte-range'
+
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
 import type { ByteSource } from './byte-source'
 import { discardedBefore, openEntryRange } from './entry-reader'
@@ -46,24 +48,15 @@ function tooFarIn() {
   )
 }
 
-/** One satisfiable byte range, or null to send the whole entry. */
+/** One satisfiable byte range with an exclusive end, or null to send the whole entry. */
 export function parseByteRange(
   header: string | null,
   size: number
 ): { start: number; end: number } | 'unsatisfiable' | null {
-  const match = header?.trim().match(/^bytes=(\d*)-(\d*)$/)
-  if (!match || (!match[1] && !match[2])) return null
-  if (!match[1]) {
-    const suffix = Number(match[2])
-    if (!suffix || !size) return 'unsatisfiable'
-    return { start: Math.max(0, size - suffix), end: size }
-  }
-  const start = Number(match[1])
-  const last = match[2] ? Number(match[2]) : size - 1
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(last)) return null
-  if (start >= size) return 'unsatisfiable'
-  if (last < start) return null
-  return { start, end: Math.min(last + 1, size) }
+  const range = parseSingleByteRange(header, size)
+  return range && range !== 'unsatisfiable'
+    ? { start: range.start, end: range.end + 1 }
+    : range
 }
 
 /** Detect inline media from the entry's own bytes; the name is never trusted. */

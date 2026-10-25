@@ -1,36 +1,50 @@
-version: '3.8'
+# Builds Flare from this checkout. Put the values below in a .env file next to
+# this file; Compose refuses to start until they are set. To run a published
+# image instead, follow https://flintsh.github.io/Flare/hosting/docker.html
+#
+#   POSTGRES_PASSWORD=<output of: openssl rand -hex 32>
+#   NEXTAUTH_SECRET=<a second, different output of: openssl rand -hex 32>
+#   NEXTAUTH_URL=http://localhost:3000
+#
+# Keep the service and volume names: an existing installation's data lives in
+# the postgres_data and uploads volumes.
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    # You can also use the pre-built image from Docker Hub:
-    # image: flintsh/flare:latest
-    restart: always
+    restart: unless-stopped
+    # Loopback only: put a reverse proxy in front for remote access. Flare
+    # trusts forwarded client-IP headers, so clients must not reach it directly.
     ports:
-      - "3000:3000"
+      - '127.0.0.1:3000:3000'
     environment:
-      - DATABASE_URL=postgresql://flare:flarepassword@postgres:5432/flare?schema=public
-      - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=your-secret-key-here
+      DATABASE_URL: postgresql://flare:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/flare?schema=public
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
     volumes:
       - uploads:/app/uploads
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
-    restart: always
+    restart: unless-stopped
+    # No published port: only services on this Compose network can connect.
     environment:
-      - POSTGRES_USER=flare
-      - POSTGRES_PASSWORD=flarepassword
-      - POSTGRES_DB=flare
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: flare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: flare
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flare -d flare']
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:
-  uploads: 
+  uploads:

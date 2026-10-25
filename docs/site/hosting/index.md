@@ -53,7 +53,7 @@ Keep sufficient local free space for temporary uploads as well as completed loca
 
 ### Multiple replicas and serverless hosts
 
-Use a single application replica unless you have tested your complete upload workflow across replicas. Database-backed email and webhook deliveries use leases, but that does not make the entire application stateless. Chunk-upload metadata and local multipart data use `/app/tmp`; some rate limits and OCR queues are process-local. S3 alone does not remove those constraints. A multi-replica design needs shared temporary storage or reliable upload affinity, consistent secrets, shared file access, coordinated changes, and workload-specific testing.
+Use a single application replica unless you have tested your complete upload workflow across replicas. Database-backed email and webhook deliveries use leases, but that does not make the entire application stateless. Chunk-upload metadata and local multipart data use `/app/tmp`; some rate limits and OCR queues are process-local. S3 alone does not remove those constraints. A multi-replica design needs shared temporary storage or reliable upload affinity, consistent secrets, shared file access, coordinated changes, and workload-specific testing. Saved settings reach every replica on its next request, except storage settings, which need the other replicas restarted; see [how changes take effect](./configuration#how-changes-take-effect).
 
 Hosts that suspend or terminate the process between requests are a poor fit for Flare's background work. A static web host can serve these documentation pages, but cannot run the Flare application itself.
 

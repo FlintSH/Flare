@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
+import { setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 
 async function handleGET(
@@ -17,6 +17,10 @@ async function handleGET(
     if (!url) {
       return new NextResponse(null, { status: 404 })
     }
+
+    // The click counter is not a separate change event; this request event
+    // identifies which link was opened.
+    setAuditTarget({ type: 'link', id: url.id, name: url.shortCode })
 
     await prisma.shortenedUrl.update({
       where: { id: url.id },

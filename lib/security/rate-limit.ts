@@ -1,5 +1,7 @@
 import { RateLimiterMemory } from 'rate-limiter-flexible'
 
+import { clientIp } from './client-ip'
+
 // per-process, resets on restart. TODO (maybe eventually): swap to Redis if folks are running multiple containers
 
 export const authLimiter = new RateLimiterMemory({
@@ -26,16 +28,9 @@ export const generalLimiter = new RateLimiterMemory({
   keyPrefix: 'general',
 })
 
+/** The limiter key for a request; see `clientIp` for which headers count. */
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for')
-  if (forwarded) {
-    return forwarded.split(',')[0].trim()
-  }
-  const realIp = req.headers.get('x-real-ip')
-  if (realIp) {
-    return realIp.trim()
-  }
-  return '127.0.0.1'
+  return clientIp(req.headers) ?? '127.0.0.1'
 }
 
 // returns a 429 Response when exceeded, null when ok

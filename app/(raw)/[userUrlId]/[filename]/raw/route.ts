@@ -10,6 +10,7 @@ import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { parseByteRange } from '@/lib/http/byte-range'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -162,19 +163,37 @@ async function handleGET(
       setAuditOutcome('denied')
       return new Response(null, {
         status: access.status,
-        headers: fileAccessDeniedHeaders(access),
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
+    // Shared caches key on the URL alone; never let them keep protected bytes.
+    const cacheHeaders: Record<string, string> =
+      file.visibility === 'PRIVATE' || file.password
+        ? { 'Cache-Control': 'private, no-store' }
+        : {}
 
     const storageProvider = await getStorageProvider()
     const range = req.headers.get('range')
 
     const size = await storageProvider.getFileSize(file.path)
 
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-')
-      const start = parseInt(parts[0], 10)
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1
+    const byteRange = parseByteRange(range, size)
+    if (byteRange === 'unsatisfiable') {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          'Content-Range': `bytes */${size}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Security-Policy': 'sandbox',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
+    }
+    if (byteRange) {
+      const { start, end } = byteRange
       const chunkSize = end - start + 1
 
       const stream = await storageProvider.getFileStream(file.path, {
@@ -192,6 +211,7 @@ async function handleGET(
         'X-Content-Type-Options': 'nosniff',
         Connection: 'keep-alive',
         'Keep-Alive': 'timeout=300, max=1000',
+        ...cacheHeaders,
       }
 
       return await createFileResponse(stream, req, file.id, {
@@ -210,6 +230,7 @@ async function handleGET(
       'X-Content-Type-Options': 'nosniff',
       Connection: 'keep-alive',
       'Keep-Alive': 'timeout=300, max=1000',
+      ...cacheHeaders,
     }
 
     return await createFileResponse(stream, req, file.id, { headers })

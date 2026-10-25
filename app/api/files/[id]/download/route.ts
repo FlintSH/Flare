@@ -5,6 +5,7 @@ import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
+import { parseByteRange } from '@/lib/http/byte-range'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -15,6 +16,17 @@ function encodeFilename(filename: string): string {
   const safe = sanitizeDisplayName(filename)
   const encoded = encodeURIComponent(safe)
   return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
+}
+
+// Shared caches key on the URL alone; never let them keep protected bytes or
+// the signed storage URL that grants them.
+function cacheHeaders(file: {
+  visibility: 'PUBLIC' | 'PRIVATE'
+  password: string | null
+}): Record<string, string> {
+  return file.visibility === 'PRIVATE' || file.password
+    ? { 'Cache-Control': 'private, no-store' }
+    : {}
 }
 
 async function handleGET(
@@ -54,7 +66,10 @@ async function handleGET(
       setAuditOutcome('denied')
       return new Response(null, {
         status: access.status,
-        headers: fileAccessDeniedHeaders(access),
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
 
@@ -70,16 +85,28 @@ async function handleGET(
       file.name
     )
     if (downloadUrl) {
-      return Response.redirect(downloadUrl, 302)
+      return new Response(null, {
+        status: 302,
+        headers: { Location: downloadUrl, ...cacheHeaders(file) },
+      })
     }
 
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-')
-      const start = parseInt(parts[0], 10)
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1
+    const byteRange = parseByteRange(range, size)
+    if (byteRange === 'unsatisfiable') {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          'Content-Range': `bytes */${size}`,
+          'Accept-Ranges': 'bytes',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
+    }
+    if (byteRange) {
+      const { start, end } = byteRange
       const chunkSize = end - start + 1
 
       const stream = await storageProvider.getFileStream(file.path, {
@@ -94,6 +121,7 @@ async function handleGET(
         'Content-Type': file.mimeType,
         'Content-Disposition': `attachment; filename=${encodeFilename(file.name)}`,
         'X-Content-Type-Options': 'nosniff',
+        ...cacheHeaders(file),
       }
 
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -109,6 +137,7 @@ async function handleGET(
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'X-Content-Type-Options': 'nosniff',
+      ...cacheHeaders(file),
     }
 
     return new NextResponse(stream as unknown as ReadableStream, {
@@ -161,7 +190,10 @@ async function handlePOST(
       setAuditOutcome('denied')
       return new Response(null, {
         status: access.status,
-        headers: fileAccessDeniedHeaders(access),
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
 
@@ -177,7 +209,10 @@ async function handlePOST(
       file.name
     )
     if (downloadUrl) {
-      return Response.redirect(downloadUrl, 302)
+      return new Response(null, {
+        status: 302,
+        headers: { Location: downloadUrl, ...cacheHeaders(file) },
+      })
     }
 
     const size = await storageProvider.getFileSize(file.path)
@@ -189,6 +224,7 @@ async function handlePOST(
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'X-Content-Type-Options': 'nosniff',
+      ...cacheHeaders(file),
     }
 
     return new NextResponse(stream as unknown as ReadableStream, {

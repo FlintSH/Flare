@@ -6,6 +6,8 @@ import { loggers } from '@/lib/logger'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
 import { startOcrTagWorker } from '@/lib/tags/worker'
 
+import { sessionSecretWarnings } from './secrets'
+
 const logger = loggers.startup
 
 let startupComplete = false
@@ -19,6 +21,9 @@ export async function runStartupTasks() {
 
   try {
     logger.info('Running startup tasks...')
+
+    for (const warning of sessionSecretWarnings(process.env.NEXTAUTH_SECRET))
+      logger.warn(warning)
 
     startSecurityCleanupWorker()
     startStorageDeletionWorker()

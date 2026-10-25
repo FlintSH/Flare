@@ -168,6 +168,68 @@ suite('email configuration against disposable PostgreSQL', () => {
     expect(view.config.verification.graceEndsAt).toBeTruthy()
   })
 
+  it('sees every committed configuration write on the next read, even back to back', async () => {
+    const parse = vi.spyOn(appConfig.configSchema, 'parse')
+    expect((await appConfig.getConfig()).settings.appearance.theme).toBe('dark')
+    // Writes this close together can share a millisecond timestamp; the row
+    // revision must still tell them apart.
+    for (const theme of ['light', 'dark', 'light', 'dark', 'light']) {
+      const row = await prisma.config.findUniqueOrThrow({
+        where: { key: 'flare_config' },
+      })
+      const value = structuredClone(row.value) as {
+        settings: { appearance: { theme: string } }
+      }
+      value.settings.appearance.theme = theme
+      await prisma.config.update({
+        where: { key: 'flare_config' },
+        data: { value },
+      })
+      expect((await appConfig.getConfig()).settings.appearance.theme).toBe(
+        theme
+      )
+    }
+    const parsesForWrites = parse.mock.calls.length
+    await appConfig.getConfig()
+    await appConfig.getConfig()
+    expect(parse.mock.calls.length).toBe(parsesForWrites)
+  })
+
+  it('sees a write from another database client, as from another replica', async () => {
+    const { PrismaClient } = await import('@prisma/client')
+    const replica = new PrismaClient({
+      datasources: { db: { url: databaseUrl! } },
+    })
+    try {
+      expect((await appConfig.getConfig()).settings.appearance.theme).toBe(
+        'dark'
+      )
+      const row = await replica.config.findUniqueOrThrow({
+        where: { key: 'flare_config' },
+      })
+      const value = structuredClone(row.value) as {
+        settings: {
+          appearance: { theme: string }
+          email: { recovery: { enabled: boolean } }
+        }
+      }
+      value.settings.appearance.theme = 'light'
+      value.settings.email.recovery.enabled = false
+      await replica.config.update({
+        where: { key: 'flare_config' },
+        data: { value },
+      })
+      expect((await appConfig.getConfig()).settings.appearance.theme).toBe(
+        'light'
+      )
+      expect((await configModule.getSavedEmailConfig()).recovery.enabled).toBe(
+        false
+      )
+    } finally {
+      await replica.$disconnect()
+    }
+  })
+
   it('serializes independent email and appearance writes without losing either change', async () => {
     await Promise.all([
       configModule.saveEmailConfig(workingConfig()),

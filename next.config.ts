@@ -26,6 +26,9 @@ const nextConfig: NextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
           },
+          // Pages opened from other sites, or that open them, get no window
+          // reference to each other. Flare's own links already use noopener.
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
         ],
       },
       {
