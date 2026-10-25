@@ -15,7 +15,7 @@ docker compose logs --tail=100 db
 docker compose exec -T db pg_isready -U flare -d flare
 ```
 
-The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
+The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example, `postgres` in the repository's `docker-compose.yml`), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
 
 Changing `POSTGRES_PASSWORD` in Compose does not change a password inside an already initialized PostgreSQL volume. Update the actual database account deliberately or restore the original correct environment value. Do not delete the volume to fix a password mismatch on a real instance.
 
@@ -26,6 +26,12 @@ If migrations failed, preserve the logs and take a database backup before correc
 Check that `NEXTAUTH_URL` exactly matches the public scheme, hostname, and port you use. Recreate the container after changing it. Your proxy must preserve the public host and protocol.
 
 All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make authenticator, SMTP, and webhook secrets unreadable. Authenticator encryption always depends on `NEXTAUTH_SECRET`, even when email/webhooks use a dedicated key. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
+
+## Startup logs warn about NEXTAUTH_SECRET
+
+Flare warns at startup when `NEXTAUTH_SECRET` is `your-secret-key-here`, the example value in earlier versions of the repository's `docker-compose.yml` and `.env.example`, or shorter than 32 characters. Anyone can sign session tokens with the published example. A short value also blocks authenticator setup, and invite links, webhooks, and saved SMTP passwords unless `FLARE_EMAIL_ENCRYPTION_KEY` is set.
+
+Generate a value with `openssl rand -hex 32`, set it, and recreate the container. Replacing the published example signs everyone out once and loses nothing else, because Flare never encrypted data with a value that short. Replacing a secret that is already 32 characters or longer is different: follow [secrets and key rotation](/hosting/maintenance#secrets-and-key-rotation) so enrolled authenticators stay readable. [Upgrading from the earlier Compose file](/hosting/docker#upgrade-from-the-earlier-repository-compose-file) covers the whole change.
 
 ## Upload error reference
 
