@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { clientIp } from '@/lib/security/client-ip'
 
 import { securityHash } from './crypto'
 
@@ -71,11 +72,7 @@ export async function securityLimit(key: string, limit = 20, seconds = 900) {
 }
 
 export function requestIp(headers: { get(name: string): string | null }) {
-  return (
-    headers.get('x-real-ip') ||
-    headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    'unknown'
-  )
+  return clientIp(headers) ?? 'unknown'
 }
 
 export async function lockSecurityUser(

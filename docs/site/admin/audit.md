@@ -72,7 +72,7 @@ For [invite links](/admin/users#invite-links), filter **Category** to `invites`.
 
 Only Administrator has this access by default. A role manager with the necessary delegation authority can grant `audit.read` to a trusted reviewer. Removing the permission takes effect on the next authenticated request, including requests from an already open log page. There is no audit-log editing or deletion control, and neither named API tokens nor the legacy upload credential can read this API.
 
-Authentication events can include a validated client IP and bounded user-agent string, when available. These are request metadata, not verified identities or locations; see [trusted proxy configuration](/hosting/reverse-proxy#client-addresses-in-session-history).
+Authentication events can include a validated client IP and bounded user-agent string, when available. These are request metadata, not verified identities or locations; see [trusted proxy configuration](/hosting/reverse-proxy#client-addresses-in-session-history) for which forwarding headers supply the address.
 
 The logger uses selected metadata, not a dump of request bodies or settings. Passwords, authorization/cookie values, API-token secrets, authenticator/recovery secrets, file contents, OCR text, and raw configuration secret values are not intended audit fields. Actor names, filenames, IDs, and operational metadata can still be sensitive. Restrict access to the database and backups as carefully as access to the viewer. Review event details before sharing a screenshot outside your instance.
 

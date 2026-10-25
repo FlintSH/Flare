@@ -29,6 +29,11 @@ import { decryptSecret } from '@/lib/email/crypto'
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
 import { issueEmailToken } from '@/lib/email/tokens'
 
+/** A different documentation-range address per request keeps per-IP email limits apart. */
+function uniqueAddress() {
+  return `2001:db8:${randomUUID().replaceAll('-', '').slice(0, 24).match(/.{4}/g)!.join(':')}`
+}
+
 const state = vi.hoisted(() => ({
   enforceSso: false,
   session: null as unknown,
@@ -207,7 +212,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-real-ip': randomUUID(),
+          'x-real-ip': uniqueAddress(),
         },
         body: JSON.stringify(body),
       })
@@ -747,7 +752,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         headers: {
           origin: 'https://flare.example',
           'Content-Type': 'application/json',
-          'x-real-ip': randomUUID(),
+          'x-real-ip': uniqueAddress(),
         },
         body: JSON.stringify({ password: 'old-password' }),
       })
