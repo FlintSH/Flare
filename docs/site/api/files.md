@@ -70,6 +70,8 @@ The URL name is built from the original filename, which is kept unchanged as the
 
 Uploads made before this rule kept their URLs. Earlier builds could put spaces, capitals, `#`, or a leading dot in new URL names, for example `My Report-1.PDF` or `.png`; those links keep working unchanged.
 
+Signed-out visitors can open a public file's share page, `/raw`, and `/direct` whether or not its URL name has an extension. Earlier builds sent them to the sign-in page instead when the name had no extension, such as `/abc12/readme`, or started with a dot, such as `/abc12/.png`; those links now open too. Private files and passwords are checked by the routes as before. A first path segment that belongs to Flare itself (`api`, `auth`, `dashboard`, `admin`, `settings`, `setup`, `raw`, `direct`, `u`, `profile`, `avatars`, or `_next`) is never read as a URL ID, which is also why vanity IDs can't use those words.
+
 ### Select a profile and folder before sending bytes
 
 Use request headers or query parameters for decisions that affect where and how the upload starts:

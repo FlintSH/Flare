@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { FILE_URL_PATTERN, VIDEO_EXTENSIONS } from './constants'
+import { VIDEO_EXTENSIONS, isFileUrlPath } from './constants'
 
 export function isBotRequest(userAgent: string): boolean {
   userAgent = userAgent.toLowerCase()
@@ -17,10 +17,7 @@ export function isBotRequest(userAgent: string): boolean {
 export function handleBotRequest(request: NextRequest): NextResponse | null {
   const userAgent = request.headers.get('user-agent')?.toLowerCase() || ''
 
-  if (
-    !isBotRequest(userAgent) ||
-    !FILE_URL_PATTERN.test(request.nextUrl.pathname)
-  ) {
+  if (!isBotRequest(userAgent) || !isFileUrlPath(request.nextUrl.pathname)) {
     return null
   }
 

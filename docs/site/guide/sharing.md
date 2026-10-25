@@ -74,6 +74,8 @@ A public archive exposes its member paths and bytes to authorized recipients thr
 
 The usual share link has a path such as `/your-id/screenshot.png`. It opens the Flare viewer with the instance's presentation and access checks.
 
+Links work for signed-out visitors whatever the file is called. Earlier builds asked them to sign in when a link's name had no extension, for example a file named `README`; those links now open like any other public link.
+
 Appending `/raw` requests the file content without the surrounding page. For video files, `/direct` is a helper that returns JSON containing a playback URL; it is not a general-purpose download route. Both check file access before returning a response. Appending one does not bypass private visibility or passwords. Use the page's **Download** action when you want to save a copy.
 
 On S3 storage, an authorized response can provide a temporary signed storage URL. Anyone who obtains that already-issued URL can use it until it expires, even if you subsequently change the Flare file's access settings. Changing visibility or a password affects new Flare access checks; it does not immediately revoke existing storage URLs.
