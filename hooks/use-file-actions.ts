@@ -1,5 +1,3 @@
-import { useRouter } from 'next/navigation'
-
 import { useToast } from './use-toast'
 
 export interface FileActionsOptions {
@@ -10,7 +8,6 @@ export interface FileActionsOptions {
 }
 
 export function useFileActions(options: FileActionsOptions = {}) {
-  const router = useRouter()
   const { toast } = useToast()
 
   const copyUrl = () => {
