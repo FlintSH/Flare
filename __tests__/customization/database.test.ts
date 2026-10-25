@@ -1073,6 +1073,64 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(await expiry.getFileExpirationInfo(retained.id)).toBeNull()
   })
 
+  it('publishes same-name and non-ASCII uploads under clean, distinct URL names', async () => {
+    const urlId = `customization-names-${randomUUID()}`
+    routeRoots.add(`uploads/${urlId}`)
+    await prisma.user.update({ where: { id: 'owner-one' }, data: { urlId } })
+    // An object stored before per-upload directories (#199) at the plain path.
+    // Earlier builds found it and named the next upload `My Report-1.PDF`.
+    await prisma.file.create({
+      data: {
+        name: 'My Report.PDF',
+        urlPath: `/${urlId}/my-report.pdf`,
+        path: `uploads/${urlId}/my-report.pdf`,
+        mimeType: 'application/pdf',
+        size: 0,
+        userId: 'owner-one',
+      },
+    })
+    const fileRoutes = await import('@/app/api/files/route')
+    async function upload(name: string, type: string, text: string) {
+      const form = new FormData()
+      form.append('file', new Blob([text], { type }), name)
+      const response = await fileRoutes.POST(
+        new Request('http://localhost/api/files', {
+          method: 'POST',
+          body: form,
+        })
+      )
+      expect(response.status).toBe(200)
+      return (await response.json()).data as { url: string; name: string }
+    }
+    const pdf = '%PDF-1.4\n%%EOF\n'
+    await upload('My Report.PDF', 'application/pdf', pdf)
+    await upload('My Report.PDF', 'application/pdf', pdf)
+    await upload('notes.h#ml', 'text/plain', 'not an extension')
+    await upload('日本語.txt', 'text/plain', 'first')
+    await upload('日本語.txt', 'text/plain', 'second')
+    // Earlier builds left this request without a response.
+    await upload('日本語', 'text/plain', 'no ASCII letters or extension')
+
+    const urls = (
+      await prisma.file.findMany({
+        where: { userId: 'owner-one' },
+        orderBy: { uploadedAt: 'asc' },
+      })
+    ).map((file) => file.urlPath.slice(urlId.length + 2))
+    expect(urls).toHaveLength(7)
+    expect(new Set(urls).size).toBe(7)
+    expect(urls[0]).toBe('my-report.pdf')
+    const id = '[0-9a-f]{8}-[0-9a-f]{3}'
+    expect(urls[1]).toMatch(new RegExp(`^my-report-${id}\\.pdf$`))
+    expect(urls[2]).toMatch(new RegExp(`^my-report-${id}\\.pdf$`))
+    expect(urls[3]).toBe('notes-h-ml')
+    expect(urls[4]).toMatch(/^[A-Za-z0-9_-]{6}\.txt$/)
+    expect(urls[5]).toMatch(
+      /^[A-Za-z0-9_-]{6}(-[0-9a-f]{8}-[0-9a-f]{3})?\.txt$/
+    )
+    expect(urls[6]).toMatch(/^[A-Za-z0-9_-]{6}$/)
+  })
+
   it('rejects traversal and malformed IDs for metadata reads and writes without changing a valid session', async () => {
     await routeFixture()
     const { data, metadata } = await startChunk('Retain this upload session')

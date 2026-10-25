@@ -71,6 +71,8 @@ The completion section gives each successful upload an open action and **Copy li
 
 These controls always copy the plain share-page URL. They do not include a password or grant access to a private file. If the browser refuses clipboard access, select the displayed link and copy it manually.
 
+The link ends in a URL-friendly version of the filename: `My Report.PDF` is shared as `my-report.pdf`, and the file keeps its original name everywhere else in Flare. Uploading another file with a name you've already used gives the new file its own link with a short random suffix, such as `my-report-3f9c2a71-b04.pdf`; the earlier link doesn't change. A filename with no A to Z letters or digits, such as `日本語.png`, gets a short random link name instead. Choose random names in an [upload profile](./upload-profiles) if you'd rather not show filenames in links at all. The [file API guide](/api/files#upload-one-file) lists the exact rules.
+
 <Screenshot src="/screenshots/workspace/upload-complete.png" alt="Successful uploads with share links and copy actions" caption="Successful upload results stay available so you can open or copy each link." />
 
 ## Size limits and larger files
