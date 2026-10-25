@@ -43,7 +43,7 @@ interface VirtualFilesProps {
   renderFile: (file: FileType) => ReactNode
   onVisibleFiles: (files: FileType[], firstIndex: number) => void
   onRefresh: () => void
-  selectionBarRef: RefObject<HTMLDivElement>
+  selectionBarRef: RefObject<HTMLDivElement | null>
 }
 
 export function VirtualFiles({

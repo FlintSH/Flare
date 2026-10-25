@@ -15,7 +15,7 @@ export const SearchInput = memo(function SearchInput({
   initialValue = '',
 }: SearchInputProps) {
   const [value, setValue] = useState(initialValue)
-  const pendingSearch = useRef<ReturnType<typeof setTimeout>>()
+  const pendingSearch = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     setValue(initialValue)

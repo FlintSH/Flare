@@ -6,7 +6,7 @@ prisma/**
 lib/auth/**
 lib/database/**
 lib/middleware/**
-middleware.ts
+proxy.ts
 __tests__/**
 **/*.test.ts
 **/*.test.tsx

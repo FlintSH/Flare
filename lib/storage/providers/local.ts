@@ -19,6 +19,13 @@ import { validateStoragePath } from '@/lib/security/paths'
 
 import type { RandomAccessFile, RangeOptions, StorageProvider } from '../types'
 
+// Stored files are found from the working directory at request time. The
+// comment stops Turbopack from tracing the whole checkout, uploads included,
+// into the standalone build because it can't tell which files these are.
+function workingPath(path: string): string {
+  return join(/* turbopackIgnore: true */ process.cwd(), path)
+}
+
 export class LocalStorageProvider implements StorageProvider {
   readonly kind = 'local' as const
   readonly target = Object.freeze({ provider: 'local' as const })
@@ -80,7 +87,7 @@ export class LocalStorageProvider implements StorageProvider {
     parts: { ETag: string; PartNumber: number }[]
   ): Promise<void> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
 
@@ -128,7 +135,7 @@ export class LocalStorageProvider implements StorageProvider {
     signal?: AbortSignal
   ): Promise<{ size: number }> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
 
@@ -151,7 +158,7 @@ export class LocalStorageProvider implements StorageProvider {
     _mimeType: string
   ): Promise<void> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
     await writeFile(fullPath, file)
@@ -159,7 +166,7 @@ export class LocalStorageProvider implements StorageProvider {
 
   async deleteFile(path: string): Promise<void> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     await unlink(fullPath)
   }
 
@@ -169,7 +176,7 @@ export class LocalStorageProvider implements StorageProvider {
     signal?: AbortSignal
   ): Promise<Readable> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const options: { start?: number; end?: number } = {}
     if (range) {
       if (typeof range.start !== 'undefined') options.start = range.start
@@ -180,7 +187,7 @@ export class LocalStorageProvider implements StorageProvider {
 
   async openRandomAccess(path: string): Promise<RandomAccessFile> {
     const validPath = validateStoragePath(path)
-    const handle = await open(join(process.cwd(), validPath), 'r')
+    const handle = await open(workingPath(validPath), 'r')
     try {
       const { size } = await handle.stat()
       return {
@@ -236,7 +243,7 @@ export class LocalStorageProvider implements StorageProvider {
 
   async getFileSize(path: string): Promise<number> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const stats = await stat(fullPath)
     return stats.size
   }
@@ -248,7 +255,7 @@ export class LocalStorageProvider implements StorageProvider {
   ): Promise<void> {
     const fullPath = targetPath.startsWith('public/')
       ? targetPath
-      : join(process.cwd(), targetPath)
+      : workingPath(targetPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
 
@@ -308,7 +315,7 @@ export class LocalStorageProvider implements StorageProvider {
     _mimeType: string
   ): Promise<NodeWritable> {
     const validPath = validateStoragePath(path)
-    const fullPath = join(process.cwd(), validPath)
+    const fullPath = workingPath(validPath)
     const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
     await mkdir(dir, { recursive: true })
     return createWriteStream(fullPath)
@@ -317,8 +324,8 @@ export class LocalStorageProvider implements StorageProvider {
   async renameFolder(oldPath: string, newPath: string): Promise<void> {
     const validOldPath = validateStoragePath(oldPath)
     const validNewPath = validateStoragePath(newPath)
-    const fullOldPath = join(process.cwd(), validOldPath)
-    const fullNewPath = join(process.cwd(), validNewPath)
+    const fullOldPath = workingPath(validOldPath)
+    const fullNewPath = workingPath(validNewPath)
 
     // Ensure the destination's parent exists, then move the directory into
     // place. Pre-creating the destination itself and renaming onto it is
