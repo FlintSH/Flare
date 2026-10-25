@@ -170,4 +170,92 @@ pnpm start
 
 `pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
 
+### Use the repository's Compose file
+
+The checkout's `docker-compose.yml` builds Flare from that source and starts PostgreSQL with the same protections as the example above: it reads its secrets from `.env` and refuses to start without them, PostgreSQL has no published port, and the app is published on `127.0.0.1:3000` only.
+
+Generate two different values with `openssl rand -hex 32`, then save `.env` in the checkout directory. If you already keep a `.env` there for `pnpm dev`, add these keys to it instead of replacing it.
+
+```dotenv
+POSTGRES_PASSWORD=REPLACE_WITH_FIRST_GENERATED_VALUE
+NEXTAUTH_SECRET=REPLACE_WITH_SECOND_GENERATED_VALUE
+NEXTAUTH_URL=http://localhost:3000
+```
+
+```sh
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=100 app
+```
+
+This file names its services `app` and `postgres`, where the rest of this handbook uses `flare` and `db`. Substitute the names in maintenance commands, for example `docker compose exec -T postgres pg_dump -U flare -d flare -Fc`. Its volume names start with the Compose project name, which is the checkout directory's name unless you set one: a `Flare` directory gives `flare_uploads` and `flare_postgres_data`. `docker volume ls` shows yours.
+
+For remote access, follow [HTTPS and reverse proxies](/hosting/reverse-proxy) with a proxy on this host (it reaches `127.0.0.1:3000`), or attach a proxy container to the Compose network and point it at `app:3000`. Publishing port 3000 on every interface lets clients skip the proxy and send their own forwarded-IP headers, which Flare uses for rate limits.
+
+### Upgrade from the earlier repository Compose file
+
+Earlier versions of `docker-compose.yml` published PostgreSQL on port 5432 of every host interface with the password `flarepassword`, published the app on every interface, and set `NEXTAUTH_SECRET=your-secret-key-here`. That password and secret are public in this repository. The current file keeps the same service and volume names, so your data carries over, but it needs a `.env` file first.
+
+1. [Make a backup](/hosting/maintenance#make-a-consistent-local-backup) with these substitutions: the services `app` and `postgres`, your uploads volume from `docker volume ls` (for example `flare_uploads`), and `docker-compose.yml` in place of `compose.yaml .env`, since `.env` does not exist yet.
+2. Create `.env` next to `docker-compose.yml`:
+
+   ```dotenv
+   POSTGRES_PASSWORD=flarepassword
+   NEXTAUTH_SECRET=REPLACE_WITH_GENERATED_VALUE
+   NEXTAUTH_URL=http://localhost:3000
+   ```
+
+   - `POSTGRES_PASSWORD` must match the password stored in your existing database volume. PostgreSQL applies it only when it initializes an empty data directory, so use the value your old file had (`flarepassword` unless you edited it). Step 5 changes it.
+   - If your old file still had `your-secret-key-here`, generate a new `NEXTAUTH_SECRET` with `openssl rand -hex 32`. That example value is 20 characters, below the 32 Flare requires for encryption, so no authenticator, saved SMTP password, webhook secret, or invite link was encrypted with it. Replacing it signs everyone out once. If you had set your own secret, keep it: changing a secret in use makes enrolled authenticators unreadable. See [secrets and key rotation](/hosting/maintenance#secrets-and-key-rotation).
+   - Set `NEXTAUTH_URL` to the public origin you already use.
+
+3. Update the checkout (`git pull`; resolve any local edits you made to `docker-compose.yml`), then start it:
+
+   ```sh
+   docker compose config --quiet
+   docker compose up -d --build
+   docker compose ps
+   ```
+
+   Run it from the same directory as before, and do not add a top-level `name:` or rename the services. The project name prefixes the volume names, so a different one starts with empty volumes. `docker compose ps` should list the app as `127.0.0.1:3000->3000/tcp` and PostgreSQL with no host port.
+
+4. Sign in again and confirm your files and settings are present.
+5. Replace the database password, which was public while the port was published. Generate a value with `openssl rand -hex 32`, then open `psql` inside the container (local connections there do not need the old password):
+
+   ```sh
+   docker compose exec postgres psql -U flare -d flare
+   ```
+
+   At the `flare=#` prompt, run `\password flare`, enter the new value twice, then `\q`. Put the same value in `POSTGRES_PASSWORD` in `.env` and apply it:
+
+   ```sh
+   docker compose up -d
+   docker compose logs --tail=50 app
+   ```
+
+   Compose recreates both containers with the new value. The database volume and its data are unchanged.
+
+PostgreSQL is no longer reachable from the host. Use `docker compose exec postgres psql -U flare -d flare` or `docker compose exec -T postgres pg_dump ...` for maintenance. If a tool on the host must connect, publish it on loopback only, in a `docker-compose.override.yml` next to the main file:
+
+```yaml
+services:
+  postgres:
+    ports:
+      - '127.0.0.1:5432:5432'
+```
+
+The app is now published on loopback only, so other machines can no longer open `http://your-server:3000`. Put a reverse proxy in front, as described in the previous section. If you must publish port 3000 on every interface anyway, replace the mapping in a `docker-compose.override.yml` (the `!override` tag needs Docker Compose 2.24.4 or later), and firewall the port so only your proxy or trusted clients reach it:
+
+```yaml
+services:
+  app:
+    ports: !override
+      - '3000:3000'
+```
+
+Without `!override`, Compose adds the mapping to the existing loopback one instead of replacing it.
+
+Flare logs a startup warning while `NEXTAUTH_SECRET` is still `your-secret-key-here` or shorter than 32 characters. The warning does not stop the instance.
+
 Next: [verify persistence and create a backup](/hosting/maintenance).
