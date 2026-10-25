@@ -704,7 +704,9 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       accent: '0.0 100.0% 50.0%',
     })
     const css = initialThemeStyles(saved)
-    expect(css).not.toMatch(/[<>{}]attacker|attacker\.test|<\/?s/)
+    // Theme CSS never needs an angle bracket, so none can close the element.
+    expect(css).not.toContain('<')
+    expect(css).not.toContain('attacker.test')
     expect(css).toContain('--primary: 210 40% 98%;')
     expect(css).toContain('--accent: 0.0 100.0% 50.0%;')
 
