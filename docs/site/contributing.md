@@ -443,7 +443,7 @@ DATABASE_URL="$FLARE_AUDIT_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/audit
 ```
 
-Without `FLARE_AUDIT_DATABASE_URL`, database cases are skipped while core/API tests still run. The PostgreSQL cases verify commit/rollback handling, transaction connection use, safe settings and role snapshots, bulk filename retention beyond 1,000 files, tag metadata, email-failure outcomes, and avoiding recursive logging. The one-connection example also checks that transaction snapshots do not wait on a second connection. These checks complement the rendered browser flows and the session-security tests.
+Without `FLARE_AUDIT_DATABASE_URL`, database cases are skipped while core/API tests still run. The PostgreSQL cases verify commit/rollback handling, transaction connection use, safe settings and role snapshots, bulk filename retention beyond 1,000 files, tag metadata, email-failure outcomes, and avoiding recursive logging. Retention cases cover the cutoff, oldest-first batches, the per-run batch limit, the `audit.retention.applied` summary, and two clients pruning at once under the advisory lock. The one-connection example also checks that transaction snapshots do not wait on a second connection. These checks complement the rendered browser flows and the session-security tests.
 
 ## Invite browser checks and demos
 

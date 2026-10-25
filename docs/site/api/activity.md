@@ -43,7 +43,7 @@ Login-history entries expose `id`, `createdAt`, `authMethod`, `outcome` (`succes
 
 History covers the last 90 days and returns at most 25 entries per page. Use `outcome=all`, `outcome=success`, or `outcome=failure` to filter history. Pass the returned opaque `nextCursor` in `cursor` (at most 512 characters) to fetch the next page with the same outcome filter; `null` means the current result is exhausted. A failure is included only when it can be attributed to that account. The unfinished authenticator challenge is not counted as a failure. Provider-side SSO failures and rate-limited attempts are not guaranteed to appear. History is not reconstructed for logins before the migration.
 
-The security worker prunes login attempts older than 90 days and session rows whose fixed expiry is more than 90 days old, using bounded batches. This login-history retention is separate from the unbounded audit log.
+The security worker prunes login attempts older than 90 days and session rows whose fixed expiry is more than 90 days old, using bounded batches. This login-history retention is separate from audit retention, which keeps every event unless the operator sets [`FLARE_AUDIT_RETENTION_DAYS`](/admin/audit#retention-and-operational-limits).
 
 Sessions have a fixed 30-day lifetime. Last-seen updates are throttled to one minute. Session revocation is enforced at subsequent authenticated requests; it does not cancel an already authorized transfer, retract downloaded bytes, or invalidate issued object-storage URLs. Account session-version invalidation from password/security changes continues to invalidate all prior browser sessions. Named tokens and legacy upload credentials retain their independent lifetime.
 

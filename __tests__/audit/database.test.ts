@@ -12,6 +12,7 @@ import {
 
 import { auditContext } from '@/lib/audit/context'
 import { withPrismaAudit } from '@/lib/audit/prisma'
+import { pruneAuditEvents } from '@/lib/audit/retention'
 
 const databaseUrl = process.env.FLARE_AUDIT_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
@@ -52,6 +53,195 @@ suite.sequential('audit against disposable PostgreSQL', () => {
   afterEach(() => vi.restoreAllMocks())
   afterAll(async () => {
     await base?.$disconnect()
+  })
+
+  describe('retention', () => {
+    const now = new Date('2026-10-25T12:00:00.000Z')
+    const day = 86_400_000
+    async function seed(count: number, ageDays: number, action: string) {
+      await base.auditEvent.createMany({
+        data: Array.from({ length: count }, (_, index) => ({
+          action,
+          category: 'files',
+          outcome: 'success',
+          // Distinct timestamps make the oldest-first order observable.
+          createdAt: new Date(now.getTime() - ageDays * day - index * 1000),
+        })),
+      })
+    }
+
+    it('deletes only events older than the cutoff, oldest first, in bounded batches', async () => {
+      await seed(12, 40, 'old.event')
+      await seed(3, 29, 'recent.event')
+      const oldest = await base.auditEvent.findMany({
+        where: { action: 'old.event' },
+        orderBy: { createdAt: 'asc' },
+        take: 5,
+        select: { id: true },
+      })
+
+      // One batch removes exactly the five oldest events.
+      expect(
+        await pruneAuditEvents(30, {
+          client: prisma,
+          now,
+          batchSize: 5,
+          maxBatches: 1,
+        })
+      ).toMatchObject({ deleted: 5, complete: false })
+      expect(
+        await base.auditEvent.count({
+          where: { id: { in: oldest.map((event) => event.id) } },
+        })
+      ).toBe(0)
+
+      const result = await pruneAuditEvents(30, {
+        client: prisma,
+        now,
+        batchSize: 5,
+      })
+      expect(result).toEqual({
+        cutoff: new Date(now.getTime() - 30 * day),
+        deleted: 7,
+        complete: true,
+        contended: false,
+      })
+      expect(
+        await base.auditEvent.count({ where: { action: 'old.event' } })
+      ).toBe(0)
+      expect(
+        await base.auditEvent.count({ where: { action: 'recent.event' } })
+      ).toBe(3)
+      // Deleting audit rows records no change events, only the summaries.
+      const events = await base.auditEvent.findMany({
+        where: { action: { notIn: ['recent.event'] } },
+        orderBy: { createdAt: 'asc' },
+      })
+      expect(events).toHaveLength(2)
+      expect(events[1]).toMatchObject({
+        action: 'audit.retention.applied',
+        category: 'system',
+        outcome: 'success',
+        actorId: null,
+        actorName: 'System',
+        details: {
+          retentionDays: 30,
+          cutoff: '2026-09-25T12:00:00.000Z',
+          count: 7,
+          complete: true,
+        },
+      })
+    })
+
+    it('stops at the batch limit and leaves the rest for the next run', async () => {
+      await seed(12, 40, 'old.event')
+      const first = await pruneAuditEvents(30, {
+        client: prisma,
+        now,
+        batchSize: 5,
+        maxBatches: 2,
+      })
+      expect(first).toMatchObject({ deleted: 10, complete: false })
+      expect(
+        await base.auditEvent.count({ where: { action: 'old.event' } })
+      ).toBe(2)
+      const second = await pruneAuditEvents(30, {
+        client: prisma,
+        now,
+        batchSize: 5,
+        maxBatches: 2,
+      })
+      expect(second).toMatchObject({ deleted: 2, complete: true })
+      const summaries = await base.auditEvent.findMany({
+        where: { action: 'audit.retention.applied' },
+        orderBy: { createdAt: 'asc' },
+      })
+      expect(summaries.map((event) => event.details)).toEqual([
+        expect.objectContaining({ count: 10, complete: false }),
+        expect.objectContaining({ count: 2, complete: true }),
+      ])
+    })
+
+    it('records nothing when no event is old enough', async () => {
+      await seed(4, 10, 'recent.event')
+      expect(
+        await pruneAuditEvents(30, { client: prisma, now, batchSize: 5 })
+      ).toMatchObject({ deleted: 0, complete: true, contended: false })
+      expect(await base.auditEvent.count()).toBe(4)
+    })
+
+    it('lets one process delete at a time without losing or repeating rows', async () => {
+      await seed(53, 40, 'old.event')
+      await seed(2, 1, 'recent.event')
+      // A second client has its own connections, like another replica.
+      // Unextended, so the suite's audit writer stays on its own client.
+      const replica = new PrismaClient({
+        datasources: { db: { url: new URL(databaseUrl!).toString() } },
+      })
+      try {
+        const runs = await Promise.all([
+          pruneAuditEvents(30, { client: prisma, now, batchSize: 5 }),
+          pruneAuditEvents(30, { client: replica, now, batchSize: 5 }),
+        ])
+        expect(runs.reduce((total, run) => total + run.deleted, 0)).toBe(53)
+        // Whichever run lost the lock stopped; the other finished the job.
+        expect(runs.some((run) => run.complete)).toBe(true)
+        for (const run of runs) expect(run.complete || run.contended).toBe(true)
+        expect(
+          await base.auditEvent.count({ where: { action: 'old.event' } })
+        ).toBe(0)
+        expect(
+          await base.auditEvent.count({ where: { action: 'recent.event' } })
+        ).toBe(2)
+        const summaries = await base.auditEvent.findMany({
+          where: { action: 'audit.retention.applied' },
+        })
+        expect(
+          summaries.reduce(
+            (total, event) =>
+              total + Number((event.details as { count: number }).count),
+            0
+          )
+        ).toBe(53)
+      } finally {
+        await replica.$disconnect()
+      }
+    })
+
+    it('waits for a batch holding the lock instead of deleting alongside it', async () => {
+      await seed(3, 40, 'old.event')
+      let release!: () => void
+      const held = new Promise<void>((resolve) => (release = resolve))
+      let locked!: () => void
+      const acquired = new Promise<void>((resolve) => (locked = resolve))
+      const holder = base.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347214)`
+          locked()
+          await held
+        },
+        { timeout: 30_000 }
+      )
+      await acquired
+      const blocked = await pruneAuditEvents(30, {
+        client: prisma,
+        now,
+        batchSize: 5,
+      })
+      release()
+      await holder
+      expect(blocked).toMatchObject({
+        deleted: 0,
+        complete: false,
+        contended: true,
+      })
+      expect(
+        await base.auditEvent.count({ where: { action: 'old.event' } })
+      ).toBe(3)
+      expect(
+        await pruneAuditEvents(30, { client: prisma, now, batchSize: 5 })
+      ).toMatchObject({ deleted: 3, complete: true })
+    })
   })
 
   it('uses the transaction connection, captures uncommitted role assignments, and persists only after commit', async () => {
