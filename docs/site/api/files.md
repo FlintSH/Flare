@@ -61,6 +61,17 @@ After an allowed download, S3 can issue a temporary signed storage URL. That URL
 
 Flare chooses safe URL names and handles collisions. Always use the returned URL instead of predicting a path from the original filename. The public origin in these responses comes from the operator's `NEXTAUTH_URL` setting.
 
+The URL name is built from the original filename, which is kept unchanged as the display name:
+
+- The part after the last dot is the extension only when it is 1 to 16 ASCII letters or digits. It is lowercased. Otherwise the dot and that part stay in the name, so `notes 2026.10.25 final` has no extension.
+- The rest is lowercased, and each run of characters other than ASCII letters and digits becomes one hyphen, with none at either end. `My Report.PDF` becomes `my-report.pdf`, and `notes.h#ml` becomes `notes-h-ml`.
+- A name with no ASCII letters or digits, such as `日本語.png`, gets six random URL-safe characters before its extension, for example `x7Kp2a.png`. Randomized naming uses the same random part and extension rule for every file.
+- If the URL is already used in your account, the upload is published with a hyphen and 12 characters of a random ID before the extension, such as `my-report-3f9c2a71-b04.pdf`.
+
+Uploads made before this rule kept their URLs. Earlier builds could put spaces, capitals, `#`, or a leading dot in new URL names, for example `My Report-1.PDF` or `.png`; those links keep working unchanged.
+
+Signed-out visitors can open a public file's share page, `/raw`, and `/direct` whether or not its URL name has an extension. Earlier builds sent them to the sign-in page instead when the name had no extension, such as `/abc12/readme`, or started with a dot, such as `/abc12/.png`; those links now open too. Private files and passwords are checked by the routes as before. A first path segment that belongs to Flare itself (`api`, `auth`, `dashboard`, `admin`, `settings`, `setup`, `raw`, `direct`, `u`, `profile`, `avatars`, or `_next`) is never read as a URL ID, which is also why vanity IDs can't use those words.
+
 ### Select a profile and folder before sending bytes
 
 Use request headers or query parameters for decisions that affect where and how the upload starts:

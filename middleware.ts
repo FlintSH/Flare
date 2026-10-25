@@ -9,7 +9,7 @@ import {
 } from './lib/customization/recovery-request'
 import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
-import { FILE_URL_PATTERN, PUBLIC_PATHS } from './lib/middleware/constants'
+import { PUBLIC_PATHS, isFileUrlPath } from './lib/middleware/constants'
 
 export async function middleware(request: NextRequest) {
   const requestedRecovery =
@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
   if (
     (request.nextUrl.pathname.endsWith('/raw') ||
       request.nextUrl.pathname.endsWith('/direct')) &&
-    FILE_URL_PATTERN.test(request.nextUrl.pathname)
+    isFileUrlPath(request.nextUrl.pathname)
   ) {
     return next()
   }

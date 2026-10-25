@@ -1,25 +1,13 @@
 import { z } from 'zod'
 
+import { RESERVED_URL_IDS } from '@/lib/middleware/constants'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 
 /**
- * Reserved route paths that cannot be used as vanity IDs.
- * These correspond to existing route segments in the application.
+ * Reserved route paths that cannot be used as vanity IDs. The middleware uses
+ * the same list, so a vanity link can never shadow one of Flare's routes.
  */
-export const RESERVED_VANITY_IDS = [
-  'api',
-  'auth',
-  'dashboard',
-  'admin',
-  'settings',
-  'setup',
-  'raw',
-  'direct',
-  'u',
-  'profile',
-  'avatars',
-  '_next',
-] as const
+export const RESERVED_VANITY_IDS = RESERVED_URL_IDS
 
 /**
  * Vanity ID validation schema.
