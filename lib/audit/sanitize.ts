@@ -75,6 +75,10 @@ const keys = new Set([
   'uses',
   'accountId',
   'accountName',
+  // Audit retention summaries.
+  'retentionDays',
+  'cutoff',
+  'complete',
 ])
 const safeField = /^[a-zA-Z][a-zA-Z0-9_.]{0,99}$/
 

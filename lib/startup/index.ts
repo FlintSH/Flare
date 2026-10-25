@@ -1,3 +1,4 @@
+import { startAuditRetentionWorker } from '@/lib/audit/retention'
 import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 import { startMailWorker } from '@/lib/email/worker'
 import { initializeEventSystem } from '@/lib/events/init'
@@ -26,6 +27,7 @@ export async function runStartupTasks() {
       logger.warn(warning)
 
     startSecurityCleanupWorker()
+    startAuditRetentionWorker()
     startStorageDeletionWorker()
     await initializeEventSystem()
     startMailWorker()
