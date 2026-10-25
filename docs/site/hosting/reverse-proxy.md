@@ -121,6 +121,23 @@ Passkey registration and sign-in verify the origin and relying-party hostname de
 
 A passkey registered at one hostname cannot sign in at a different hostname. Before moving domains, users who require passkeys must preserve their dedicated passkey recovery codes, or explicitly choose **Allow other sign-in methods** while a passkey still works. Password plus authenticator/recovery code or SSO is a fallback only with that requirement off. After the move, sign in through an allowed method and register new passkeys. Dedicated passkey recovery works with the account's current email and a saved code, keeps the requirement on, and provides five minutes to enroll a replacement key. Keep the previous hostname available during a planned transition when possible, and communicate the cutover before relying on the new host. [Sign-in security](/guide/security) covers account recovery.
 
+## Security headers
+
+Flare sends these headers on every response. Pass them through unchanged rather than overriding them at the proxy:
+
+| Header                       | Value                                          |
+| ---------------------------- | ---------------------------------------------- |
+| `X-Content-Type-Options`     | `nosniff`                                      |
+| `X-Frame-Options`            | `SAMEORIGIN`                                   |
+| `Referrer-Policy`            | `strict-origin-when-cross-origin`              |
+| `Permissions-Policy`         | `camera=(), microphone=(), geolocation=()`     |
+| `Strict-Transport-Security`  | `max-age=63072000; includeSubDomains; preload` |
+| `Cross-Origin-Opener-Policy` | `same-origin`                                  |
+
+Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Flare doesn't send a site-wide `Content-Security-Policy`. Adding one at the proxy can break pages that rely on inline scripts and styles, including the theme and administrator custom head HTML, and a proxy policy that replaces the file routes' header would remove their sandbox.
+
+`Cross-Origin-Opener-Policy: same-origin` means a Flare page and a page on another site never get a window reference to each other, even when one opens the other. Links between them still work. Builds before this header was added let a page that opened Flare in a new tab keep a reference to it, though Flare's own outgoing links already used `noopener`.
+
 ## Verify the public origin
 
 After changing `NEXTAUTH_URL`, recreate the app container and use the final hostname in your browser. Verify:

@@ -129,6 +129,18 @@ Recheck these overrides against upstream releases before removing them, and run 
 
 Flare validates with Zod 4, which differs from Zod 3 in ways the type checker does not always catch. `.default()` returns its value without parsing it, so use `.prefault()` when an object default should fill its nested defaults. Defaults also apply inside optional fields, so build update schemas from fields without create defaults; otherwise `.partial()` resets every omitted field. API timestamps that accept offsets use `isoDateTimeWithOffset` from `lib/utils/iso-datetime.ts`, which keeps Zod 3's forms (`+0200` offsets and optional seconds) for existing clients. Messages without custom text use Zod 4's default wording. Form resolvers need `@hookform/resolvers` 5.1 or later.
 
+### Workflow actions
+
+Every `uses:` reference in `.github/workflows/` names a full commit SHA, followed by a comment with the release it came from, such as `actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0`. A tag like `@v4` can be moved to different code at any time, and the release workflow runs with registry and release credentials. Dependabot doesn't raise security alerts for actions pinned this way, so `.github/dependabot.yml` asks it for monthly `github-actions` updates, grouped into one pull request that bumps the SHA and its comment together. Review those like any dependency update: read the action's release notes, especially for a new major version, and check that the workflows still pass.
+
+To add or change an action by hand, resolve the release tag to its commit and pin that, keeping the version comment:
+
+```sh
+gh api repos/actions/checkout/git/ref/tags/v4.4.0 --jq '.object'
+```
+
+The result shows the target's `sha` and `type`. Pin a `commit` SHA directly. If `type` is `tag`, the tag is annotated: resolve once more with `gh api repos/<owner>/<repo>/git/tags/<sha> --jq '.object.sha'`.
+
 ## Database permission and avatar regression tests
 
 The role/cleanup and avatar race suites require **two separate disposable PostgreSQL databases**. Create them on a loopback server with names beginning `flare_roles_test_` and `flare_avatar_test_`. Use a local test database role allowed to apply migrations and manage fixture tables. Both suites clear fixture tables in their dedicated databases. Do not use an application or browser-demo database for these tests.
