@@ -77,6 +77,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
   })
 
   beforeEach(async () => {
+    // Every request here comes from the same fallback address, so the
+    // per-minute upload limit would otherwise carry over between tests.
+    const { uploadLimiter } = await import('@/lib/security/rate-limit')
+    await uploadLimiter.delete('127.0.0.1')
     await prisma.user.deleteMany()
     await prisma.event.deleteMany()
     await prisma.config.deleteMany()
