@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server'
 
 import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import {
+  checkFileAccess,
+  fileAccessDeniedHeaders,
+  retryAfterMinutes,
+} from '@/lib/files/access'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { takeOcrRequest } from '@/lib/ocr/limits'
@@ -123,16 +128,22 @@ async function handleGET(
     const session = await getAccessSession()
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
-    const access = await checkFileAccess(file, session, providedPassword)
+    const access = await checkFileAccess(file, session, providedPassword, {
+      requester: requestIp(req.headers),
+    })
     if (!access.allowed) {
       setAuditOutcome('denied')
       return NextResponse.json(
         {
           success: false,
           error:
-            access.reason === 'private' ? 'Unauthorized' : 'Password required',
+            access.reason === 'private'
+              ? 'Unauthorized'
+              : access.reason === 'password_rate_limited'
+                ? `Too many incorrect passwords for this file. Try again in ${retryAfterMinutes(access)} min.`
+                : 'Password required',
         },
-        { status: access.status }
+        { status: access.status, headers: fileAccessDeniedHeaders(access) }
       )
     }
 

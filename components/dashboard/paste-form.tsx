@@ -6,6 +6,10 @@ import Link from 'next/link'
 
 import { ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 
+import {
+  FilePasswordHint,
+  filePasswordFieldProps,
+} from '@/components/file/file-password-hint'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +23,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
+
+import { filePasswordHint } from '@/lib/files/password-policy'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -49,6 +55,7 @@ export function PasteForm() {
       setError('Add some text or code before creating your paste.')
       return
     }
+    if (password && filePasswordHint(password)) return
     setIsSubmitting(true)
     setError('')
 
@@ -261,7 +268,9 @@ export function PasteForm() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             disabled={isSubmitting}
+            {...filePasswordFieldProps('paste-password-hint', password)}
           />
+          <FilePasswordHint id="paste-password-hint" password={password} />
         </div>
       </PermissionGate>
       {error && (
@@ -276,7 +285,11 @@ export function PasteForm() {
       <Button
         type="submit"
         className="w-full"
-        disabled={isSubmitting || !content.trim()}
+        disabled={
+          isSubmitting ||
+          !content.trim() ||
+          Boolean(password && filePasswordHint(password))
+        }
       >
         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isSubmitting ? 'Creating paste…' : 'Create Paste'}

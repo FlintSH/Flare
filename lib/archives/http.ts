@@ -238,7 +238,11 @@ export async function archiveRoute(action: () => Promise<unknown>) {
     } else loggers.files.error('Archive operation failed', error as Error)
     const response = apiError(message, status)
     response.headers.set('Cache-Control', 'private, no-store')
-    if (status === 429) response.headers.set('Retry-After', '5')
+    if (status === 429)
+      response.headers.set(
+        'Retry-After',
+        String((error instanceof ArchiveError && error.retryAfterSeconds) || 5)
+      )
     return response
   }
 }

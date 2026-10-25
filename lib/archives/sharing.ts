@@ -7,7 +7,11 @@ import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
-import { type SessionInfo, checkFileAccess } from '@/lib/files/access'
+import {
+  type SessionInfo,
+  checkFileAccess,
+  retryAfterMinutes,
+} from '@/lib/files/access'
 import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
 import { rateLimit } from '@/lib/security/rate-limit'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
@@ -155,15 +159,19 @@ async function currentSession(
 function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
   if (access.allowed) return
   setAuditOutcome('denied')
-  throw new ArchiveError(
+  const error = new ArchiveError(
     access.reason === 'private'
       ? 'Archive not found.'
       : access.reason === 'password_required'
         ? 'Enter the file password to browse this archive.'
-        : 'The file password is incorrect.',
+        : access.reason === 'password_rate_limited'
+          ? `Too many incorrect passwords for this file. Try again in ${retryAfterMinutes(access)} min.`
+          : 'The file password is incorrect.',
     access.status,
     true
   )
+  error.retryAfterSeconds = access.retryAfterSeconds
+  throw error
 }
 
 /**
@@ -173,7 +181,8 @@ function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
 export async function authorizeSharedArchive(
   id: string,
   password?: string,
-  unlock: string | null = null
+  unlock: string | null = null,
+  requester: string | null = null
 ): Promise<SharedArchiveAccess> {
   const [file, session] = await Promise.all([
     prisma.file.findUnique({ where: { id }, select: sharedSourceSelect }),
@@ -191,7 +200,8 @@ export async function authorizeSharedArchive(
   const access = await checkFileAccess(
     unlocked ? { ...file, password: null } : file,
     await currentSession(viewer),
-    password
+    password,
+    { requester }
   )
   denied(access)
   // Only the visitor-password branch actually compares the supplied password.

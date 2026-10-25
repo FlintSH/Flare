@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { parseByteRange } from '@/lib/http/byte-range'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
@@ -58,12 +59,17 @@ async function handleGET(
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
-    const access = await checkFileAccess(file, session, providedPassword)
+    const access = await checkFileAccess(file, session, providedPassword, {
+      requester: requestIp(request.headers),
+    })
     if (!access.allowed) {
       setAuditOutcome('denied')
       return new Response(null, {
         status: access.status,
-        headers: { 'Cache-Control': 'private, no-store' },
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
 
@@ -177,12 +183,17 @@ async function handlePOST(
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
-    const access = await checkFileAccess(file, session, providedPassword)
+    const access = await checkFileAccess(file, session, providedPassword, {
+      requester: requestIp(request.headers),
+    })
     if (!access.allowed) {
       setAuditOutcome('denied')
       return new Response(null, {
         status: access.status,
-        headers: { 'Cache-Control': 'private, no-store' },
+        headers: {
+          'Cache-Control': 'private, no-store',
+          ...fileAccessDeniedHeaders(access),
+        },
       })
     }
 

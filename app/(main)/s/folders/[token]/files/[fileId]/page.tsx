@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
 import { PublicState } from '@/components/auth/public-state'
@@ -8,9 +9,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { getAccessSession } from '@/lib/auth'
+import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkFileAccess, retryAfterMinutes } from '@/lib/files/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +48,7 @@ export default async function SharedFolderFilePage({
       folder: { shareToken: token },
     },
     select: {
+      id: true,
       userId: true,
       visibility: true,
       password: true,
@@ -57,7 +60,8 @@ export default async function SharedFolderFilePage({
   const access = await checkFileAccess(
     file,
     await getAccessSession(),
-    providedPassword
+    providedPassword,
+    { requester: requestIp(await headers()) }
   )
   if (access.allowed) {
     // Only reveal the canonical filename after access succeeds. The existing
@@ -78,16 +82,30 @@ export default async function SharedFolderFilePage({
     config.settings.customization.published.sharing.showFooter ??
     config.settings.general.credits.showFooter
   const invalidPassword = access.reason === 'password_invalid'
+  const limited = access.reason === 'password_rate_limited'
+  const problem = limited
+    ? `Too many incorrect passwords were entered for this file. Wait ${retryAfterMinutes(access)} min, then try again.`
+    : invalidPassword
+      ? 'That password didn’t match. Check with the sender and try again.'
+      : null
   const opaquePath = `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}`
 
   return (
     <PublicState
       compact
-      title={invalidPassword ? 'Incorrect Password' : 'Password Protected File'}
+      title={
+        limited
+          ? 'Too Many Attempts'
+          : invalidPassword
+            ? 'Incorrect Password'
+            : 'Password Protected File'
+      }
       description={
-        invalidPassword
-          ? 'The password you entered is incorrect'
-          : 'This file requires a password to access'
+        limited
+          ? 'Password checks for this file are paused'
+          : invalidPassword
+            ? 'The password you entered is incorrect'
+            : 'This file requires a password to access'
       }
       footer={showFooter ? <Footer /> : undefined}
     >
@@ -102,24 +120,22 @@ export default async function SharedFolderFilePage({
             placeholder="Enter the password from the sender"
             className="h-11"
             aria-invalid={invalidPassword}
-            aria-describedby={
-              invalidPassword ? 'share-password-error' : undefined
-            }
+            aria-describedby={problem ? 'share-password-error' : undefined}
             required
             autoFocus
           />
-          {invalidPassword && (
+          {problem && (
             <p
               id="share-password-error"
               role="alert"
               className="text-sm text-foreground"
             >
-              That password didn’t match. Check with the sender and try again.
+              {problem}
             </p>
           )}
         </div>
         <Button type="submit" className="h-11 w-full">
-          {invalidPassword ? 'Try Again' : 'Access File'}
+          {invalidPassword || limited ? 'Try Again' : 'Access File'}
         </Button>
       </form>
     </PublicState>

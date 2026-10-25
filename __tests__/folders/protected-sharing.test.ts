@@ -6,6 +6,7 @@ import { hashSync } from 'bcryptjs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { FILE_PASSWORD_ATTEMPTS } from '@/lib/files/password-attempts'
 import { getSharedFolder } from '@/lib/folders/shared'
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +31,9 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('next/navigation', () => ({
   redirect: mocks.redirect,
   notFound: mocks.notFound,
+}))
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-real-ip': '198.51.100.20' }),
 }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
@@ -169,6 +173,26 @@ describe('protected shared-folder links', () => {
       '/recipient-slug/Quarterly%20Budget%20FY26.pdf'
     )
     expect(destination.searchParams.get('password')).toBe(password)
+  })
+
+  it('tells visitors when password checks for the file are paused', async () => {
+    // Attempt limits are process-wide; use a file no other case touches.
+    mocks.file.mockResolvedValue({ ...file, id: 'paused-folder-file' })
+    for (
+      let attempt = 1;
+      attempt <= FILE_PASSWORD_ATTEMPTS.perRequester;
+      attempt++
+    )
+      expect(
+        renderToStaticMarkup(await openFile(`wrong-${attempt}`))
+      ).toContain('Incorrect Password')
+
+    const html = renderToStaticMarkup(await openFile(password))
+    expect(html).toContain('Too Many Attempts')
+    expect(html).toContain('Wait 15 min, then try again.')
+    expect(html).toContain(`action="${opaquePath}"`)
+    expectNoProtectedMetadata(html)
+    expect(mocks.redirect).not.toHaveBeenCalled()
   })
 
   it('lets the existing owner access rule bypass the password', async () => {

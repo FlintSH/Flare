@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { newFilePasswordSchema } from '@/lib/files/password-policy'
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
 export const expirationSchema = z.enum([
@@ -64,15 +65,7 @@ export const uploadRequestOptionsSchema = z.preprocess(
     .extend({
       profileId: z.string().min(1).max(100).nullable().optional(),
       folderId: z.string().min(1).max(128).nullable().optional(),
-      password: z
-        .string()
-        .max(72)
-        .refine(
-          (value) => new TextEncoder().encode(value).length <= 72,
-          'Passwords must use at most 72 bytes.'
-        )
-        .nullable()
-        .optional(),
+      password: newFilePasswordSchema.nullable().optional(),
       expiresAt: isoDateTimeWithOffset.nullable().optional(),
     })
     .strict()

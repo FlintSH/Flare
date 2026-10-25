@@ -1621,7 +1621,7 @@
           "password": {
             "type": ["string", "null"],
             "maxLength": 72,
-            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+            "description": "At least 8 characters and at most 72 UTF-8 bytes; other non-empty values return 400. Empty or null clears password protection. Not a saved profile option."
           },
           "expiresAt": {
             "type": ["string", "null"],
@@ -1677,7 +1677,7 @@
           },
           "password": {
             "type": "string",
-            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option. Multipart uses an empty string or the literal string null for null."
+            "description": "At least 8 characters and at most 72 UTF-8 bytes; other non-empty values return 400. Empty or null clears password protection. Not a saved profile option. Multipart uses an empty string or the literal string null for null."
           },
           "expiresAt": {
             "type": "string",
@@ -1739,7 +1739,7 @@
           "password": {
             "type": ["string", "null"],
             "maxLength": 72,
-            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+            "description": "At least 8 characters and at most 72 UTF-8 bytes; other non-empty values return 400. Empty or null clears password protection. Not a saved profile option."
           },
           "expiresAt": {
             "type": ["string", "null"],
@@ -1825,7 +1825,7 @@
           "password": {
             "type": ["string", "null"],
             "maxLength": 72,
-            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+            "description": "At least 8 characters and at most 72 UTF-8 bytes; other non-empty values return 400. Empty or null clears password protection. Not a saved profile option."
           },
           "expiresAt": {
             "type": ["string", "null"],
@@ -1915,7 +1915,7 @@
           "password": {
             "type": ["string", "null"],
             "maxLength": 72,
-            "description": "At most 72 UTF-8 bytes as well as 72 characters. Empty or null clears password protection. Not a saved profile option."
+            "description": "At least 8 characters and at most 72 UTF-8 bytes; other non-empty values return 400. Empty or null clears password protection. Not a saved profile option."
           },
           "expiresAt": {
             "type": ["string", "null"],
