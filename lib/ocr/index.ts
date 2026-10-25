@@ -1,20 +1,4 @@
-import { processImageOCRTask } from './processor'
-import type { OCRResult } from './processor'
-import { ocrQueue } from './queue'
-
-export async function processImageOCR(
-  filePath: string,
-  fileId: string
-): Promise<OCRResult> {
-  try {
-    const result = await processImageOCRTask({ filePath, fileId })
-    return result
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'OCR processing failed',
-    }
-  }
-}
-
-export { ocrQueue }
+// On-demand and background OCR share the queue's single recognition slot.
+export { ocrQueue } from './queue'
+export type { OCRRequestOutcome } from './queue'
+export type { OCRResult } from './processor'
