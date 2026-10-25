@@ -1,4 +1,9 @@
-import { createHmac, randomBytes } from 'node:crypto'
+import {
+  type ScryptOptions,
+  createHmac,
+  randomBytes,
+  scrypt,
+} from 'node:crypto'
 
 /**
  * Incorrect file passwords per window. Only distinct wrong passwords count:
@@ -42,6 +47,23 @@ function digest(...parts: string[]) {
   return createHmac('sha256', state.key)
     .update(parts.join('\0'))
     .digest('base64url')
+}
+
+// Submitted passwords go through a memory-hard KDF rather than a fast hash.
+// These parameters take about 2 ms, far less than the bcrypt check they save.
+const PASSWORD_KDF: ScryptOptions = { N: 1024, r: 8, p: 1 }
+
+function passwordDigest(password: string, ...context: string[]) {
+  return new Promise<string>((resolve, reject) =>
+    scrypt(
+      password,
+      Buffer.from(digest('password', ...context)),
+      32,
+      PASSWORD_KDF,
+      (error, key) =>
+        error ? reject(error) : resolve(key.toString('base64url'))
+    )
+  )
 }
 
 const fileKey = (fileId: string) => `file:${fileId}`
@@ -104,13 +126,13 @@ export function filePasswordBlock(
     : null
 }
 
-export function recordFilePasswordFailure(
+export async function recordFilePasswordFailure(
   fileId: string,
   requester: string | null,
   password: string,
   now = Date.now()
 ) {
-  const attempt = digest('attempt', fileId, password)
+  const attempt = await passwordDigest(password, 'attempt', fileId)
   addFailure(fileKey(fileId), attempt, FILE_PASSWORD_ATTEMPTS.perFile, now)
   if (requester)
     addFailure(
@@ -132,21 +154,16 @@ export function clearFilePasswordFailures(
 // The stored hash is part of the key, so changing or removing the file's
 // password stops earlier verifications from matching. So is the client
 // address: a remembered success must not answer guesses from anyone else.
-const verifiedKey = (
+export function verifiedFilePasswordKey(
   fileId: string,
   hash: string,
   password: string,
   requester: string | null
-) => digest('verified', fileId, hash, password, requester ?? '')
-
-export function isVerifiedFilePassword(
-  fileId: string,
-  hash: string,
-  password: string,
-  requester: string | null,
-  now = Date.now()
 ) {
-  const key = verifiedKey(fileId, hash, password, requester)
+  return passwordDigest(password, 'verified', fileId, hash, requester ?? '')
+}
+
+export function isVerifiedFilePassword(key: string, now = Date.now()) {
   const expiresAt = state.verified.get(key)
   if (expiresAt === undefined) return false
   if (expiresAt > now) return true
@@ -154,14 +171,7 @@ export function isVerifiedFilePassword(
   return false
 }
 
-export function rememberVerifiedFilePassword(
-  fileId: string,
-  hash: string,
-  password: string,
-  requester: string | null,
-  now = Date.now()
-) {
-  const key = verifiedKey(fileId, hash, password, requester)
+export function rememberVerifiedFilePassword(key: string, now = Date.now()) {
   state.verified.delete(key)
   state.verified.set(key, now + VERIFIED_TTL_MS)
   for (const oldest of state.verified.keys()) {

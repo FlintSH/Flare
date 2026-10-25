@@ -8,6 +8,7 @@ import {
   isVerifiedFilePassword,
   recordFilePasswordFailure,
   rememberVerifiedFilePassword,
+  verifiedFilePasswordKey,
 } from './password-attempts'
 
 export type FileAccessInfo = {
@@ -73,12 +74,13 @@ export async function checkFileAccess(
       options.requester && options.requester !== 'unknown'
         ? options.requester
         : null
-    const verified = isVerifiedFilePassword(
+    const verifiedKey = await verifiedFilePasswordKey(
       file.id,
       file.password,
       providedPassword,
       requester
     )
+    const verified = isVerifiedFilePassword(verifiedKey)
     // An address that recently proved the password keeps access during a
     // pause, so other people's guessing cannot interrupt its playback.
     // Everyone else is refused before comparing, revealing nothing.
@@ -97,15 +99,10 @@ export async function checkFileAccess(
     if (!verified) {
       const isPasswordValid = await compare(providedPassword, file.password)
       if (!isPasswordValid) {
-        recordFilePasswordFailure(file.id, requester, providedPassword)
+        await recordFilePasswordFailure(file.id, requester, providedPassword)
         return { allowed: false, reason: 'password_invalid', status: 401 }
       }
-      rememberVerifiedFilePassword(
-        file.id,
-        file.password,
-        providedPassword,
-        requester
-      )
+      rememberVerifiedFilePassword(verifiedKey)
       clearFilePasswordFailures(file.id, requester)
     }
   }
