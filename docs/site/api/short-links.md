@@ -95,7 +95,7 @@ Deletion stops future redirects through that code. It does not delete the target
 
 ## What visitors see
 
-`GET /u/{shortCode}` is a public redirect route. It increments the link's click count and sends the visitor to the target URL. It does not require a Flare account. A missing/deleted code returns `404`.
+`GET /u/{shortCode}` is a public redirect route. It increments the link's click count and sends the visitor to the target URL. It does not require a Flare account. A missing/deleted code returns `404`. The [audit log](/admin/audit) records each redirect as an `http.get` request event that names the link by its short code; the click increment itself is not a separate change event.
 
 The count reflects redirect requests, including requests from bots and link previews. It is not a unique-person analytics metric. A short link does not change the destination's permissions: a target private file remains private.
 

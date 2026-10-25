@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { prisma } from '@/lib/database/prisma'
+import { clientIp } from '@/lib/security/client-ip'
 
 import type { EmailConfig } from './schema'
 
@@ -33,11 +34,7 @@ export async function limitEmailRequest(
   config: EmailConfig,
   address?: string
 ) {
-  // Reverse proxies must replace forwarded headers, rather than append client input.
-  const ip =
-    req.headers.get('x-real-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    'unknown'
+  const ip = clientIp(req.headers) ?? 'unknown'
   await consumeEmailLimit(`email:ip:${ip}`, config.limits.ipPerHour, 3600)
   if (address) {
     const normalized = address.trim().toLowerCase()

@@ -121,6 +121,8 @@ DOCS_BASE=/flare/ npm test
 
 Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. Use Node.js 24 and the pnpm version in the root `package.json`; install with `pnpm install --frozen-lockfile` and `npm ci --prefix docs/site`. Check both dependency trees with `pnpm audit` and `npm audit --prefix docs/site` before a release. A clean audit describes the advisories known at that time, not a guarantee against future findings.
 
+The application checks that CI runs are `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm lint`, and `pnpm format:check`. `pnpm lint` runs ESLint 9 directly with `eslint.config.mjs` over `app`, `components`, `lib`, `hooks`, `middleware.ts`, and `instrumentation.ts`. It replaced `next lint`, which Next.js 15 deprecated and Next.js 16 removes. `scripts`, `types`, the test files, and the handbook are not linted by it. The pre-commit hook runs the same command.
+
 The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress.
 
 Later security floors raise that proxy stack's `basic-ftp` to 6.2.3 or later, because `get-uri` 8 still requests the vulnerable 5.x line. They also keep `ip-address` and Vitest's Vite on patched releases, because `pnpm update ip-address vite` leaves both at their locked vulnerable versions. Tailwind CSS 3 requires `postcss-selector-parser` 6.x. Keep it on 6.1.5 or later, the maintainers' backport of the 7.1.6 parser fix, rather than forcing 7.x onto Tailwind 3. Until advisory GHSA-rj75-hqrm-r3gf lists 6.1.5 as patched, `pnpm audit` and Dependabot still report it.
@@ -128,6 +130,18 @@ Later security floors raise that proxy stack's `basic-ftp` to 6.2.3 or later, be
 Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
 
 Flare validates with Zod 4, which differs from Zod 3 in ways the type checker does not always catch. `.default()` returns its value without parsing it, so use `.prefault()` when an object default should fill its nested defaults. Defaults also apply inside optional fields, so build update schemas from fields without create defaults; otherwise `.partial()` resets every omitted field. API timestamps that accept offsets use `isoDateTimeWithOffset` from `lib/utils/iso-datetime.ts`, which keeps Zod 3's forms (`+0200` offsets and optional seconds) for existing clients. Messages without custom text use Zod 4's default wording. Form resolvers need `@hookform/resolvers` 5.1 or later.
+
+### Workflow actions
+
+Every `uses:` reference in `.github/workflows/` names a full commit SHA, followed by a comment with the release it came from, such as `actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0`. A tag like `@v4` can be moved to different code at any time, and the release workflow runs with registry and release credentials. Dependabot doesn't raise security alerts for actions pinned this way, so `.github/dependabot.yml` asks it for monthly `github-actions` updates, grouped into one pull request that bumps the SHA and its comment together. Review those like any dependency update: read the action's release notes, especially for a new major version, and check that the workflows still pass.
+
+To add or change an action by hand, resolve the release tag to its commit and pin that, keeping the version comment:
+
+```sh
+gh api repos/actions/checkout/git/ref/tags/v4.4.0 --jq '.object'
+```
+
+The result shows the target's `sha` and `type`. Pin a `commit` SHA directly. If `type` is `tag`, the tag is annotated: resolve once more with `gh api repos/<owner>/<repo>/git/tags/<sha> --jq '.object.sha'`.
 
 ## Database permission and avatar regression tests
 

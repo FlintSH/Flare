@@ -141,6 +141,16 @@ For an image, choose **Extract text (OCR)**. Flare processes the image on the se
 
 If the administrator enables automatic OCR, images can be processed after upload without a manual request. Upload completion does not mean OCR has completed. Manual extraction remains useful when automatic processing is disabled.
 
+Flare reads one image at a time, and requests and automatic processing share that turn. Asking about an image that is already being read waits for the same result instead of starting again, and doesn't count toward your reading limit. Saved text opens immediately. The same applies when visitors choose **Extract text** on a share page. If the dialog shows one of these messages, the text isn't lost:
+
+| Message                                   | What to do                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flare is still reading this image         | Reading continues on the server after a one-minute wait. Choose **Check again** shortly to see the text.                                                            |
+| Flare is busy reading other images        | Ten new images are already waiting to be read, or 30 requests are already waiting for results. Choose **Try again** in a minute.                                    |
+| You’ve asked Flare to read several images | Each account, or each address for visitors who aren't signed in, can start 20 readings per 10 minutes. Saved text doesn't count. The message says how long to wait. |
+| Flare couldn’t read text from this image  | The last attempt failed. Flare waits 5 minutes before reading that image again; the message says when. Try a clearer, larger PNG or JPEG if it keeps failing.       |
+| Couldn’t extract text. Please try again.  | The request didn't reach Flare, for example because the connection dropped. Choose **Try again**.                                                                   |
+
 <Screenshot src="/screenshots/workspace/files-ocr.png" alt="Dialog showing text extracted from an image" caption="OCR makes text inside an image available to copy and search." />
 
 Administrators with `audit.read` can inspect OCR start, completion, and failure events alongside the file’s other activity in [Audit log](/admin/audit). Those audit details do not include extracted text. Ask for an investigation when processing repeatedly fails; do not assume a successful upload also completed OCR.

@@ -68,17 +68,27 @@ If you need to stop public access while keeping your copy, set the file to **Pri
 
 Browser preview support is separate from upload support. If a preview fails, try downloading the file and opening it in an appropriate application. A share page expanded image viewer shows that shared image; it does not reveal the owner's surrounding library.
 
+Flare never lets an uploaded file run as part of its own site. Raw links, file paths under `/api/files/`, and image previews are served in a browser sandbox, so an HTML page, SVG drawing, or other active document opened from a Flare link cannot run scripts, read the viewer's Flare session, or act on their behalf. SVG images still display; only their scripts are blocked. This protects people who open a link, including administrators reviewing other accounts' uploads.
+
 A public archive exposes its member paths and bytes to authorized recipients through the [archive browser](./archives#browse-an-archive-shared-with-you), even if those files originally had private links or Flare passwords. Protected public archives require the file password before browsing or entry downloads; a private archive remains unavailable to other ordinary users even if they know its password. Share-page browsing does not add files to an account or offer extraction. [Archive creation](./archives#create-an-archive-from-selected-files) defaults to private and does not embed source sharing controls or encrypt the result. An explicitly selected public upload profile can make the new archive public immediately; review its contents and the profile summary before confirming.
 
 ## Share pages, raw links, and downloads
 
 The usual share link has a path such as `/your-id/screenshot.png`. It opens the Flare viewer with the instance's presentation and access checks.
 
+Links work for signed-out visitors whatever the file is called. Earlier builds asked them to sign in when a link's name had no extension, for example a file named `README`; those links now open like any other public link.
+
 Appending `/raw` requests the file content without the surrounding page. For video files, `/direct` is a helper that returns JSON containing a playback URL; it is not a general-purpose download route. Both check file access before returning a response. Appending one does not bypass private visibility or passwords. Use the page's **Download** action when you want to save a copy.
 
 On S3 storage, an authorized response can provide a temporary signed storage URL. Anyone who obtains that already-issued URL can use it until it expires, even if you subsequently change the Flare file's access settings. Changing visibility or a password affects new Flare access checks; it does not immediately revoke existing storage URLs.
 
 Dashboard copy buttons and generated screenshot tools copy the normal share-page URL. For automation that needs a different response URL, see the [API guide](../api/index).
+
+### Browser and CDN caching
+
+Content from a private or password-protected file, including what a visitor unlocks with the password, is sent with `Cache-Control: private, no-store`, so browsers and shared caches such as a CDN do not keep a copy. Public files without a password can be cached: their video at the `/api/files/...` content URL that upload tools return, and their image thumbnails, for up to a year.
+
+That cache is not recalled when access changes. If you make a cached public file private or add a password, a visitor's browser or a CDN in front of Flare can keep serving the copy it already has. Ask the operator to purge the file's paths from the CDN. A browser keeps its copy until it expires or its cache is cleared. Earlier releases also marked private and password-protected video at `/api/files/...` as cacheable for a year; [operators with a CDN](../hosting/reverse-proxy#keep-access-decisions-in-flare) should purge those paths once after upgrading.
 
 ### View counts
 

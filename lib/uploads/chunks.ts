@@ -25,6 +25,7 @@ import {
 } from '@/lib/storage/targets'
 import type { StorageTarget } from '@/lib/storage/targets'
 
+import { uploadDisplayName } from './display-name'
 import {
   cleanupUncommittedUpload,
   enqueueUploadProcessing,
@@ -172,9 +173,15 @@ export async function initializeChunkUpload(
   req: Request,
   user: AuthenticatedUser
 ) {
-  const { filename, mimeType, size, ...bodyOptions } = initSchema.parse(
-    discardLegacyCopyFormat(await req.json())
-  )
+  const {
+    filename: requestedName,
+    mimeType,
+    size,
+    ...bodyOptions
+  } = initSchema.parse(discardLegacyCopyFormat(await req.json()))
+  // A path in `filename` names the file, never a storage location.
+  const filename = uploadDisplayName(requestedName)
+  if (!filename) throw new UploadError('Invalid filename.')
   const selection = requestUploadOptions(req)
   if (
     selection.profileId !== undefined &&

@@ -4,7 +4,12 @@ import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
 import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requireAuth, requirePermission } from '@/lib/auth/api-auth'
-import { FlareConfig, getConfig, updateConfig } from '@/lib/config'
+import {
+  ConfigValidationError,
+  FlareConfig,
+  getConfig,
+  updateConfig,
+} from '@/lib/config'
 import { redactEmailConfig } from '@/lib/email/config'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -155,6 +160,8 @@ async function handlePATCH(request: Request) {
   } catch (error) {
     if (error instanceof PermissionError)
       return apiError(error.message, error.status)
+    if (error instanceof ConfigValidationError)
+      return apiError(error.message, 400)
     return apiError(
       'Could not update settings. Check the values and try again.',
       400
@@ -210,6 +217,8 @@ async function handlePOST(req: Request) {
     if (error instanceof PermissionError)
       return apiError(error.message, error.status)
     if (error instanceof SyntaxError) return apiError('Provide valid JSON', 400)
+    if (error instanceof ConfigValidationError)
+      return apiError(error.message, 400)
     logger.error('Error updating settings', error as Error)
     return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
   }

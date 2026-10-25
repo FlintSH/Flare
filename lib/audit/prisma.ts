@@ -13,7 +13,17 @@ type Delegate = {
 }
 const models: Record<
   string,
-  { category: string; target: string; fields: string[] }
+  {
+    category: string
+    target: string
+    fields: string[]
+    /**
+     * Request counters. Each view, download, or click already records its
+     * request outcome, so an update that only increments these is not a
+     * separate change event.
+     */
+    counters?: string[]
+  }
 > = {
   File: {
     category: 'files',
@@ -32,6 +42,7 @@ const models: Record<
       'views',
       'downloads',
     ],
+    counters: ['views', 'downloads'],
   },
   VaultFolder: {
     category: 'folders',
@@ -98,6 +109,7 @@ const models: Record<
     category: 'links',
     target: 'link',
     fields: ['id', 'userId', 'clicks'],
+    counters: ['clicks'],
   },
   Passkey: {
     category: 'authentication',
@@ -330,7 +342,15 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 )
               ),
             ].filter((field) => !noisyFields.has(field))
-            if (operation.startsWith('update') && changedFields.length === 0)
+            // Counter-only updates run as one statement, without a snapshot
+            // read or change event. Other changes keep counters in their
+            // snapshots and changedFields.
+            if (
+              operation.startsWith('update') &&
+              changedFields.every((field) =>
+                definition.counters?.includes(field)
+              )
+            )
               return query(args)
             const snapshotClient =
               auditContext.getStore()?.transactionClient ?? base

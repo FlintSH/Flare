@@ -1,4 +1,7 @@
+import { NextRequest } from 'next/server'
+
 import { type Prisma, PrismaClient } from '@prisma/client'
+import { Readable } from 'node:stream'
 import {
   afterAll,
   afterEach,
@@ -13,6 +16,27 @@ import {
 import { auditContext } from '@/lib/audit/context'
 import { withPrismaAudit } from '@/lib/audit/prisma'
 import { pruneAuditEvents } from '@/lib/audit/retention'
+
+// Request-level cases run real routes against this suite's audited client.
+const routes = vi.hoisted(() => ({ prisma: undefined as unknown }))
+vi.mock('@/lib/database/prisma', () => ({
+  get prisma() {
+    return routes.prisma
+  },
+}))
+vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
+vi.mock('@/lib/storage', () => ({
+  getStorageProvider: async () => ({
+    getFileSize: async () => 4,
+    getFileStream: async (
+      _path: string,
+      range?: { start?: number; end?: number }
+    ) =>
+      Readable.from([
+        Buffer.from('test').subarray(range?.start ?? 0, (range?.end ?? 3) + 1),
+      ]),
+  }),
+}))
 
 const databaseUrl = process.env.FLARE_AUDIT_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
@@ -35,6 +59,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       throw new Error('Use the disposable local flare_audit_test database')
     base = new PrismaClient({ datasources: { db: { url: url.toString() } } })
     prisma = withPrismaAudit(base)
+    routes.prisma = prisma
   })
   beforeEach(async () => {
     await base.user.deleteMany()
@@ -526,7 +551,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       })
       await base.file.update({
         where: { id: 'joined' },
-        data: { visibility: 'PUBLIC', views: 10 },
+        data: { visibility: 'PUBLIC', size: 10 },
       })
       return observed
     }) as unknown as typeof base.file.findMany)
@@ -537,14 +562,14 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       const actual = await updateReturning(args)
       await base.file.update({
         where: { id: 'joined' },
-        data: { name: 'later.pdf', views: 100 },
+        data: { name: 'later.pdf', size: 100 },
       })
       return actual
     }) as unknown as typeof base.file.updateManyAndReturn)
     expect(
       await prisma.file.updateMany({
         where: { visibility: 'PUBLIC' },
-        data: { views: { increment: 1 } },
+        data: { size: { increment: 1 } },
       })
     ).toEqual({ count: 1 })
     const events = await base.auditEvent.findMany({
@@ -555,12 +580,212 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       targetId: 'joined',
       targetName: 'joined.pdf',
       details: {
-        changedFields: ['views'],
+        changedFields: ['size'],
         before: {},
-        after: { name: 'joined.pdf', views: 11 },
+        after: { name: 'joined.pdf', size: 11 },
         count: 1,
       },
     })
+  })
+
+  it('runs view, download, and click increments as one statement without a change event', async () => {
+    await fixtureFile('counted')
+    await base.shortenedUrl.create({
+      data: {
+        id: 'counted-link',
+        shortCode: 'counted',
+        targetUrl: 'https://example.test/',
+        userId: 'audit-actor',
+      },
+    })
+    const fileSnapshot = vi.spyOn(base.file, 'findUnique')
+    const bulkSnapshot = vi.spyOn(base.file, 'findMany')
+    const linkSnapshot = vi.spyOn(base.shortenedUrl, 'findUnique')
+    await prisma.file.update({
+      where: { id: 'counted' },
+      data: { views: { increment: 1 } },
+    })
+    await prisma.file.update({
+      where: { id: 'counted' },
+      data: { downloads: { increment: 1 } },
+    })
+    await prisma.file.updateMany({
+      where: { id: 'counted' },
+      data: { views: { increment: 1 }, downloads: { increment: 1 } },
+    })
+    await prisma.shortenedUrl.update({
+      where: { id: 'counted-link' },
+      data: { clicks: { increment: 1 } },
+    })
+    expect(fileSnapshot).not.toHaveBeenCalled()
+    expect(bulkSnapshot).not.toHaveBeenCalled()
+    expect(linkSnapshot).not.toHaveBeenCalled()
+    expect(await base.auditEvent.count()).toBe(0)
+    expect(
+      await base.file.findUniqueOrThrow({ where: { id: 'counted' } })
+    ).toMatchObject({ views: 2, downloads: 2 })
+    expect(
+      await base.shortenedUrl.findUniqueOrThrow({
+        where: { id: 'counted-link' },
+      })
+    ).toMatchObject({ clicks: 1 })
+  })
+
+  it('still records counters changed alongside other fields, and invite uses', async () => {
+    await fixtureFile('mixed')
+    await prisma.file.update({
+      where: { id: 'mixed' },
+      data: { visibility: 'PRIVATE', downloads: { increment: 1 } },
+    })
+    expect(
+      (
+        await base.auditEvent.findFirstOrThrow({
+          where: { action: 'file.update' },
+        })
+      ).details
+    ).toMatchObject({
+      changedFields: ['visibility', 'downloads'],
+      before: { visibility: 'PUBLIC', downloads: 0 },
+      after: { visibility: 'PRIVATE', downloads: 1 },
+    })
+    await base.invite.create({
+      data: {
+        id: 'invite-uses',
+        creatorId: 'audit-actor',
+        tokenHash: 'fixture-invite-digest',
+        token: 'fixture-invite-token',
+      },
+    })
+    await prisma.invite.update({
+      where: { id: 'invite-uses' },
+      data: { uses: { increment: 1 } },
+    })
+    const invite = await base.auditEvent.findFirstOrThrow({
+      where: { action: 'invite.update' },
+    })
+    expect(invite).toMatchObject({
+      targetId: 'invite-uses',
+      details: {
+        changedFields: ['uses'],
+        before: { uses: 0 },
+        after: { uses: 1 },
+      },
+    })
+    expect(JSON.stringify(invite)).not.toMatch(/fixture-invite/)
+  })
+
+  it('records one request event for an anonymous raw view, link click, or legacy download', async () => {
+    const { GET: raw } =
+      await import('@/app/(raw)/[userUrlId]/[filename]/raw/route')
+    const { GET: openLink } =
+      await import('@/app/(shorturl)/u/[shortCode]/route')
+    const { GET: files } = await import('@/app/api/files/[...path]/route')
+    await base.file.create({
+      data: {
+        id: 'shared',
+        name: 'shared.txt',
+        userId: 'audit-actor',
+        urlPath: '/audit-actor/shared.txt',
+        path: 'uploads/audit-actor/shared.txt',
+        mimeType: 'text/plain',
+        size: 0.001,
+      },
+    })
+    await base.shortenedUrl.create({
+      data: {
+        id: 'shared-link',
+        shortCode: 'shared',
+        targetUrl: 'https://example.test/',
+        userId: 'audit-actor',
+      },
+    })
+    const eventsFor = async (response: Response) => {
+      await response.arrayBuffer()
+      const events = await base.auditEvent.findMany({
+        select: {
+          action: true,
+          outcome: true,
+          actorName: true,
+          targetType: true,
+          targetId: true,
+          targetName: true,
+          route: true,
+          status: true,
+        },
+      })
+      await base.auditEvent.deleteMany()
+      return events
+    }
+
+    const view = await raw(
+      new Request('https://flare.test/audit-actor/shared.txt/raw', {
+        headers: { range: 'bytes=0-1' },
+      }),
+      {
+        params: Promise.resolve({
+          userUrlId: 'audit-actor',
+          filename: 'shared.txt',
+        }),
+      }
+    )
+    expect(view.status).toBe(206)
+    expect(await eventsFor(view)).toEqual([
+      {
+        action: 'file.read',
+        outcome: 'success',
+        actorName: 'Anonymous',
+        targetType: 'file',
+        targetId: 'shared',
+        targetName: 'shared.txt',
+        route: '/[userUrlId]/[filename]/raw',
+        status: 206,
+      },
+    ])
+
+    const click = await openLink(new Request('https://flare.test/u/shared'), {
+      params: Promise.resolve({ shortCode: 'shared' }),
+    })
+    expect(click.status).toBe(307)
+    expect(await eventsFor(click)).toEqual([
+      {
+        action: 'http.get',
+        outcome: 'success',
+        actorName: 'Anonymous',
+        targetType: 'link',
+        targetId: 'shared-link',
+        targetName: 'shared',
+        route: '/u/[shortCode]',
+        status: 307,
+      },
+    ])
+
+    const download = await files(
+      new NextRequest(
+        'https://flare.test/api/files/audit-actor/shared.txt?download=true'
+      ),
+      { params: Promise.resolve({ path: ['audit-actor', 'shared.txt'] }) }
+    )
+    expect(download.status).toBe(200)
+    expect(await eventsFor(download)).toEqual([
+      {
+        action: 'file.download',
+        outcome: 'success',
+        actorName: 'Anonymous',
+        targetType: 'file',
+        targetId: 'shared',
+        targetName: 'shared.txt',
+        route: '/api/files/[...path]',
+        status: 200,
+      },
+    ])
+    expect(
+      await base.file.findUniqueOrThrow({ where: { id: 'shared' } })
+    ).toMatchObject({ views: 1, downloads: 1 })
+    expect(
+      await base.shortenedUrl.findUniqueOrThrow({
+        where: { id: 'shared-link' },
+      })
+    ).toMatchObject({ clicks: 1 })
   })
 
   it('locks and rechecks bulk deletions so concurrent predicate changes cannot blame the wrong filename', async () => {

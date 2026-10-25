@@ -101,6 +101,18 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Sandboxed image previews
+
+Earlier builds served `/api/files/{id}/thumbnail` without the sandbox policy that raw links use. Anyone allowed to upload could store an SVG whose script ran on your Flare origin when someone opened that thumbnail URL directly, with the visitor's session. Updated builds send `Content-Security-Policy: sandbox` on every thumbnail. No data migration or setting change is needed.
+
+Public thumbnails are sent with `Cache-Control: public, max-age=31536000, immutable`, so a copy cached before the update keeps its old headers. If people you don't fully trust can upload to your instance:
+
+1. After deploying, purge `/api/files/*/thumbnail` from any CDN or caching proxy in front of Flare.
+2. Ask administrators and moderators who reviewed untrusted uploads, for example through **View Content**, to clear cached files for your Flare site in their browser. Browsers otherwise keep those copies until they expire.
+3. Search [Audit log](/admin/audit) for `.svg` to find SVG uploads and the accounts that opened their previews, then review any you don't recognize.
+
+Private and password-protected previews were sent with `private, no-store` and weren't cached.
+
 ### Upgrading from 2.1 to 3.0
 
 Flare 3.0 adds roles, authenticator 2FA and passkeys, revocable browser sessions and login history, the audit log, archive tools, continuous library scrolling, and invite links. Use the normal backup and upgrade steps above, and stop all old application replicas before starting the new version. The official image applies the migrations automatically; source deployments run `npx prisma migrate deploy` before starting the updated application.

@@ -17,6 +17,8 @@ Flare separates server connection details from instance preferences. Configure P
 
 For email, precedence is **environment or secret file → saved value → default**. Removing an override reveals the saved fallback; the override is not copied into the database. Other settings do not have an equivalent generic environment mapping.
 
+Saved settings apply from the next request without a restart. Each request checks the saved configuration's revision in PostgreSQL and reuses the settings it already read only while that revision is unchanged and Flare's own code hasn't been reloaded, as happens in development. A change saved through another replica, written by a maintenance script, or edited directly in the database is therefore seen on the next request too. Storage is the exception: a Flare process keeps its storage connection until that same process saves a storage change, so restart any other replicas after changing storage settings.
+
 ## Core environment variables
 
 | Variable                              | Default                                      | Purpose                                                                                                                                                            |
@@ -30,13 +32,14 @@ For email, precedence is **environment or secret file → saved value → defaul
 | `FLARE_EMAIL_ENCRYPTION_KEY_FILE`     | Unset                                        | Read the dedicated encryption key from a file; mutually exclusive with the direct variable                                                                         |
 | `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update checks, display, and rolling documentation links; other values resolve to stable                                               |
 | `FLARE_COMMIT_SHA`                    | Unset                                        | Build identity shown for rolling releases; use the actual source commit                                                                                            |
+| `FLARE_CLIENT_IP_HEADER`              | Unset                                        | One header your edge overwrites with the client address, such as `CF-Connecting-IP`; when set, `X-Real-IP` and `X-Forwarded-For` are ignored                       |
 | `FLARE_AUDIT_RETENTION_DAYS`          | Unset (keep every audit event)               | Whole number of days, 1 to 36,500, after which audit events are deleted; `0` or unset keeps them all. Read at startup                                              |
 
 `DATABASE_URL` and `NEXTAUTH_SECRET` do not have Flare-provided `_FILE` variants. If your host supplies these through secret files, use its supported environment injection mechanism. Never assume every environment variable in this table supports a `_FILE` suffix.
 
 The **Documentation** link in Settings and **Setup guide** link during setup use the version in the build's `package.json` and `FLARE_RELEASE_CHANNEL`. Stable versions link to their matching documentation archive. **Setup guide** opens the dedicated setup page from version 2.1.0 onward; earlier versions open their archive homepage with the original setup guidance. Rolling builds link to the latest published rolling handbook, not an archive for the specific `FLARE_COMMIT_SHA`. Other prerelease or unknown versions link to the version selector. For a custom build, keep its package version and release channel accurate; if its source differs from a published release, the linked guide may not describe those changes. Changing Flare's saved configuration version does not change these links.
 
-Use a stable, random `NEXTAUTH_SECRET` of at least 32 characters from the beginning. Creating webhooks, creating invite links, and enrolling an authenticator need encryption even when account email is disabled. Invite links are looked up by a digest, so an encryption key change only stops creators from copying existing links again; the links keep working. Authenticator secrets use a separate, domain-derived key from `NEXTAUTH_SECRET`; `FLARE_EMAIL_ENCRYPTION_KEY` does not replace that key. Changing the active encryption key without migrating encrypted values prevents existing secrets from being decrypted; [plan key rotation](/hosting/maintenance#secrets-and-key-rotation).
+Use a stable, random `NEXTAUTH_SECRET` of at least 32 characters from the beginning, for example the output of `openssl rand -hex 32`. Flare logs a startup warning, and still starts, when the value is `your-secret-key-here` (the example shipped in earlier repository files) or shorter than 32 characters. Creating webhooks, creating invite links, and enrolling an authenticator need encryption even when account email is disabled. Invite links are looked up by a digest, so an encryption key change only stops creators from copying existing links again; the links keep working. Authenticator secrets use a separate, domain-derived key from `NEXTAUTH_SECRET`; `FLARE_EMAIL_ENCRYPTION_KEY` does not replace that key. Changing the active encryption key without migrating encrypted values prevents existing secrets from being decrypted; [plan key rotation](/hosting/maintenance#secrets-and-key-rotation).
 
 ### Two-factor authentication and passkey configuration
 
@@ -216,6 +219,8 @@ Setup also maintains `general.setup.completed` (initially `false`) and `general.
 ### Saved appearance fields
 
 Legacy appearance remains in `settings.appearance`: `theme` defaults to `dark`; `favicon` is initially `null`; `customColors` is the original HSL palette. `settings.advanced.customCSS` and `settings.advanced.customHead` are empty strings initially. The favicon and custom styles are separate from studio packs.
+
+`theme` must be `dark`, `light`, or `system`. Each `customColors` entry needs a name made of letters and digits that starts with a lowercase letter, and an HSL triplet such as `222.2 84% 4.9%` or a hex color, which is stored as HSL. Submitted colors are merged into the saved palette, which holds at most 64 colors, counting the ones already saved. Saving other values, or a change that would take the palette past 64 colors, returns `400` and saves nothing. Values written by earlier builds or edited directly in the database are read leniently: an invalid theme counts as `dark`, invalid colors are ignored, and both are removed the next time any settings are saved.
 
 The studio's published document lives under `settings.customization.published`. The same shape is used for a saved `draft` and `previous` document. Paths in this table are relative to that appearance document.
 

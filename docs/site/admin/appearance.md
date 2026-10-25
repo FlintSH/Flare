@@ -98,6 +98,16 @@ Packs do not include accounts, uploaded files, storage credentials, custom CSS/h
 
 Existing installations retain their explicit color overrides. The Appearance section keeps the original theme controls alongside the studio, so you can continue using the classic look. A partial or empty legacy palette falls back to original Flare colors.
 
+Open **Classic color controls**, then **Advanced Color Options**, to set individual colors. They apply while **Use studio theme** is off. Each color is an HSL value such as `222.2 84% 4.9%` (hue 0 to 360, saturation and lightness 0 to 100) or a hex color such as `#1e293b`. The color picker and hex values are saved in HSL form: a hex value stays as you type it, and the field shows the saved HSL value once you leave it. A value that is neither shows a message under the field when you leave it and is not saved. It stays in the field until you correct it or choose **Discard**, and **Save settings** keeps the last valid color. The classic theme mode is `dark`, `light`, or `system`.
+
+<Screenshot src="/screenshots/customization/appearance-classic-colors.png" alt="Classic color controls with the Primary field set to red and a message saying classic colors must be HSL values or hex colors and that the value isn't saved" caption="An invalid classic color is flagged in place and never reaches the page." />
+
+These colors are written into every page, including the sign-in page, so Flare accepts only color values here. Someone with `appearance.manage` can change the palette but cannot add CSS or scripts through it. Earlier builds accepted any text for these colors and for the theme mode, which let a delegated appearance manager add styles or scripts to every page. After upgrading:
+
+- Saved colors that are not valid HSL or hex values, and an unrecognized theme mode, are ignored when pages render. Flare uses the original colors and `dark` in their place, and drops the invalid values the next time any settings are saved.
+- Colors chosen with the picker in earlier builds were saved as hex, which the theme could not use, so the affected elements lost their color; a primary button could turn transparent. They now display as the colors that were picked. Review **Classic color controls** if your palette changes unexpectedly.
+- If you delegated `appearance.manage` to people you don't fully trust, filter [Audit log](/admin/audit) to the `settings` category and review events whose `settingsKeys` include `settings.appearance`, then check the classic colors.
+
 The favicon control accepts a **PNG up to 1 MB** in the dashboard. Save your changes to apply the pending favicon. It is stored through the active storage provider, so it belongs in file backups as well as the database configuration.
 
 ## Custom CSS and head HTML

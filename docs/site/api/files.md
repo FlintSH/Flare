@@ -61,6 +61,17 @@ After an allowed download, S3 can issue a temporary signed storage URL. That URL
 
 Flare chooses safe URL names and handles collisions. Always use the returned URL instead of predicting a path from the original filename. The public origin in these responses comes from the operator's `NEXTAUTH_URL` setting.
 
+The URL name is built from the original filename, which is kept unchanged as the display name:
+
+- The part after the last dot is the extension only when it is 1 to 16 ASCII letters or digits. It is lowercased. Otherwise the dot and that part stay in the name, so `notes 2026.10.25 final` has no extension.
+- The rest is lowercased, and each run of characters other than ASCII letters and digits becomes one hyphen, with none at either end. `My Report.PDF` becomes `my-report.pdf`, and `notes.h#ml` becomes `notes-h-ml`.
+- A name with no ASCII letters or digits, such as `日本語.png`, gets six random URL-safe characters before its extension, for example `x7Kp2a.png`. Randomized naming uses the same random part and extension rule for every file.
+- If the URL is already used in your account, the upload is published with a hyphen and 12 characters of a random ID before the extension, such as `my-report-3f9c2a71-b04.pdf`.
+
+Uploads made before this rule kept their URLs. Earlier builds could put spaces, capitals, `#`, or a leading dot in new URL names, for example `My Report-1.PDF` or `.png`; those links keep working unchanged.
+
+Signed-out visitors can open a public file's share page, `/raw`, and `/direct` whether or not its URL name has an extension. Earlier builds sent them to the sign-in page instead when the name had no extension, such as `/abc12/readme`, or started with a dot, such as `/abc12/.png`; those links now open too. Private files and passwords are checked by the routes as before. A first path segment that belongs to Flare itself (`api`, `auth`, `dashboard`, `admin`, `settings`, `setup`, `raw`, `direct`, `u`, `profile`, `avatars`, or `_next`) is never read as a URL ID, which is also why vanity IDs can't use those words.
+
 ### Select a profile and folder before sending bytes
 
 Use request headers or query parameters for decisions that affect where and how the upload starts:
@@ -129,9 +140,15 @@ Base defaults are public visibility, no expiration, delete on expiration, origin
 
 `POST /api/files` and `POST /api/files/chunks` share a limit of **30 requests per 60 seconds per client IP per application process**. It runs before authentication. Limits reset on process restart and are not a distributed rate-limit service. Proxies should supply accurate client IP headers. Other file-read and part/completion routes do not use this upload-start limiter.
 
-Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Accounts with `quotas.bypass` or Administrator are exempt from the default quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check.
+Direct uploads and chunk parts can use the full limits described here. Earlier builds truncated any API request body over 10 MB, so direct uploads above that failed with `500`, and uploads with larger parts failed at completion with `400`; see [aligning upload limits](/hosting/reverse-proxy#align-all-upload-limits). Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Accounts with `quotas.bypass` or Administrator are exempt from the default quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check.
 
 The server checks detected file bytes against the claimed MIME type. A successful file-ready event means the upload was committed; optional OCR may finish later. Ordinary multipart uploads have no idempotency-key parameter: retrying after a lost response can create another file.
+
+Multipart filenames are read as UTF-8, which is what browsers, curl, and most HTTP libraries send, so `café 日本語.png` is stored as written. A client can instead declare the encoding with an RFC 5987 `filename*` parameter, such as `filename*=UTF-8''caf%C3%A9.png`. Builds before this change decoded a plain `filename` as Latin-1, so names with non-ASCII characters were stored garbled; those files keep their stored names.
+
+If Flare rejects an upload after reading the filename but before storing the bytes, for example because of its name or upload options, it answers at once with the error and discards the rest of the request body. Earlier builds could leave such a request waiting with no response until the client timed out.
+
+A multipart upload that exceeds the maximum file size or the remaining quota always returns `413`. Flare stops reading the body as soon as either limit is reached and keeps none of the file, even when the limit is reached before Flare has started writing to storage. Earlier builds could miss the limit when it was reached before Flare had prepared the upload's destination, which is likely when little quota remains and the request arrives quickly. They then stored the first part of the file and returned success: with 1 KB of quota left, a 64 KB upload was saved as a 1,024-byte file. Check recent uploads from accounts close to their quota if the file sizes look wrong.
 
 ## List and search files
 
@@ -240,6 +257,19 @@ curl --fail-with-body --get \
   "$FLARE_URL/api/files"
 ```
 
+### Content caching
+
+File content responses set `Cache-Control` from the file's access state, so a shared cache never stores bytes that needed a session or a password:
+
+| Response                                                                | Private or password-protected | Public, no password                                                    |
+| ----------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
+| `GET /api/files/{path}` (the `rawUrl` in upload responses), `200`/`206` | `private, no-store`           | `public, max-age=31536000` for `video/*` content, otherwise `no-cache` |
+| `GET /{userUrlId}/{filename}/raw`, `200`/`206`                          | `private, no-store`           | No `Cache-Control` header                                              |
+| `GET`/`POST /api/files/{id}/download`, including a signed S3 redirect   | `private, no-store`           | No `Cache-Control` header                                              |
+| `GET /api/files/{id}/thumbnail`                                         | `private, no-store`           | `public, max-age=31536000, immutable`                                  |
+
+Access denials from these routes, `404` for a private file and `401` for a missing or wrong password, also send `private, no-store`. Archive listings and entries always do. There is no `Vary` header: a public, unprotected response is the same for every requester, and the others are never stored. A response cached while a file was public stays cached after it becomes private or gets a password; see [browser and CDN caching](/guide/sharing#browser-and-cdn-caching).
+
 ## Browse the whole file timeline
 
 **`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**
@@ -337,6 +367,35 @@ Timeline responses use `Cache-Control: private, no-store`. Invalid groupings, ti
 
 File-list and timeline reads can appear as request-level `http.get` events in the [instance audit log](/admin/audit). These include the acting account and applicable token ID when available, without recording the bearer secret. The log uses its existing access, retention, and best-effort rules; reading metadata does not itself create file-ready webhook events.
 
+## Byte ranges
+
+`GET /{userUrlId}/{filename}/raw`, `GET /api/files/{path}`, and `GET /api/files/{id}/download` honor one `Range` header per request, so media players can seek and download tools can resume. `Content-Length` always matches the bytes in the body.
+
+| `Range` header                                                                                | Response                                                                                    |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `bytes=0-1023`                                                                                | `206` with bytes 0 through 1,023 and `Content-Range: bytes 0-1023/<size>`                   |
+| `bytes=1024-`                                                                                 | `206` from byte 1,024 to the end                                                            |
+| `bytes=-500`                                                                                  | `206` with the last 500 bytes, or the whole file if it is shorter                           |
+| A last byte past the end, such as `bytes=0-999999999`                                         | `206` that stops at the file's last byte; `Content-Range` names the bytes actually sent     |
+| A first byte at or past the end, `bytes=-0`, or any range of an empty file                    | `416` with `Content-Range: bytes */<size>` and no body                                      |
+| Several ranges such as `bytes=0-99,200-299`, a reversed range such as `bytes=9-1`, or garbage | `200` with the whole file; the header is ignored, which HTTP allows for ranges it can't use |
+
+A `416` keeps the content routes' `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` headers. It does not count as a raw view, and the [audit log](/admin/audit) records it as a failed `file.read` or `file.download` request. Access checks run first, so a private or password-protected file returns `404` or `401` before its size is revealed.
+
+On S3 storage, `GET /api/files/{id}/download` can redirect to a temporary signed URL before reading the header. S3 then handles the `Range` itself: a single range gets `206`, and an unsatisfiable one gets `416`. `/raw` and `/api/files/{path}` read through Flare on both storage providers.
+
+Earlier builds parsed `Range` loosely. On local storage, a suffix range, a reversed or malformed range, or a first byte past the end returned `500` from `/raw` and `404` from `/api/files/{path}`. On S3, a suffix range returned bytes from the start of the file under `Content-Range: bytes NaN-…`. On both, a last byte past the end advertised a `Content-Length` larger than the file, so clients reported a truncated transfer.
+
+To check a disposable public file without a password, reuse `FLARE_URL` and `FLARE_FILE_PATH` from [Check raw view counts](#check-raw-view-counts). The first command prints the file's last five bytes. The second prints the status and `Content-Range` for a range past the end (curl 7.84 or later for `%header{}`):
+
+```sh
+curl --fail-with-body --range -5 "$FLARE_URL$FLARE_FILE_PATH/raw"
+
+curl --silent --output /dev/null \
+  --write-out '%{http_code} %header{content-range}\n' \
+  --range 999999999- "$FLARE_URL$FLARE_FILE_PATH/raw"
+```
+
 ## Discover file types
 
 **`GET /api/files/types`** · Scope: **`files:read`**
@@ -408,6 +467,8 @@ curl --fail-with-body \
 ```
 
 Required fields are `filename` (1–255 characters), `mimeType` (1–255 characters), and `size` (positive integer **bytes**). The body also accepts the upload options above, including `profileId`, `folderId`, and `randomizeFileUrls`. Header/query profile/folder choices must agree with JSON choices if both are present. Unknown JSON fields are rejected, except the retired `copyFormat` compatibility field.
+
+`filename` names the file; it never selects a folder or storage location. Flare keeps only the part after the last `/` or `\` as the display name and removes control characters, so `photos/2026/shot.png` and `C:\Users\me\shot.png` are both stored as `shot.png`. Multipart uploads to `POST /api/files` treat the form's filename the same way. A chunked `filename` with nothing left after that, such as `folder/` or `..`, returns `400` with `Invalid filename.`; a multipart upload in the same situation is named `file`. Earlier versions stored a chunked `filename` exactly as sent, so clients that put a path there now get only its last part. Files uploaded before this change keep their saved names.
 
 ```json
 {

@@ -15,7 +15,7 @@ docker compose logs --tail=100 db
 docker compose exec -T db pg_isready -U flare -d flare
 ```
 
-The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
+The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example, `postgres` in the repository's `docker-compose.yml`), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
 
 Changing `POSTGRES_PASSWORD` in Compose does not change a password inside an already initialized PostgreSQL volume. Update the actual database account deliberately or restore the original correct environment value. Do not delete the volume to fix a password mismatch on a real instance.
 
@@ -26,6 +26,12 @@ If migrations failed, preserve the logs and take a database backup before correc
 Check that `NEXTAUTH_URL` exactly matches the public scheme, hostname, and port you use. Recreate the container after changing it. Your proxy must preserve the public host and protocol.
 
 All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make authenticator, SMTP, and webhook secrets unreadable. Authenticator encryption always depends on `NEXTAUTH_SECRET`, even when email/webhooks use a dedicated key. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
+
+## Startup logs warn about NEXTAUTH_SECRET
+
+Flare warns at startup when `NEXTAUTH_SECRET` is `your-secret-key-here`, the example value in earlier versions of the repository's `docker-compose.yml` and `.env.example`, or shorter than 32 characters. Anyone can sign session tokens with the published example. A short value also blocks authenticator setup, and invite links, webhooks, and saved SMTP passwords unless `FLARE_EMAIL_ENCRYPTION_KEY` is set.
+
+Generate a value with `openssl rand -hex 32`, set it, and recreate the container. Replacing the published example signs everyone out once and loses nothing else, because Flare never encrypted data with a value that short. Replacing a secret that is already 32 characters or longer is different: follow [secrets and key rotation](/hosting/maintenance#secrets-and-key-rotation) so enrolled authenticators stay readable. [Upgrading from the earlier Compose file](/hosting/docker#upgrade-from-the-earlier-repository-compose-file) covers the whole change.
 
 ## Upload error reference
 
@@ -40,7 +46,7 @@ All replicas must use the same authentication secret. A secret regenerated on ev
 | Upload breaks after a storage change or provenance upgrade | Start a new upload. Part/completion requests reject `409` for a changed actual provider or old session metadata without a recorded target. |
 | Small uploads work, large ones fail                        | Proxy timeouts, host request limits, temp disk, memory, and S3 multipart permissions                                                       |
 
-Flare has process-local request throttles as well as persistent email throttles. If unrelated users appear to share a rate limit, inspect your proxy's forwarding headers. The app should receive a trusted client IP, not a spoofed header or the same proxy IP for everyone.
+Flare has process-local request throttles as well as persistent email throttles. If unrelated users appear to share a rate limit, inspect your proxy's forwarding headers. The app should receive a trusted client IP, not a spoofed header or the same proxy IP for everyone. Behind a CDN, restore the client address at your proxy or set `FLARE_CLIENT_IP_HEADER`; requests whose headers carry no valid address all share one limit. [Client addresses and rate limits](/hosting/reverse-proxy#client-addresses-and-rate-limits) lists the headers Flare reads and in which order.
 
 ## Files disappear after redeploying
 
@@ -122,6 +128,8 @@ Flare's application process must remain running for background work. Check start
 With `audit.read`, filter [Audit log](/admin/audit) for the relevant file and processing outcomes, then compare the timestamps with worker diagnostics. Recorded OCR events retain outcomes rather than extracted text.
 
 Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
+
+Each Flare process reads one image at a time. Automatic OCR after upload and **Extract text** requests share that queue, so a burst of uploads delays manual requests and the reverse. A request waits up to 60 seconds and then answers `202` while reading continues. At most ten new images wait to be read, and at most 30 requests wait for results at once, including requests for an image that is already being read; more get `503`. Each account, or client address for anonymous visitors, can start 20 readings per 10 minutes before getting `429`. After a failed reading, Flare waits 5 minutes before trying that image again. All of this state is in memory: a restart clears it, and queued work that hadn't finished is not resumed. Ask for **Extract text** again after a restart. Correct client addresses depend on your [proxy configuration](/hosting/reverse-proxy).
 
 ## Audit activity is missing
 

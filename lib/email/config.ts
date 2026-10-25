@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { readFileSync } from 'node:fs'
 
-import { getConfig } from '@/lib/config'
+import { getConfig, readSavedConfigRow } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
 
@@ -101,7 +101,12 @@ export function resolveEmailConfig(
 export async function getSavedEmailConfig(
   client: Pick<Prisma.TransactionClient, 'config'> = prisma
 ): Promise<EmailConfig> {
-  const row = await client.config.findUnique({ where: { key: 'flare_config' } })
+  // Outside a transaction, reuse the shared read of the saved row; it is
+  // re-read whenever the row changes.
+  const row =
+    client === prisma
+      ? await readSavedConfigRow()
+      : await client.config.findUnique({ where: { key: 'flare_config' } })
   const settings = (row?.value as { settings?: { email?: unknown } } | null)
     ?.settings
   // Database errors deliberately propagate instead of relaxing a saved policy.
