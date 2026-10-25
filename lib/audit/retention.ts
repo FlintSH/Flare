@@ -69,37 +69,44 @@ export async function pruneAuditEvents(
   let deleted = 0
   let complete = false
   let contended = false
-  for (let batch = 0; batch < maxBatches; batch++) {
-    const removed = await client.$transaction(
-      async (tx) => {
-        const [{ locked }] = await tx.$queryRaw<Array<{ locked: boolean }>>`
+  let failure: unknown = null
+  try {
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const removed = await client.$transaction(
+        async (tx) => {
+          const [{ locked }] = await tx.$queryRaw<Array<{ locked: boolean }>>`
           SELECT pg_try_advisory_xact_lock(712347214) AS "locked"
         `
-        if (!locked) return null
-        // AuditEvent is not an audited model, so these writes add no events.
-        const expired = await tx.auditEvent.findMany({
-          where: { createdAt: { lt: cutoff } },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: batchSize,
-          select: { id: true },
-        })
-        if (!expired.length) return 0
-        const { count } = await tx.auditEvent.deleteMany({
-          where: { id: { in: expired.map((event) => event.id) } },
-        })
-        return count
-      },
-      { maxWait: 10_000, timeout: 60_000 }
-    )
-    if (removed === null) {
-      contended = true
-      break
+          if (!locked) return null
+          // AuditEvent is not an audited model, so these writes add no events.
+          const expired = await tx.auditEvent.findMany({
+            where: { createdAt: { lt: cutoff } },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: batchSize,
+            select: { id: true },
+          })
+          if (!expired.length) return 0
+          const { count } = await tx.auditEvent.deleteMany({
+            where: { id: { in: expired.map((event) => event.id) } },
+          })
+          return count
+        },
+        { maxWait: 10_000, timeout: 60_000 }
+      )
+      if (removed === null) {
+        contended = true
+        break
+      }
+      deleted += removed
+      if (removed < batchSize) {
+        complete = true
+        break
+      }
     }
-    deleted += removed
-    if (removed < batchSize) {
-      complete = true
-      break
-    }
+  } catch (error) {
+    // Earlier batches are already committed; still say how many were removed.
+    failure = error
+    complete = false
   }
   if (deleted > 0)
     await recordAudit({
@@ -114,6 +121,7 @@ export async function pruneAuditEvents(
         complete,
       },
     })
+  if (failure) throw failure
   return { cutoff, deleted, complete, contended }
 }
 
@@ -126,7 +134,10 @@ const state = globalThis as typeof globalThis & {
  * FLARE_AUDIT_RETENTION_DAYS. Without it, nothing is scheduled.
  */
 export function startAuditRetentionWorker(
-  value = process.env.FLARE_AUDIT_RETENTION_DAYS
+  value = process.env.FLARE_AUDIT_RETENTION_DAYS,
+  {
+    prune = pruneAuditEvents,
+  }: { prune?: (days: number) => Promise<AuditPruneResult> } = {}
 ): AuditRetentionSetting {
   const setting = auditRetentionSetting(value)
   if (setting.error) logger.error(setting.error)
@@ -139,7 +150,7 @@ export function startAuditRetentionWorker(
       if (!worker || worker.busy) return
       worker.busy = true
       try {
-        const result = await pruneAuditEvents(days)
+        const result = await prune(days)
         if (result.deleted)
           logger.info('Deleted audit events past the retention period', {
             deleted: result.deleted,
