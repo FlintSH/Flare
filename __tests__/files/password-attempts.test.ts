@@ -39,6 +39,109 @@ afterEach(() => {
 })
 
 describe('file password attempt limits', () => {
+  it('counts checks still in flight, so a burst cannot exceed the address limit', async () => {
+    const file = protectedFile()
+    for (
+      let attempt = 1;
+      attempt < FILE_PASSWORD_ATTEMPTS.perRequester;
+      attempt++
+    )
+      await checkFileAccess(file, null, `wrong-${attempt}`, visitor())
+
+    bcrypt.compare.mockClear()
+    const burst = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        checkFileAccess(file, null, `burst-${index}`, visitor())
+      )
+    )
+    // One allowance was left: exactly one more password may be compared.
+    expect(bcrypt.compare).toHaveBeenCalledTimes(1)
+    expect(
+      burst.filter(
+        (result) => result.allowed === false && result.status === 401
+      )
+    ).toHaveLength(1)
+    expect(
+      burst.filter(
+        (result) => result.allowed === false && result.status === 429
+      )
+    ).toHaveLength(19)
+  })
+
+  it('counts checks still in flight against the whole-file limit', async () => {
+    const file = protectedFile()
+    for (let attempt = 1; attempt < FILE_PASSWORD_ATTEMPTS.perFile; attempt++)
+      await checkFileAccess(
+        file,
+        null,
+        `spread-${attempt}`,
+        visitor(`2001:db8::${attempt.toString(16)}`)
+      )
+
+    bcrypt.compare.mockClear()
+    const burst = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        checkFileAccess(
+          file,
+          null,
+          `burst-${index}`,
+          visitor(`198.51.100.${index + 1}`)
+        )
+      )
+    )
+    expect(bcrypt.compare).toHaveBeenCalledTimes(1)
+    expect(
+      burst.filter(
+        (result) => result.allowed === false && result.status === 429
+      )
+    ).toHaveLength(19)
+  })
+
+  it('lets concurrent copies of one password through as a single attempt', async () => {
+    const file = protectedFile()
+    for (
+      let attempt = 1;
+      attempt < FILE_PASSWORD_ATTEMPTS.perRequester;
+      attempt++
+    )
+      await checkFileAccess(file, null, `wrong-${attempt}`, visitor())
+
+    // A player can request several ranges at once with the same password.
+    const ranges = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        checkFileAccess(file, null, password, visitor())
+      )
+    )
+    expect(ranges.every((result) => result.allowed)).toBe(true)
+  })
+
+  it('clears the address failures when a remembered password is used again', async () => {
+    const file = protectedFile()
+    expect(
+      await checkFileAccess(file, null, password, visitor())
+    ).toMatchObject({ allowed: true })
+    for (
+      let attempt = 1;
+      attempt < FILE_PASSWORD_ATTEMPTS.perRequester;
+      attempt++
+    )
+      await checkFileAccess(file, null, `wrong-${attempt}`, visitor())
+
+    // Served from the remembered success, without bcrypt.
+    expect(
+      await checkFileAccess(file, null, password, visitor())
+    ).toMatchObject({ allowed: true })
+    // A fresh count: the next wrong password is the first, not the tenth.
+    for (
+      let attempt = 1;
+      attempt < FILE_PASSWORD_ATTEMPTS.perRequester;
+      attempt++
+    )
+      expect(
+        await checkFileAccess(file, null, `later-${attempt}`, visitor())
+      ).toMatchObject({ reason: 'password_invalid' })
+  })
+
   it('pauses one address after ten different wrong passwords, even for the right one', async () => {
     const file = protectedFile()
     for (

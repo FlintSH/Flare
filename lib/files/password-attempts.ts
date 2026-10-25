@@ -24,7 +24,12 @@ const VERIFIED_TTL_MS = 10 * 60_000
 const MAX_VERIFIED = 1_000
 const MAX_BUCKETS = 10_000
 
-type Bucket = { resetAt: number; failures: Set<string> }
+type Bucket = {
+  resetAt: number
+  failures: Set<string>
+  /** Checks admitted but still comparing, by attempt, with a count of copies. */
+  pending: Map<string, number>
+}
 type State = {
   key: Buffer
   buckets: Map<string, Bucket>
@@ -53,10 +58,14 @@ function digest(...parts: string[]) {
 // These parameters take about 2 ms, far less than the bcrypt check they save.
 const PASSWORD_KDF: ScryptOptions = { N: 1024, r: 8, p: 1 }
 
-function passwordDigest(password: string, ...context: string[]) {
+/**
+ * `secrets` are the submitted password and, where it matters, the stored
+ * hash; only the KDF sees them. `context` is non-secret and salts the result.
+ */
+function passwordDigest(secrets: string[], ...context: string[]) {
   return new Promise<string>((resolve, reject) =>
     scrypt(
-      password,
+      secrets.join('\0'),
       Buffer.from(digest('password', ...context)),
       32,
       PASSWORD_KDF,
@@ -90,17 +99,34 @@ function makeRoom(now: number) {
   }
 }
 
-function addFailure(key: string, attempt: string, limit: number, now: number) {
+function ensureBucket(key: string, now: number) {
   let bucket = liveBucket(key, now)
   if (!bucket) {
     makeRoom(now)
     bucket = {
       resetAt: now + FILE_PASSWORD_ATTEMPTS.windowMs,
       failures: new Set(),
+      pending: new Map(),
     }
     state.buckets.set(key, bucket)
   }
-  if (bucket.failures.size < limit) bucket.failures.add(attempt)
+  return bucket
+}
+
+function scopes(fileId: string, requester: string | null) {
+  const list: { key: string; limit: number }[] = [
+    { key: fileKey(fileId), limit: FILE_PASSWORD_ATTEMPTS.perFile },
+  ]
+  if (requester)
+    list.push({
+      key: requesterKey(fileId, requester),
+      limit: FILE_PASSWORD_ATTEMPTS.perRequester,
+    })
+  return list
+}
+
+function retryAfter(resetAt: number, now: number) {
+  return { retryAfterSeconds: Math.max(1, Math.ceil((resetAt - now) / 1000)) }
 }
 
 /**
@@ -113,34 +139,75 @@ export function filePasswordBlock(
   now = Date.now()
 ): { retryAfterSeconds: number } | null {
   let resetAt = 0
-  const file = liveBucket(fileKey(fileId), now)
-  if (file && file.failures.size >= FILE_PASSWORD_ATTEMPTS.perFile)
-    resetAt = file.resetAt
-  if (requester) {
-    const own = liveBucket(requesterKey(fileId, requester), now)
-    if (own && own.failures.size >= FILE_PASSWORD_ATTEMPTS.perRequester)
-      resetAt = Math.max(resetAt, own.resetAt)
+  for (const { key, limit } of scopes(fileId, requester)) {
+    const bucket = liveBucket(key, now)
+    if (bucket && bucket.failures.size >= limit)
+      resetAt = Math.max(resetAt, bucket.resetAt)
   }
-  return resetAt
-    ? { retryAfterSeconds: Math.max(1, Math.ceil((resetAt - now) / 1000)) }
-    : null
+  return resetAt ? retryAfter(resetAt, now) : null
 }
 
-export async function recordFilePasswordFailure(
+/** Identifies one submitted password for one file, without keeping it. */
+export function filePasswordAttempt(fileId: string, password: string) {
+  return passwordDigest([password], 'attempt', fileId)
+}
+
+export type FilePasswordAdmission =
+  | { admitted: false; retryAfterSeconds: number }
+  | { admitted: true; settle(correct: boolean): void }
+
+/**
+ * Admit one password comparison. A full window pauses every check, even the
+ * right password. Checks still comparing count against the allowance, so a
+ * burst of different guesses can't all start before any of them has failed;
+ * concurrent copies of one password count once. Call `settle` exactly once.
+ */
+export function admitFilePasswordAttempt(
   fileId: string,
   requester: string | null,
-  password: string,
+  attempt: string,
   now = Date.now()
-) {
-  const attempt = await passwordDigest(password, 'attempt', fileId)
-  addFailure(fileKey(fileId), attempt, FILE_PASSWORD_ATTEMPTS.perFile, now)
-  if (requester)
-    addFailure(
-      requesterKey(fileId, requester),
-      attempt,
-      FILE_PASSWORD_ATTEMPTS.perRequester,
-      now
-    )
+): FilePasswordAdmission {
+  const limits = scopes(fileId, requester)
+  let resetAt = 0
+  for (const { key, limit } of limits) {
+    const bucket = liveBucket(key, now)
+    if (!bucket) continue
+    let used = bucket.failures.size
+    for (const pending of bucket.pending.keys())
+      if (!bucket.failures.has(pending)) used++
+    const known = bucket.failures.has(attempt) || bucket.pending.has(attempt)
+    if (bucket.failures.size >= limit || (!known && used >= limit))
+      resetAt = Math.max(resetAt, bucket.resetAt)
+  }
+  if (resetAt) return { admitted: false, ...retryAfter(resetAt, now) }
+
+  for (const { key } of limits) {
+    const bucket = ensureBucket(key, now)
+    bucket.pending.set(attempt, (bucket.pending.get(attempt) ?? 0) + 1)
+  }
+  let settled = false
+  return {
+    admitted: true,
+    settle(correct) {
+      if (settled) return
+      settled = true
+      const at = Date.now()
+      for (const { key, limit } of limits) {
+        const bucket = state.buckets.get(key)
+        if (bucket) {
+          const remaining = (bucket.pending.get(attempt) ?? 1) - 1
+          if (remaining > 0) bucket.pending.set(attempt, remaining)
+          else bucket.pending.delete(attempt)
+        }
+        if (!correct) {
+          const live = ensureBucket(key, at)
+          if (live.failures.size < limit) live.failures.add(attempt)
+        }
+      }
+      if (correct) clearFilePasswordFailures(fileId, requester)
+    },
+  }
 }
 
 /** A correct password clears that client's own failures, not the file's. */
@@ -160,7 +227,7 @@ export function verifiedFilePasswordKey(
   password: string,
   requester: string | null
 ) {
-  return passwordDigest(password, 'verified', fileId, hash, requester ?? '')
+  return passwordDigest([password, hash], 'verified', fileId, requester ?? '')
 }
 
 export function isVerifiedFilePassword(key: string, now = Date.now()) {
