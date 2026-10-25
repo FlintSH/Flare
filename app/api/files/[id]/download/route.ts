@@ -4,6 +4,7 @@ import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
+import { parseByteRange } from '@/lib/http/byte-range'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -70,10 +71,19 @@ async function handleGET(
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-')
-      const start = parseInt(parts[0], 10)
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1
+    const byteRange = parseByteRange(range, size)
+    if (byteRange === 'unsatisfiable') {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          'Content-Range': `bytes */${size}`,
+          'Accept-Ranges': 'bytes',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
+    }
+    if (byteRange) {
+      const { start, end } = byteRange
       const chunkSize = end - start + 1
 
       const stream = await storageProvider.getFileStream(file.path, {

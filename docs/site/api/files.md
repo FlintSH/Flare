@@ -337,6 +337,35 @@ Timeline responses use `Cache-Control: private, no-store`. Invalid groupings, ti
 
 File-list and timeline reads can appear as request-level `http.get` events in the [instance audit log](/admin/audit). These include the acting account and applicable token ID when available, without recording the bearer secret. The log uses its existing access, retention, and best-effort rules; reading metadata does not itself create file-ready webhook events.
 
+## Byte ranges
+
+`GET /{userUrlId}/{filename}/raw`, `GET /api/files/{path}`, and `GET /api/files/{id}/download` honor one `Range` header per request, so media players can seek and download tools can resume. `Content-Length` always matches the bytes in the body.
+
+| `Range` header                                                                                | Response                                                                                    |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `bytes=0-1023`                                                                                | `206` with bytes 0 through 1,023 and `Content-Range: bytes 0-1023/<size>`                   |
+| `bytes=1024-`                                                                                 | `206` from byte 1,024 to the end                                                            |
+| `bytes=-500`                                                                                  | `206` with the last 500 bytes, or the whole file if it is shorter                           |
+| A last byte past the end, such as `bytes=0-999999999`                                         | `206` that stops at the file's last byte; `Content-Range` names the bytes actually sent     |
+| A first byte at or past the end, `bytes=-0`, or any range of an empty file                    | `416` with `Content-Range: bytes */<size>` and no body                                      |
+| Several ranges such as `bytes=0-99,200-299`, a reversed range such as `bytes=9-1`, or garbage | `200` with the whole file; the header is ignored, which HTTP allows for ranges it can't use |
+
+A `416` keeps the content routes' `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` headers. It does not count as a raw view, and the [audit log](/admin/audit) records it as a failed `file.read` or `file.download` request. Access checks run first, so a private or password-protected file returns `404` or `401` before its size is revealed.
+
+On S3 storage, `GET /api/files/{id}/download` can redirect to a temporary signed URL before reading the header. S3 then handles the `Range` itself: a single range gets `206`, and an unsatisfiable one gets `416`. `/raw` and `/api/files/{path}` read through Flare on both storage providers.
+
+Earlier builds parsed `Range` loosely. On local storage, a suffix range, a reversed or malformed range, or a first byte past the end returned `500` from `/raw` and `404` from `/api/files/{path}`. On S3, a suffix range returned bytes from the start of the file under `Content-Range: bytes NaN-…`. On both, a last byte past the end advertised a `Content-Length` larger than the file, so clients reported a truncated transfer.
+
+To check a disposable public file without a password, reuse `FLARE_URL` and `FLARE_FILE_PATH` from [Check raw view counts](#check-raw-view-counts). The first command prints the file's last five bytes. The second prints the status and `Content-Range` for a range past the end (curl 7.84 or later for `%header{}`):
+
+```sh
+curl --fail-with-body --range -5 "$FLARE_URL$FLARE_FILE_PATH/raw"
+
+curl --silent --output /dev/null \
+  --write-out '%{http_code} %header{content-range}\n' \
+  --range 999999999- "$FLARE_URL$FLARE_FILE_PATH/raw"
+```
+
 ## Discover file types
 
 **`GET /api/files/types`** · Scope: **`files:read`**

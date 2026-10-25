@@ -9,6 +9,7 @@ import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { parseByteRange } from '@/lib/http/byte-range'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -165,10 +166,20 @@ async function handleGET(
 
     const size = await storageProvider.getFileSize(file.path)
 
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-')
-      const start = parseInt(parts[0], 10)
-      const end = parts[1] ? parseInt(parts[1], 10) : size - 1
+    const byteRange = parseByteRange(range, size)
+    if (byteRange === 'unsatisfiable') {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          'Content-Range': `bytes */${size}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Security-Policy': 'sandbox',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
+    }
+    if (byteRange) {
+      const { start, end } = byteRange
       const chunkSize = end - start + 1
 
       const stream = await storageProvider.getFileStream(file.path, {
