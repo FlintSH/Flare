@@ -83,11 +83,31 @@ Send file routes to the application. Do not publish the uploads directory as an 
 
 For S3, Flare can issue temporary signed object URLs after authorizing access. Those URLs are bearer links until they expire; see [S3 access behavior](/hosting/storage#private-files-and-signed-links).
 
-Flare uses forwarded client IPs for request throttling. Keep the app port private to the proxy and replace untrusted headers at the edge. This also keeps many users from incorrectly sharing the proxy's IP-based limit.
+Flare uses forwarded client addresses for request throttling and session history. Keep the app port private to the proxy and replace untrusted headers at the edge, as described in [client addresses and rate limits](#client-addresses-and-rate-limits).
+
+## Client addresses and rate limits
+
+Behind a proxy, every connection reaches Flare from the proxy itself, so Flare reads the client address from forwarding headers. Request rate limits, sign-in and email limits, shared-archive limits, login history, and active sessions all use the same address:
+
+1. `X-Real-IP`, when it holds an IPv4 or IPv6 address.
+2. Otherwise the first entry of `X-Forwarded-For`.
+
+Values that are not addresses are skipped. Brackets and ports are removed, so `[2001:db8::1]:443` counts as `2001:db8::1` and `203.0.113.9:51234` as `203.0.113.9`, and an IPv4-mapped address such as `::ffff:203.0.113.9` counts as `203.0.113.9`. Requests that carry no usable address share a single limit with each other, and their sessions and login history show no address.
+
+Both headers contain whatever your proxy forwards, so configure the edge to **set or overwrite** them, as the Caddy and nginx examples above do. A widely copied nginx line, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`, appends the real address to any `X-Forwarded-For` value the client sent, which leaves the client's own value first. Flare reads `X-Real-IP` before `X-Forwarded-For` for that reason: set `X-Real-IP` to `$remote_addr` and never pass a client-supplied one through. Clients that can reach the application port directly can send either header themselves.
+
+- **Railway:** the edge proxy sets `X-Real-IP` to the address that connected to it, which is the client when nothing sits in front of Railway. No setting is needed.
+- **A CDN or load balancer in front of your proxy or platform:** the connecting address is the CDN's, so everyone served by one CDN location would share each limit. Either restore the client address at your proxy so it arrives in `X-Real-IP` (for example with nginx's `real_ip` module and the CDN's published address ranges), or set `FLARE_CLIENT_IP_HEADER` to the header your CDN sends, such as `CF-Connecting-IP` for Cloudflare, `Fly-Client-IP` on Fly.io, or `True-Client-IP` where your CDN provides it.
+
+With `FLARE_CLIENT_IP_HEADER` set, Flare reads only that header, using its first entry if it is a list, and ignores `X-Real-IP` and `X-Forwarded-For`. Use it only when every request reaches Flare through that edge and the edge overwrites the header. A request that bypasses the edge could otherwise choose its own address. Requests without the header share one limit. See [configuration](/hosting/configuration#core-environment-variables).
+
+Request rate limits, other than the database-backed sign-in and email limits, are kept in memory by each Flare process and reset when it restarts. Separate replicas count separately; the [hosting overview](/hosting/#multiple-replicas-and-serverless-hosts) recommends one.
+
+Earlier versions read the first `X-Forwarded-For` entry before `X-Real-IP` for upload, registration, setup, invite, upload-token, and shared-archive limits, while sign-in, email, and session history read `X-Real-IP` first, and none of them checked that the value was an address. Every limit now uses the order above. With the proxy examples in this guide, both headers carry the same address and nothing changes. Behind a proxy that appends to `X-Forwarded-For` and sets `X-Real-IP`, those limits now follow `X-Real-IP`, so a client can no longer reset them by sending its own `X-Forwarded-For`. Header values that are not addresses no longer become limit keys of their own.
 
 ## Client addresses in session history
 
-[Active sessions and login history](/guide/account#login-history-and-active-sessions) record client-address and browser information when it is available. Flare receives forwarded headers from the request; an IP value is not independent proof of identity. Keep the application port private and have the trusted edge replace incoming forwarding headers, as in the examples above. A user-agent string is supplied by the client and can be imitated. Do not infer an exact device or physical location from these fields.
+[Active sessions and login history](/guide/account#login-history-and-active-sessions) record client-address and browser information when it is available. The address follows the [rules above](#client-addresses-and-rate-limits); an IP value is not independent proof of identity. Keep the application port private and have the trusted edge replace incoming forwarding headers, as in the examples above. A user-agent string is supplied by the client and can be imitated. Do not infer an exact device or physical location from these fields.
 
 ## Passkeys and hostname changes
 

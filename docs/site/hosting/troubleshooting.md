@@ -40,7 +40,7 @@ All replicas must use the same authentication secret. A secret regenerated on ev
 | Upload breaks after a storage change or provenance upgrade | Start a new upload. Part/completion requests reject `409` for a changed actual provider or old session metadata without a recorded target. |
 | Small uploads work, large ones fail                        | Proxy timeouts, host request limits, temp disk, memory, and S3 multipart permissions                                                       |
 
-Flare has process-local request throttles as well as persistent email throttles. If unrelated users appear to share a rate limit, inspect your proxy's forwarding headers. The app should receive a trusted client IP, not a spoofed header or the same proxy IP for everyone.
+Flare has process-local request throttles as well as persistent email throttles. If unrelated users appear to share a rate limit, inspect your proxy's forwarding headers. The app should receive a trusted client IP, not a spoofed header or the same proxy IP for everyone. Behind a CDN, restore the client address at your proxy or set `FLARE_CLIENT_IP_HEADER`; requests whose headers carry no valid address all share one limit. [Client addresses and rate limits](/hosting/reverse-proxy#client-addresses-and-rate-limits) lists the headers Flare reads and in which order.
 
 ## Files disappear after redeploying
 

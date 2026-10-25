@@ -30,6 +30,7 @@ For email, precedence is **environment or secret file → saved value → defaul
 | `FLARE_EMAIL_ENCRYPTION_KEY_FILE`     | Unset                                        | Read the dedicated encryption key from a file; mutually exclusive with the direct variable                                                                         |
 | `FLARE_RELEASE_CHANNEL`               | `stable`                                     | `rolling` selects prerelease update checks, display, and rolling documentation links; other values resolve to stable                                               |
 | `FLARE_COMMIT_SHA`                    | Unset                                        | Build identity shown for rolling releases; use the actual source commit                                                                                            |
+| `FLARE_CLIENT_IP_HEADER`              | Unset                                        | One header your edge overwrites with the client address, such as `CF-Connecting-IP`; when set, `X-Real-IP` and `X-Forwarded-For` are ignored                       |
 
 `DATABASE_URL` and `NEXTAUTH_SECRET` do not have Flare-provided `_FILE` variants. If your host supplies these through secret files, use its supported environment injection mechanism. Never assume every environment variable in this table supports a `_FILE` suffix.
 

@@ -1,9 +1,9 @@
 import type { Prisma } from '@prisma/client'
 import type { Session } from 'next-auth'
-import { isIP } from 'node:net'
 
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { clientIp } from '@/lib/security/client-ip'
 
 import { SecurityError, lockSecurityUser } from './security/shared'
 
@@ -17,12 +17,8 @@ export type LoginMetadata = {
 export function loginMetadata(headers: {
   get(name: string): string | null
 }): LoginMetadata {
-  const candidate =
-    headers.get('x-real-ip') ||
-    headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    ''
   return {
-    ipAddress: isIP(candidate) ? candidate : null,
+    ipAddress: clientIp(headers),
     userAgent:
       headers
         .get('user-agent')

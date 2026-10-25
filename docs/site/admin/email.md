@@ -93,7 +93,7 @@ Use sender-domain SPF, DKIM, and DMARC settings as provided by your mail service
 
 ## Limits and delivery history
 
-Defaults are a 60-second resend interval, 5 messages per address per hour, 20 per IP per hour, and a daily admission cap of 500. Rate-limit accounting is stored in PostgreSQL. Your reverse proxy must supply trusted client-IP headers for IP limits to work as intended.
+Defaults are a 60-second resend interval, 5 messages per address per hour, 20 per IP per hour, and a daily admission cap of 500. Rate-limit accounting is stored in PostgreSQL. Your reverse proxy must supply trusted client-IP headers for IP limits to work as intended; the per-IP limit uses the same client address as sign-in and request limits, described in [client addresses and rate limits](/hosting/reverse-proxy#client-addresses-and-rate-limits).
 
 Queued messages survive restarts. Workers use leases to coordinate attempts and default to 2 concurrent sends, 3 attempts, and 60-second initial retry delay with exponential backoff. An expired or revoked account link cannot be made useful by retrying its old message.
 

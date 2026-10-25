@@ -138,7 +138,8 @@ suite('archive publication against disposable PostgreSQL', () => {
   beforeEach(async () => {
     state.userId = 'archive-owner'
     state.version = 1
-    shareIp = `archive-test-${randomUUID()}`
+    // A unique documentation-range address keeps each test's per-IP budget apart.
+    shareIp = `2001:db8:${randomUUID().replaceAll('-', '').slice(0, 24).match(/.{4}/g)!.join(':')}`
     state.objects.clear()
     ;(await import('@/lib/archives/index-cache')).clearArchiveIndexCache()
     state.targets = []
