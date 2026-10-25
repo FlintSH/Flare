@@ -409,6 +409,8 @@ curl --fail-with-body \
 
 Required fields are `filename` (1–255 characters), `mimeType` (1–255 characters), and `size` (positive integer **bytes**). The body also accepts the upload options above, including `profileId`, `folderId`, and `randomizeFileUrls`. Header/query profile/folder choices must agree with JSON choices if both are present. Unknown JSON fields are rejected, except the retired `copyFormat` compatibility field.
 
+`filename` names the file; it never selects a folder or storage location. Flare keeps only the part after the last `/` or `\` as the display name and removes control characters, so `photos/2026/shot.png` and `C:\Users\me\shot.png` are both stored as `shot.png`. Multipart uploads to `POST /api/files` treat the form's filename the same way. A chunked `filename` with nothing left after that, such as `folder/` or `..`, returns `400` with `Invalid filename.`; a multipart upload in the same situation is named `file`. Earlier versions stored a chunked `filename` exactly as sent, so clients that put a path there now get only its last part. Files uploaded before this change keep their saved names.
+
 ```json
 {
   "data": {
