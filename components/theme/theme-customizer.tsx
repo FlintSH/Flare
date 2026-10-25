@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { ChevronDown } from 'lucide-react'
 
@@ -131,6 +131,9 @@ function SimpleThemeCustomizer({
   const [drafts, setDrafts] = useState<
     Partial<Record<keyof ColorConfig, { text: string; left: boolean }>>
   >({})
+  // Set while this component's own change comes back as initialColors. Any
+  // other new palette, such as Discard, replaces text still being edited.
+  const ownChange = useRef(false)
   const [colors, setColors] = useState<ColorConfig>({
     background: '',
     foreground: '',
@@ -163,6 +166,8 @@ function SimpleThemeCustomizer({
         ...colors,
         ...initialColors,
       }))
+      if (ownChange.current) ownChange.current = false
+      else setDrafts({})
     }
   }, [initialColors])
 
@@ -186,6 +191,7 @@ function SimpleThemeCustomizer({
       })
 
     setDrafts({})
+    ownChange.current = true
     onColorChange(newColors)
   }
 
@@ -198,7 +204,7 @@ function SimpleThemeCustomizer({
     setBaseHue(222.2)
     setColors(DEFAULT_COLORS)
     setDrafts({})
-
+    ownChange.current = true
     onColorChange(DEFAULT_COLORS)
   }
 
@@ -211,6 +217,7 @@ function SimpleThemeCustomizer({
     const cssKey = key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)
     if (livePreview)
       document.documentElement.style.setProperty(`--${cssKey}`, cssValue)
+    ownChange.current = true
     onColorChange({ [key]: cssValue })
   }
 
