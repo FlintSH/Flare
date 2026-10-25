@@ -80,6 +80,12 @@ On S3 storage, an authorized response can provide a temporary signed storage URL
 
 Dashboard copy buttons and generated screenshot tools copy the normal share-page URL. For automation that needs a different response URL, see the [API guide](../api/index).
 
+### Browser and CDN caching
+
+Content from a private or password-protected file, including what a visitor unlocks with the password, is sent with `Cache-Control: private, no-store`, so browsers and shared caches such as a CDN do not keep a copy. Public files without a password can be cached: their video at the `/api/files/...` content URL that upload tools return, and their image thumbnails, for up to a year.
+
+That cache is not recalled when access changes. If you make a cached public file private or add a password, a visitor's browser or a CDN in front of Flare can keep serving the copy it already has. Ask the operator to purge the file's paths from the CDN. A browser keeps its copy until it expires or its cache is cleared. Earlier releases also marked private and password-protected video at `/api/files/...` as cacheable for a year; [operators with a CDN](../hosting/reverse-proxy#keep-access-decisions-in-flare) should purge those paths once after upgrading.
+
 ### View counts
 
 The view total on a [library file card](./library#understand-activity-and-refresh) includes share-page visits and successful `GET` requests to `/{userUrlId}/{filename}/raw`. Each raw request adds one view, including a `206` byte-range response used for media playback. Raw requests denied by visibility or password checks, missing files, storage failures before a stream is opened, and `HEAD` probes do not add views.

@@ -48,7 +48,10 @@ async function handleGET(
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
       setAuditOutcome('denied')
-      return new Response(null, { status: access.status })
+      return new Response(null, {
+        status: access.status,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
     }
 
     if (isDownloadRequest) {
@@ -59,7 +62,14 @@ async function handleGET(
     }
 
     const storageProvider = await getStorageProvider()
-    const isVideo = file.mimeType.startsWith('video/')
+    // A shared cache keys on the URL alone, so only public, unprotected bytes
+    // may be stored; otherwise one authorized read would serve everyone.
+    const cacheControl =
+      file.visibility === 'PRIVATE' || file.password
+        ? 'private, no-store'
+        : file.mimeType.startsWith('video/')
+          ? 'public, max-age=31536000'
+          : 'no-cache'
     const range = request.headers.get('range')
     const size = await storageProvider.getFileSize(file.path)
 
@@ -82,7 +92,7 @@ async function handleGET(
         'Content-Disposition': `${isDownloadRequest ? 'attachment' : 'inline'}; filename=${encodeFilename(file.name)}`,
         'Content-Security-Policy': 'sandbox',
         'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
+        'Cache-Control': cacheControl,
       }
 
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -99,7 +109,7 @@ async function handleGET(
       'X-Content-Type-Options': 'nosniff',
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
-      'Cache-Control': isVideo ? 'public, max-age=31536000' : 'no-cache',
+      'Cache-Control': cacheControl,
     }
 
     return new NextResponse(stream as unknown as ReadableStream, {

@@ -157,8 +157,16 @@ async function handleGET(
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
       setAuditOutcome('denied')
-      return new Response(null, { status: access.status })
+      return new Response(null, {
+        status: access.status,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
     }
+    // Shared caches key on the URL alone; never let them keep protected bytes.
+    const cacheHeaders: Record<string, string> =
+      file.visibility === 'PRIVATE' || file.password
+        ? { 'Cache-Control': 'private, no-store' }
+        : {}
 
     const storageProvider = await getStorageProvider()
     const range = req.headers.get('range')
@@ -186,6 +194,7 @@ async function handleGET(
         'X-Content-Type-Options': 'nosniff',
         Connection: 'keep-alive',
         'Keep-Alive': 'timeout=300, max=1000',
+        ...cacheHeaders,
       }
 
       return await createFileResponse(stream, req, file.id, {
@@ -204,6 +213,7 @@ async function handleGET(
       'X-Content-Type-Options': 'nosniff',
       Connection: 'keep-alive',
       'Keep-Alive': 'timeout=300, max=1000',
+      ...cacheHeaders,
     }
 
     return await createFileResponse(stream, req, file.id, { headers })

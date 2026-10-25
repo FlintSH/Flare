@@ -16,6 +16,17 @@ function encodeFilename(filename: string): string {
   return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
 }
 
+// Shared caches key on the URL alone; never let them keep protected bytes or
+// the signed storage URL that grants them.
+function cacheHeaders(file: {
+  visibility: 'PUBLIC' | 'PRIVATE'
+  password: string | null
+}): Record<string, string> {
+  return file.visibility === 'PRIVATE' || file.password
+    ? { 'Cache-Control': 'private, no-store' }
+    : {}
+}
+
 async function handleGET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -49,7 +60,10 @@ async function handleGET(
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
       setAuditOutcome('denied')
-      return new Response(null, { status: access.status })
+      return new Response(null, {
+        status: access.status,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
     }
 
     await prisma.file.update({
@@ -64,7 +78,10 @@ async function handleGET(
       file.name
     )
     if (downloadUrl) {
-      return Response.redirect(downloadUrl, 302)
+      return new Response(null, {
+        status: 302,
+        headers: { Location: downloadUrl, ...cacheHeaders(file) },
+      })
     }
 
     const range = request.headers.get('range')
@@ -88,6 +105,7 @@ async function handleGET(
         'Content-Type': file.mimeType,
         'Content-Disposition': `attachment; filename=${encodeFilename(file.name)}`,
         'X-Content-Type-Options': 'nosniff',
+        ...cacheHeaders(file),
       }
 
       return new NextResponse(stream as unknown as ReadableStream, {
@@ -103,6 +121,7 @@ async function handleGET(
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'X-Content-Type-Options': 'nosniff',
+      ...cacheHeaders(file),
     }
 
     return new NextResponse(stream as unknown as ReadableStream, {
@@ -151,7 +170,10 @@ async function handlePOST(
     const access = await checkFileAccess(file, session, providedPassword)
     if (!access.allowed) {
       setAuditOutcome('denied')
-      return new Response(null, { status: access.status })
+      return new Response(null, {
+        status: access.status,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
     }
 
     await prisma.file.update({
@@ -166,7 +188,10 @@ async function handlePOST(
       file.name
     )
     if (downloadUrl) {
-      return Response.redirect(downloadUrl, 302)
+      return new Response(null, {
+        status: 302,
+        headers: { Location: downloadUrl, ...cacheHeaders(file) },
+      })
     }
 
     const size = await storageProvider.getFileSize(file.path)
@@ -178,6 +203,7 @@ async function handlePOST(
       'Accept-Ranges': 'bytes',
       'Content-Length': size.toString(),
       'X-Content-Type-Options': 'nosniff',
+      ...cacheHeaders(file),
     }
 
     return new NextResponse(stream as unknown as ReadableStream, {
