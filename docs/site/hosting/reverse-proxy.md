@@ -81,6 +81,10 @@ Flare defaults to a **100 MB** maximum file size, calculated in binary units. Th
 
 Send file routes to the application. Do not publish the uploads directory as an unrestricted static directory; doing that would bypass the visibility and password checks on Flare's file routes. Similarly, do not add blanket shared caching for authenticated APIs, account pages, or protected file responses.
 
+Flare sends `Cache-Control: private, no-store` with content, downloads, signed-URL redirects, and access denials for private and password-protected files, so a CDN or caching proxy that follows origin headers does not store them. Do not add rules that cache `/api/files/` or `/raw` paths regardless of those headers. Public files without a password can be cached: video at `/api/files/{path}` with `public, max-age=31536000`, and thumbnails at `/api/files/{id}/thumbnail` with `public, max-age=31536000, immutable`. When someone makes such a file private or adds a password, purge both paths from your CDN. Flare cannot recall a copy that a cache or browser already holds; browsers keep theirs until it expires or their cache is cleared.
+
+Earlier releases sent `public, max-age=31536000` for every video at `/api/files/{path}`, including private and password-protected ones. If a CDN or shared cache sits in front of Flare, purge its cached `/api/files/` paths once after upgrading. Purging the whole prefix is simplest; public content is fetched again on the next request.
+
 For S3, Flare can issue temporary signed object URLs after authorizing access. Those URLs are bearer links until they expire; see [S3 access behavior](/hosting/storage#private-files-and-signed-links).
 
 Flare uses forwarded client IPs for request throttling. Keep the app port private to the proxy and replace untrusted headers at the edge. This also keeps many users from incorrectly sharing the proxy's IP-based limit.

@@ -240,6 +240,19 @@ curl --fail-with-body --get \
   "$FLARE_URL/api/files"
 ```
 
+### Content caching
+
+File content responses set `Cache-Control` from the file's access state, so a shared cache never stores bytes that needed a session or a password:
+
+| Response                                                                | Private or password-protected | Public, no password                                                    |
+| ----------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------- |
+| `GET /api/files/{path}` (the `rawUrl` in upload responses), `200`/`206` | `private, no-store`           | `public, max-age=31536000` for `video/*` content, otherwise `no-cache` |
+| `GET /{userUrlId}/{filename}/raw`, `200`/`206`                          | `private, no-store`           | No `Cache-Control` header                                              |
+| `GET`/`POST /api/files/{id}/download`, including a signed S3 redirect   | `private, no-store`           | No `Cache-Control` header                                              |
+| `GET /api/files/{id}/thumbnail`                                         | `private, no-store`           | `public, max-age=31536000, immutable`                                  |
+
+Access denials from these routes, `404` for a private file and `401` for a missing or wrong password, also send `private, no-store`. Archive listings and entries always do. There is no `Vary` header: a public, unprotected response is the same for every requester, and the others are never stored. A response cached while a file was public stays cached after it becomes private or gets a password; see [browser and CDN caching](/guide/sharing#browser-and-cdn-caching).
+
 ## Browse the whole file timeline
 
 **`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**
