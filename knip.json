@@ -5,16 +5,10 @@
     "components/**/*.{ts,tsx}",
     "lib/**/*.{ts,tsx}",
     "hooks/**/*.{ts,tsx}",
-    "middleware.ts"
+    "proxy.ts"
   ],
   "project": ["**/*.{ts,tsx}"],
-  "ignoreDependencies": [
-    "eslint",
-    "eslint-config-next",
-    "postcss",
-    "tailwindcss",
-    "typescript"
-  ],
+  "ignoreDependencies": ["eslint", "postcss", "tailwindcss", "typescript"],
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["prisma"],
   "includeEntryExports": true,

@@ -101,6 +101,18 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Next.js 16 and React 19
+
+Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup and upgrade steps above. There are no new settings, environment variables, or database migrations, and existing sessions stay signed in.
+
+- **Browsers.** Flare supports Chrome, Edge, and Firefox 111 or later and Safari 16.4 or later. Earlier builds also targeted browsers back to Chrome 64 and Safari 12. Ask people on older devices to update; see [Use a current browser](/guide/#a-few-things-to-know-early).
+- **Source installs.** Node.js 22.13 or later is still required, because the pinned pnpm release needs it; Next.js 16 itself needs 20.9. Builds no longer copy `uploads/` into `.next/standalone`. Keep starting Flare with `pnpm start` from the project root, which reads uploads from there.
+- **Image optimizer.** `/_next/image` now returns `400` for any quality other than 75. Flare's own pages only request 75.
+- **Custom CSS.** The bundled Inter fonts are now `/fonts/inter/Inter-VariableFont_opsz_wght.ttf` and `/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf`, without the comma in their old names. Update custom CSS that loads them by URL.
+- **Modified builds.** `middleware.ts` is now `proxy.ts`, and `next dev` and `next build` use Turbopack. Move your changes to `middleware.ts` into `proxy.ts`. A fork that adds a webpack configuration must port it to Turbopack options or build with `next build --webpack`.
+
+This change doesn't touch the database, so going back needs only the earlier image.
+
 ### Upgrading from 3.0 to 3.0.1
 
 Flare 3.0.1 is a security release. Use the normal backup and upgrade steps above. There are no database migrations, and nobody is signed out unless you change `NEXTAUTH_SECRET`. Then work through the items that apply to your installation:

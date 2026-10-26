@@ -29,7 +29,7 @@ interface ImageLightboxProps {
   index: number
   onIndexChange: (index: number) => void
   onClose: () => void
-  fallbackFocusRef?: RefObject<HTMLElement>
+  fallbackFocusRef?: RefObject<HTMLElement | null>
   hasPrevious?: boolean
   hasNext?: boolean
   onPrevious?: () => void

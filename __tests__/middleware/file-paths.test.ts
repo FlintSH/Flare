@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 
-import { middleware } from '@/middleware'
+import { proxy } from '@/proxy'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { isFileUrlPath } from '@/lib/middleware/constants'
@@ -15,10 +15,10 @@ function request(path: string, userAgent = 'Mozilla/5.0 Firefox/131.0') {
   })
 }
 
-// A signed-out request reaches Flare when the middleware passes it on rather
+// A signed-out request reaches Flare when the proxy passes it on rather
 // than redirecting it to the sign-in page.
 async function reachesFlare(path: string, userAgent?: string) {
-  const response = await middleware(request(path, userAgent))
+  const response = await proxy(request(path, userAgent))
   return response.headers.get('x-middleware-next') === '1'
 }
 
@@ -67,7 +67,7 @@ describe('public file paths', () => {
   })
 })
 
-describe('signed-out middleware handling', () => {
+describe('signed-out proxy handling', () => {
   it('lets signed-out visitors open public files without an extension', async () => {
     for (const path of [
       '/abc12/readme',
@@ -80,7 +80,7 @@ describe('signed-out middleware handling', () => {
 
   it('still sends signed-out visitors from app pages to sign in', async () => {
     for (const path of ['/dashboard/files', '/dashboard/settings']) {
-      const response = await middleware(request(path))
+      const response = await proxy(request(path))
       expect(response.status, path).toBe(307)
       expect(new URL(response.headers.get('location')!).pathname).toBe(
         '/auth/login'
@@ -89,7 +89,7 @@ describe('signed-out middleware handling', () => {
   })
 
   it('sends link-preview bots to the raw content of a file without an extension', async () => {
-    const response = await middleware(
+    const response = await proxy(
       request('/abc12/readme', 'Mozilla/5.0 (compatible; Discordbot/2.0)')
     )
     expect(response.status).toBe(307)

@@ -17,15 +17,18 @@ import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 
 import './globals.css'
 
+// Keep commas out of font file names. Next.js 16 preloads such a file with the
+// comma percent-encoded while the stylesheet requests it unencoded, so
+// browsers download the font twice.
 const inter = localFont({
   src: [
     {
-      path: '../public/fonts/inter/Inter-VariableFont_opsz,wght.ttf',
+      path: '../public/fonts/inter/Inter-VariableFont_opsz_wght.ttf',
       weight: '100 900',
       style: 'normal',
     },
     {
-      path: '../public/fonts/inter/Inter-Italic-VariableFont_opsz,wght.ttf',
+      path: '../public/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf',
       weight: '100 900',
       style: 'italic',
     },

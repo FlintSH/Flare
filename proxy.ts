@@ -11,7 +11,7 @@ import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
 import { PUBLIC_PATHS, isFileUrlPath } from './lib/middleware/constants'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const requestedRecovery =
     request.nextUrl.searchParams.get('recovery') === '1' &&
     RECOVERY_PATHS.includes(request.nextUrl.pathname)
@@ -72,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Never run for /api: those handlers own their session and bearer checks
-  // (see above). When middleware runs, Next.js also clones the request body
+  // (see above). When the proxy runs, Next.js also clones the request body
   // and cuts it off at 10 MB, which broke larger uploads and chunk parts.
   matcher: ['/((?!api/|_next/static|_next/image|favicon.ico).*)'],
 }

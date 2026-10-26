@@ -156,7 +156,7 @@ docker build \
   -t flare:local .
 ```
 
-For a source checkout outside Docker, use Node compatible with the repository's dependencies and the exact pnpm release in `package.json`'s `packageManager` field. Supply `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` to the shell/process manager, then:
+For a source checkout outside Docker, use Node.js 22.13 or later and the exact pnpm release in `package.json`'s `packageManager` field. That pnpm release needs Node.js 22.13. CI uses Node.js 24, and the official image uses the current Node.js LTS release (`node:lts`). Supply `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` to the shell/process manager, then:
 
 ```sh
 corepack enable pnpm
@@ -168,7 +168,7 @@ pnpm build
 pnpm start
 ```
 
-`pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
+`pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories; `pnpm start` reads both from there. Builds leave `uploads` out of `.next/standalone`, so building next to existing uploads doesn't copy them. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
 
 ### Use the repository's Compose file
 

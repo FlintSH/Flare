@@ -1,9 +1,9 @@
 import * as staticInfo from 'next/dist/build/analysis/get-page-static-info'
 
-import { config } from '@/middleware'
+import { config } from '@/proxy'
 import { describe, expect, it } from 'vitest'
 
-// The compiler Next.js uses when it builds the middleware manifest. It is
+// The function Next.js uses to compile the proxy matcher at build time. It is
 // internal, so its types aren't published.
 const { getMiddlewareMatchers } = staticInfo as unknown as {
   getMiddlewareMatchers: (
@@ -26,7 +26,7 @@ const apiPaths = [
   '/api/auth/session',
 ]
 
-describe('middleware matcher', () => {
+describe('proxy matcher', () => {
   it('never runs for API routes, so Next.js passes request bodies through whole', () => {
     for (const path of apiPaths)
       expect(runsFor(config.matcher, path)).toBe(false)

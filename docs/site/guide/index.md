@@ -78,6 +78,8 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 
 **An instance is its own service.** Accounts, limits, storage, registration, email, and branding belong to that installation. Ask its administrator about availability and backups.
 
+**Use a current browser.** Flare supports Chrome, Edge, and Firefox 111 or later and Safari 16.4 or later. On an iPhone or iPad every browser uses Safari's engine, so the device needs iOS or iPadOS 16.4 or later. Older browsers aren't supported, and the dashboard and share pages may not work in them, for you or for the people you send links to.
+
 **Public means accessible by link.** Treat the link as something recipients can forward. A folder share can also list public files placed directly in that folder.
 
 **Private and password-protected are different.** A password on a public file lets another person unlock it. A password on a private file does not give other people access.

@@ -3,13 +3,16 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   output: 'standalone',
   productionBrowserSourceMaps: process.env.METICULOUS_BUILD === 'true',
-  experimental: {
-    reactCompiler: true,
-  },
+  reactCompiler: true,
   serverExternalPackages: [
     'tesseract.js',
     '@alwaysmeticulous/backend-recorder-launcher',
   ],
+  // Uploads and in-progress upload data live here at runtime. Keep them out
+  // of route traces, so builds don't copy them into .next/standalone.
+  outputFileTracingExcludes: {
+    '/*': ['./uploads/**/*', './tmp/**/*'],
+  },
   async headers() {
     return [
       {
