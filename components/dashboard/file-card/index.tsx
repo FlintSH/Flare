@@ -68,6 +68,14 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
 
+// Folder and tag labels share one fixed-height line with the activity counts,
+// so every card in the grid keeps the same height. Each name is capped so a
+// long label cannot crowd out a short one in narrow cards, and counts from
+// 1,000 are abbreviated (1.4K) so large numbers leave room for the labels.
+const labelClassName =
+  'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
+const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
+
 interface FileCardProps {
   file: FileType
   onDelete?: (id: string) => void
@@ -337,6 +345,8 @@ export function FileCard({
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const safeUrl = sanitizeUrl(file.urlPath)
+  const tags = initialFile.tags ?? []
+  const visibleTags = tags.slice(0, folder ? 1 : 2)
 
   return (
     <Card
@@ -665,22 +675,22 @@ export function FileCard({
             {formatFileSize(file.size)}
           </span>
         </div>
-        {folder && (
-          <button
-            type="button"
-            onClick={() => onFolderSelect?.(folder.id)}
-            disabled={!onFolderSelect}
-            title={folder.name}
-            aria-label={`Open folder ${folder.name}`}
-            className="mt-2 flex max-w-full items-center gap-1.5 rounded text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Folder className="h-3 w-3 shrink-0" />
-            <span className="truncate">{folder.name}</span>
-          </button>
-        )}
-        {!!initialFile.tags?.length && (
-          <div className="mt-2 flex items-center gap-1.5">
-            {initialFile.tags.slice(0, 2).map((tag) => (
+        <div className="mt-1 flex h-5 items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {folder && (
+              <button
+                type="button"
+                onClick={() => onFolderSelect?.(folder.id)}
+                disabled={!onFolderSelect}
+                title={folder.name}
+                aria-label={`Open folder ${folder.name}`}
+                className={labelClassName}
+              >
+                <Folder className="h-2.5 w-2.5 shrink-0" />
+                <span className="max-w-20 truncate">{folder.name}</span>
+              </button>
+            )}
+            {visibleTags.map((tag) => (
               <button
                 key={tag.id}
                 type="button"
@@ -688,39 +698,41 @@ export function FileCard({
                 disabled={!onTagSelect}
                 title={tag.name}
                 aria-label={`Show files tagged ${tag.name}`}
-                className="inline-flex min-w-0 items-center gap-1 rounded-md bg-muted/70 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+                className={labelClassName}
               >
                 <Tag className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{tag.name}</span>
+                <span className="max-w-20 truncate">{tag.name}</span>
               </button>
             ))}
-            {initialFile.tags.length > 2 && (
+            {tags.length > visibleTags.length && (
               <button
                 type="button"
                 onClick={onEditTags}
-                aria-label={`View all ${initialFile.tags.length} tags`}
+                aria-label={`View all ${tags.length} tags`}
                 className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
-                +{initialFile.tags.length - 2}
+                +{tags.length - visibleTags.length}
               </button>
             )}
           </div>
-        )}
-        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-          <span
-            className="inline-flex items-center gap-1"
-            aria-label={`${file.views} views`}
-          >
-            <Eye className="h-3 w-3" />
-            {file.views.toLocaleString()}
-          </span>
-          <span
-            className="inline-flex items-center gap-1"
-            aria-label={`${file.downloads} downloads`}
-          >
-            <Download className="h-3 w-3" />
-            {file.downloads.toLocaleString()}
-          </span>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            <span
+              className="inline-flex items-center gap-1"
+              aria-label={`${file.views} views`}
+              title={`${file.views.toLocaleString()} views`}
+            >
+              <Eye className="h-3 w-3" />
+              {compactCount.format(file.views)}
+            </span>
+            <span
+              className="inline-flex items-center gap-1"
+              aria-label={`${file.downloads} downloads`}
+              title={`${file.downloads.toLocaleString()} downloads`}
+            >
+              <Download className="h-3 w-3" />
+              {compactCount.format(file.downloads)}
+            </span>
+          </div>
         </div>
       </div>
 

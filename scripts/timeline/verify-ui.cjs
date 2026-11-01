@@ -283,6 +283,23 @@ async function screenshot(page, name) {
     .toFile(path.join(screenshots, `${name}.webp`))
 }
 
+// Distinct rendered heights of mounted file cards (or placeholders).
+async function cardHeights(
+  page,
+  selector = '[data-file-index] > :first-child'
+) {
+  return page.evaluate(
+    (selector) => [
+      ...new Set(
+        [...document.querySelectorAll(selector)].map(
+          (card) => Math.round(card.getBoundingClientRect().height * 10) / 10
+        )
+      ),
+    ],
+    selector
+  )
+}
+
 async function sample(page, stage) {
   const value = await page.evaluate(() => ({
     mountedFiles: document.querySelectorAll('[data-file-index]').length,
@@ -299,9 +316,15 @@ async function sample(page, stage) {
       ?.getAttribute('aria-valuetext'),
     horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
   }))
+  // Cards with and without tags or a folder.
+  value.cardHeights = await cardHeights(page)
   assert.ok(
     value.mountedFiles <= 100,
     `${stage}: ${value.mountedFiles} mounted cards`
+  )
+  assert.ok(
+    value.cardHeights.length <= 1,
+    `${stage}: mounted cards share one height (${value.cardHeights.join(', ')})`
   )
   assert.equal(
     value.horizontalOverflow,
@@ -920,6 +943,14 @@ async function main() {
       page.getByText('1,714 files', { exact: true }).first()
     ).toBeVisible()
     await ready(page)
+    // Cards inside a folder do not repeat the folder being viewed.
+    await expect(
+      page.locator('[data-file-index]').getByRole('button', {
+        name: 'Open folder Travel journal',
+        exact: true,
+      })
+    ).toHaveCount(0)
+    await sample(page, 'folder-travel-journal')
     await page.getByRole('button', { name: 'All files', exact: true }).click()
     await expect(
       page.getByText('12,000 files', { exact: true }).first()
@@ -1010,11 +1041,26 @@ async function main() {
     await expect(
       page.getByText('Couldn’t load these files.', { exact: true })
     ).toBeVisible()
+    // The failed rows keep their loading placeholders until Retry.
+    const placeholders = await cardHeights(
+      page,
+      '[data-file-index] > [aria-hidden="true"]'
+    )
+    assert.equal(
+      placeholders.length,
+      1,
+      `Loading placeholders share one height (${placeholders.join(', ')})`
+    )
     await page.getByRole('button', { name: 'Retry', exact: true }).click()
     await ready(page)
     await expect(
       page.locator('[data-file-index="11999"] a[aria-label^="Open "]')
     ).toBeAttached()
+    assert.deepEqual(
+      await cardHeights(page),
+      placeholders,
+      'Loaded cards replace their placeholders without changing height'
+    )
     await page.unroute('**/api/files?**')
     assert.equal(failedOnce, true)
     passed(

@@ -26,6 +26,8 @@ Folder names can be up to 80 characters. Use a plain-text name without `/` or `\
 
 **All files** includes files from every folder. **Unfiled** includes files that do not belong to a folder. Opening a specific folder shows its direct files; open a subfolder to see the files inside that subfolder.
 
+In **All files**, a [file card](./library#read-a-file-card) shows the name of the folder its file belongs to, beside the file's tags. Choose that name to open the folder. Inside a folder, cards leave out the folder you are viewing, which leaves room for two tags.
+
 Search, tag filters, sorting, dates, and image browsing stay within the folder you are viewing. Its direct files use the same [continuous scrolling and date rail](./library#scroll-through-your-library) as **All files**; the rail covers only the matching files in that folder. Resetting those filters keeps the folder selected.
 
 ## Move files

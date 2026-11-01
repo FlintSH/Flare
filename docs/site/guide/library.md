@@ -13,6 +13,12 @@ Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upg
 
 <Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare's file library with an account-wide file count, search, folders, filters, and a grid of previews" caption="One continuous library includes every matching file, with the same search, folders, and file actions." />
 
+## Read a file card
+
+Every card has the same layout and height, whether or not a file has tags or a folder. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
+
+A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; choose it to see every tag in **Edit tags**. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
+
 ## Scroll through your library
 
 Scroll normally with your mouse, trackpad, or touch screen. More files load as you reach them, without a **Next page** button. You can browse every matching file without changing pages.
