@@ -140,13 +140,15 @@ export function VirtualFiles({
         remembered.columns === dimensions.columns
           ? remembered.rows.get(index + windowStart)
           : undefined
+      // A card is as tall as it is wide plus 69px for its details and borders,
+      // and each row adds 16px of spacing, so this matches the measured row.
       return (
         knownSize ??
         (layout.row(index + windowStart).heading
           ? 44
           : (dimensions.width - (dimensions.columns - 1) * 16) /
               dimensions.columns +
-            118)
+            85)
       )
     },
     [layout, dimensions, windowStart]

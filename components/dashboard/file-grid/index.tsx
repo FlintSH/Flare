@@ -643,7 +643,12 @@ function FileLibrary({ scope }: { scope: string }) {
                 }
                 onEditTags={() => setTaggingFiles([file])}
                 onMove={() => setMovingFiles([file])}
-                folder={folders.find((folder) => folder.id === file.folderId)}
+                folder={
+                  // Inside a folder, every card would repeat the open folder.
+                  file.folderId === filters.folder
+                    ? undefined
+                    : folders.find((folder) => folder.id === file.folderId)
+                }
                 onFolderSelect={setFolder}
                 onTagSelect={setTag}
                 selected={selectedIds.includes(file.id)}
