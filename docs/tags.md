@@ -1,6 +1,6 @@
 # Tags
 
-Tags are an optional way to find related files in your vault. Your Files still
+Tags are an optional way to find related files in your vault. **Your files** still
 opens with everything together. A file can have several tags; tagging never moves
 it or changes its URL, visibility, or storage path. Tags and matching rules are
 private to your account, including on public files.

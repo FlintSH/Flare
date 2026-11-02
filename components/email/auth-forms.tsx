@@ -4,8 +4,16 @@ import { useEffect, useState } from 'react'
 
 import Link from 'next/link'
 
-import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Info,
+  Loader2,
+} from 'lucide-react'
 
+import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,23 +23,18 @@ import { EmailCapabilities, emailPost, emailRequest } from './api'
 
 function Feedback({ error, message }: { error: string; message: string }) {
   return (
-    <div aria-live="polite">
+    <div aria-live="polite" className="space-y-3 empty:sr-only">
       {error && (
-        <p
-          className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground"
-          role="alert"
-        >
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {message && (
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed">
-          <CheckCircle2
-            className="mt-0.5 h-4 w-4 shrink-0 text-primary"
-            aria-hidden="true"
-          />
-          <p>{message}</p>
-        </div>
+        <Alert variant="success" role="status">
+          <CheckCircle2 aria-hidden="true" />
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       )}
     </div>
   )
@@ -82,6 +85,7 @@ export function ForgotPasswordForm() {
           <div className="space-y-2">
             <Label htmlFor="recovery-email">Email address</Label>
             <Input
+              className="h-11"
               id="recovery-email"
               type="email"
               autoComplete="email"
@@ -96,10 +100,13 @@ export function ForgotPasswordForm() {
           </Button>
         </form>
       ) : capabilities ? (
-        <p className="text-sm text-muted-foreground">
-          Email password recovery is not enabled on this instance. Contact your
-          administrator for help.
-        </p>
+        <Alert variant="info" role="status">
+          <Info aria-hidden="true" />
+          <AlertDescription>
+            Email password recovery is not enabled on this instance. Contact
+            your administrator for help.
+          </AlertDescription>
+        </Alert>
       ) : (
         !error && (
           <p
@@ -112,12 +119,11 @@ export function ForgotPasswordForm() {
         )
       )}
       <Feedback error={error} message={message} />
-      <Link
-        href="/auth/login?local=1"
-        className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-      >
-        Back to sign in
-      </Link>
+      <AuthFooter>
+        <Link href="/auth/login?local=1" className={authLinkClassName}>
+          Back to sign in
+        </Link>
+      </AuthFooter>
     </div>
   )
 }
@@ -158,18 +164,19 @@ export function ResetPasswordForm({ token }: { token: string }) {
   return (
     <div className="space-y-5">
       {!token ? (
-        <p
-          className="rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed"
-          role="alert"
-        >
-          This reset link is incomplete. Request a new link below.
-        </p>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>
+            This reset link is incomplete. Request a new link below.
+          </AlertDescription>
+        </Alert>
       ) : (
         !complete && (
           <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
             <div className="space-y-2">
               <Label htmlFor="reset-password">New password</Label>
               <Input
+                className="h-11"
                 id="reset-password"
                 name="password"
                 type="password"
@@ -179,13 +186,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 required
                 disabled={busy}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Use at least 8 characters.
               </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="reset-confirm">Confirm new password</Label>
               <Input
+                className="h-11"
                 id="reset-confirm"
                 name="confirmPassword"
                 type="password"
@@ -203,25 +211,20 @@ export function ResetPasswordForm({ token }: { token: string }) {
         )
       )}
       <Feedback error={error} message={message} />
-      {!complete && (
-        <Link
-          href="/auth/forgot-password"
-          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-        >
-          Request a new reset link
-        </Link>
-      )}
       {complete ? (
         <Button asChild className="h-11 w-full">
           <Link href="/auth/login?local=1">Sign in with your new password</Link>
         </Button>
       ) : (
-        <Link
-          href="/auth/login?local=1"
-          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-        >
-          Back to sign in
-        </Link>
+        <AuthFooter>
+          <Link href="/auth/forgot-password" className={authLinkClassName}>
+            Request a new reset link
+          </Link>
+          <span aria-hidden="true"> · </span>
+          <Link href="/auth/login?local=1" className={authLinkClassName}>
+            Back to sign in
+          </Link>
+        </AuthFooter>
       )}
     </div>
   )
@@ -276,20 +279,20 @@ export function VerifyEmailForm({ token }: { token: string }) {
             <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
           </Link>
         </Button>
-      ) : (
-        <Link
-          href="/auth/verify-email"
-          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-        >
-          Check status or request another email
+      ) : null}
+      <AuthFooter>
+        {!complete && (
+          <>
+            <Link href="/auth/verify-email" className={authLinkClassName}>
+              Check status or request another email
+            </Link>
+            <span aria-hidden="true"> · </span>
+          </>
+        )}
+        <Link href="/auth/login?local=1" className={authLinkClassName}>
+          Back to sign in
         </Link>
-      )}
-      <Link
-        href="/auth/login?local=1"
-        className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-      >
-        Back to sign in
-      </Link>
+      </AuthFooter>
     </div>
   )
 }
@@ -299,18 +302,23 @@ function VerificationStatus() {
   if (error)
     return (
       <div className="space-y-4">
-        <p className="text-sm" role="alert">
-          {error}
-        </p>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-full"
+          onClick={() => void refresh()}
+        >
           Try again
         </Button>
-        <Link
-          className="block text-sm font-medium text-foreground underline underline-offset-4 hover:text-primary"
-          href="/auth/login?local=1"
-        >
-          Sign in
-        </Link>
+        <AuthFooter>
+          <Link className={authLinkClassName} href="/auth/login?local=1">
+            Sign in
+          </Link>
+        </AuthFooter>
       </div>
     )
   if (!status)

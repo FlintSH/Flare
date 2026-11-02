@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { initialThemeStyles } from '@/components/theme/initial-theme-styles'
 
 import { DEFAULT_CONFIG } from '@/lib/config'
+import { LIGHT_PALETTE } from '@/lib/customization/schema'
 import { paletteVariables } from '@/lib/customization/theme'
 
 function declarations(css: string, selector: string) {
@@ -61,6 +62,19 @@ describe('initial server-rendered theme', () => {
       )
       expect(css).toContain('--background: 222.2 84% 4.9%;')
     }
+  })
+
+  it('keeps the default light palette while the studio palette is off', () => {
+    const config = structuredClone(DEFAULT_CONFIG)
+    config.settings.appearance.theme = 'light'
+    const theme = config.settings.customization.published.theme
+    // Trying a preset in the studio and switching its palette off again.
+    theme.light = { ...theme.light, primary: '#0f766e', ring: '#0f766e' }
+    theme.enabled = false
+    const css = initialThemeStyles(config)
+    expect(declarations(css, '.light')).toEqual(paletteVariables(LIGHT_PALETTE))
+    // The tried teal appears nowhere, in either mode.
+    expect(css).not.toContain(paletteVariables(theme.light)['--primary'])
   })
 
   it('lets an explicitly enabled appearance studio own the palette after fallback colors', () => {

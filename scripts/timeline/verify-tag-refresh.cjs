@@ -63,7 +63,9 @@ async function selectFiles(page, selectedNames = names) {
       .check()
   }
   await expect(
-    page.getByText(`${selectedNames.length} / 100 selected`, { exact: true })
+    page.getByText(`${selectedNames.length} selected · up to 100`, {
+      exact: true,
+    })
   ).toBeVisible()
 }
 async function refresh(page) {
@@ -225,12 +227,12 @@ async function main() {
       .getByRole('checkbox', { name: `Select ${names[0]}`, exact: true })
       .check()
     await expect(
-      page.getByText('1 / 100 selected', { exact: true })
+      page.getByText('1 selected · up to 100', { exact: true })
     ).toBeVisible()
     await setFavorite([ids[0]], 'remove')
     await refresh(page)
     await expect(
-      page.getByText('1 / 100 selected', { exact: true })
+      page.getByText('1 selected · up to 100', { exact: true })
     ).toBeVisible()
     let dialog = await openTags(page)
     await favorite(dialog, 'false')
@@ -263,7 +265,7 @@ async function main() {
     await expect(page.locator('[data-file-index="0"]')).toHaveCount(0)
     await closeTags(page)
     await expect(
-      page.getByText('0 / 100 selected', { exact: true })
+      page.getByText('0 selected · up to 100', { exact: true })
     ).toBeInViewport()
     passed(
       'An unmounted selected file receives the same fresh membership read and correct add action'

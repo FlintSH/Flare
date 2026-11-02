@@ -1,25 +1,49 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import {
+  FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
 
 import Link from 'next/link'
 
 import {
+  AlertCircle,
   ArrowUpRight,
-  Camera,
   Check,
   Copy,
-  KeyRound,
+  Info,
   Plus,
   RefreshCw,
   Send,
-  Webhook,
+  SlidersHorizontal,
 } from 'lucide-react'
 
+import { MetaLine } from '@/components/profile/meta-line'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -55,10 +79,60 @@ const scopes = [
   ['urls:read', 'Read short links', 'List your shortened URLs'],
   ['urls:write', 'Manage short links', 'Create and delete your short links'],
 ] as const
-const panel =
-  'min-w-0 rounded-xl border bg-card text-card-foreground p-5 shadow-sm sm:p-6'
-const selectStyle =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
+// Card titles that are also headings, so each card is reachable by heading.
+const cardTitle = 'font-semibold leading-none tracking-tight'
+// One header layout for cards with actions, as on the other profile tabs:
+// title and description on the left, actions at the top right. On phones the
+// actions follow the description.
+const cardHeaderRow =
+  'flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between'
+const deliveryTone = (status: string) =>
+  status === 'failed'
+    ? 'danger'
+    : status === 'delivered'
+      ? 'success'
+      : 'neutral'
+// Text links, underlined like the other links on the profile tabs.
+const tipLinkClassName =
+  'inline-flex items-center gap-1 rounded-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
+/**
+ * A pointer to another tab. Tips sit between the cards, so they take the
+ * card surface and its 24px inner edges; the info icon and the text link
+ * mark them as guidance rather than content. Both tips on this tab use it.
+ */
+function Tip({
+  title,
+  children,
+  action,
+}: {
+  title?: string
+  children: ReactNode
+  action: ReactNode
+}) {
+  return (
+    <Card className="flex gap-3 p-6 text-sm">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
+      <div className="flex min-w-0 flex-1 flex-col gap-x-6 gap-y-2 sm:flex-row sm:items-start sm:justify-between">
+        {/* The lead line is in the text colour; a description under a
+            title is muted, like a card description. */}
+        <div className="min-w-0 space-y-1">
+          {title && <h2 className="font-medium">{title}</h2>}
+          <p
+            className={
+              title
+                ? 'max-w-xl text-pretty text-muted-foreground'
+                : 'text-pretty'
+            }
+          >
+            {children}
+          </p>
+        </div>
+        <div className="shrink-0">{action}</div>
+      </div>
+    </Card>
+  )
+}
 
 export function IntegrationsPanel({
   embedded = false,
@@ -155,6 +229,29 @@ export function IntegrationsPanel({
     )
   }
 
+  const hookName = (delivery: Delivery) =>
+    data?.webhooks.find((hook) => hook.id === delivery.webhookId)?.name ||
+    'Webhook'
+  const eventName = (delivery: Delivery) =>
+    delivery.eventId.startsWith('test:') ? 'Test event' : 'File ready'
+  const retryButton = (delivery: Delivery, className?: string) =>
+    delivery.status === 'failed' && (
+      <Button
+        size="sm"
+        variant="outline"
+        className={className}
+        disabled={busy}
+        onClick={() =>
+          void run(
+            { action: 'retry-delivery', id: delivery.id },
+            'Delivery queued for retry.'
+          )
+        }
+      >
+        Retry
+      </Button>
+    )
+
   return (
     <div
       className={
@@ -163,70 +260,43 @@ export function IntegrationsPanel({
           : 'container mx-auto max-w-6xl space-y-6 pb-10'
       }
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {!embedded && (
         <div>
-          {!embedded && (
-            <>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
-                Your workflow, connected
-              </p>
-              <h1 className="text-3xl font-bold tracking-tight">
-                Integrations
-              </h1>
-              <p className="mt-2 max-w-2xl text-muted-foreground">
-                Connect your favorite tools to Flare. Give each connection the
-                access it needs and keep uploads moving your way.
-              </p>
-            </>
-          )}
-          {embedded && (
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Manage custom app access and webhook delivery history.
-            </p>
-          )}
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
+            Your workflow, connected
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Integrations</h1>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Connect your favorite tools to Flare. Give each connection the
+            access it needs and keep uploads moving your way.
+          </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => void refresh()}
-          disabled={busy}
-        >
-          <RefreshCw />
-          Refresh
-        </Button>
-      </div>
+      )}
       <PermissionGate permission="files.upload">
         <PermissionGate permission="tokens.manage">
-          <section className="flex flex-col gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex min-w-0 items-start gap-3">
-              <Camera className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-              <div className="space-y-1.5">
-                <h2 className="font-semibold">Setting up a screenshot tool?</h2>
-                <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  ShareX, iTake, Flameshot, Spectacle, and Bash have
-                  ready-to-use downloads with your upload token included. No API
-                  key setup needed.
-                </p>
-              </div>
-            </div>
-            <Button asChild className="shrink-0">
+          <Tip
+            title="Setting up a screenshot tool?"
+            action={
               <Link
                 href="/dashboard/profile?section=uploads#upload-tools"
                 onNavigate={onSetupTool}
+                className={tipLinkClassName}
               >
                 Set up a tool
-                <ArrowUpRight />
+                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               </Link>
-            </Button>
-          </section>
+            }
+          >
+            ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
+            downloads with your upload token included. No API key setup needed.
+          </Tip>
         </PermissionGate>
       </PermissionGate>
       {error && (
-        <div
-          role="alert"
-          className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm"
-        >
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {notice && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -234,7 +304,7 @@ export function IntegrationsPanel({
         </p>
       )}
       {secret && (
-        <div className="rounded-2xl border border-primary/40 bg-primary/10 p-5 space-y-3">
+        <div className="space-y-3 rounded-2xl border border-primary/40 bg-primary/10 p-6">
           <h2 className="font-semibold">
             Save your{' '}
             {secret.kind === 'token' ? 'API token' : 'webhook signing secret'}
@@ -269,180 +339,46 @@ export function IntegrationsPanel({
       )}
       <div className="grid gap-6 xl:grid-cols-2">
         <PermissionGate permission="tokens.manage">
-          <section className={panel}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-semibold">API tokens</h2>
+          <Card className="min-w-0">
+            <CardHeader className={cardHeaderRow}>
+              <div className="min-w-0 space-y-1.5">
+                <h2 className={cardTitle}>API tokens</h2>
+                <CardDescription>
+                  Optional keys for custom apps and scripts that need specific
+                  permissions, an expiration date, or separate revocation.
+                </CardDescription>
               </div>
+              {/* Peer card actions share the outline style. */}
               <Button
-                size="sm"
+                variant="outline"
+                className="shrink-0 self-start"
                 onClick={() => setForm(form === 'token' ? null : 'token')}
               >
                 <Plus />
                 New token
               </Button>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Optional keys for custom apps and scripts that need specific
-              permissions, an expiration date, or separate revocation.
-            </p>
-            {form === 'token' && (
-              <form
-                onSubmit={createToken}
-                className="mt-5 space-y-4 rounded-xl border bg-background/70 p-4"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="token-name">Connection name</Label>
-                  <Input
-                    id="token-name"
-                    name="name"
-                    placeholder="My automation script"
-                    required
-                    maxLength={80}
-                  />
-                </div>
-                <fieldset className="space-y-2">
-                  <legend className="mb-2 text-sm font-medium">
-                    Allowed actions
-                  </legend>
-                  {scopes
-                    .filter(
-                      ([scope]) =>
-                        ({
-                          'files:upload': can('files.upload'),
-                          'files:read': can('files.read'),
-                          'urls:read': can('links.read'),
-                          'urls:write':
-                            can('links.create') || can('links.delete'),
-                        })[scope]
-                    )
-                    .map(([value, label, description]) => (
-                      <label
-                        key={value}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1 accent-[hsl(var(--primary))]"
-                          checked={selectedScopes.includes(value)}
-                          onChange={(event) =>
-                            setSelectedScopes(
-                              event.target.checked
-                                ? [...selectedScopes, value]
-                                : selectedScopes.filter(
-                                    (scope) => scope !== value
-                                  )
-                            )
-                          }
-                        />
-                        <span>
-                          <span className="block text-sm font-medium">
-                            {label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {description}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                </fieldset>
-                <div className="space-y-2">
-                  <Label htmlFor="token-profile">Upload profile</Label>
-                  <select
-                    id="token-profile"
-                    name="profileId"
-                    className={selectStyle}
-                    disabled={!selectedScopes.includes('files:upload')}
-                  >
-                    <option value="">No profile binding</option>
-                    {data?.profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground">
-                    Bind an uploader to a profile to keep its upload defaults
-                    consistent.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="token-expiry">Expires after</Label>
-                  <select
-                    id="token-expiry"
-                    name="days"
-                    className={selectStyle}
-                    defaultValue="90"
-                  >
-                    <option value="30">30 days</option>
-                    <option value="90">90 days</option>
-                    <option value="365">1 year</option>
-                    <option value="0">Never</option>
-                  </select>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="submit"
-                    disabled={busy || !selectedScopes.length}
-                  >
-                    Create token
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setForm(null)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            )}
-            <div className="mt-5 divide-y">
-              {data?.tokens.length === 0 && (
-                <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No API tokens yet. Built-in tool downloads work without one.
-                </p>
-              )}
-              {data?.tokens.map((token) => (
-                <div key={token.id} className="py-4 first:pt-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{token.name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {token.revokedAt
-                          ? 'Revoked'
-                          : token.expiresAt &&
-                              new Date(token.expiresAt) <= new Date()
-                            ? 'Expired'
-                            : token.lastUsedAt
-                              ? `Used ${new Date(token.lastUsedAt).toLocaleDateString()}`
-                              : 'Not used yet'}
-                        {!token.revokedAt &&
-                          token.expiresAt &&
-                          ` · Expires ${new Date(token.expiresAt).toLocaleDateString()}`}
-                      </p>
-                    </div>
-                    {!token.revokedAt && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            { action: 'revoke-token', id: token.id },
-                            'Token revoked.'
-                          )
-                        }
-                      >
-                        Revoke
-                      </Button>
-                    )}
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {form === 'token' && (
+                <form
+                  onSubmit={createToken}
+                  className="space-y-4 rounded-xl border bg-muted/30 p-4"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="token-name">Connection name</Label>
+                    <Input
+                      id="token-name"
+                      name="name"
+                      placeholder="My automation script"
+                      required
+                      maxLength={80}
+                    />
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {token.scopes
+                  <fieldset className="space-y-2">
+                    <legend className="mb-2 text-sm font-medium">
+                      Allowed actions
+                    </legend>
+                    {scopes
                       .filter(
                         ([scope]) =>
                           ({
@@ -453,265 +389,491 @@ export function IntegrationsPanel({
                               can('links.create') || can('links.delete'),
                           })[scope]
                       )
-                      .map((scope) => (
-                        <span
-                          key={scope}
-                          className="rounded-md bg-muted px-2 py-1 text-xs"
+                      .map(([value, label, description]) => (
+                        <label
+                          key={value}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
                         >
-                          {scopes.find(([value]) => value === scope)?.[1] ||
-                            scope}
-                        </span>
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={selectedScopes.includes(value)}
+                            onChange={(event) =>
+                              setSelectedScopes(
+                                event.target.checked
+                                  ? [...selectedScopes, value]
+                                  : selectedScopes.filter(
+                                      (scope) => scope !== value
+                                    )
+                              )
+                            }
+                          />
+                          <span>
+                            <span className="block text-sm font-medium">
+                              {label}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {description}
+                            </span>
+                          </span>
+                        </label>
                       ))}
-                    {token.profileId && (
-                      <span className="rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
-                        {data.profiles.find(
-                          (profile) => profile.id === token.profileId
-                        )?.name || 'Bound profile unavailable'}
-                      </span>
-                    )}
+                  </fieldset>
+                  <div className="space-y-2">
+                    <Label htmlFor="token-profile">Upload profile</Label>
+                    <NativeSelect
+                      id="token-profile"
+                      name="profileId"
+                      disabled={!selectedScopes.includes('files:upload')}
+                    >
+                      <option value="">No profile binding</option>
+                      {data?.profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    <p className="text-xs text-muted-foreground">
+                      Bind an uploader to a profile to keep its upload defaults
+                      consistent.
+                    </p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                  <div className="space-y-2">
+                    <Label htmlFor="token-expiry">Expires after</Label>
+                    <NativeSelect
+                      id="token-expiry"
+                      name="days"
+                      defaultValue="90"
+                    >
+                      <option value="30">30 days</option>
+                      <option value="90">90 days</option>
+                      <option value="365">1 year</option>
+                      <option value="0">Never</option>
+                    </NativeSelect>
+                  </div>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setForm(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={busy || !selectedScopes.length}
+                    >
+                      Create token
+                    </Button>
+                  </div>
+                </form>
+              )}
+              {/* Each token is an inset, like each webhook beside it. */}
+              <div className="space-y-3">
+                {!data && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    Loading tokens…
+                  </p>
+                )}
+                {data?.tokens.length === 0 && (
+                  <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No API tokens yet. Built-in tool downloads work without one.
+                  </p>
+                )}
+                {data?.tokens.map((token) => {
+                  const tokenScopes = token.scopes.filter(
+                    (scope) =>
+                      ({
+                        'files:upload': can('files.upload'),
+                        'files:read': can('files.read'),
+                        'urls:read': can('links.read'),
+                        'urls:write':
+                          can('links.create') || can('links.delete'),
+                      })[scope]
+                  )
+                  return (
+                    <div
+                      key={token.id}
+                      className="rounded-xl border bg-muted/30 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-medium">
+                            {token.name}
+                          </h3>
+                          <MetaLine
+                            className="mt-1 text-xs text-muted-foreground"
+                            items={[
+                              {
+                                key: 'use',
+                                text: token.revokedAt
+                                  ? 'Revoked'
+                                  : token.expiresAt &&
+                                      new Date(token.expiresAt) <= new Date()
+                                    ? 'Expired'
+                                    : token.lastUsedAt
+                                      ? `Used ${new Date(token.lastUsedAt).toLocaleDateString()}`
+                                      : 'Not used yet',
+                              },
+                              ...(!token.revokedAt && token.expiresAt
+                                ? [
+                                    {
+                                      key: 'expires',
+                                      text: `Expires ${new Date(token.expiresAt).toLocaleDateString()}`,
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                          />
+                        </div>
+                        {!token.revokedAt && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 text-destructive hover:bg-danger/10 hover:text-destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(
+                                { action: 'revoke-token', id: token.id },
+                                'Token revoked.'
+                              )
+                            }
+                          >
+                            Revoke
+                          </Button>
+                        )}
+                      </div>
+                      {(tokenScopes.length > 0 || token.profileId) && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {tokenScopes.map((scope) => (
+                            <Badge key={scope}>
+                              {scopes.find(([value]) => value === scope)?.[1] ||
+                                scope}
+                            </Badge>
+                          ))}
+                          {/* The bound profile is a different kind of chip
+                              from the permissions: outlined, with an icon. */}
+                          {token.profileId && (
+                            <Badge variant="outline">
+                              <SlidersHorizontal aria-hidden="true" />
+                              <span className="sr-only">Upload profile: </span>
+                              {data.profiles.find(
+                                (profile) => profile.id === token.profileId
+                              )?.name || 'Bound profile unavailable'}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
         </PermissionGate>
         <PermissionGate permission="webhooks.manage">
-          <section className={panel}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
-                  <Webhook className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-semibold">Webhooks</h2>
+          <Card className="min-w-0">
+            <CardHeader className={cardHeaderRow}>
+              <div className="min-w-0 space-y-1.5">
+                <h2 className={cardTitle}>Webhooks</h2>
+                <CardDescription>
+                  Tell your other tools when a file is ready. Connect
+                  automations, notifications, and your own services.
+                </CardDescription>
               </div>
               <Button
-                size="sm"
+                variant="outline"
+                className="shrink-0 self-start"
                 onClick={() => setForm(form === 'webhook' ? null : 'webhook')}
               >
                 <Plus />
                 Add webhook
               </Button>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Tell your other tools when a file is ready. Connect automations,
-              notifications, and your own services.
-            </p>
-            {form === 'webhook' && (
-              <form
-                onSubmit={createHook}
-                className="mt-5 space-y-4 rounded-xl border bg-background/70 p-4"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-name">Connection name</Label>
-                  <Input
-                    id="webhook-name"
-                    name="name"
-                    placeholder="My automation server"
-                    required
-                    maxLength={80}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="webhook-url">Receiver URL</Label>
-                  <Input
-                    id="webhook-url"
-                    name="url"
-                    type="url"
-                    placeholder="https://automation.example.com/flare"
-                    required
-                    maxLength={2048}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Your receiver gets signed file metadata when your uploads
-                    finish. File contents and passwords are never included.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={busy}>
-                    Connect webhook
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setForm(null)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            )}
-            <div className="mt-5 space-y-3">
-              {data?.webhooks.length === 0 && (
-                <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Connect a receiver to start automating your uploads.
-                </p>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {form === 'webhook' && (
+                <form
+                  onSubmit={createHook}
+                  className="space-y-4 rounded-xl border bg-muted/30 p-4"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-name">Connection name</Label>
+                    <Input
+                      id="webhook-name"
+                      name="name"
+                      placeholder="My automation server"
+                      required
+                      maxLength={80}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="webhook-url">Receiver URL</Label>
+                    <Input
+                      id="webhook-url"
+                      name="url"
+                      type="url"
+                      placeholder="https://automation.example.com/flare"
+                      required
+                      maxLength={2048}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Your receiver gets signed file metadata when your uploads
+                      finish. File contents and passwords are never included.
+                    </p>
+                  </div>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setForm(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={busy}>
+                      Connect webhook
+                    </Button>
+                  </div>
+                </form>
               )}
-              {data?.webhooks.map((hook) => (
-                <div key={hook.id} className="rounded-xl border p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-medium">{hook.name}</h3>
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs ${hook.enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      {hook.enabled ? 'Enabled' : 'Paused'}
-                    </span>
-                  </div>
-                  <p className="mt-1 break-all text-xs text-muted-foreground">
-                    {hook.url}
+              <div className="space-y-3">
+                {!data && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    Loading webhooks…
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || !hook.enabled}
-                      onClick={() =>
-                        void run(
-                          { action: 'test-webhook', id: hook.id },
-                          'Test queued. Delivery status updates automatically.'
-                        )
-                      }
-                    >
-                      <Send />
-                      Send test
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          {
-                            action: 'toggle-webhook',
-                            id: hook.id,
-                            enabled: !hook.enabled,
-                          },
-                          hook.enabled
-                            ? 'Webhook paused. Pending deliveries cancelled.'
-                            : 'Webhook enabled.'
-                        )
-                      }
-                    >
-                      {hook.enabled ? 'Pause' : 'Enable'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(
-                          { action: 'delete-webhook', id: hook.id },
-                          'Webhook deleted.'
-                        )
-                      }
-                    >
-                      Delete
-                    </Button>
+                )}
+                {data?.webhooks.length === 0 && (
+                  <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Connect a receiver to start automating your uploads.
+                  </p>
+                )}
+                {data?.webhooks.map((hook) => (
+                  <div
+                    key={hook.id}
+                    className="rounded-xl border bg-muted/30 p-4"
+                  >
+                    {/* Status follows the title on its line, like every
+                        status badge on the profile tabs. */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <h3 className="min-w-0 break-words text-sm font-medium">
+                        {hook.name}
+                      </h3>
+                      <Badge variant={hook.enabled ? 'success' : 'neutral'}>
+                        {hook.enabled ? 'Enabled' : 'Paused'}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 break-all text-xs text-muted-foreground">
+                      {hook.url}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || !hook.enabled}
+                        onClick={() =>
+                          void run(
+                            { action: 'test-webhook', id: hook.id },
+                            'Test queued. Delivery status updates automatically.'
+                          )
+                        }
+                      >
+                        <Send />
+                        Send test
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(
+                            {
+                              action: 'toggle-webhook',
+                              id: hook.id,
+                              enabled: !hook.enabled,
+                            },
+                            hook.enabled
+                              ? 'Webhook paused. Pending deliveries cancelled.'
+                              : 'Webhook enabled.'
+                          )
+                        }
+                      >
+                        {hook.enabled ? 'Pause' : 'Enable'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:bg-danger/10 hover:text-destructive"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(
+                            { action: 'delete-webhook', id: hook.id },
+                            'Webhook deleted.'
+                          )
+                        }
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </PermissionGate>
       </div>
       <PermissionGate permission="webhooks.manage">
-        <section className={panel}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-semibold">Delivery history</h2>
-            <p className="text-xs text-muted-foreground">
-              Latest 50 deliveries · History kept for 30 days
-            </p>
-          </div>
-          {!data && (
-            <p className="py-6 text-sm text-muted-foreground">
-              Loading your connections…
-            </p>
-          )}
-          {data?.deliveries.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Send a test or upload a file to see deliveries here.
-            </p>
-          )}
-          {!!data?.deliveries.length && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-xs text-muted-foreground">
-                  <tr>
-                    <th className="pb-3 font-medium">Connection / event</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Attempts</th>
-                    <th className="pb-3 font-medium">Created</th>
-                    <th>
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {data.deliveries.map((delivery) => (
-                    <tr key={delivery.id}>
-                      <td className="py-3 pr-4">
-                        <p className="font-medium">
-                          {data.webhooks.find(
-                            (hook) => hook.id === delivery.webhookId
-                          )?.name || 'Webhook'}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {delivery.eventId.startsWith('test:')
-                            ? 'Test event'
-                            : 'File ready'}
-                        </p>
-                        {delivery.lastError && (
-                          <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                            {delivery.lastError}
-                          </p>
-                        )}
-                      </td>
-                      <td className="pr-4">
-                        <span className="rounded-full bg-muted px-2 py-1 text-xs capitalize">
-                          {delivery.status}
-                        </span>
-                      </td>
-                      <td className="pr-4">{delivery.attempts} / 5</td>
-                      <td className="pr-4 whitespace-nowrap text-xs text-muted-foreground">
-                        {new Date(delivery.createdAt).toLocaleString()}
-                      </td>
-                      <td>
-                        {delivery.status === 'failed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() =>
-                              void run(
-                                { action: 'retry-delivery', id: delivery.id },
-                                'Delivery queued for retry.'
-                              )
-                            }
-                          >
-                            Retry
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <Card className="min-w-0">
+          <CardHeader className={cardHeaderRow}>
+            <div className="min-w-0 space-y-1.5">
+              <h2 className={cardTitle}>Delivery history</h2>
+              <CardDescription>
+                Your latest 50 deliveries. History is kept for 30 days.
+              </CardDescription>
             </div>
-          )}
-        </section>
+            {/* Reloads tokens and webhooks too; the list also updates on its
+                own every few seconds. */}
+            <Button
+              variant="outline"
+              className="shrink-0 self-start"
+              onClick={() => void refresh()}
+              disabled={busy}
+              aria-label="Refresh delivery history"
+            >
+              <RefreshCw />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {!data && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Loading deliveries…
+              </p>
+            )}
+            {data?.deliveries.length === 0 && (
+              <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Send a test or upload a file to see deliveries here.
+              </p>
+            )}
+            {!!data?.deliveries.length && (
+              <>
+                {/* Phones: one stacked entry per delivery, in the same
+                    bordered list as the table. */}
+                <ul
+                  className="divide-y rounded-xl border sm:hidden"
+                  aria-label="Deliveries"
+                >
+                  {data.deliveries.map((delivery) => (
+                    <li key={delivery.id} className="p-4">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="min-w-0 break-words text-sm font-medium">
+                          {hookName(delivery)}
+                        </p>
+                        <Badge
+                          variant={deliveryTone(delivery.status)}
+                          className="capitalize"
+                        >
+                          {delivery.status}
+                        </Badge>
+                      </div>
+                      <MetaLine
+                        className="mt-1 text-xs text-muted-foreground"
+                        items={[
+                          { key: 'event', text: eventName(delivery) },
+                          {
+                            key: 'attempts',
+                            text: `${delivery.attempts} / 5 attempts`,
+                          },
+                        ]}
+                      />
+                      {delivery.lastError && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {delivery.lastError}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(delivery.createdAt).toLocaleString()}
+                      </p>
+                      {retryButton(delivery, 'mt-3')}
+                    </li>
+                  ))}
+                </ul>
+                {/* Drawn like the short links table: a bordered box with a
+                    filled header row. */}
+                <div className="hidden overflow-hidden rounded-xl border sm:block">
+                  <Table aria-label="Deliveries">
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead className="pl-4">
+                          Connection / event
+                        </TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Attempts</TableHead>
+                        {/* Dates end on their header, as in the short links
+                            table. */}
+                        <TableHead className="text-right">Created</TableHead>
+                        <TableHead className="pr-3">
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.deliveries.map((delivery) => (
+                        <TableRow key={delivery.id}>
+                          <TableCell className="py-3 pl-4">
+                            <p className="font-medium">{hookName(delivery)}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {eventName(delivery)}
+                            </p>
+                            {delivery.lastError && (
+                              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+                                {delivery.lastError}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={deliveryTone(delivery.status)}
+                              className="capitalize"
+                            >
+                              {delivery.status}
+                            </Badge>
+                          </TableCell>
+                          {/* Cells at the table's size, like the short links
+                              table: numbers in the text colour, dates muted. */}
+                          <TableCell className="whitespace-nowrap tabular-nums">
+                            {delivery.attempts} / 5
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-right text-muted-foreground">
+                            {new Date(delivery.createdAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="pr-3 text-right">
+                            {retryButton(delivery)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </PermissionGate>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed p-4 text-sm">
-        <p className="text-muted-foreground">
-          Pair your connection with an upload profile to make every upload feel
-          automatic.
-        </p>
-        <Link
-          href="/dashboard/profile?section=uploads"
-          className="inline-flex items-center gap-1 font-medium text-primary"
-        >
-          Explore workflows
-          <ArrowUpRight className="h-4 w-4" />
-        </Link>
-      </div>
+      {/* A tip, not an empty slot: dashed outlines mean empty or drop
+          targets. */}
+      <Tip
+        action={
+          <Link
+            href="/dashboard/profile?section=uploads"
+            className={tipLinkClassName}
+          >
+            Explore workflows
+            <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        }
+      >
+        Pair your connection with an upload profile to make every upload feel
+        automatic.
+      </Tip>
     </div>
   )
 }

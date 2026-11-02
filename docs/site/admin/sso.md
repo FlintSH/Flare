@@ -4,7 +4,7 @@ description: Connect an OpenID Connect provider, understand provisioning and ema
 
 # Single sign-on with OIDC
 
-Flare supports one configured OpenID Connect provider. Users can sign in through your existing identity service while Flare retains its own accounts, file ownership, and roles. Configure it under **Settings → Access → Single Sign-On (OIDC)** with `settings.security`.
+Flare supports one configured OpenID Connect provider. Users can sign in through your existing identity service while Flare retains its own accounts, file ownership, and roles. Configure it under **Settings → Access → Single sign-on (OIDC)** with `settings.security`.
 
 The 2.1 dependency refresh preserves existing provider settings and issuer/subject bindings; it does not enable email-only account linking. After [upgrading](/hosting/maintenance#upgrading-from-2-0-to-2-1), test both a linked SSO account and your local administrator fallback.
 
@@ -33,13 +33,13 @@ Flare uses provider discovery, ID tokens, PKCE, and state checks. The callback o
 
 | Setting                   | Default            | Behavior                                                                                  |
 | ------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| Enable OIDC Sign-In       | Off                | Makes the provider available when issuer, client ID, and client secret are also present   |
+| Enable OIDC sign-in       | Off                | Makes the provider available when issuer, client ID, and client secret are also present   |
 | Issuer URL                | Empty              | Identity provider's issuer; trailing slash is normalized for subject identity             |
-| Client ID / Client Secret | Empty              | Credentials for the provider application                                                  |
-| Sign-In Button Text       | `Sign in with SSO` | Label shown to users                                                                      |
-| Auto-Provision Users      | On                 | Allows a new eligible provider identity to create a Flare account inheriting Everyone     |
-| Require Verified Email    | On                 | Requires `email_verified=true` for a new identity before account creation                 |
-| OIDC Auto-login           | Off                | Redirects the usual login page to OIDC; `/auth/login?local=1` still exposes local sign-in |
+| Client ID / Client secret | Empty              | Credentials for the provider application                                                  |
+| Sign-in button text       | `Sign in with SSO` | Label shown to users                                                                      |
+| Auto-provision users      | On                 | Allows a new eligible provider identity to create a Flare account inheriting Everyone     |
+| Require verified email    | On                 | Requires `email_verified=true` for a new identity before account creation                 |
+| OIDC auto-login           | Off                | Redirects the usual login page to OIDC; `/auth/login?local=1` still exposes local sign-in |
 
 These settings are stored in the database. There are no `FLARE_OIDC_*` server environment overrides in the current implementation.
 
@@ -77,13 +77,13 @@ Keep an independently usable administrator method and saved recovery codes befor
 
 ## Registration and auto-login
 
-**Allow Registrations** controls public local password-account creation. **Auto-Provision Users** independently controls new OIDC account creation. For a private team, restrict access in your identity provider and review both Flare switches. [Invite links](/admin/users#invite-links) always create local password accounts, even while registration is closed; they do not create or link SSO identities.
+**Allow registrations** controls public local password-account creation. **Auto-provision users** independently controls new OIDC account creation. For a private team, restrict access in your identity provider and review both Flare switches. [Invite links](/admin/users#invite-links) always create local password accounts, even while registration is closed; they do not create or link SSO identities.
 
-OIDC Auto-login simplifies the normal login screen; it is not a mechanism for deleting or cryptographically disabling all local credentials. The local sign-in escape URL is deliberate. The setting also suppresses local email password recovery, so administrators should keep their local fallback password available.
+**OIDC auto-login** simplifies the normal login screen; it is not a mechanism for deleting or cryptographically disabling all local credentials. The local sign-in escape URL is deliberate. The setting also suppresses local email password recovery, so administrators should keep their local fallback password available.
 
 ## Verified email versus Flare email policy
 
-The OIDC **Require Verified Email** setting decides whether a new provider identity can be provisioned. **Settings → Email → Trust verified SSO email** separately decides whether provider proof satisfies Flare's email-verification policy. It is off by default.
+The OIDC **Require verified email** setting decides whether a new provider identity can be provisioned. **Settings → Email → Trust verified SSO email** separately decides whether provider proof satisfies Flare's email-verification policy. It is off by default.
 
 When trust is enabled, Flare accepts a verified claim tied to the current account email. It does not use that claim to merge accounts. If trust is later disabled, those users may need local mailbox verification when required by your email policy. [Account email and recovery](/admin/email).
 

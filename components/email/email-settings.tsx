@@ -2,6 +2,27 @@
 
 import { useCallback, useEffect, useId, useState } from 'react'
 
+import { deepEqual } from 'fast-equals'
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Save,
+} from 'lucide-react'
+
+import {
+  colorSwatchClassName,
+  numberFieldClassName,
+} from '@/components/settings/form-styles'
+import { SaveBar } from '@/components/settings/save-bar'
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from '@/components/setup/setup-actions'
+import { SetupOption } from '@/components/setup/setup-option'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -12,9 +33,13 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
+import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 
 import type { EmailConfig } from '@/lib/email/schema'
+import { cn } from '@/lib/utils'
 
 import { emailPost, emailRequest } from './api'
 
@@ -43,16 +68,27 @@ interface EmailDiagnostics {
 interface EmailSettingsProps {
   setup?: boolean
   onComplete?: (config: EmailConfig) => void
-  onBusyChange?: (busy: boolean) => void
+  /** Setup only: leave email for later from the step's footer. */
+  onSkip?: () => void
 }
 
-const selectClass =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50'
+const OPTIONAL = ' (optional)'
+
+/** "Reply-to address (optional)" with the suffix muted, as in every form. */
+function fieldLabel(label: string) {
+  if (!label.endsWith(OPTIONAL)) return label
+  return (
+    <>
+      {label.slice(0, -OPTIONAL.length)}{' '}
+      <span className="font-normal text-muted-foreground">(optional)</span>
+    </>
+  )
+}
 
 export function EmailSettings({
   setup = false,
   onComplete,
-  onBusyChange,
+  onSkip,
 }: EmailSettingsProps) {
   const id = useId()
   const [settings, setSettings] = useState<SettingsResponse | null>(null)
@@ -70,10 +106,6 @@ export function EmailSettings({
   const [feedbackLocation, setFeedbackLocation] = useState<'test' | 'save'>(
     'save'
   )
-
-  useEffect(() => {
-    onBusyChange?.(Boolean(busy))
-  }, [busy, onBusyChange])
 
   const load = useCallback(async () => {
     try {
@@ -122,7 +154,7 @@ export function EmailSettings({
   }, [config, clearPassword])
 
   if (!config || !settings) {
-    return (
+    const status = (
       <Card>
         <CardContent className="py-6" aria-live="polite">
           {error ? (
@@ -141,6 +173,23 @@ export function EmailSettings({
           )}
         </CardContent>
       </Card>
+    )
+    // Setup can always move on, even when the settings can't be loaded.
+    if (!setup || !onSkip) return status
+    return (
+      <div className="space-y-5">
+        {status}
+        <SetupActions>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSkip}
+            className={setupSecondaryActionClassName}
+          >
+            Set up email later
+          </Button>
+        </SetupActions>
+      </div>
     )
   }
 
@@ -172,7 +221,9 @@ export function EmailSettings({
   }
   const note = (path: string, hint?: string) => (
     <>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="text-pretty text-xs text-muted-foreground">{hint}</p>
+      )}
       {managed(path) && (
         <p className="text-xs text-muted-foreground">Managed by environment</p>
       )}
@@ -187,7 +238,7 @@ export function EmailSettings({
     max?: number
   ) => (
     <div className="space-y-2" key={path}>
-      <Label htmlFor={`${id}-${path}`}>{label}</Label>
+      <Label htmlFor={`${id}-${path}`}>{fieldLabel(label)}</Label>
       <Input
         id={`${id}-${path}`}
         type={type}
@@ -201,19 +252,29 @@ export function EmailSettings({
         disabled={disabled(path)}
         min={min}
         max={max}
+        inputMode={type === 'number' ? 'numeric' : undefined}
         autoComplete={type === 'password' ? 'new-password' : undefined}
+        // Short numbers, and the colour swatch, take one compact width.
+        className={cn(
+          type === 'number' && numberFieldClassName,
+          type === 'color' &&
+            cn(
+              numberFieldClassName,
+              'cursor-pointer p-1.5',
+              colorSwatchClassName
+            )
+        )}
       />
       {note(path, hint)}
     </div>
   )
+  // The switch row used across Settings: a 14px description, no inset box.
   const toggle = (path: string, label: string, hint: string) => (
-    <div
-      className="flex items-start justify-between gap-6 rounded-lg border p-4"
-      key={path}
-    >
-      <div className="space-y-1">
+    <div className="flex items-center justify-between gap-4" key={path}>
+      <div className="min-w-0 flex-1 space-y-0.5">
         <Label htmlFor={`${id}-${path}`}>{label}</Label>
-        {note(path, hint)}
+        <p className="text-pretty text-sm text-muted-foreground">{hint}</p>
+        {note(path)}
       </div>
       <Switch
         id={`${id}-${path}`}
@@ -231,9 +292,8 @@ export function EmailSettings({
   ) => (
     <div className="space-y-2" key={path}>
       <Label htmlFor={`${id}-${path}`}>{label}</Label>
-      <select
+      <NativeSelect
         id={`${id}-${path}`}
-        className={selectClass}
         value={String(read(path))}
         disabled={disabled(path)}
         onChange={(event) => change(path, event.target.value)}
@@ -243,7 +303,7 @@ export function EmailSettings({
             {title}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       {note(path, hint)}
     </div>
   )
@@ -253,6 +313,16 @@ export function EmailSettings({
     if (!managed('verification.mode'))
       change('verification.mode', verification ? 'new_users' : 'off')
   }
+  // The preset the current settings match, if any.
+  const activePreset =
+    config.enabled && config.recovery.enabled
+      ? config.verification.mode === 'off'
+        ? 'recovery'
+        : config.verification.mode === 'new_users'
+          ? 'verify'
+          : ''
+      : ''
+  const dirty = clearPassword || !deepEqual(config, settings.config)
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -328,8 +398,9 @@ export function EmailSettings({
     <form className="space-y-5" onSubmit={save}>
       <Card>
         <CardHeader>
+          {/* Settings already heads this section "Email". */}
           <CardTitle>
-            {setup ? 'Add email to your instance' : 'Email'}
+            {setup ? 'Add email to your instance' : 'Email delivery'}
           </CardTitle>
           <CardDescription>
             Connect your own mail provider for account recovery and email
@@ -338,48 +409,30 @@ export function EmailSettings({
         </CardHeader>
         <CardContent className="space-y-5">
           {setup && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Button
-                type="button"
-                variant={
-                  config.enabled &&
-                  config.recovery.enabled &&
-                  config.verification.mode === 'off'
-                    ? 'default'
-                    : 'outline'
-                }
-                aria-pressed={
-                  config.enabled &&
-                  config.recovery.enabled &&
-                  config.verification.mode === 'off'
-                }
-                className="h-auto whitespace-normal py-4"
-                onClick={() => preset(false)}
-                disabled={Boolean(busy)}
-              >
-                Password recovery only
-              </Button>
-              <Button
-                type="button"
-                variant={
-                  config.enabled &&
-                  config.recovery.enabled &&
-                  config.verification.mode === 'new_users'
-                    ? 'default'
-                    : 'outline'
-                }
-                aria-pressed={
-                  config.enabled &&
-                  config.recovery.enabled &&
-                  config.verification.mode === 'new_users'
-                }
-                className="h-auto whitespace-normal py-4"
-                onClick={() => preset(true)}
-                disabled={Boolean(busy)}
-              >
-                Recovery + verify new users
-              </Button>
-            </div>
+            // The option cards every setup step uses. Choosing one turns
+            // email on with that policy; neither is chosen while email is off.
+            <RadioGroup
+              value={activePreset}
+              onValueChange={(value) => preset(value === 'verify')}
+              disabled={Boolean(busy)}
+              aria-label="Email features"
+              className="gap-3 sm:grid-cols-2"
+            >
+              <SetupOption
+                id={`${id}-preset-recovery`}
+                value="recovery"
+                selected={activePreset === 'recovery'}
+                title="Password recovery only"
+                description="Let people reset a forgotten password. Verifying an address stays optional."
+              />
+              <SetupOption
+                id={`${id}-preset-verify`}
+                value="verify"
+                selected={activePreset === 'verify'}
+                title="Recovery + verify new users"
+                description="Also ask new accounts to confirm their address before they use Flare."
+              />
+            </RadioGroup>
           )}
           {toggle(
             'enabled',
@@ -387,13 +440,13 @@ export function EmailSettings({
             'Email is optional. Enabling delivery does not automatically require anyone to verify their address.'
           )}
           {!config.enabled && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               Email is off. Users can continue signing in as before. Settings
               below can be prepared and tested before enabling email.
             </p>
           )}
           {setup && config.enabled && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               {config.verification.mode === 'new_users'
                 ? 'New users will confirm their address before using Flare. Your administrator account keeps access.'
                 : 'Users can sign in as usual. Email recovery becomes available after they confirm their address.'}{' '}
@@ -488,13 +541,15 @@ export function EmailSettings({
             )}
             {field('replyTo', 'Reply-to address (optional)', 'email')}
           </div>
-          <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-            <p className="font-medium text-sm">Check your connection</p>
-            <p className="text-sm text-muted-foreground">
-              Tests use the details above without saving them. A successful
-              connection confirms the server and credentials; the test email
-              checks sending.
-            </p>
+          <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Check your connection</p>
+              <p className="text-pretty text-sm text-muted-foreground">
+                Tests use the details above without saving them. A successful
+                connection confirms the server and credentials; the test email
+                checks sending.
+              </p>
+            </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input
                 aria-label="Test email recipient"
@@ -562,15 +617,15 @@ export function EmailSettings({
               'An exemption preserves access without claiming that an address has been verified.'
             )}
             {config.verification.mode === 'new_users' && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-pretty text-sm text-muted-foreground">
                 Accounts created before this policy is enabled keep access. They
                 can verify from their profile when ready.
               </p>
             )}
             {config.verification.mode === 'all_users' && (
-              <div className="space-y-3 rounded-lg border p-4">
+              <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
                 {config.verification.graceEndsAt && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-pretty text-sm text-muted-foreground">
                     The current grace period ends{' '}
                     {new Date(config.verification.graceEndsAt).toLocaleString()}
                     .
@@ -644,7 +699,7 @@ export function EmailSettings({
       )}
 
       <details className="rounded-xl border bg-card">
-        <summary className="cursor-pointer px-6 py-5 font-medium">
+        <summary className="cursor-pointer rounded-xl px-6 py-5 text-sm font-medium">
           Advanced email settings
         </summary>
         <div className="space-y-7 border-t p-6">
@@ -770,11 +825,11 @@ export function EmailSettings({
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${id}-ca`}>
-                Custom certificate authority (optional)
+                {fieldLabel('Custom certificate authority (optional)')}
               </Label>
-              <textarea
+              <Textarea
                 id={`${id}-ca`}
-                className={`${selectClass} min-h-24 font-mono`}
+                className="min-h-24 font-mono"
                 value={config.smtp.ca}
                 disabled={disabled('smtp.ca')}
                 onChange={(event) => change('smtp.ca', event.target.value)}
@@ -788,7 +843,7 @@ export function EmailSettings({
           </section>
           <section className="space-y-4">
             <h3 className="font-medium">Email appearance</h3>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               Customize the built-in templates. Text is escaped automatically,
               and security links are supplied by Flare.
             </p>
@@ -812,67 +867,113 @@ export function EmailSettings({
         </div>
       </details>
 
-      {!setup && settings.diagnostics && (
-        <DeliveryStatus
-          diagnostics={settings.diagnostics}
-          onRefresh={async () => {
-            const result = await emailRequest<SettingsResponse>(
-              '/api/settings/email'
-            )
-            setSettings((current) =>
-              current ? { ...current, diagnostics: result.diagnostics } : result
-            )
-          }}
-        />
-      )}
       {feedbackLocation === 'save' && (
         <div aria-live="polite" className="space-y-2">
           {error && (
-            <p
-              className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              {error}
-            </p>
+            <Alert variant="destructive">
+              <AlertCircle aria-hidden="true" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           {message && (
-            <p className="rounded-lg border p-3 text-sm">{message}</p>
+            <Alert variant="success" role="status">
+              <CheckCircle2 aria-hidden="true" />
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="submit"
-          disabled={
-            Boolean(busy) || (enablingAll && (!applyToExisting || !impact))
-          }
-        >
-          {busy === 'save'
-            ? 'Saving…'
-            : setup
-              ? 'Save and continue'
-              : 'Save email settings'}
-        </Button>
-        {!setup && (
+      {setup ? (
+        // The footer every setup step shares: skip at the start, the
+        // primary action at the end.
+        <SetupActions>
+          {onSkip && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={Boolean(busy)}
+              onClick={onSkip}
+              className={setupSecondaryActionClassName}
+            >
+              Set up email later
+            </Button>
+          )}
           <Button
-            type="button"
-            variant="outline"
-            disabled={Boolean(busy)}
-            onClick={() => {
-              setConfig(structuredClone(settings.config))
-              setClearPassword(false)
-              setApplyToExisting(false)
-              setError('')
-              setMessage('')
-            }}
+            type="submit"
+            disabled={
+              Boolean(busy) || (enablingAll && (!applyToExisting || !impact))
+            }
+            className={setupPrimaryActionClassName}
           >
-            Discard email changes
+            {busy === 'save' ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" />
+                Saving…
+              </>
+            ) : (
+              <>
+                Save and continue
+                <ArrowRight aria-hidden="true" />
+              </>
+            )}
           </Button>
-        )}
-        <p className="text-xs text-muted-foreground">
-          These settings are saved separately from other instance settings.
-        </p>
-      </div>
+        </SetupActions>
+      ) : (
+        <>
+          {/* The save bar every editor shares. It saves the settings above;
+              delivery status below is read-only. */}
+          <SaveBar
+            tone={dirty ? 'unsaved' : 'saved'}
+            title={dirty ? 'Unsaved changes' : 'All changes saved'}
+            description="Email settings are saved separately from other instance settings."
+          >
+            <Button
+              type="button"
+              variant="outline"
+              disabled={Boolean(busy) || !dirty}
+              onClick={() => {
+                setConfig(structuredClone(settings.config))
+                setClearPassword(false)
+                setApplyToExisting(false)
+                setError('')
+                setMessage('')
+              }}
+            >
+              Discard
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                Boolean(busy) ||
+                !dirty ||
+                (enablingAll && (!applyToExisting || !impact))
+              }
+            >
+              {busy === 'save' ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Save aria-hidden="true" />
+              )}
+              {busy === 'save' ? 'Saving…' : 'Save email settings'}
+            </Button>
+          </SaveBar>
+          {settings.diagnostics && (
+            <DeliveryStatus
+              diagnostics={settings.diagnostics}
+              onRefresh={async () => {
+                const result = await emailRequest<SettingsResponse>(
+                  '/api/settings/email'
+                )
+                setSettings((current) =>
+                  current
+                    ? { ...current, diagnostics: result.diagnostics }
+                    : result
+                )
+              }}
+            />
+          )}
+        </>
+      )}
     </form>
   )
 }
@@ -977,21 +1078,25 @@ function DeliveryStatus({
             ))}
           </div>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void refresh()}
-        >
-          {busy ? 'Refreshing…' : 'Refresh delivery status'}
-        </Button>
-        <div aria-live="polite">
-          {message && <p className="text-sm">{message}</p>}
-          {error && (
-            <p className="text-sm text-destructive" role="alert">
-              {error}
-            </p>
-          )}
+        {/* The result sits beside the button, so the card ends at the
+            button, like the other cards, until there is something to say. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void refresh()}
+          >
+            {busy ? 'Refreshing…' : 'Refresh delivery status'}
+          </Button>
+          <div aria-live="polite" className="min-w-0">
+            {message && <p className="text-sm">{message}</p>}
+            {error && (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -117,8 +117,8 @@ export function OcrDialog({
   }
 
   const dialogTitle = filename
-    ? `Extracted Text - ${filename}`
-    : 'Extracted Text'
+    ? `Extracted text: ${filename}`
+    : 'Extracted text'
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -135,10 +135,9 @@ export function OcrDialog({
             <div className="space-y-4">
               <div
                 role="alert"
-                className="relative rounded-xl bg-destructive/10 border border-destructive/20 backdrop-blur-sm p-4"
+                className="rounded-xl border border-danger/30 bg-danger/10 p-4"
               >
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-destructive/5 via-transparent to-destructive/10" />
-                <div className="relative text-sm text-destructive flex items-center space-x-2">
+                <div className="flex items-center gap-2 text-sm text-destructive">
                   <Icons.alertCircle className="h-4 w-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -152,14 +151,8 @@ export function OcrDialog({
             </div>
           ) : notice ? (
             <div className="space-y-4">
-              <div
-                role="status"
-                className="relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm p-4"
-              >
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-                <p className="relative text-muted-foreground text-sm">
-                  {notice}
-                </p>
+              <div role="status" className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-sm text-muted-foreground">{notice}</p>
               </div>
               {onRetry && (
                 <Button variant="outline" className="w-full" onClick={onRetry}>
@@ -169,22 +162,20 @@ export function OcrDialog({
               )}
             </div>
           ) : !text ? (
-            <div className="relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm p-4">
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-              <p className="relative text-muted-foreground text-sm">
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground">
                 No text was found in this image.
               </p>
             </div>
           ) : (
             <div className="relative">
               {confidence !== undefined && confidence !== null && (
-                <div className="mb-4 relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm p-4">
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-                  <div className="relative flex items-center gap-3">
+                <div className="mb-4 rounded-xl border bg-muted/30 p-4">
+                  <div className="flex items-center gap-3">
                     <span className="text-sm font-medium">Confidence:</span>
-                    <div className="flex-1 h-2 bg-white/10 dark:bg-black/10 rounded-full overflow-hidden backdrop-blur-sm border border-white/20 dark:border-white/10">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full bg-gradient-to-r from-primary to-primary/80 transition-all duration-500"
+                        className="h-full bg-primary transition-all duration-500"
                         style={{ width: `${confidence}%` }}
                       />
                     </div>
@@ -194,15 +185,14 @@ export function OcrDialog({
                   </div>
                 </div>
               )}
-              <div className="relative rounded-xl bg-white/5 dark:bg-black/5 border border-white/10 dark:border-white/5 backdrop-blur-sm overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/5 dark:from-white/5 dark:via-transparent dark:to-black/10" />
-                <div className="relative max-h-[400px] overflow-y-auto p-4">
+              <div className="overflow-hidden rounded-xl border bg-muted/30">
+                <div className="max-h-[400px] overflow-y-auto p-4">
                   <p className="text-sm whitespace-pre-wrap">{text}</p>
                 </div>
               </div>
               <Button className="w-full mt-4" onClick={handleCopy}>
                 <Copy className="h-4 w-4 mr-2" />
-                Copy Text
+                Copy text
               </Button>
             </div>
           )}

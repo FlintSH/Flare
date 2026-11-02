@@ -14,12 +14,14 @@ export function AudioViewer() {
   }
 
   return (
-    <div className="flex w-full items-center justify-center px-4 py-4 sm:px-6">
+    // The browser draws the controls, in the theme's colour scheme. The
+    // width gives the scrubber room on a card sized to its content.
+    <div className="w-[36rem] min-w-0 max-w-full px-6">
       <audio
         src={state.urls.fileUrl}
         controls
         aria-label={`${file.name} audio player`}
-        className="w-full max-w-2xl"
+        className="block w-full rounded-full focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
         onError={() => setFailedUrl(state.urls?.fileUrl)}

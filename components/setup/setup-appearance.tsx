@@ -12,7 +12,7 @@ import {
 
 import Link from 'next/link'
 
-import { ArrowRight, Check, ImageIcon, Loader2, Palette } from 'lucide-react'
+import { ArrowRight, Check, ImageIcon, InfoIcon, Loader2 } from 'lucide-react'
 
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { RadioGroup } from '@/components/ui/radio-group'
 
 import {
   type CustomizationState,
@@ -40,7 +40,13 @@ import {
   type SetupAppearancePreset,
   createSetupAppearance,
 } from '@/lib/setup/appearance'
-import { cn } from '@/lib/utils'
+
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from './setup-actions'
+import { SetupOption } from './setup-option'
 
 export function SetupAppearance({
   onComplete,
@@ -159,18 +165,11 @@ export function SetupAppearance({
   return (
     <form onSubmit={(event) => void publish(event)} className="space-y-6">
       <Card className="overflow-hidden">
-        <CardHeader className="space-y-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-              <Palette className="h-5 w-5" />
-            </span>
-            <div className="space-y-1.5">
-              <CardTitle>Your name. Your style.</CardTitle>
-              <CardDescription>
-                A few personal touches to make this space feel like yours.
-              </CardDescription>
-            </div>
-          </div>
+        <CardHeader>
+          <CardTitle>Your name. Your style.</CardTitle>
+          <CardDescription>
+            A few personal touches to make this space feel like yours.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {error && (
@@ -200,7 +199,8 @@ export function SetupAppearance({
             </div>
           )}
           {settings?.draft && (
-            <Alert>
+            <Alert variant="info" role="status">
+              <InfoIcon aria-hidden="true" />
               <AlertTitle>You already have an appearance draft</AlertTitle>
               <AlertDescription>
                 Continue with your published appearance to keep that draft
@@ -272,59 +272,42 @@ export function SetupAppearance({
                     aria-labelledby={`${id}-presets`}
                     className="grid-cols-2 gap-3"
                   >
+                    {/* The option cards every setup step uses. */}
                     {settings.published.theme.enabled && (
-                      <Label
-                        htmlFor={`${id}-current`}
-                        className={cn(
-                          'col-span-2 flex cursor-pointer items-center gap-3 rounded-xl border p-3',
-                          preset === 'current' && 'border-primary bg-primary/5'
-                        )}
-                      >
-                        <RadioGroupItem value="current" id={`${id}-current`} />
-                        <div className="space-y-1">
-                          <span className="block text-sm">
-                            Current appearance
-                          </span>
-                          <span className="block text-xs font-normal text-muted-foreground">
-                            Keep the theme you have already published.
-                          </span>
-                        </div>
-                      </Label>
+                      <SetupOption
+                        id={`${id}-current`}
+                        value="current"
+                        selected={preset === 'current'}
+                        title="Current appearance"
+                        description="Keep the theme you have already published."
+                        className="col-span-2"
+                      />
                     )}
                     {SETUP_APPEARANCE_PRESETS.map((option) => (
-                      <Label
+                      <SetupOption
                         key={option.id}
-                        htmlFor={`${id}-${option.id}`}
-                        className={cn(
-                          'cursor-pointer space-y-3 rounded-xl border p-3 transition-colors hover:border-primary/50',
-                          preset === option.id && 'border-primary bg-primary/5'
-                        )}
-                      >
-                        <span
-                          className="flex h-9 items-center gap-1.5 overflow-hidden rounded-md px-3"
-                          style={{ backgroundColor: option.background }}
-                          aria-hidden="true"
-                        >
+                        id={`${id}-${option.id}`}
+                        value={option.id}
+                        selected={preset === option.id}
+                        visual={
                           <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: option.accent }}
-                          />
-                          <span
-                            className="h-1.5 w-10 rounded-full opacity-60"
-                            style={{ backgroundColor: option.accent }}
-                          />
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <RadioGroupItem
-                            value={option.id}
-                            id={`${id}-${option.id}`}
-                          />
-                          <span className="text-sm">{option.name}</span>
-                        </span>
-                        <span className="block text-xs font-normal leading-relaxed text-muted-foreground">
-                          {option.description}
-                        </span>
-                      </Label>
+                            className="flex h-9 items-center gap-1.5 overflow-hidden rounded-md px-3"
+                            style={{ backgroundColor: option.background }}
+                            aria-hidden="true"
+                          >
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: option.accent }}
+                            />
+                            <span
+                              className="h-1.5 w-10 rounded-full opacity-60"
+                              style={{ backgroundColor: option.accent }}
+                            />
+                          </span>
+                        }
+                        title={option.name}
+                        description={option.description}
+                      />
                     ))}
                   </RadioGroup>
                 </div>
@@ -391,7 +374,7 @@ export function SetupAppearance({
                     </div>
                   </div>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
+                <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
                   Try a look here. It goes live when you save and continue.
                   Logos, share pages, and every detail can be customized later.
                 </p>
@@ -400,26 +383,36 @@ export function SetupAppearance({
           )}
         </CardContent>
       </Card>
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <SetupActions>
         <Button
           type="button"
           variant="outline"
           onClick={onSkip}
           disabled={saving}
+          className={setupSecondaryActionClassName}
         >
           {settings?.draft
             ? 'Keep published appearance'
             : 'Set up appearance later'}
         </Button>
-        <Button type="submit" disabled={!document || locked || !name.trim()}>
+        <Button
+          type="submit"
+          disabled={!document || locked || !name.trim()}
+          className={setupPrimaryActionClassName}
+        >
           {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <>
+              <Loader2 className="animate-spin" aria-hidden="true" />
+              Saving appearance…
+            </>
           ) : (
-            <Check className="h-4 w-4" />
+            <>
+              Save and continue
+              <ArrowRight aria-hidden="true" />
+            </>
           )}
-          {saving ? 'Saving appearance…' : 'Save and continue'}
         </Button>
-      </div>
+      </SetupActions>
     </form>
   )
 }

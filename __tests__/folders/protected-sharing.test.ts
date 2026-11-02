@@ -135,9 +135,8 @@ describe('protected shared-folder links', () => {
     async (provided) => {
       const html = renderToStaticMarkup(await openFile(provided))
       expect(html).toContain(`action="${opaquePath}"`)
-      expect(html).toContain(
-        provided ? 'Incorrect Password' : 'Password Protected File'
-      )
+      expect(html).toContain('Password-protected file')
+      if (provided) expect(html).toContain('That password didn’t match.')
       expect(html).toContain('type="password"')
       expectNoProtectedMetadata(html)
       expectNoProtectedMetadata(JSON.stringify(metadata))
@@ -185,10 +184,12 @@ describe('protected shared-folder links', () => {
     )
       expect(
         renderToStaticMarkup(await openFile(`wrong-${attempt}`))
-      ).toContain('Incorrect Password')
+      ).toContain('That password didn’t match.')
 
     const html = renderToStaticMarkup(await openFile(password))
-    expect(html).toContain('Too Many Attempts')
+    expect(html).toContain(
+      'Too many incorrect passwords were entered for this file.'
+    )
     expect(html).toContain('Wait 15 min, then try again.')
     expect(html).toContain(`action="${opaquePath}"`)
     expectNoProtectedMetadata(html)

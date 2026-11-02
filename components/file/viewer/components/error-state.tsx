@@ -1,5 +1,7 @@
 import { FileWarning } from 'lucide-react'
 
+import { PreviewPlaceholder } from './preview-placeholder'
+
 interface ErrorStateProps {
   error: string
   fallbackMessage?: string
@@ -10,21 +12,18 @@ export function ErrorState({
   fallbackMessage = 'You can still try downloading the original file below.',
 }: ErrorStateProps) {
   return (
-    <div
-      className="flex w-full flex-col items-center justify-center gap-3 p-8 text-center"
-      role="alert"
-    >
-      <FileWarning
-        className="h-5 w-5 text-muted-foreground"
-        aria-hidden="true"
-      />
-      <h2 className="text-base font-medium">Preview unavailable</h2>
-      <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-        {error}
-      </p>
-      <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-        {fallbackMessage}
-      </p>
+    <div className="w-full px-6">
+      <PreviewPlaceholder
+        role="alert"
+        icon={FileWarning}
+        title="Preview unavailable"
+        titleAs="h2"
+        description={error}
+      >
+        <p className="max-w-xs text-pretty text-xs leading-relaxed text-muted-foreground">
+          {fallbackMessage}
+        </p>
+      </PreviewPlaceholder>
     </div>
   )
 }

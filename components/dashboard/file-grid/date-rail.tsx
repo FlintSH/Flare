@@ -100,7 +100,12 @@ export function DateRail({
         <div
           className={cn(
             'absolute bottom-3.5 left-1/2 top-3.5 w-px -translate-x-1/2 bg-border transition-opacity motion-reduce:transition-none',
-            visible ? 'opacity-100' : 'opacity-30'
+            // At rest the track stays faintly visible where the rail sits in
+            // the page gutter, so the thumb reads as a scrubber on a rail.
+            // Narrower screens put the rail over the content column (the
+            // header panel above the grid), so there it appears only while
+            // scrolling, hovered, focused or dragged.
+            visible ? 'opacity-100' : 'opacity-0 min-[1360px]:opacity-70'
           )}
         />
         <span
@@ -128,13 +133,15 @@ export function DateRail({
           <div
             className={cn(
               'h-7 w-1 -translate-y-1/2 rounded-full transition-colors motion-reduce:transition-none',
-              visible ? 'bg-primary/80' : 'bg-muted-foreground/30'
+              visible
+                ? 'bg-primary/80'
+                : 'bg-transparent min-[1360px]:bg-muted-foreground/40'
             )}
           />
           <div
             aria-hidden="true"
             className={cn(
-              'pointer-events-none absolute right-4 top-0 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border/60 bg-background/95 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-xl transition-opacity motion-reduce:transition-none',
+              'pointer-events-none absolute right-4 top-0 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-overlay px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-lg shadow-black/20 transition-opacity motion-reduce:transition-none',
               visible ? 'opacity-100' : 'opacity-0'
             )}
           >

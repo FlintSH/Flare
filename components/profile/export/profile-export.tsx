@@ -22,19 +22,13 @@ export function ProfileExport() {
         variant="outline"
         className="w-full sm:w-auto"
       >
-        {isExporting ? (
-          <span>
-            <span>
-              {status === 'preparing'
-                ? `Preparing... ${exportProgress}%`
-                : status === 'downloading'
-                  ? `Downloading... ${downloadProgress}%`
-                  : 'Starting...'}
-            </span>
-          </span>
-        ) : (
-          'Export All Data'
-        )}
+        {isExporting
+          ? status === 'preparing'
+            ? `Preparing… ${exportProgress}%`
+            : status === 'downloading'
+              ? `Downloading… ${downloadProgress}%`
+              : 'Starting…'
+          : 'Export all data'}
       </Button>
       {isExporting && (
         <Progress

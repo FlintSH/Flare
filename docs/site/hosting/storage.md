@@ -24,12 +24,12 @@ Create a bucket and credentials with your provider, then enter:
 
 | Setting               | What to enter                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------------- |
-| **S3 Bucket**         | The existing bucket name, without a URL or object path                                            |
+| **S3 bucket**         | The existing bucket name, without a URL or object path                                            |
 | **Region**            | The region identifier expected by your provider                                                   |
-| **Access Key ID**     | A credential dedicated to this Flare instance                                                     |
-| **Secret Access Key** | Its corresponding secret                                                                          |
-| **Custom Endpoint**   | Your provider's HTTP(S) S3 API origin; leave empty for the AWS regional default                   |
-| **Force Path Style**  | Enable when your compatible provider expects `endpoint/bucket/key` rather than a bucket subdomain |
+| **Access key ID**     | A credential dedicated to this Flare instance                                                     |
+| **Secret access key** | Its corresponding secret                                                                          |
+| **Custom endpoint**   | Your provider's HTTP(S) S3 API origin; leave empty for the AWS regional default                   |
+| **Force path style**  | Enable when your compatible provider expects `endpoint/bucket/key` rather than a bucket subdomain |
 
 The provider is configured through saved instance settings. Flare does not read `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, or an IAM role as substitutes for these configured credentials. Setup validates required fields but does not perform a live bucket test.
 

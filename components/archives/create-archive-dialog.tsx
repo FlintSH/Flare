@@ -5,8 +5,16 @@ import { useState } from 'react'
 import Link from 'next/link'
 
 import type { FileType } from '@/types/components/file'
-import { Archive, CheckCircle2, FolderOpen, Loader2, Lock } from 'lucide-react'
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle2,
+  FolderOpen,
+  Loader2,
+  Lock,
+} from 'lucide-react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -29,6 +37,7 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { ARCHIVE_LIMITS, type ArchiveOutputFormat } from '@/lib/archives/shared'
 import { formatBytes, formatFileSize } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -168,7 +177,10 @@ export function CreateArchiveDialog({
               </span>
               <DialogTitle>Archive created</DialogTitle>
               <DialogDescription className="break-words">
-                {result.file.name} is saved in your account
+                <span className="font-medium text-foreground">
+                  {result.file.name}
+                </span>{' '}
+                is saved in your account
                 {profileId
                   ? ' using your selected upload profile'
                   : ' as a private file'}
@@ -212,13 +224,17 @@ export function CreateArchiveDialog({
               className="flex min-h-0 flex-1 flex-col"
               aria-busy={busy}
             >
-              <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
-                <details className="rounded-xl border bg-muted/20 p-3 text-sm">
+              <div
+                ref={scrollFadeRef}
+                className="scroll-fade scroll-fade-tall -ml-1 min-h-0 space-y-5 overflow-y-auto pl-1 pr-1"
+              >
+                <details className="rounded-xl border bg-muted/30 p-3 text-sm">
                   <summary className="cursor-pointer font-medium">
                     Selected files ({files.length})
                   </summary>
                   <ul
-                    className="mt-3 max-h-36 space-y-2 overflow-y-auto"
+                    ref={scrollFadeRef}
+                    className="scroll-fade mt-3 max-h-36 space-y-2 overflow-y-auto overscroll-contain"
                     aria-label="Selected archive files"
                   >
                     {files.map((file) => (
@@ -265,7 +281,7 @@ export function CreateArchiveDialog({
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="text-xs text-muted-foreground sm:col-span-2">
+                  <p className="text-pretty text-xs text-muted-foreground sm:col-span-2">
                     ZIP works with most devices. TAR.GZ is useful for Unix tools
                     and project bundles.
                   </p>
@@ -287,38 +303,41 @@ export function CreateArchiveDialog({
                   onSnapshotChange={setProfileSnapshot}
                   disabled={busy}
                 />
-                <div className="flex gap-3 rounded-xl border bg-muted/20 p-4 text-sm leading-relaxed">
-                  <Lock
-                    className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <p>
+                <Alert variant="info" role="status">
+                  <Lock aria-hidden="true" />
+                  <AlertDescription>
                     Your archive uses the settings shown above. Original files
                     stay unchanged. No file password is inherited.
-                  </p>
-                </div>
-                {overLimit && (
-                  <p role="alert" className="text-sm text-destructive">
-                    Choose up to {ARCHIVE_LIMITS.selectedFiles} files, no larger
-                    than 256 MiB each and 512 MiB in total.
-                  </p>
-                )}
-                {error && (
-                  <p
-                    role="alert"
-                    className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive"
-                  >
-                    {error}
-                  </p>
-                )}
-                {busy && (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Creating archive… This can take up to two minutes. Keep this
-                    dialog open.
-                  </p>
-                )}
+                  </AlertDescription>
+                </Alert>
               </div>
-              <DialogFooter className="shrink-0 border-t pt-4 mt-4">
+              {/* Outside the scrolling fields, so they show wherever the
+                  fields are scrolled to. */}
+              {(overLimit || error || busy) && (
+                <div className="mr-1 mt-4 shrink-0 space-y-3">
+                  {overLimit && (
+                    <p role="alert" className="text-sm text-destructive">
+                      Choose up to {ARCHIVE_LIMITS.selectedFiles} files, no
+                      larger than 256 MiB each and 512 MiB in total.
+                    </p>
+                  )}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle aria-hidden="true" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  {busy && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Creating archive… This can take up to two minutes. Keep
+                      this dialog open.
+                    </p>
+                  )}
+                </div>
+              )}
+              {/* A margin, not padding, so the divider ends with the fields
+                  above it (the body keeps a 4px gutter on the right). */}
+              <DialogFooter className="mr-1 mt-4 shrink-0 border-t pt-4">
                 <Button
                   type="button"
                   variant="outline"

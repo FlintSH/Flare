@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ChevronDown } from 'lucide-react'
 
+import { colorSwatchClassName } from '@/components/settings/form-styles'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -17,6 +18,7 @@ import {
   LEGACY_COLOR_MESSAGE,
   legacyColorValue,
 } from '@/lib/customization/legacy-appearance'
+import { cn } from '@/lib/utils'
 
 interface ColorConfig {
   background: string
@@ -105,7 +107,7 @@ const DEFAULT_COLORS: ColorConfig = {
 }
 
 const PRESET_HUES = [
-  { hue: 222.2, name: 'Midnight Blue', saturation: 84, lightness: 45 },
+  { hue: 222.2, name: 'Midnight blue', saturation: 84, lightness: 45 },
   { hue: 260, name: 'Royal', saturation: 80, lightness: 45 },
   { hue: 280, name: 'Amethyst', saturation: 75, lightness: 45 },
   { hue: 325, name: 'Rose', saturation: 85, lightness: 45 },
@@ -118,6 +120,24 @@ const PRESET_HUES = [
   { hue: 195, name: 'Azure', saturation: 85, lightness: 45 },
   { hue: 210, name: 'Ocean', saturation: 85, lightness: 45 },
 ]
+
+// White or near-black, whichever reads better on an HSL swatch.
+function swatchLabelColor(hue: number, saturation: number, lightness: number) {
+  const s = saturation / 100
+  const l = lightness / 100
+  const k = (n: number) => (n + hue / 30) % 12
+  const a = s * Math.min(l, 1 - l)
+  const channel = (n: number) => {
+    const value =
+      l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  const luminance =
+    0.2126 * channel(0) + 0.7152 * channel(8) + 0.0722 * channel(4)
+  const onWhite = 1.05 / (luminance + 0.05)
+  const onDark = (luminance + 0.05) / 0.0545
+  return onWhite >= onDark ? '#ffffff' : '#020817'
+}
 
 function SimpleThemeCustomizer({
   onColorChange,
@@ -257,7 +277,10 @@ function SimpleThemeCustomizer({
             id={key}
             type="color"
             value={parseColor(colors[key] || DEFAULT_COLORS[key])}
-            className="w-12 p-1 h-9"
+            className={cn(
+              'h-9 w-12 shrink-0 cursor-pointer p-1.5',
+              colorSwatchClassName
+            )}
             onChange={(e) => handlePickerChange(key, e.target.value)}
           />
           <Input
@@ -299,8 +322,10 @@ function SimpleThemeCustomizer({
               background: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
             }}
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-black/20" />
-            <div className="absolute inset-0 flex items-center justify-center font-medium tracking-wide text-[13px] text-white text-shadow-sm">
+            <div
+              className="absolute inset-0 flex items-center justify-center text-[13px] font-medium tracking-wide"
+              style={{ color: swatchLabelColor(hue, saturation, lightness) }}
+            >
               {name}
             </div>
           </button>
@@ -309,14 +334,14 @@ function SimpleThemeCustomizer({
 
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={handleReset}>
-          Reset to Default
+          Reset to default
         </Button>
       </div>
 
       <Collapsible>
         <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ChevronDown className="h-4 w-4" />
-          Advanced Color Options
+          Advanced color options
         </CollapsibleTrigger>
 
         <CollapsibleContent className="space-y-4 pt-4">
@@ -324,21 +349,21 @@ function SimpleThemeCustomizer({
             {renderColorInput('background', 'Background')}
             {renderColorInput('foreground', 'Foreground')}
             {renderColorInput('card', 'Card')}
-            {renderColorInput('cardForeground', 'Card Foreground')}
+            {renderColorInput('cardForeground', 'Card foreground')}
             {renderColorInput('popover', 'Popover')}
-            {renderColorInput('popoverForeground', 'Popover Foreground')}
+            {renderColorInput('popoverForeground', 'Popover foreground')}
             {renderColorInput('primary', 'Primary')}
-            {renderColorInput('primaryForeground', 'Primary Foreground')}
+            {renderColorInput('primaryForeground', 'Primary foreground')}
             {renderColorInput('secondary', 'Secondary')}
-            {renderColorInput('secondaryForeground', 'Secondary Foreground')}
+            {renderColorInput('secondaryForeground', 'Secondary foreground')}
             {renderColorInput('muted', 'Muted')}
-            {renderColorInput('mutedForeground', 'Muted Foreground')}
+            {renderColorInput('mutedForeground', 'Muted foreground')}
             {renderColorInput('accent', 'Accent')}
-            {renderColorInput('accentForeground', 'Accent Foreground')}
+            {renderColorInput('accentForeground', 'Accent foreground')}
             {renderColorInput('destructive', 'Destructive')}
             {renderColorInput(
               'destructiveForeground',
-              'Destructive Foreground'
+              'Destructive foreground'
             )}
             {renderColorInput('border', 'Border')}
             {renderColorInput('input', 'Input')}

@@ -151,7 +151,7 @@ This recording performs real settings and invite operations on an isolated insta
 1. In a separate signed-out browser, open the invite link from the previous recording.
 2. **You’re invited** explains that **Alex Morgan invited you to join Flare** and lists the **Moderator** role.
 3. Enter the username **Sam Rivera**, the demonstration address `sam@invite-demo.example`, and a password twice. The password is masked.
-4. Choose **Create account**. Flare creates the account, signs in, and opens **Your Files**. The navigation includes **Users** because the invite granted Moderator.
+4. Choose **Create account**. Flare creates the account, signs in, and opens **Your files**. The navigation includes **Users** because the invite granted Moderator.
 
 Afterward the single-use link is spent: opening it again shows **Invite unavailable** with **This invite link has already been used.** In **Users**, Sam’s account shows **Invited by Alex Morgan**. [Read what invited people see](./guide/invites#what-the-invited-person-sees).
 
@@ -221,31 +221,31 @@ This is a real local account workflow; Chromium's virtual authenticator replaces
 3. Search for **View users** and turn it on.
 4. Search for **moderation**. Turn on **View all content** and **Edit all content**; leave **Delete all content** off.
 5. Choose **Save role**. The role exists without any members yet.
-6. Open **Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save Changes**.
+6. Open **Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save changes**.
 7. Return to **Roles**, select **Content reviewer**, and confirm it shows **1 member** and the selected moderation permissions.
 
 This recording makes real role and account changes in an isolated instance. Everyone remains the shared baseline; the new role adds review/edit capabilities without granting deletion of other users' content or settings administration. [Read the role guide](./admin/roles) for hierarchy and permission details. The separate [roles lab](#roles-and-permissions-lab) below is a local simulation.
 
 ### Organize and upload
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 23-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 17-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
-1. In **Files**, create a folder named Project launch.
-2. Select two existing files and move them into that folder.
-3. Open the folder and create a Week 39 subfolder.
-4. Use **Upload here** to upload a project checklist into the subfolder.
-5. Open the destination from the completed upload.
+1. In **Files**, choose **New folder** and create a folder named Project launch. The new folder opens.
+2. Go back to **Folders**, open **Unfiled**, select two files, and move them into Project launch.
+3. Open Project launch and create a Week 39 subfolder, which opens in turn.
+4. Use **Upload here** to upload a project checklist into the subfolder. **Save to** already shows Project launch / Week 39.
+5. Choose **Open folder** in **Upload complete** to see the checklist in its folder.
 
 Moving a file preserves its individual share link. [Read the folders guide](./guide/folders).
 
 ### Share a collection, then revoke access
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 15-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 13-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
-1. Open a folder’s sharing controls and create a share link.
-2. Visit the collection as a recipient. Public files appear; a password-protected file appears as a generic locked tile.
-3. Return to the owner’s sharing controls and disable the link.
-4. Revisit the collection URL to confirm the shared page is unavailable.
+1. Open a folder, choose **Share**, and choose **Create share link**.
+2. Open the shared folder link. It shows what any recipient sees: the public files, and a password-protected file as a generic locked tile.
+3. Return to the folder, choose **Share**, and choose **Disable link**.
+4. Revisit the link to confirm the shared page is unavailable.
 
 Disabling a folder link does not revoke a file’s separate public URL. [Understand sharing boundaries](./guide/sharing).
 
@@ -253,7 +253,7 @@ Disabling a folder link does not revoke a file’s separate public URL. [Underst
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Protected-file handoff: 11-second silent Flare recording" :src="withBase('/demos/protected-file-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
-1. Open a locked tile from a shared folder.
+1. Open a locked tile from a shared folder. The password page links back to the folder.
 2. Enter an incorrect password; the file stays locked and its name stays hidden.
 3. Enter the correct password to reveal the file and its normal viewer.
 

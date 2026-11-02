@@ -126,7 +126,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       )
       progressToastRef.current.update({
         id: progressToastRef.current.id,
-        title: 'Uploading...',
+        title: 'Uploading…',
         description: (
           <div className="space-y-2">
             <p className="text-sm">{files[index].name}</p>
@@ -372,7 +372,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         let response: UploadResponse
 
         progressToastRef.current = toast({
-          title: 'Uploading...',
+          title: 'Uploading…',
           description: (
             <div className="space-y-2">
               <p className="text-sm">{file.name}</p>
@@ -398,7 +398,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
       if (responses.length === 1) {
         const file = responses[0]
         toast({
-          title: 'Upload Complete',
+          title: 'Upload complete',
           description: `Successfully uploaded ${file.name}`,
           action: (
             <div className="flex gap-2">
@@ -418,14 +418,14 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 altText="Copy link"
                 onClick={() => copyLinks(file.pageUrl || file.url)}
               >
-                Copy Link
+                Copy link
               </ToastAction>
             </div>
           ),
         })
       } else {
         toast({
-          title: 'Upload Complete',
+          title: 'Upload complete',
           description: `Successfully uploaded ${responses.length} files`,
           action: (
             <ToastAction
@@ -437,7 +437,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
                 void copyLinks(links)
               }}
             >
-              Copy All Links
+              Copy all links
             </ToastAction>
           ),
         })
@@ -466,7 +466,7 @@ export function useFileUpload(options: FileUploadOptions = {}) {
         router.refresh()
       }
       toast({
-        title: 'Upload Failed',
+        title: 'Upload failed',
         description: errorMessage,
         variant: 'destructive',
       })

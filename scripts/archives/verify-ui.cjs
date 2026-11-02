@@ -919,7 +919,7 @@ async function sharedArchiveChecks(browser, state, fixture) {
     (request) => new URL(request.url()).pathname === sharedPath
   )
   await protectedPage
-    .getByRole('button', { name: 'Access File', exact: true })
+    .getByRole('button', { name: 'Access file', exact: true })
     .click()
   await expect(
     protectedPage.getByLabel('Search archive', { exact: true })

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import { UsersWorkspace } from '@/components/invites/users-workspace'
+import { PageHeader } from '@/components/layout/page-header'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -21,15 +22,16 @@ export default async function UsersPage({
     hasPermission(session.user, 'invites.manage')
 
   return (
-    <div className="container space-y-6">
-      <header className="rounded-2xl border bg-card p-5 sm:p-6">
-        <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {showInvites
+    <div className="container space-y-7">
+      <PageHeader
+        eyebrow="Your community"
+        title="Users"
+        description={
+          showInvites
             ? 'Manage user accounts, roles, permissions, and invite links.'
-            : 'Manage user accounts, roles, and permissions.'}
-        </p>
-      </header>
+            : 'Manage user accounts, roles, and permissions.'
+        }
+      />
       <UsersWorkspace
         initialTab={tab === 'invites' ? 'invites' : 'accounts'}
         showInvites={showInvites}

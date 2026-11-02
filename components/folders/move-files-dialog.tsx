@@ -3,8 +3,13 @@
 import { useState } from 'react'
 
 import type { FileType } from '@/types/components/file'
-import { Check, Folder, Inbox, Loader2, Plus } from 'lucide-react'
+import { Folder, Inbox, Link2, Loader2, Plus } from 'lucide-react'
 
+import {
+  FolderOption,
+  folderListClassName,
+} from '@/components/folders/folder-option'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { folderPath } from '@/lib/folders/navigation'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { folderRequest, useFolders } from '@/hooks/use-folders'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -136,9 +142,17 @@ export function MoveFilesDialog({
             {files.length === 1 ? 'Move file' : `Move ${files.length} files`}
           </DialogTitle>
           <DialogDescription className="break-words">
-            {files.length === 1
-              ? files[0].name
-              : 'Choose a folder for your selected files.'}{' '}
+            {files.length === 1 ? (
+              <>
+                Choose a folder for{' '}
+                <span className="font-medium text-foreground">
+                  {files[0].name}
+                </span>
+                .
+              </>
+            ) : (
+              'Choose a folder for your selected files.'
+            )}{' '}
             Links, tags, and file privacy stay the same.
           </DialogDescription>
         </DialogHeader>
@@ -149,72 +163,59 @@ export function MoveFilesDialog({
           onChange={(event) => setSearch(event.target.value)}
           disabled={busy}
         />
-        <div
-          className="max-h-64 space-y-1 overflow-y-auto"
-          role="group"
-          aria-label="Destination folder"
-          aria-busy={loading || busy}
-        >
-          {loading ? (
-            <p className="p-3 text-sm text-muted-foreground">
-              Loading folders…
-            </p>
-          ) : loadError ? (
-            <Button variant="outline" onClick={() => void reload()}>
-              Retry loading folders
-            </Button>
-          ) : (
-            <>
-              {'unfiled'.includes(search.toLowerCase()) && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={destination === null}
-                  onClick={() => selectDestination(null)}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-lg p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-                    destination === null && 'bg-primary/10 text-primary'
-                  )}
-                >
-                  <Inbox className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">Unfiled</span>
-                  {destination === null && <Check className="h-4 w-4" />}
-                </button>
-              )}
-              {matching.map((folder) => (
-                <button
-                  key={folder.id}
-                  type="button"
-                  disabled={busy}
-                  aria-pressed={destination === folder.id}
-                  onClick={() => selectDestination(folder.id)}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-lg p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-                    destination === folder.id && 'bg-primary/10 text-primary'
-                  )}
-                >
-                  <Folder className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 flex-1 break-words">
-                    {folder.path}
-                  </span>
-                  {destination === folder.id && (
-                    <Check className="h-4 w-4 shrink-0" />
-                  )}
-                </button>
-              ))}
-              {search &&
-                !matching.length &&
-                !'unfiled'.includes(search.toLowerCase()) && (
-                  <p className="p-3 text-sm text-muted-foreground">
-                    No matching folders.
-                  </p>
+        {/* The same list as the archive destination picker; its height
+            leaves half a row showing when it scrolls. */}
+        <div className="rounded-xl border p-1">
+          <div
+            ref={scrollFadeRef}
+            className={cn(folderListClassName, 'max-h-[16.5rem]')}
+            role="group"
+            aria-label="Destination folder"
+            aria-busy={loading || busy}
+          >
+            {loading ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                Loading folders…
+              </p>
+            ) : loadError ? (
+              <Button variant="outline" onClick={() => void reload()}>
+                Retry loading folders
+              </Button>
+            ) : (
+              <>
+                {'unfiled'.includes(search.toLowerCase()) && (
+                  <FolderOption
+                    icon={<Inbox aria-hidden="true" />}
+                    label="Unfiled"
+                    selected={destination === null}
+                    disabled={busy}
+                    onSelect={() => selectDestination(null)}
+                  />
                 )}
-            </>
-          )}
+                {matching.map((folder) => (
+                  <FolderOption
+                    key={folder.id}
+                    icon={<Folder aria-hidden="true" />}
+                    label={folder.path}
+                    selected={destination === folder.id}
+                    disabled={busy}
+                    onSelect={() => selectDestination(folder.id)}
+                  />
+                ))}
+                {search &&
+                  !matching.length &&
+                  !'unfiled'.includes(search.toLowerCase()) && (
+                    <p className="p-3 text-sm text-muted-foreground">
+                      No matching folders.
+                    </p>
+                  )}
+              </>
+            )}
+          </div>
         </div>
         {creating ? (
           <form
-            className="space-y-2 rounded-xl border p-3"
+            className="space-y-2 rounded-xl border bg-muted/30 p-3"
             onSubmit={(event) => {
               event.preventDefault()
               void create()
@@ -254,21 +255,25 @@ export function MoveFilesDialog({
             </div>
           </form>
         ) : (
+          // An action under the list, not one more destination row.
           <Button
-            variant="ghost"
-            className="justify-start"
+            variant="outline"
+            size="sm"
             disabled={busy || loading || loadError || destinationUnavailable}
             onClick={() => setCreating(true)}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus aria-hidden="true" />
             New folder
           </Button>
         )}
         {selectedFolder?.shareToken && (
-          <p className="rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground">
-            This folder has a share link. Public files you move here will appear
-            on its shared page.
-          </p>
+          <Alert variant="info" role="status">
+            <Link2 aria-hidden="true" />
+            <AlertDescription>
+              This folder has a share link. Public files you move here will
+              appear on its shared page.
+            </AlertDescription>
+          </Alert>
         )}
         {destinationUnavailable && (
           <p role="alert" className="text-sm text-destructive">

@@ -72,7 +72,7 @@ export function ITakeSetupButton({
           size={compact ? 'sm' : 'default'}
           disabled={disabled}
         >
-          {compact ? 'iTake' : 'Set Up iTake'}
+          {compact ? 'iTake' : 'Set up iTake'}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
@@ -125,7 +125,7 @@ export function ITakeSetupButton({
         </p>
         <DialogFooter>
           <Button onClick={() => void download()} disabled={isLoading}>
-            {isLoading ? 'Downloading...' : 'Download Config'}
+            {isLoading ? 'Downloading…' : 'Download config'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -137,8 +137,8 @@ export function ITakeTool() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h3 className="font-medium">iTake</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-medium">iTake</h3>
+        <p className="text-pretty text-sm text-muted-foreground">
           Screenshots and screen recording on macOS 15 or newer. Import a
           ready-to-use config to upload and copy links automatically.
         </p>

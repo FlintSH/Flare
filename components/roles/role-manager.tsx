@@ -1,22 +1,32 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
 import {
-  Check,
+  AlertCircle,
   ChevronRight,
   Loader2,
+  Lock,
   Plus,
+  Save,
   Search,
   Shield,
+  ShieldCheck,
   Trash2,
   Users,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
-import { createPortal } from 'react-dom'
 
+import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import {
+  colorSwatchClassName,
+  destructiveActionClassName,
+  numberFieldClassName,
+} from '@/components/settings/form-styles'
+import { SaveBar } from '@/components/settings/save-bar'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +83,15 @@ export function RoleManager() {
   const [pendingSelection, setPendingSelection] = useState<Role | 'new' | null>(
     null
   )
+  const editorRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  // Set when someone picks a role or starts a new one, so the editor can be
+  // brought into view once it has rendered.
+  const reveal = useRef<'role' | 'new' | null>(null)
+  // Set when "Discard changes" starts a new role: the dialog would otherwise
+  // hand focus back to the button that opened it as it closes.
+  const focusNameOnClose = useRef(false)
   const selected = roles.find((role) => role.id === selectedId)
   const isEveryone = selected?.systemKey === 'everyone'
   const isAdministrator = hasPermission(session?.user, 'administrator')
@@ -127,10 +146,31 @@ export function RoleManager() {
     }
   }, [load, select])
 
+  function open(role: Role | 'new') {
+    select(role)
+    reveal.current = role === 'new' ? 'new' : 'role'
+  }
   function requestSelection(role: Role | 'new') {
     if (dirty) setPendingSelection(role)
-    else select(role)
+    else open(role)
   }
+  useEffect(() => {
+    const target = reveal.current
+    if (!target || !draft) return
+    reveal.current = null
+    // Below lg the editor sits under the role list, often off screen.
+    const stacked = window.matchMedia('(max-width: 1023px)').matches
+    if (stacked)
+      editorRef.current?.scrollIntoView({
+        block: 'start',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+      })
+    // Focus follows the scroll, so the next Tab continues in the editor.
+    if (target === 'new') nameRef.current?.focus({ preventScroll: stacked })
+    else if (stacked) headingRef.current?.focus({ preventScroll: true })
+  }, [draft])
   function toggle(keys: string[], enabled: boolean) {
     setDraft(
       (current) =>
@@ -227,28 +267,21 @@ export function RoleManager() {
   })).filter((group) => group.permissions.length)
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7 pb-24">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b pb-7">
-        <div>
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
-            Your community
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Roles
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Give people the access they need. Combine roles to build a workspace
-            that works for everyone.
-          </p>
-        </div>
-        <Button
-          onClick={() => requestSelection('new')}
-          disabled={busy || (!isAdministrator && highest <= 1)}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create role
-        </Button>
-      </header>
+    <div className="mx-auto max-w-7xl space-y-7">
+      <PageHeader
+        eyebrow="Your community"
+        title="Roles"
+        description="Give people the access they need. Combine roles to build a workspace that works for everyone."
+        actions={
+          <Button
+            onClick={() => requestSelection('new')}
+            disabled={busy || (!isAdministrator && highest <= 1)}
+          >
+            <Plus className="h-4 w-4" />
+            Create role
+          </Button>
+        }
+      />
       {loading ? (
         <div
           role="status"
@@ -261,6 +294,23 @@ export function RoleManager() {
         <div className="grid min-w-0 gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-9">
           <aside className="min-w-0 space-y-5">
             <nav aria-label="Roles" className="space-y-1">
+              {draft && !selectedId && (
+                <div className="flex w-full items-center gap-3 rounded-xl border border-dashed border-border bg-card px-3 py-3">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: draft.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {draft.name.trim() || 'New role'}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Not saved yet
+                    </span>
+                  </span>
+                </div>
+              )}
               {roles.map((role) => (
                 <button
                   key={role.id}
@@ -269,7 +319,7 @@ export function RoleManager() {
                   disabled={busy}
                   aria-current={selectedId === role.id ? 'page' : undefined}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors',
+                    'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                     selectedId === role.id
                       ? 'border-border bg-card shadow-sm'
                       : 'border-transparent hover:bg-muted/40'
@@ -278,6 +328,7 @@ export function RoleManager() {
                   <span
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: role.color }}
+                    aria-hidden="true"
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">
@@ -289,12 +340,16 @@ export function RoleManager() {
                         : `${role.memberCount} ${role.memberCount === 1 ? 'member' : 'members'}`}
                     </span>
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRight
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
                 </button>
               ))}
             </nav>
-            <div className="rounded-xl border bg-muted/20 p-4 text-xs leading-relaxed text-muted-foreground">
-              <Shield className="mb-2 h-5 w-5" />
+            {/* The same unboxed aside note as Settings and Profile. */}
+            <div className="border-t border-border/60 px-3.5 pt-6 text-xs leading-relaxed text-muted-foreground">
+              <ShieldCheck className="mb-3 h-5 w-5" aria-hidden="true" />
               <p>
                 Everyone is the baseline. Other roles add permissions; switching
                 a permission off never removes access granted by another role.
@@ -307,30 +362,33 @@ export function RoleManager() {
           </aside>
           <div className="min-w-0 space-y-5">
             {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-              >
-                {error}
-              </div>
+              <Alert variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
             {draft && (
               <form
                 id="role-editor"
+                ref={editorRef}
                 onSubmit={(event) => {
                   event.preventDefault()
                   void save()
                 }}
-                className="space-y-5"
+                className="scroll-mt-24 space-y-5"
               >
-                <section className="rounded-2xl border bg-card p-5 sm:p-6">
+                <section className={pagePanelClassName}>
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-xl font-semibold">
+                    <h2
+                      ref={headingRef}
+                      tabIndex={-1}
+                      className="text-base font-semibold"
+                    >
                       {selected ? selected.name : 'New role'}
                     </h2>
                     {selected && (
                       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Users className="h-4 w-4" />
+                        <Users className="h-4 w-4" aria-hidden="true" />
                         {isEveryone
                           ? 'Applies to every account'
                           : `${selected.memberCount} ${selected.memberCount === 1 ? 'member' : 'members'}`}
@@ -338,19 +396,24 @@ export function RoleManager() {
                     )}
                   </div>
                   {!editable && (
-                    <p className="mb-5 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                      This role is at or above your highest role. You can review
-                      its permissions; an administrator can change them.
-                    </p>
+                    <Alert variant="info" role="status" className="mb-5">
+                      <Lock aria-hidden="true" />
+                      <AlertDescription>
+                        This role is at or above your highest role. You can
+                        review its permissions; an administrator can change
+                        them.
+                      </AlertDescription>
+                    </Alert>
                   )}
                   <fieldset
                     disabled={!editable || busy}
-                    className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_110px]"
+                    className="grid grid-cols-[minmax(0,1fr)_3.5rem] gap-x-3 gap-y-5 sm:grid-cols-[minmax(0,1fr)_110px] sm:gap-5"
                   >
                     <div className="space-y-2">
                       <Label htmlFor="role-name">Role name</Label>
                       <Input
                         id="role-name"
+                        ref={nameRef}
                         required
                         maxLength={50}
                         disabled={isEveryone}
@@ -366,14 +429,17 @@ export function RoleManager() {
                       <Input
                         id="role-color"
                         type="color"
-                        className="cursor-pointer p-1.5"
+                        className={cn(
+                          'cursor-pointer p-1.5',
+                          colorSwatchClassName
+                        )}
                         value={draft.color}
                         onChange={(event) =>
                           setDraft({ ...draft, color: event.target.value })
                         }
                       />
                     </div>
-                    <div className="space-y-2 sm:col-span-2">
+                    <div className="col-span-2 space-y-2">
                       <Label htmlFor="role-description">
                         Description{' '}
                         <span className="font-normal text-muted-foreground">
@@ -394,12 +460,13 @@ export function RoleManager() {
                       />
                     </div>
                     {!isEveryone && (
-                      <div className="space-y-2 sm:col-span-2">
+                      <div className="col-span-2 space-y-2">
                         <Label htmlFor="role-position">Position</Label>
                         <Input
                           id="role-position"
-                          className="max-w-32"
+                          className={numberFieldClassName}
                           type="number"
+                          inputMode="numeric"
                           min={1}
                           max={
                             isAdministrator ? 1000000 : Math.max(1, highest - 1)
@@ -424,7 +491,7 @@ export function RoleManager() {
                 <section className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-xl font-semibold">Permissions</h2>
+                      <h2 className="text-base font-semibold">Permissions</h2>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {draft.permissions.includes('administrator')
                           ? 'All permissions, including permissions added in the future.'
@@ -432,7 +499,10 @@ export function RoleManager() {
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Search
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden="true"
+                      />
                       <Input
                         aria-label="Search permissions"
                         className="pl-9"
@@ -442,16 +512,20 @@ export function RoleManager() {
                       />
                     </div>
                   </div>
+                  {/* The shared note surface: a primary tint read as a
+                      grey, disabled block in light themes. */}
                   {draft.permissions.includes('administrator') && (
-                    <div className="flex gap-3 rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm">
-                      <Shield className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                      <p>
-                        <strong>Administrator grants complete access.</strong>{' '}
+                    <Alert variant="info" role="status">
+                      <Shield aria-hidden="true" />
+                      <AlertDescription>
+                        <strong className="font-medium">
+                          Administrator grants complete access.
+                        </strong>{' '}
                         Individual switches below do not restrict this role.
                         Keep this permission for people you trust to manage the
                         whole instance.
-                      </p>
-                    </div>
+                      </AlertDescription>
+                    </Alert>
                   )}
                   {groups.length === 0 && (
                     <p className="py-8 text-center text-sm text-muted-foreground">
@@ -473,11 +547,13 @@ export function RoleManager() {
                     return (
                       <section
                         key={group.id}
-                        className="overflow-hidden rounded-xl border bg-card"
+                        className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-xl"
                       >
-                        <header className="flex items-center justify-between gap-3 border-b bg-muted/20 p-4 sm:px-5">
+                        <header className="flex items-center justify-between gap-3 border-b bg-muted/40 px-6 py-4">
                           <div>
-                            <h3 className="font-medium">{group.label}</h3>
+                            <h3 className="text-base font-semibold">
+                              {group.label}
+                            </h3>
                             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                               {group.description}
                             </p>
@@ -485,10 +561,12 @@ export function RoleManager() {
                           {editable &&
                             grantable.length > 1 &&
                             !draft.permissions.includes('administrator') && (
+                              // Text ends on the switch column's edge.
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="ghost"
+                                className="-mr-3"
                                 disabled={busy}
                                 onClick={() => toggle(grantable, !allEnabled)}
                               >
@@ -511,7 +589,7 @@ export function RoleManager() {
                             return (
                               <div
                                 key={permission.key}
-                                className="flex items-center justify-between gap-5 p-4 sm:px-5"
+                                className="flex items-center justify-between gap-5 px-6 py-4"
                               >
                                 <div>
                                   <Label
@@ -547,45 +625,42 @@ export function RoleManager() {
                     )
                   })}
                 </section>
-                {typeof document !== 'undefined' &&
-                  createPortal(
-                    <div className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur">
-                      <span className="text-xs text-muted-foreground">
-                        {dirty
-                          ? 'You have unsaved changes'
-                          : 'All changes saved'}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {selected && !isEveryone && editable && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="text-destructive"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => setDeleting(true)}
-                          >
-                            <Trash2 className="mr-1.5 h-4 w-4" />
-                            Delete
-                          </Button>
-                        )}
-                        <Button
-                          type="submit"
-                          form="role-editor"
-                          size="sm"
-                          disabled={busy || !editable || !dirty}
-                        >
-                          {busy ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="mr-2 h-4 w-4" />
-                          )}
-                          Save role
-                        </Button>
-                      </div>
-                    </div>,
-                    document.body
+                {/* Saving lives at the end of the editor column, in the
+                    save bar every editor shares. It follows the screen only
+                    while there is something to save, so it never hides the
+                    form when nothing has changed. */}
+                <SaveBar
+                  sticky={dirty}
+                  tone={!selected || dirty ? 'unsaved' : 'saved'}
+                  title={
+                    !selected
+                      ? 'New role, not saved yet'
+                      : dirty
+                        ? 'Unsaved changes'
+                        : 'All changes saved'
+                  }
+                >
+                  {selected && !isEveryone && editable && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-destructive hover:bg-danger/10 hover:text-destructive"
+                      disabled={busy}
+                      onClick={() => setDeleting(true)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      Delete
+                    </Button>
                   )}
+                  <Button type="submit" disabled={busy || !editable || !dirty}>
+                    {busy ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Save aria-hidden="true" />
+                    )}
+                    Save role
+                  </Button>
+                </SaveBar>
               </form>
             )}
           </div>
@@ -596,16 +671,17 @@ export function RoleManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {selected?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the role from {selected?.memberCount ?? 0} members.
-              They keep permissions from Everyone and their other roles. This
-              cannot be undone.
+              This removes the role from {selected?.memberCount ?? 0}{' '}
+              {selected?.memberCount === 1 ? 'member' : 'members'}. They keep
+              permissions from Everyone and their other roles. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={destructiveActionClassName}
               onClick={(event) => {
                 event.preventDefault()
                 void remove()
@@ -622,7 +698,14 @@ export function RoleManager() {
           if (!open) setPendingSelection(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            if (!focusNameOnClose.current) return
+            focusNameOnClose.current = false
+            event.preventDefault()
+            nameRef.current?.focus()
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -633,7 +716,8 @@ export function RoleManager() {
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (pendingSelection) select(pendingSelection)
+                focusNameOnClose.current = pendingSelection === 'new'
+                if (pendingSelection) open(pendingSelection)
                 setPendingSelection(null)
               }}
             >

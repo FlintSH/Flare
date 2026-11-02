@@ -1,20 +1,25 @@
 import { FileDown } from 'lucide-react'
 
+import { PreviewPlaceholder } from './preview-placeholder'
+
 interface UnsupportedStateProps {
   mimeType: string
 }
 
 export function UnsupportedState({ mimeType }: UnsupportedStateProps) {
   return (
-    <div className="flex w-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <FileDown className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-      <h2 className="text-base font-medium">Preview not available</h2>
-      <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-        Download this file to open it with an app on your device.
-      </p>
-      <p className="max-w-full break-all text-xs text-muted-foreground">
-        {mimeType}
-      </p>
+    <div className="w-full px-6">
+      <PreviewPlaceholder
+        icon={FileDown}
+        title="Preview not available"
+        titleAs="h2"
+        description="Download this file to open it with an app on your device."
+      >
+        {/* The file type as a quiet code chip, apart from the instruction. */}
+        <code className="mt-1 max-w-full break-all rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+          {mimeType}
+        </code>
+      </PreviewPlaceholder>
     </div>
   )
 }

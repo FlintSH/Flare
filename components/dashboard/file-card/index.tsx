@@ -73,7 +73,7 @@ import { useToast } from '@/hooks/use-toast'
 // long label cannot crowd out a short one in narrow cards, and counts from
 // 1,000 are abbreviated (1.4K) so large numbers leave room for the labels.
 const labelClassName =
-  'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
+  'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
 
 interface FileCardProps {
@@ -351,8 +351,14 @@ export function FileCard({
   return (
     <Card
       className={cn(
-        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-background/70 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/30 hover:bg-background/90',
-        selected && 'ring-2 ring-primary'
+        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-card/80 shadow-sm backdrop-blur-xl transition-colors hover:bg-card/95',
+        // Selected cards keep a 2px edge inside the column: the border plus a
+        // ring drawn above the thumbnail and the hover veil, so it looks the
+        // same on every card and while hovered. The ring sits inside the
+        // border, so its corners use the border's inner radius.
+        selected
+          ? 'border-primary after:pointer-events-none after:absolute after:inset-0 after:z-20 after:rounded-[calc(0.75rem-1px)] after:ring-1 after:ring-inset after:ring-primary'
+          : 'hover:border-primary/30'
       )}
     >
       <div className="relative">
@@ -376,7 +382,7 @@ export function FileCard({
               else onPreview?.(file)
             }
           }}
-          className="relative block aspect-square overflow-hidden bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="relative block aspect-square overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
         >
           {isImage && !previewFailed ? (
             <Image
@@ -394,26 +400,42 @@ export function FileCard({
               }
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
+            // The icon steps aside for the hover and focus controls, so it
+            // doesn't show through between them.
+            <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
               {getFileIcon(file.mimeType, 'h-16 w-16 text-muted-foreground')}
             </div>
           )}
         </Link>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/55 opacity-0 transition-opacity group-focus-within:[&>*]:pointer-events-auto group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
+        {/* Hover and keyboard focus veil the preview halfway toward the page
+            colour, in both themes, with solid buttons on top. Only keyboard
+            focus counts, so a tap on a phone doesn't leave the card veiled. */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/50 opacity-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
           {onBrowseArchive ? (
-            <Button variant="secondary" size="sm" onClick={onBrowseArchive}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-background"
+              onClick={onBrowseArchive}
+            >
               Browse archive
             </Button>
           ) : isImage && onPreview ? (
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
+              className="bg-background"
               onClick={() => onPreview(file)}
             >
               View image
             </Button>
           ) : (
-            <Button variant="secondary" size="sm" asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-background"
+              asChild
+            >
               <Link prefetch={false} href={safeUrl}>
                 View
               </Link>
@@ -422,9 +444,9 @@ export function FileCard({
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
             <PermissionGate permission="files.share">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 bg-background"
                 onClick={handleCopyLink}
                 aria-label={`Copy link to ${file.name}`}
                 title="Copy link"
@@ -432,7 +454,12 @@ export function FileCard({
                 <LinkIcon className="h-4 w-4" />
               </Button>
             </PermissionGate>
-            <Button variant="secondary" size="icon" className="h-8 w-8" asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 bg-background"
+              asChild
+            >
               <a
                 href={`/api/files/${file.id}/download`}
                 download={file.name}
@@ -444,9 +471,9 @@ export function FileCard({
             </Button>
             <PermissionGate permission="files.share">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 bg-background"
                 onClick={() => {
                   setVisibility(file.visibility)
                   setIsVisibilityDialogOpen(true)
@@ -459,9 +486,9 @@ export function FileCard({
             </PermissionGate>
             <PermissionGate permission="files.share">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 bg-background"
                 onClick={() => handlePasswordDialogOpenChange(true)}
                 aria-label={`Password protection for ${file.name}`}
                 title="Password protection"
@@ -471,9 +498,9 @@ export function FileCard({
             </PermissionGate>
             {isImage && (
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 bg-background"
                 disabled={isLoadingOcr}
                 onClick={() => void handleFetchOcr()}
                 aria-label={`Extract text from ${file.name}`}
@@ -484,9 +511,9 @@ export function FileCard({
             )}
             <PermissionGate permission="files.update">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 bg-background"
                 onClick={() => setIsExpiryModalOpen(true)}
                 aria-label={`Manage expiration of ${file.name}`}
                 title="Manage expiration"
@@ -496,9 +523,9 @@ export function FileCard({
             </PermissionGate>
             <PermissionGate permission="files.delete">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground"
+                className="h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive"
                 onClick={() => setIsDeleteDialogOpen(true)}
                 aria-label={`Delete ${file.name}`}
                 title="Delete"
@@ -525,14 +552,14 @@ export function FileCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background"
+                className="h-8 w-8 rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent"
                 aria-label={`Manage ${file.name}`}
                 title="Manage file"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-popover">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {onBrowseArchive && (
@@ -609,7 +636,7 @@ export function FileCard({
               <DropdownMenuSeparator />
               <PermissionGate permission="files.delete">
                 <DropdownMenuItem
-                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  className="text-destructive focus:bg-danger/10 focus:text-destructive"
                   onSelect={() => setIsDeleteDialogOpen(true)}
                 >
                   <Trash2 />
@@ -641,7 +668,7 @@ export function FileCard({
             type="button"
             onClick={() => setIsExpiryModalOpen(true)}
             title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
-            className="absolute left-2 top-2 inline-flex max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute left-2 top-2 inline-flex h-8 max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Timer className="h-3 w-3 shrink-0 text-primary" />
             <span className="truncate">
@@ -709,7 +736,7 @@ export function FileCard({
                 type="button"
                 onClick={onEditTags}
                 aria-label={`View all ${tags.length} tags`}
-                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 +{tags.length - visibleTags.length}
               </button>
@@ -746,7 +773,8 @@ export function FileCard({
               {file.hasPassword ? 'Manage password' : 'Protect this file'}
             </DialogTitle>
             <DialogDescription className="break-words">
-              Add another layer of privacy to {file.name}.
+              Add another layer of privacy to{' '}
+              <span className="font-medium text-foreground">{file.name}</span>.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -775,7 +803,7 @@ export function FileCard({
               <p
                 id={`password-hint-${file.id}`}
                 className={cn(
-                  'text-xs leading-5',
+                  'text-pretty text-xs',
                   passwordHint ? 'text-destructive' : 'text-muted-foreground'
                 )}
               >
@@ -826,7 +854,8 @@ export function FileCard({
           <DialogHeader>
             <DialogTitle>Who can open this file?</DialogTitle>
             <DialogDescription className="break-words">
-              Choose how you share {file.name}.
+              Choose how you share{' '}
+              <span className="font-medium text-foreground">{file.name}</span>.
             </DialogDescription>
           </DialogHeader>
           <RadioGroup
@@ -858,7 +887,7 @@ export function FileCard({
                 htmlFor={`${file.id}-${value}`}
                 className={cn(
                   'flex cursor-pointer items-start gap-3 rounded-xl border p-4',
-                  visibility === value && 'border-primary/40 bg-primary/5'
+                  visibility === value && 'border-primary bg-primary/5'
                 )}
               >
                 <RadioGroupItem
@@ -871,7 +900,7 @@ export function FileCard({
                     <Icon className="h-4 w-4 text-muted-foreground" />
                     {label}
                   </span>
-                  <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">
+                  <span className="mt-1 block text-pretty text-xs font-normal leading-5 text-muted-foreground">
                     {description}
                   </span>
                 </span>
@@ -911,8 +940,9 @@ export function FileCard({
           <DialogHeader>
             <DialogTitle>Delete this file?</DialogTitle>
             <DialogDescription className="break-words">
-              {file.name} will be permanently deleted and its shared link will
-              stop working. This cannot be undone.
+              <span className="font-medium text-foreground">{file.name}</span>{' '}
+              will be permanently deleted and its shared link will stop working.
+              This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

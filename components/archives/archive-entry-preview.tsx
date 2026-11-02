@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ArrowDownToLine, Loader2, Maximize2 } from 'lucide-react'
+import { ArrowDownToLine, Loader2 } from 'lucide-react'
 
+import {
+  type CheckerTone,
+  checkerClassName,
+  checkerToneFor,
+} from '@/components/file/checker-tone'
+import { ExpandImageButton } from '@/components/file/viewer/components/expand-image-button'
 import { Button } from '@/components/ui/button'
 
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
@@ -52,6 +58,7 @@ function ImagePreview({
 }) {
   const [requested, setRequested] = useState(size <= IMAGE_PREVIEW_BYTES)
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [tone, setTone] = useState<CheckerTone>(null)
   if (!requested)
     return (
       <div className="space-y-3">
@@ -70,36 +77,33 @@ function ImagePreview({
       </Unavailable>
     )
   return (
-    <div className="group relative flex min-h-40 items-center justify-center">
+    <div className="relative flex min-h-40 items-center justify-center">
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center">
           <Waiting label="Loading image…" />
         </div>
       )}
-      {/* The server sends inline image bytes only after checking their signature. */}
-      <img
-        src={src}
-        alt={`Preview of ${name}`}
-        decoding="async"
-        onLoad={() => setState('ready')}
-        onError={() => setState('failed')}
-        className={
-          state === 'ready'
-            ? 'mx-auto max-h-80 max-w-full rounded-lg object-contain'
-            : 'h-0 w-0 opacity-0'
-        }
-      />
-      {state === 'ready' && onExpand && (
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-label={`Expand ${name}`}
-          title="Expand image"
-          className="absolute bottom-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Maximize2 className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
+      <div className="relative max-w-full">
+        {/* The server sends inline image bytes only after checking their signature. */}
+        <img
+          src={src}
+          alt={`Preview of ${name}`}
+          decoding="async"
+          onLoad={(event) => {
+            setTone(checkerToneFor(event.currentTarget))
+            setState('ready')
+          }}
+          onError={() => setState('failed')}
+          className={
+            state === 'ready'
+              ? `${checkerClassName(tone)} block max-h-80 max-w-full rounded-lg object-contain`
+              : 'h-0 w-0 opacity-0'
+          }
+        />
+        {state === 'ready' && onExpand && (
+          <ExpandImageButton onClick={onExpand} aria-label={`Expand ${name}`} />
+        )}
+      </div>
     </div>
   )
 }
@@ -253,10 +257,7 @@ function TextPreview({ src, size }: { src: string; size: number }) {
               onClick={() => load(loaded)}
             >
               {state === 'more' && (
-                <Loader2
-                  className="mr-2 h-4 w-4 animate-spin"
-                  aria-hidden="true"
-                />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               )}
               Load more
             </Button>
@@ -304,7 +305,7 @@ export function ArchiveEntryPreview({
         {!entry.issue && (
           <Button variant="outline" size="sm" asChild>
             <a href={download} download={name}>
-              <ArrowDownToLine className="mr-2 h-4 w-4" aria-hidden="true" />
+              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
               Download entry
             </a>
           </Button>

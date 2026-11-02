@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import Link from 'next/link'
 
@@ -33,6 +39,7 @@ import { VirtualFiles } from '@/components/dashboard/file-grid/virtual-files'
 import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
+import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
@@ -52,6 +59,11 @@ import {
 } from '@/hooks/use-request-lifetime'
 import { useTags } from '@/hooks/use-tags'
 import { toast } from '@/hooks/use-toast'
+
+// Summaries of the active filters, with the same hairline as badges so they
+// keep their shape on light panels.
+const filterChipClassName =
+  'rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs'
 
 export function FileGrid() {
   const { data: session, status } = useSession()
@@ -97,6 +109,20 @@ function FileLibrary({ scope }: { scope: string }) {
   )
   const [selecting, setSelecting] = useState(false)
   const selectedIds = selectedFiles.map((file) => file.id)
+  const allVisibleSelected =
+    files.length > 0 && files.every((file) => selectedIds.includes(file.id))
+  const someVisibleSelected = files.some((file) =>
+    selectedIds.includes(file.id)
+  )
+  // "Select visible files" shows a dash when only some are selected. Set
+  // after every render: a click clears the browser's flag even when the
+  // selection, and so the values here, stay the same (at the 100 cap).
+  const selectVisibleRef = useRef<HTMLInputElement>(null)
+  useLayoutEffect(() => {
+    if (selectVisibleRef.current)
+      selectVisibleRef.current.indeterminate =
+        !allVisibleSelected && someVisibleSelected
+  })
   const clearSelection = () => setSelectedFiles([])
   const { tags, reload: reloadTags } = useTags()
   const {
@@ -276,18 +302,16 @@ function FileLibrary({ scope }: { scope: string }) {
     <div className="space-y-6">
       <section
         aria-label="Find and filter files"
-        className="rounded-2xl border border-border/60 bg-background/70 p-5 shadow-sm backdrop-blur-xl sm:p-6"
+        className={pagePanelClassName}
       >
-        <div className="mb-4">
-          <div className="flex items-center justify-between gap-2">
-            <h1
-              ref={libraryHeading}
-              tabIndex={-1}
-              className="text-3xl font-bold"
-            >
-              Your Files
-            </h1>
-            <div className="flex shrink-0 items-center gap-2">
+        <PageHeader
+          className="mb-4 border-0 pb-0"
+          actionsBesideTitle
+          headingRef={libraryHeading}
+          title="Your files"
+          description="View and manage your uploaded files."
+          actions={
+            <>
               <Button
                 variant="ghost"
                 size="sm"
@@ -337,12 +361,9 @@ function FileLibrary({ scope }: { scope: string }) {
                   className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
                 />
               </Button>
-            </div>
-          </div>
-          <p className="mt-1 text-muted-foreground">
-            View and manage your uploaded files
-          </p>
-        </div>
+            </>
+          }
+        />
         <div className="flex flex-col gap-3 lg:flex-row">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
@@ -375,7 +396,7 @@ function FileLibrary({ scope }: { scope: string }) {
                 type="button"
                 onClick={() => setTag(null)}
                 aria-label={`Remove ${activeTagName} filter`}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1 text-xs text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Tag className="h-3 w-3 shrink-0" />
                 <span className="truncate">{activeTagName}</span>
@@ -383,21 +404,18 @@ function FileLibrary({ scope }: { scope: string }) {
               </button>
             )}
             {filters.search && (
-              <span className="max-w-full truncate rounded-lg bg-muted px-2.5 py-1 text-xs">
+              <span className={`max-w-full truncate ${filterChipClassName}`}>
                 Search: {filters.search}
               </span>
             )}
             {filters.types.length > 0 && (
-              <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
+              <span className={filterChipClassName}>
                 {filters.types.length} file{' '}
                 {filters.types.length === 1 ? 'type' : 'types'}
               </span>
             )}
             {filters.visibility.map((value) => (
-              <span
-                key={value}
-                className="rounded-lg bg-muted px-2.5 py-1 text-xs"
-              >
+              <span key={value} className={filterChipClassName}>
                 {value === 'hasPassword'
                   ? 'Password protected'
                   : value === 'private'
@@ -406,12 +424,10 @@ function FileLibrary({ scope }: { scope: string }) {
               </span>
             ))}
             {(filters.dateFrom || filters.dateTo) && (
-              <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
-                Upload date selected
-              </span>
+              <span className={filterChipClassName}>Upload date selected</span>
             )}
             {filters.groupBy !== 'none' && (
-              <span className="rounded-lg bg-muted px-2.5 py-1 text-xs">
+              <span className={filterChipClassName}>
                 Grouped by {filters.groupBy}
               </span>
             )}
@@ -440,16 +456,14 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           ref={selectionBar}
           aria-busy={selection.loading}
-          className="sticky top-24 z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-xl"
+          className="sticky top-24 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-overlay px-4 py-3 shadow-lg shadow-black/20"
         >
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary"
-              checked={
-                files.length > 0 &&
-                files.every((file) => selectedIds.includes(file.id))
-              }
+              checked={allVisibleSelected}
+              ref={selectVisibleRef}
               disabled={isLoading || !files.length}
               onChange={(event) =>
                 setSelectedFiles((current) =>
@@ -470,57 +484,65 @@ function FileLibrary({ scope }: { scope: string }) {
             Select visible files
           </label>
           <span className="text-xs text-muted-foreground" role="status">
-            {selectedIds.length} / 100 selected
+            {selectedIds.length} selected · up to 100
             {selection.loading && ' · Refreshing selection…'}
           </span>
-          {can('files.read') && can('files.upload') && (
+          {/* Phones lay the actions out in two equal columns, so wrapped
+              rows share their edges. */}
+          <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+            {can('files.read') && can('files.upload') && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!selectedIds.length || isLoading || selection.loading}
+                onClick={() => void openSelection('archive')}
+              >
+                <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+                Create archive
+              </Button>
+            )}
+            <PermissionGate permission="files.update">
+              <PermissionGate permission="folders.manage">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    !selectedIds.length || isLoading || selection.loading
+                  }
+                  onClick={() => void openSelection('move')}
+                >
+                  <FolderInput className="mr-2 h-4 w-4" />
+                  Move
+                </Button>
+              </PermissionGate>
+            </PermissionGate>
+            <PermissionGate permission="files.update">
+              <PermissionGate permission="tags.manage">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    !selectedIds.length || isLoading || selection.loading
+                  }
+                  onClick={() => void openSelection('tags')}
+                >
+                  <Tag className="mr-2 h-4 w-4" />
+                  Edit tags
+                </Button>
+              </PermissionGate>
+            </PermissionGate>
+            {/* The bar stays in view while the header scrolls away. */}
             <Button
+              variant="ghost"
               size="sm"
-              variant="outline"
-              disabled={!selectedIds.length || isLoading || selection.loading}
-              onClick={() => void openSelection('archive')}
+              onClick={() => {
+                setSelecting(false)
+                clearSelection()
+              }}
             >
-              <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
-              Create archive
+              Done
             </Button>
-          )}
-          <PermissionGate permission="files.update">
-            <PermissionGate permission="folders.manage">
-              <Button
-                size="sm"
-                className="ml-auto"
-                variant="outline"
-                disabled={!selectedIds.length || isLoading || selection.loading}
-                onClick={() => void openSelection('move')}
-              >
-                <FolderInput className="mr-2 h-4 w-4" />
-                Move
-              </Button>
-            </PermissionGate>
-          </PermissionGate>
-          <PermissionGate permission="files.update">
-            <PermissionGate permission="tags.manage">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!selectedIds.length || isLoading || selection.loading}
-                onClick={() => void openSelection('tags')}
-              >
-                <Tag className="mr-2 h-4 w-4" />
-                Edit tags
-              </Button>
-            </PermissionGate>
-          </PermissionGate>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSelecting(false)
-              clearSelection()
-            }}
-          >
-            Done
-          </Button>
+          </div>
         </div>
       )}
 
@@ -528,14 +550,14 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           aria-busy="true"
           aria-label="Loading files"
-          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-[1360px]:mr-0"
         >
           {Array.from({ length: 8 }, (_, index) => (
             <FileCardSkeleton key={index} />
           ))}
         </div>
       ) : error && !gallery ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-background/70 p-6 text-center">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-card/80 p-6 text-center">
           <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-destructive">
             <AlertCircle className="h-7 w-7" />
           </div>
@@ -550,7 +572,7 @@ function FileLibrary({ scope }: { scope: string }) {
           </Button>
         </div>
       ) : timeline?.total === 0 ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-background/70 p-6 text-center">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/80 p-6 text-center">
           <div className="mb-4 rounded-xl bg-primary/10 p-3 text-primary">
             {hasActiveFilters ? (
               <SearchX className="h-7 w-7" />

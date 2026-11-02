@@ -2,13 +2,16 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
+import {
+  FILE_PASSWORD_DESCRIPTION,
+  FILE_PASSWORD_TITLE,
+  FilePasswordForm,
+  filePasswordProblem,
+} from '@/components/auth/file-password-form'
 import { PublicState } from '@/components/auth/public-state'
 import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
 import { Footer } from '@/components/layout/footer'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 import { detectArchiveFormat } from '@/lib/archives/shared'
 import { recordAudit } from '@/lib/audit'
@@ -18,8 +21,10 @@ import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
 import { shareMetadataText } from '@/lib/customization/sharing'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess, retryAfterMinutes } from '@/lib/files/access'
+import { checkFileAccess } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { languageFromFilename } from '@/lib/files/text-language'
+import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
 
@@ -119,8 +124,8 @@ export async function generateMetadata({
   })
   if (!access.allowed) {
     return {
-      title: `Protected File - ${appearance.brand.name}`,
-      description: 'This file is protected',
+      title: `Protected file - ${appearance.brand.name}`,
+      description: 'This file is protected.',
     }
   }
 
@@ -245,8 +250,9 @@ export default async function FilePage({
   const serializedFile = prepareFileProps(file)
 
   // Check the database record itself; the serialized copy is for rendering.
+  const requestHeaders = await headers()
   const access = await checkFileAccess(file, session, providedPassword, {
-    requester: requestIp(await headers()),
+    requester: requestIp(requestHeaders),
   })
 
   await recordAudit({
@@ -268,63 +274,16 @@ export default async function FilePage({
       notFound()
     }
 
-    const limited = access.reason === 'password_rate_limited'
-    const title = limited
-      ? 'Too Many Attempts'
-      : access.reason === 'password_invalid'
-        ? 'Incorrect Password'
-        : 'Password Protected File'
-    const description = limited
-      ? 'Password checks for this file are paused'
-      : access.reason === 'password_invalid'
-        ? 'The password you entered is incorrect'
-        : 'This file requires a password to access'
-    const buttonText =
-      access.reason === 'password_invalid' || limited
-        ? 'Try Again'
-        : 'Access File'
-    const problem = limited
-      ? `Too many incorrect passwords were entered for this file. Wait ${retryAfterMinutes(access)} min, then try again.`
-      : access.reason === 'password_invalid'
-        ? 'That password didn’t match. Check with the sender and try again.'
-        : null
-
     return (
       <PublicState
-        compact
-        title={title}
-        description={description}
+        title={FILE_PASSWORD_TITLE}
+        description={FILE_PASSWORD_DESCRIPTION}
         footer={showFooter ? <Footer /> : undefined}
       >
-        <form className="space-y-4" action={urlPath}>
-          <div className="space-y-2">
-            <Label htmlFor="share-password">File password</Label>
-            <Input
-              id="share-password"
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              placeholder="Enter the password from the sender"
-              className="h-11"
-              aria-invalid={access.reason === 'password_invalid'}
-              aria-describedby={problem ? 'share-password-error' : undefined}
-              required
-              autoFocus
-            />
-            {problem && (
-              <p
-                id="share-password-error"
-                role="alert"
-                className="text-sm text-foreground"
-              >
-                {problem}
-              </p>
-            )}
-          </div>
-          <Button type="submit" className="h-11 w-full">
-            {buttonText}
-          </Button>
-        </form>
+        <FilePasswordForm
+          action={urlPath}
+          problem={filePasswordProblem(access)}
+        />
       </PublicState>
     )
   }
@@ -349,7 +308,13 @@ export default async function FilePage({
     mimeType: file.mimeType,
     // Detect using the real name while keeping the filename presentation setting.
     archiveFormat: detectArchiveFormat(file.name, file.mimeType),
+    textLanguage: languageFromFilename(file.name),
   }
+
+  const backLink = await sharedFolderBackLink(
+    file,
+    requestHeaders.get('referer')
+  )
 
   return (
     <ShareLayout
@@ -366,6 +331,7 @@ export default async function FilePage({
       }}
       isMedia={isMediaFile}
       showFooter={showFooter}
+      backLink={backLink}
     >
       <ProtectedFile file={viewerFile} verifiedPassword={providedPassword} />
     </ShareLayout>

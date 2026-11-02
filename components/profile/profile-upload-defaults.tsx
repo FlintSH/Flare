@@ -66,16 +66,19 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-background/40 p-4 sm:p-5">
+      <div className="rounded-xl border bg-muted/30 p-4">
         <div className="space-y-4">
           <div className="min-w-0 space-y-1">
             <Label htmlFor="vanity-url">Vanity URL</Label>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-pretty text-sm text-muted-foreground">
               Set a custom URL path for your uploads instead of the default ID.
               Your files will be accessible at{' '}
-              <code className="break-all text-xs bg-muted px-1 py-0.5 rounded">
+              {/* One chip: it moves to the next line whole, and only wraps
+                  inside itself when it's longer than a line. */}
+              <code className="inline-block max-w-full break-all rounded bg-muted px-1 py-0.5 text-xs">
                 /{vanityId || user.urlId}/filename
               </code>
+              .
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -98,9 +101,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                 <p className="text-sm text-destructive mt-1">{vanityError}</p>
               )}
             </div>
+            {/* A field's submit button is the filled default, like
+                Shorten on Links. */}
             <Button
               type="button"
-              variant="outline"
               disabled={isLoading || vanityId === (user.vanityId || '')}
               onClick={async () => {
                 setIsLoading(true)
@@ -135,7 +139,7 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                 }
               }}
             >
-              {isLoading ? 'Saving...' : 'Save'}
+              {isLoading ? 'Saving…' : 'Save'}
             </Button>
             {user.vanityId && (
               <Button
@@ -182,10 +186,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-xl border bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="randomize-urls">Randomize File URLs</Label>
-          <p className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 p-4">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label htmlFor="randomize-urls">Randomize file URLs</Label>
+          <p className="text-pretty text-sm text-muted-foreground">
             When enabled, new uploads use randomized URLs unless an upload
             profile or the upload form overrides this choice.
           </p>
@@ -204,11 +208,11 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
         />
       </div>
 
-      <div className="flex flex-col gap-4 rounded-xl border bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <div className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
           <Label htmlFor="default-expiry-action">When files expire</Label>
-          <p className="text-sm text-muted-foreground">
-            Set the default file expiry action when creating a new upload
+          <p className="text-pretty text-sm text-muted-foreground">
+            Set the default file expiry action when creating a new upload.
           </p>
         </div>
         <div className="w-full sm:w-48 sm:shrink-0">
@@ -234,11 +238,11 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-xl border bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <div className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
           <Label htmlFor="default-expiry-time">Default expiration</Label>
-          <p className="text-sm text-muted-foreground">
-            Set the default relative time before an upload expires
+          <p className="text-pretty text-sm text-muted-foreground">
+            Set the default relative time before an upload expires.
           </p>
         </div>
         <div className="w-full sm:w-48 sm:shrink-0">

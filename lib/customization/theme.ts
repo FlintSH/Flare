@@ -1,4 +1,4 @@
-import type { AppearanceDocument, Palette } from './schema'
+import { type AppearanceDocument, LIGHT_PALETTE, type Palette } from './schema'
 
 export function hexToHsl(hex: string): string {
   const [r, g, b] = [1, 3, 5].map(
@@ -37,9 +37,11 @@ export function themeStyles(document: AppearanceDocument): string {
     Object.entries(paletteVariables(palette))
       .map(([key, value]) => `${key}:${value}`)
       .join(';')
-  // A personal light preference still needs readable tokens when the instance
-  // keeps its original dark palette. Never replace that legacy dark palette.
-  if (!theme.enabled) return `.light{${declarations(theme.light)}}`
+  // With the studio palette off, Flare keeps its original look in both modes:
+  // the legacy dark colors and the default light palette. A light palette
+  // saved in the studio (for example by trying a preset) only applies once the
+  // studio palette is on. Never replace the legacy dark palette here.
+  if (!theme.enabled) return `.light{${declarations(LIGHT_PALETTE)}}`
   const font =
     theme.font === 'mono'
       ? 'ui-monospace,monospace'

@@ -38,7 +38,7 @@ You can go back and edit the first three steps before creating the instance. Cre
 
 ## 4. Make it yours, or keep the defaults
 
-Choose an instance name, tagline, and starting look. The preview is local until **Save and continue** publishes it. **Set up appearance later** keeps the published design unchanged. Choosing the Flare default retains the original theme.
+Choose an instance name, tagline, and starting look. The preview is local until **Save and continue** publishes it. **Set up appearance later** keeps the published design unchanged. Choosing the Flare default retains the original theme. The other looks match the studio's Orbit, Tide, and Ember presets described in [Appearance](./appearance#theme).
 
 <Screenshot src="/screenshots/documentation-links/setup-appearance.webp" alt="Setup appearance step showing the Flare default starting look and the Setup guide link" caption="Keep the Flare default or preview a starting look before publishing it." />
 
@@ -46,7 +46,7 @@ For paired palettes, typography, backgrounds, logos, share-page layouts, and por
 
 ## 5. Add account email, optionally
 
-Choose **Set up email later**, **Password recovery only**, or **Recovery + verify new users**. To enable email, configure SMTP and test the connection, then send a test message and check the inbox. Save when it works.
+Choose **Password recovery only** or **Recovery + verify new users** to turn email on with that policy, or choose **Set up email later** to skip the step. **Set up email later** is beside **Save and continue** at the end of the step; a note at the top points to it. To enable email, configure SMTP and test the connection, then send a test message and check the inbox. Save when it works.
 
 <Screenshot src="/screenshots/documentation-links/setup-email.webp" alt="Optional email setup with email left for later and the Setup guide link still available" caption="Choose whether to configure account email now or set it up later." />
 

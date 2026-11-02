@@ -2,9 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { Check, Copy, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  AlertCircle,
+  Check,
+  Copy,
+  Loader2,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 
+import { MetaLine } from '@/components/profile/meta-line'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -122,13 +131,44 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
     }
   }
 
+  const rowActions = (url: ShortenedUrl) => (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => copyUrl(url)}
+        aria-label={`Copy short link ${url.shortCode}`}
+        title={copiedId === url.id ? 'Copied' : 'Copy short link'}
+      >
+        {copiedId === url.id ? (
+          <Check className="h-4 w-4" />
+        ) : (
+          <Copy className="h-4 w-4" />
+        )}
+      </Button>
+      <PermissionGate permission="links.delete">
+        {/* Red at rest, like every destructive row action. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setDeleting(url)}
+          aria-label={`Delete short link ${url.shortCode}`}
+          title="Delete short link"
+          className="text-destructive hover:bg-danger/10 hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </PermissionGate>
+    </>
+  )
+
   return (
     <>
       {isLoading ? (
         <div
           role="status"
           aria-label="Loading shortened URLs"
-          className="divide-y rounded-lg border"
+          className="divide-y rounded-xl border"
         >
           <span className="sr-only">Loading shortened URLs…</span>
           {[0, 1, 2].map((index) => (
@@ -139,107 +179,132 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
           ))}
         </div>
       ) : error ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm"
-        >
-          <p>{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setIsLoading(true)
-              void fetchUrls()
-            }}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Try again
-          </Button>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsLoading(true)
+                void fetchUrls()
+              }}
+            >
+              <RefreshCw aria-hidden="true" />
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : urls.length === 0 ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
           No shortened URLs yet. Add a URL above to get started.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <Table
-            className="min-w-[680px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            aria-label="Shortened URLs"
-            tabIndex={0}
-          >
+        <div className="overflow-hidden rounded-xl border">
+          {/* On phones the destination gets the row's full width; the short
+              link, clicks, and date sit under it with the actions beside
+              them. Wider screens give each its own column. */}
+          <Table className="table-fixed" aria-label="Shortened URLs">
             <TableHeader className="bg-muted/30">
               <TableRow>
                 <TableHead className="pl-4">Original URL</TableHead>
-                <TableHead>Short URL</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">Created</TableHead>
-                <TableHead className="pr-3 text-right">Actions</TableHead>
+                <TableHead className="hidden w-60 md:table-cell">
+                  Short URL
+                </TableHead>
+                <TableHead className="hidden w-20 text-right md:table-cell">
+                  Clicks
+                </TableHead>
+                <TableHead className="hidden w-28 text-right lg:table-cell">
+                  Created
+                </TableHead>
+                <TableHead className="hidden w-24 pr-3 text-right md:table-cell">
+                  Actions
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {urls.map((url) => (
-                <TableRow key={url.id}>
-                  <TableCell className="max-w-[260px] pl-4 font-medium">
-                    <a
-                      href={url.targetUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={url.targetUrl}
-                      className="block truncate rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {url.targetUrl}
-                    </a>
-                  </TableCell>
-                  <TableCell className="max-w-[250px]">
-                    <a
-                      href={`/u/${url.shortCode}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`${origin}/u/${url.shortCode}`}
-                      className="block truncate rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {origin}/u/{url.shortCode}
-                    </a>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {url.clicks.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-right text-muted-foreground">
-                    {new Date(url.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="pr-2 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyUrl(url)}
-                        aria-label={`Copy short link ${url.shortCode}`}
-                        title={
-                          copiedId === url.id ? 'Copied' : 'Copy short link'
-                        }
+              {urls.map((url) => {
+                const created = new Date(url.createdAt).toLocaleDateString()
+                return (
+                  <TableRow key={url.id}>
+                    <TableCell className="py-3 pl-4 pr-3 md:pr-2">
+                      <a
+                        href={url.targetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={url.targetUrl}
+                        className="block truncate rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        {copiedId === url.id ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <PermissionGate permission="links.delete">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleting(url)}
-                          aria-label={`Delete short link ${url.shortCode}`}
-                          title="Delete short link"
-                          className="text-muted-foreground hover:bg-destructive/10 hover:text-foreground"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </PermissionGate>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {url.targetUrl}
+                      </a>
+                      <div className="mt-1 flex items-center gap-1 lg:hidden">
+                        <div className="min-w-0 flex-1 space-y-0.5 text-xs">
+                          <a
+                            href={`/u/${url.shortCode}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`${origin}/u/${url.shortCode}`}
+                            className="block truncate rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+                          >
+                            {origin}/u/{url.shortCode}
+                          </a>
+                          {/* Breaks only between the two facts, and the
+                              separator moves with the date, so a line
+                              never ends on "·". */}
+                          <MetaLine
+                            className="text-muted-foreground"
+                            items={[
+                              {
+                                key: 'clicks',
+                                className: 'md:hidden',
+                                text: (
+                                  <>
+                                    <span className="tabular-nums">
+                                      {url.clicks.toLocaleString()}
+                                    </span>{' '}
+                                    {url.clicks === 1 ? 'click' : 'clicks'}
+                                  </>
+                                ),
+                              },
+                              { key: 'created', text: `Created ${created}` },
+                            ]}
+                          />
+                        </div>
+                        {/* The negative margin lines the last icon up with
+                            the destination's end. */}
+                        <div className="-mr-2.5 flex shrink-0 gap-1 md:hidden">
+                          {rowActions(url)}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <a
+                        href={`/u/${url.shortCode}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`${origin}/u/${url.shortCode}`}
+                        className="block truncate rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {origin}/u/{url.shortCode}
+                      </a>
+                    </TableCell>
+                    <TableCell className="hidden text-right tabular-nums md:table-cell">
+                      {url.clicks.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="hidden whitespace-nowrap text-right text-muted-foreground lg:table-cell">
+                      {created}
+                    </TableCell>
+                    <TableCell className="hidden pr-3 text-right md:table-cell">
+                      {/* The negative margin lines the last icon up with the
+                          column header. */}
+                      <div className="-mr-2.5 flex justify-end gap-1">
+                        {rowActions(url)}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </div>
@@ -270,7 +335,7 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
               onClick={deleteUrl}
               disabled={isDeleting}
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
               {isDeleting ? 'Deleting…' : 'Delete link'}
             </Button>
           </AlertDialogFooter>

@@ -75,10 +75,12 @@ export function InstanceVersion({ buildInfo }: { buildInfo: BuildInfo }) {
             </p>
           )}
         </div>
+        {/* Raised so its label shares the version's baseline (12px text
+            centred in 28px against 14px text on a 20px line). */}
         <Button
           variant="ghost"
           size="sm"
-          className="-mr-2 h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground"
+          className="-mr-2 -mt-[3px] h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground"
           onClick={() => void checkForUpdates()}
           disabled={isChecking}
           aria-label="Check for updates"

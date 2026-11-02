@@ -6,7 +6,7 @@ description: Manage registration, invite links, accounts, administrator roles, c
 
 Open **Users** in the dashboard to find accounts by name or email, filter by role, and inspect file counts, storage use, and shortened links. The list is paginated so you can manage a larger instance without loading every account at once.
 
-<Screenshot src="/screenshots/roles/users-overview.webp" alt="User management table showing accounts, roles, file counts, and actions" caption="Administrators can manage accounts and open each user's content from one list." />
+<Screenshot src="/screenshots/roles/users-overview.webp" alt="Users page with the account table showing accounts, roles, file counts, and actions" caption="Administrators can manage accounts and open each user's content from one list." />
 
 ## Roles and permissions
 
@@ -33,7 +33,7 @@ OIDC auto-provisioning is a separate setting. Closing password registration does
 
 ## Invite links
 
-An invite link lets a person create their own local password account while registration is closed. It is the friendlier alternative to choosing someone's password with **New User**: the invited person picks their own username, email address, and password. The [invite guide](/guide/invites) covers creating, copying, sharing, tracking, and revoking links; this section covers who may invite and how to oversee invites across the instance.
+An invite link lets a person create their own local password account while registration is closed. It is the friendlier alternative to choosing someone's password with **New user**: the invited person picks their own username, email address, and password. The [invite guide](/guide/invites) covers creating, copying, sharing, tracking, and revoking links; this section covers who may invite and how to oversee invites across the instance.
 
 ### Choose who can invite
 
@@ -98,7 +98,7 @@ Deleting an account also deletes the invites it created, so they stop working. A
 
 ## Create an account
 
-1. With `users.create`, open Users and choose **New User**. Assigning additional roles also requires `users.roles`.
+1. With `users.create`, open Users and choose **New user**. Assigning additional roles also requires `users.roles`.
 2. Enter the person's name and email.
 3. Set a password of at least eight characters for an account that should sign in locally.
 4. Select any additional **Roles** the person needs. Everyone applies automatically; leave the additional roles empty to use only that baseline. Assign the Admin role only for full instance control.
@@ -112,7 +112,7 @@ With email enabled, new administrator-created accounts follow the configured **i
 
 The edit dialog lets you change name, email, roles, password, URL ID, and vanity URL, when your permissions allow those actions. Role assignment requires `users.roles`; identity edits require `users.update`. Delegated managers can affect only accounts below their highest role. Leave the password empty when you do not intend to replace it.
 
-<Screenshot src="/screenshots/roles/user-roles.webp" alt="Edit User dialog with multiple role selections, identity fields, and URL settings" caption="Account edits include both identity details and the user's share-link identifiers." />
+<Screenshot src="/screenshots/roles/user-roles.webp" alt="Edit user dialog with multiple role selections, identity fields, and URL settings" caption="Account edits include both identity details and the user's share-link identifiers." />
 
 The normal **URL ID** is five alphanumeric characters. A **vanity URL** is a friendlier optional identifier, 3–32 characters using letters, numbers, and internal hyphens. It cannot start or end with a hyphen, collide with another user's identifiers, or use reserved application paths such as `api`, `dashboard`, or `setup`. Clearing the vanity field removes it.
 
@@ -130,9 +130,9 @@ Removing the last administrator exemption under an all-user policy requires a ve
 
 ## Moderate files and shortened links
 
-With `users.read` and `content.read`, choose **View Content** on a user to inspect their files and shortened URLs. Changing their file settings needs `content.update`; deleting content needs `content.delete`. Content permissions are instance-wide, including content owned by accounts above your role; they do not grant role assignment or instance settings access. The content dialog provides search, pagination, and file filters. You can open files, adjust visibility, delete a file, inspect link destinations/clicks, and remove shortened links. Removing a user's avatar is available from their row. It clears the profile image immediately and queues the owned object for durable cleanup; stored bytes and cached copies can remain until cleanup or cache expiry.
+With `users.read` and `content.read`, choose **View content** on a user to inspect their files and shortened URLs. Changing their file settings needs `content.update`; deleting content needs `content.delete`. Content permissions are instance-wide, including content owned by accounts above your role; they do not grant role assignment or instance settings access. The content dialog provides search, pagination, and file filters. Each file is marked **Public**, **Private** (in amber, since private files are usually the ones to check), or **Password** for a password-protected file. You can open files, adjust visibility, delete a file, inspect link destinations/clicks, and remove shortened links. Removing a user's avatar is available from their row; on a phone, open the row's **More actions** menu. It clears the profile image immediately and queues the owned object for durable cleanup; stored bytes and cached copies can remain until cleanup or cache expiry.
 
-Image previews in **View Content** use your current browser session. With `content.read`, private and password-protected images load without signing in as the owner or entering the file password. Public previews and animated GIFs also load directly from Flare. The thumbnail endpoint currently streams the original image, so even these small previews can transfer large files.
+Image previews in **View content** use your current browser session. With `content.read`, private and password-protected images load without signing in as the owner or entering the file password. Public previews and animated GIFs also load directly from Flare. The thumbnail endpoint currently streams the original image, so even these small previews can transfer large files.
 
 <Screenshot src="/screenshots/roles/users-content.webp" alt="Administrator content dialog showing loaded thumbnails for another user's public, private, password-protected, and animated GIF uploads" caption="Review an account's content without switching to its identity; private and protected previews use your moderator session." />
 
@@ -142,7 +142,7 @@ The [archive workspace](/guide/archives) separates owner-library mutations from 
 
 ## Revoke browser sessions
 
-Choose **Revoke Sessions** on an account, review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. On success, the confirmation closes and **Sessions revoked** appears; the person must sign in again. The server returns an empty `204 No Content`, which is a successful result. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.
+Choose **Revoke sessions** on an account (on a phone, it is in the row's **More actions** menu), review **Sign out {name}?**, then confirm **Revoke sessions**. This requires `users.sessions` and authority above that account. On success, the confirmation closes and **Sessions revoked** appears; the person must sign in again. The server returns an empty `204 No Content`, which is a successful result. It invalidates browser sessions; it does not revoke named API tokens or the legacy upload credential. Revoke or rotate those separately when retiring an integration.
 
 If the request fails, the confirmation stays open and shows an error so you can address the cause and retry. Owners can also review their own [active sessions and login history](/guide/account#login-history-and-active-sessions) and revoke one session at a time from Profile. Their self-service controls do not require `users.sessions`.
 

@@ -53,8 +53,8 @@ export function ShareXTool() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h3 className="font-medium">ShareX</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-medium">ShareX</h3>
+        <p className="text-pretty text-sm text-muted-foreground">
           Screenshots and file sharing on Windows. Open the downloaded .sxcu
           file in ShareX and confirm the import.
         </p>
@@ -64,7 +64,7 @@ export function ShareXTool() {
         onClick={handleShareXDownload}
         disabled={isLoading}
       >
-        {isLoading ? 'Downloading...' : 'Download Config'}
+        {isLoading ? 'Downloading…' : 'Download config'}
       </Button>
     </div>
   )

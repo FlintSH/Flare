@@ -2,7 +2,7 @@ export function FileCardSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className="overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-sm"
+      className="overflow-hidden rounded-xl border border-border/60 bg-card/80 shadow-sm"
     >
       <div className="aspect-square animate-pulse bg-muted/50" />
       <div className="border-t border-border/40 p-3">

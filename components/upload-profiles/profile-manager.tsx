@@ -3,20 +3,20 @@
 import { useRef, useState } from 'react'
 
 import {
+  AlertCircle,
   ChevronDown,
   Download,
   Plus,
-  Save,
-  Sparkles,
   Star,
-  Tag,
   Trash2,
   Upload,
 } from 'lucide-react'
 
+import { MetaLine } from '@/components/profile/meta-line'
 import { ITakeSetupButton } from '@/components/profile/tools/itake-tool'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -37,11 +37,20 @@ import {
   type UploadProfileView,
   uploadRecipeSchema,
 } from '@/lib/uploads/schema'
+import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
 import { useUploadProfiles } from './profile-picker'
+
+// Profiles and recipes are insets inside their cards; both lists share it.
+const listItemClassName =
+  'w-full rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+// Drawn like SelectTrigger, so the tag picker lines up with the selects.
+const tagTriggerClassName =
+  'flex h-9 w-full items-center justify-between gap-2 whitespace-nowrap rounded-md border border-control bg-transparent px-3 py-2 text-left text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 md:text-sm'
 
 const controls: {
   key: Exclude<keyof UploadProfileOptions, 'tagIds'>
@@ -53,7 +62,7 @@ const controls: {
     label: 'Visibility',
     choices: [
       ['PUBLIC', 'Public'],
-      ['PRIVATE', 'Private — only me'],
+      ['PRIVATE', 'Private (only me)'],
     ],
   },
   {
@@ -93,6 +102,8 @@ const controls: {
     ],
   },
 ]
+// Descriptions stay short enough for one line in the narrow desktop column,
+// so the three recipes keep one height.
 const starters: {
   name: string
   description: string
@@ -100,7 +111,7 @@ const starters: {
 }[] = [
   {
     name: 'Public screenshots',
-    description: 'A minimal share page and random filenames.',
+    description: 'Minimal share page and random filenames.',
     options: {
       visibility: 'PUBLIC',
       randomizeFileUrls: true,
@@ -119,7 +130,7 @@ const starters: {
   },
   {
     name: 'Temporary clips',
-    description: 'Public links that become private after one hour.',
+    description: 'Public links that go private after an hour.',
     options: {
       visibility: 'PUBLIC',
       expiration: 'HOUR',
@@ -128,6 +139,23 @@ const starters: {
     },
   },
 ]
+
+/** Whether two option sets save the same choices (tag order aside). */
+function sameOptions(a: UploadProfileOptions, b: UploadProfileOptions) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<
+    keyof UploadProfileOptions
+  >
+  return [...keys].every((key) => {
+    if (key === 'tagIds') {
+      const left = a.tagIds ?? []
+      const right = b.tagIds ?? []
+      return (
+        left.length === right.length && left.every((id) => right.includes(id))
+      )
+    }
+    return a[key] === b[key]
+  })
+}
 
 export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const { data, error } = useUploadProfiles()
@@ -235,23 +263,32 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     })
   }
 
+  // Card headings sit one level below the section heading.
+  const CardHeading = embedded ? 'h4' : 'h2'
+  // Save waits for something to save: a name for a new profile, and a
+  // change for a saved one.
+  const unchanged =
+    !!editing &&
+    name.trim() === editing.name &&
+    sameOptions(options, editing.options)
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           {!embedded && (
-            <p className="text-sm font-medium text-primary mb-2">
+            <p className="mb-2 text-sm font-medium text-primary">
               Your workflow
             </p>
           )}
           {embedded ? (
-            <h3 className="text-lg font-semibold">Reusable upload profiles</h3>
+            <h3 className="font-semibold">Reusable upload profiles</h3>
           ) : (
             <h1 className="text-3xl font-bold tracking-tight">
               Upload profiles
             </h1>
           )}
-          <p className="text-muted-foreground mt-2 max-w-2xl">
+          <p className="mt-1.5 max-w-2xl text-pretty text-sm text-muted-foreground">
             Save how you share. Use the same settings from your browser,
             screenshot tools and API.
           </p>
@@ -262,11 +299,11 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
             disabled={busy}
             onClick={() => importInput.current?.click()}
           >
-            <Upload className="mr-2 h-4 w-4" />
+            <Upload />
             Import recipe
           </Button>
           <Button onClick={() => choose(null)}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus />
             New profile
           </Button>
         </div>
@@ -296,377 +333,428 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
         }}
       />
       {(message || error) && (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
-        >
-          {message || error}
-        </p>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{message || error}</AlertDescription>
+        </Alert>
       )}
       {!data && !error && (
-        <p role="status" className="text-muted-foreground">
+        <p role="status" className="text-sm text-muted-foreground">
           Loading upload profiles…
         </p>
       )}
       <div className="grid gap-6 xl:grid-cols-[minmax(200px,0.8fr)_minmax(0,1.5fr)]">
-        <div className="min-w-0 space-y-4">
-          <Card className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Your profiles</h2>
+        <div className="min-w-0 space-y-6">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+              <CardHeading className="font-semibold leading-none tracking-tight">
+                Your profiles
+              </CardHeading>
               <span className="text-xs text-muted-foreground">
                 {data?.profiles.length ?? 0} saved
               </span>
-            </div>
-            {data?.profiles.map((profile) => (
-              <button
-                type="button"
-                key={profile.id}
-                onClick={() => choose(profile)}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${editing?.id === profile.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/60'}`}
-              >
-                <span className="flex items-center gap-2 break-words font-medium">
-                  {profile.name}
-                  {data.defaultProfileId === profile.id && (
-                    <Star
-                      className="h-3.5 w-3.5 fill-primary text-primary"
-                      aria-label="Default profile"
-                    />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data?.profiles.map((profile) => (
+                <button
+                  type="button"
+                  key={profile.id}
+                  onClick={() => choose(profile)}
+                  aria-current={editing?.id === profile.id ? 'true' : undefined}
+                  className={cn(
+                    listItemClassName,
+                    editing?.id === profile.id
+                      ? 'border-primary bg-primary/5'
+                      : 'bg-muted/30 hover:bg-muted/60'
                   )}
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {profile.options.visibility === 'PRIVATE'
-                    ? 'Private'
-                    : profile.options.visibility === 'PUBLIC'
-                      ? 'Public'
-                      : 'Inherited visibility'}{' '}
-                  · {Object.keys(profile.options).length} saved choices
-                </span>
-              </button>
-            ))}
-            {data?.profiles.length === 0 && (
-              <p className="text-sm text-muted-foreground py-3">
-                Start with a recipe below, or create a profile with your own
-                defaults.
-              </p>
-            )}
-            {data?.defaultProfileId && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full"
-                disabled={busy}
-                onClick={() =>
-                  void perform(async () => {
-                    await request('/api/upload-profiles/default', 'PUT', {
-                      profileId: null,
-                    })
-                  })
-                }
-              >
-                Use account settings as default
-              </Button>
-            )}
-          </Card>
-          <div className="space-y-2">
-            <h2 className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="h-4 w-4" />
-              Start with a recipe
-            </h2>
-            {starters.map((starter) => (
-              <button
-                key={starter.name}
-                className="w-full rounded-xl border p-4 text-left hover:bg-muted/50 transition-colors"
-                onClick={() => {
-                  setEditing(null)
-                  setName(starter.name)
-                  setOptions(starter.options)
-                  setMessage('')
-                }}
-              >
-                <span className="font-medium text-sm">{starter.name}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {starter.description}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <Card className="min-w-0 p-5 sm:p-6 space-y-6">
-          <div>
-            <h2 className="text-xl font-semibold">
-              {editing ? 'Edit profile' : 'Create a profile'}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              “Inherit” follows your account or instance settings. Changes apply
-              to future uploads.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="profile-name">Profile name</Label>
-            <Input
-              id="profile-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="My screenshots"
-              maxLength={80}
-            />
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            {controls.map((control) => (
-              <div key={control.key} className="space-y-2">
-                <Label htmlFor={`profile-${control.key}`}>
-                  {control.label}
-                </Label>
-                <Select
-                  value={
-                    options[control.key] === undefined
-                      ? 'inherit'
-                      : String(options[control.key])
-                  }
-                  onValueChange={(value) =>
-                    setOptions((current) => {
-                      const next = { ...current }
-                      if (value === 'inherit') delete next[control.key]
-                      else
-                        Object.assign(next, {
-                          [control.key]:
-                            control.key === 'randomizeFileUrls'
-                              ? value === 'true'
-                              : value,
-                        })
-                      return next
-                    })
-                  }
                 >
-                  <SelectTrigger id={`profile-${control.key}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inherit">Inherit</SelectItem>
-                    {control.choices.map(([value, label]) => (
-                      <SelectItem value={value} key={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
-            <div className="space-y-2">
-              <Label htmlFor="profile-tags">Tags</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="profile-tags"
-                    variant="outline"
-                    className="w-full justify-start font-normal"
-                  >
-                    <Tag className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">
-                      {options.tagIds?.length
-                        ? tags
-                            .filter((tag) => options.tagIds?.includes(tag.id))
-                            .map((tag) => tag.name)
-                            .join(', ') || `${options.tagIds.length} selected`
-                        : 'No tags'}
-                    </span>
-                    <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-72 p-2">
-                  <Input
-                    aria-label="Find a tag"
-                    placeholder="Find a tag…"
-                    value={tagSearch}
-                    onChange={(event) => setTagSearch(event.target.value)}
-                    className="mb-2"
-                  />
-                  <div className="max-h-52 overflow-y-auto">
-                    {tagsLoading ? (
-                      <p
-                        className="p-2 text-sm text-muted-foreground"
-                        role="status"
-                      >
-                        Loading tags…
-                      </p>
-                    ) : tagsError ? (
-                      <div className="p-2 text-sm">
-                        <p role="alert">Couldn’t load tags.</p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => void reloadTags()}
-                        >
-                          Try again
-                        </Button>
-                      </div>
-                    ) : tags.length === 0 ? (
-                      <p className="p-2 text-sm text-muted-foreground">
-                        Create a tag in your vault, then choose it here.
-                      </p>
-                    ) : tags.filter((tag) =>
-                        tag.name.toLowerCase().includes(tagSearch.toLowerCase())
-                      ).length === 0 ? (
-                      <p className="p-2 text-sm text-muted-foreground">
-                        No tags found.
-                      </p>
-                    ) : (
-                      tags
-                        .filter((tag) =>
-                          tag.name
-                            .toLowerCase()
-                            .includes(tagSearch.toLowerCase())
-                        )
-                        .map((tag) => {
-                          const selected =
-                            options.tagIds?.includes(tag.id) ?? false
-                          return (
-                            <label
-                              key={tag.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                disabled={
-                                  !selected &&
-                                  (options.tagIds?.length ?? 0) >= 20
-                                }
-                                className="h-4 w-4 accent-primary"
-                                onChange={() =>
-                                  setOptions((current) => ({
-                                    ...current,
-                                    tagIds: selected
-                                      ? current.tagIds?.filter(
-                                          (id) => id !== tag.id
-                                        )
-                                      : [...(current.tagIds ?? []), tag.id],
-                                  }))
-                                }
-                              />
-                              <span className="min-w-0 break-words">
-                                {tag.name}
-                              </span>
-                            </label>
-                          )
-                        })
+                  <span className="flex items-center gap-2 break-words text-sm font-medium">
+                    {profile.name}
+                    {data.defaultProfileId === profile.id && (
+                      <Star
+                        className="h-3.5 w-3.5 shrink-0 fill-primary text-primary"
+                        aria-label="Default profile"
+                      />
                     )}
-                  </div>
-                  {(options.tagIds?.length ?? 0) > 0 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="mt-2 w-full border-t"
-                      onClick={() =>
-                        setOptions((current) => ({ ...current, tagIds: [] }))
-                      }
-                    >
-                      Clear tags
-                    </Button>
-                  )}
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-muted-foreground">
-                Add these tags to every file uploaded with this profile.
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Passwords are set on individual uploads. Recipes contain preferences
-            only and never include account credentials. Tags in a recipe belong
-            to this account.
-          </p>
-          <div className="flex flex-wrap items-center gap-2 border-t pt-5">
-            <Button onClick={() => void save()} disabled={busy || !name.trim()}>
-              <Save className="mr-2 h-4 w-4" />
-              {busy ? 'Saving…' : 'Save profile'}
-            </Button>
-            {editing && (
-              <>
+                  </span>
+                  <MetaLine
+                    className="mt-1 text-xs text-muted-foreground"
+                    items={[
+                      {
+                        key: 'visibility',
+                        text:
+                          profile.options.visibility === 'PRIVATE'
+                            ? 'Private'
+                            : profile.options.visibility === 'PUBLIC'
+                              ? 'Public'
+                              : 'Inherited visibility',
+                      },
+                      {
+                        key: 'choices',
+                        text: `${Object.keys(profile.options).length} saved choices`,
+                      },
+                    ]}
+                  />
+                </button>
+              ))}
+              {data?.profiles.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Start with a recipe below, or create a profile with your own
+                  defaults.
+                </p>
+              )}
+              {data?.defaultProfileId && (
                 <Button
-                  variant="outline"
-                  disabled={busy || data?.defaultProfileId === editing.id}
+                  size="sm"
+                  variant="ghost"
+                  className="w-full"
+                  disabled={busy}
                   onClick={() =>
                     void perform(async () => {
                       await request('/api/upload-profiles/default', 'PUT', {
-                        profileId: editing.id,
-                      })
-                      toast({ title: 'Default profile updated' })
-                    })
-                  }
-                >
-                  <Star className="mr-2 h-4 w-4" />
-                  {data?.defaultProfileId === editing.id
-                    ? 'Default profile'
-                    : 'Make default'}
-                </Button>
-                <Button variant="outline" asChild>
-                  <a href={`/api/upload-profiles/${editing.id}/export`}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export
-                  </a>
-                </Button>
-                <Button
-                  variant="ghost"
-                  aria-label="Delete profile"
-                  disabled={busy}
-                  onClick={() =>
-                    void perform(async () => {
-                      await request(
-                        `/api/upload-profiles/${editing.id}`,
-                        'DELETE'
-                      )
-                      choose(null)
-                      toast({
-                        title: 'Profile deleted',
-                        description: 'Existing files are unchanged.',
+                        profileId: null,
                       })
                     })
                   }
                 >
-                  <Trash2 className="h-4 w-4" />
+                  Use account settings as default
                 </Button>
-              </>
-            )}
-          </div>
-          {editing && (
-            <div className="rounded-xl bg-muted/50 p-4 space-y-3">
-              <div>
-                <h3 className="font-medium">Use this profile in your tools</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Download an uploader with this profile selected. Generated
-                  configs and scripts contain your upload credential; keep them
-                  private.
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardHeading className="font-semibold leading-none tracking-tight">
+                Start with a recipe
+              </CardHeading>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {starters.map((starter) => (
+                <button
+                  type="button"
+                  key={starter.name}
+                  className={cn(
+                    listItemClassName,
+                    'bg-muted/30 hover:bg-muted/60'
+                  )}
+                  onClick={() => {
+                    setEditing(null)
+                    setName(starter.name)
+                    setOptions(starter.options)
+                    setMessage('')
+                  }}
+                >
+                  <span className="block text-sm font-medium">
+                    {starter.name}
+                  </span>
+                  <span className="mt-1 block text-balance text-xs text-muted-foreground">
+                    {starter.description}
+                  </span>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardHeading className="font-semibold leading-none tracking-tight">
+              {editing ? 'Edit profile' : 'Create a profile'}
+            </CardHeading>
+            <p className="text-pretty text-sm text-muted-foreground">
+              “Inherit” follows your account or instance settings. Changes apply
+              to future uploads.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="profile-name">Profile name</Label>
+              <Input
+                id="profile-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="My screenshots"
+                maxLength={80}
+              />
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              {controls.map((control) => (
+                <div key={control.key} className="space-y-2">
+                  <Label htmlFor={`profile-${control.key}`}>
+                    {control.label}
+                  </Label>
+                  <Select
+                    value={
+                      options[control.key] === undefined
+                        ? 'inherit'
+                        : String(options[control.key])
+                    }
+                    onValueChange={(value) =>
+                      setOptions((current) => {
+                        const next = { ...current }
+                        if (value === 'inherit') delete next[control.key]
+                        else
+                          Object.assign(next, {
+                            [control.key]:
+                              control.key === 'randomizeFileUrls'
+                                ? value === 'true'
+                                : value,
+                          })
+                        return next
+                      })
+                    }
+                  >
+                    <SelectTrigger id={`profile-${control.key}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">Inherit</SelectItem>
+                      {control.choices.map(([value, label]) => (
+                        <SelectItem value={value} key={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+              <div className="space-y-2">
+                <Label htmlFor="profile-tags">Tags</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      id="profile-tags"
+                      className={tagTriggerClassName}
+                    >
+                      <span className="truncate">
+                        {options.tagIds?.length
+                          ? tags
+                              .filter((tag) => options.tagIds?.includes(tag.id))
+                              .map((tag) => tag.name)
+                              .join(', ') || `${options.tagIds.length} selected`
+                          : 'No tags'}
+                      </span>
+                      <ChevronDown
+                        className="h-4 w-4 shrink-0 opacity-50"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-2">
+                    <Input
+                      aria-label="Find a tag"
+                      placeholder="Find a tag…"
+                      value={tagSearch}
+                      onChange={(event) => setTagSearch(event.target.value)}
+                      className="mb-2"
+                    />
+                    <div
+                      ref={scrollFadeRef}
+                      className="scroll-fade max-h-52 overflow-y-auto"
+                    >
+                      {tagsLoading ? (
+                        <p
+                          className="p-2 text-sm text-muted-foreground"
+                          role="status"
+                        >
+                          Loading tags…
+                        </p>
+                      ) : tagsError ? (
+                        <div className="p-2 text-sm">
+                          <p role="alert">Couldn’t load tags.</p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void reloadTags()}
+                          >
+                            Try again
+                          </Button>
+                        </div>
+                      ) : tags.length === 0 ? (
+                        <p className="p-2 text-sm text-muted-foreground">
+                          Create a tag in your vault, then choose it here.
+                        </p>
+                      ) : tags.filter((tag) =>
+                          tag.name
+                            .toLowerCase()
+                            .includes(tagSearch.toLowerCase())
+                        ).length === 0 ? (
+                        <p className="p-2 text-sm text-muted-foreground">
+                          No tags found.
+                        </p>
+                      ) : (
+                        tags
+                          .filter((tag) =>
+                            tag.name
+                              .toLowerCase()
+                              .includes(tagSearch.toLowerCase())
+                          )
+                          .map((tag) => {
+                            const selected =
+                              options.tagIds?.includes(tag.id) ?? false
+                            return (
+                              <label
+                                key={tag.id}
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  disabled={
+                                    !selected &&
+                                    (options.tagIds?.length ?? 0) >= 20
+                                  }
+                                  onChange={() =>
+                                    setOptions((current) => ({
+                                      ...current,
+                                      tagIds: selected
+                                        ? current.tagIds?.filter(
+                                            (id) => id !== tag.id
+                                          )
+                                        : [...(current.tagIds ?? []), tag.id],
+                                    }))
+                                  }
+                                />
+                                <span className="min-w-0 break-words">
+                                  {tag.name}
+                                </span>
+                              </label>
+                            )
+                          })
+                      )}
+                    </div>
+                    {(options.tagIds?.length ?? 0) > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 w-full border-t"
+                        onClick={() =>
+                          setOptions((current) => ({ ...current, tagIds: [] }))
+                        }
+                      >
+                        Clear tags
+                      </Button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+                <p className="text-pretty text-xs text-muted-foreground">
+                  Add these tags to every file uploaded with this profile.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {['sharex', 'bash', 'flameshot', 'spectacle'].map((client) => (
-                  <Button
-                    key={client}
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void downloadClient(client)}
-                  >
-                    {
-                      {
-                        sharex: 'ShareX',
-                        bash: 'Bash',
-                        flameshot: 'Flameshot',
-                        spectacle: 'Spectacle',
-                      }[client]
-                    }
-                  </Button>
-                ))}
-                <ITakeSetupButton
-                  profileId={editing.id}
-                  profileName={editing.name}
-                  disabled={busy}
-                  compact
-                />
-              </div>
             </div>
-          )}
+            <p className="text-pretty text-xs text-muted-foreground">
+              Passwords are set on individual uploads. Recipes contain
+              preferences only and never include account credentials. Tags in a
+              recipe belong to this account.
+            </p>
+            {/* Form actions: the primary at the end on wider screens; full
+                width and on top on phones, like dialog footers. */}
+            <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              {editing && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="text-destructive hover:bg-danger/10 hover:text-destructive"
+                    aria-label="Delete profile"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        await request(
+                          `/api/upload-profiles/${editing.id}`,
+                          'DELETE'
+                        )
+                        choose(null)
+                        toast({
+                          title: 'Profile deleted',
+                          description: 'Existing files are unchanged.',
+                        })
+                      })
+                    }
+                  >
+                    <Trash2 />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-auto sm:flex-none"
+                    asChild
+                  >
+                    <a href={`/api/upload-profiles/${editing.id}/export`}>
+                      <Download />
+                      Export
+                    </a>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-auto sm:flex-none"
+                    disabled={busy || data?.defaultProfileId === editing.id}
+                    onClick={() =>
+                      void perform(async () => {
+                        await request('/api/upload-profiles/default', 'PUT', {
+                          profileId: editing.id,
+                        })
+                        toast({ title: 'Default profile updated' })
+                      })
+                    }
+                  >
+                    <Star />
+                    {data?.defaultProfileId === editing.id
+                      ? 'Default profile'
+                      : 'Make default'}
+                  </Button>
+                </div>
+              )}
+              <Button
+                className="w-full sm:w-auto"
+                onClick={() => void save()}
+                disabled={busy || !name.trim() || unchanged}
+              >
+                {busy ? 'Saving…' : 'Save profile'}
+              </Button>
+            </div>
+            {editing && (
+              <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+                <div>
+                  <h3 className="text-sm font-medium">
+                    Use this profile in your tools
+                  </h3>
+                  <p className="mt-1 text-pretty text-xs text-muted-foreground">
+                    Download an uploader with this profile selected. Generated
+                    configs and scripts contain your upload credential; keep
+                    them private.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['sharex', 'bash', 'flameshot', 'spectacle'].map(
+                    (client) => (
+                      <Button
+                        key={client}
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => void downloadClient(client)}
+                      >
+                        {
+                          {
+                            sharex: 'ShareX',
+                            bash: 'Bash',
+                            flameshot: 'Flameshot',
+                            spectacle: 'Spectacle',
+                          }[client]
+                        }
+                      </Button>
+                    )
+                  )}
+                  <ITakeSetupButton
+                    profileId={editing.id}
+                    profileName={editing.name}
+                    disabled={busy}
+                    compact
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>

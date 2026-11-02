@@ -18,7 +18,9 @@ Open **Settings → Email** with `settings.email` (and `settings.read` to naviga
 4. Set a sender address the provider authorizes, a display name, and optional Reply-To.
 5. Set the public Flare URL, or let it use `NEXTAUTH_URL`. It must use HTTPS outside localhost testing.
 6. Choose **Test connection**, then **Send test email** to an address you control. Open the inbox to confirm receipt.
-7. Enable automatic sending and save when you are satisfied with the result.
+7. Turn on **Enable email** and choose **Save email settings** when you are satisfied with the result.
+
+The bar with **Save email settings** sits at the end of the settings and shows whether you have unsaved changes. Its buttons become available once you change something; **Discard** returns every field to the saved settings. Email settings save separately from the rest of Settings. **Delivery status**, below the bar, is not part of that save; its **Refresh delivery status** and **Retry delivery** buttons act immediately.
 
 Tests can use the draft configuration before saving or enabling automatic email. Connection testing checks connectivity/authentication; sending tests SMTP acceptance of sender and recipient. Test messages count toward the daily cap. Server acceptance does not guarantee inbox delivery.
 
@@ -82,7 +84,7 @@ When an account requires passkeys, starting enrollment or a confirmed email chan
 
 Two separate controls affect SSO:
 
-- **Settings → Access → Require Verified Email** controls whether a new OIDC identity needs the provider's `email_verified=true` claim before Flare creates its account.
+- **Settings → Access → Require verified email** controls whether a new OIDC identity needs the provider's `email_verified=true` claim before Flare creates its account.
 - **Settings → Email → Trust verified SSO email** controls whether that provider proof also satisfies Flare's account-email policy.
 
 The second control is off by default. When enabled, proof is tied to the account's current email and configured identity. Disabling trust stops accepting proof based solely on an OIDC claim. Neither option links accounts with matching email addresses. [Full SSO guide](/admin/sso).

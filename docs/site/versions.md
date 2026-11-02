@@ -5,7 +5,7 @@ description: Read the documentation for a dated Flare release and compare what c
 
 # Documentation versions and changes
 
-The public handbook opens on the **current stable release**. Find your installed Flare version in **Settings → General → Instance Information**, then choose the matching documentation below or use **Documentation release → View docs** on any page. Ask your instance administrator for the version if you cannot open Settings. Development changes appear in the stable handbook when they ship in a stable release; the rolling preview is available separately through an explicit link below.
+The public handbook opens on the **current stable release**. Find your installed Flare version in **Settings → General → Instance information**, then choose the matching documentation below or use **Documentation release → View docs** on any page. Ask your instance administrator for the version if you cannot open Settings. Development changes appear in the stable handbook when they ship in a stable release; the rolling preview is available separately through an explicit link below.
 
 <VersionHistory />
 

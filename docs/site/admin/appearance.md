@@ -10,13 +10,13 @@ Open **Settings → Appearance** to design the instance's identity and public sh
 
 ## A draft-to-publish workflow
 
-1. Edit Identity, Theme, or Sharing. The preview follows your working design.
+1. Edit Identity, Theme, or Sharing. The preview follows your working design. On a phone, the section tabs stay on one row; swipe it sideways to reach **Appearance packs**.
 2. Check light and dark modes, image and code examples, and a protected-file example.
 3. Choose **Save draft** to keep the design for later, or **Publish appearance** to make it live.
 4. Open a real share page and the dashboard on desktop and mobile.
 5. If you need to go back, choose **Restore previous**.
 
-Flare keeps a saved draft, the published design, and the previous published design. This is a one-step restore, not an unlimited history. **Discard draft** removes the draft without changing the published appearance. Concurrent saves use revisions, so a stale editor must reload instead of silently overwriting another administrator's work.
+These actions are in the bar under the studio, which also shows whether you have unsaved changes, a saved draft, or the published design. Flare keeps a saved draft, the published design, and the previous published design. This is a one-step restore, not an unlimited history. **Discard** removes the draft without changing the published appearance; with unsaved edits and no draft, it returns the studio to the published design. Concurrent saves use revisions, so a stale editor must reload instead of silently overwriting another administrator's work.
 
 ## Identity
 
@@ -33,9 +33,15 @@ Logos are embedded into the appearance document, making exported designs portabl
 
 ## Theme
 
-Enable **Use studio theme** to apply the studio palettes. Leaving it off keeps the original/legacy theme behavior while allowing identity and sharing choices to be saved.
+Enable **Use studio theme** to apply the studio palettes. Leaving it off keeps the original/legacy theme behavior while allowing identity and sharing choices to be saved. With it off, light mode uses Flare's original light palette too; light colors you changed in the studio, including a preset you tried, apply only once the studio theme is on. Earlier builds kept applying a saved studio light palette to light mode after the studio theme was switched off.
 
-Start with **Midnight**, **Orbit**, **Tide**, or **Ember**, then customize the light and dark palettes. Palette fields accept six-digit hex colors. Foreground/background pairs exist for cards, popovers, primary, secondary, muted, accent, and destructive states, alongside page colors, borders, inputs, and focus rings. Preview text, buttons, error states, and keyboard focus when choosing colors.
+Start with **Midnight**, **Orbit**, **Tide**, or **Ember**, then customize the light and dark palettes. A preset sets the primary and focus color for both modes. In dark mode it also sets the page color and gives borders, fields, and secondary text the same hue, so the violet, teal, or warm page doesn't show slate lines. A preset applied before this change keeps its stored colors; choose it again, then **Publish**, to pick up the matching neutrals. Palette fields accept six-digit hex colors. Foreground/background pairs exist for cards, popovers, primary, secondary, muted, accent, and destructive states, alongside page colors, borders, inputs, and focus rings. Preview text, buttons, error states, and keyboard focus when choosing colors.
+
+A few colors are derived from the palette so they stay readable whatever it holds:
+
+- **Destructive** fills buttons such as **Delete**. Error messages and destructive menu items use the same hue, lightened in dark mode and darkened in light mode when the color is too dark or too light to read as text. In dark mode a very deep destructive color is also lifted for button fills (to about 55% lightness), so **Delete** reads as a clear red next to the red text instead of a maroon that looks disabled.
+- The outlines of text fields, selects, and unchecked switches mix **Input** with **Muted foreground**, so an empty field stays visible. With the default palettes they reach 3:1 against the page.
+- Success, warning, danger, and info labels, such as an invite's **Active** status or the audit log's outcomes, use fixed green, amber, red, and blue shades for each mode. They don't change with the palette.
 
 | Control       | Choices             |
 | ------------- | ------------------- |
@@ -60,7 +66,7 @@ Choose a default share-page layout:
 
 <Screenshot src="/screenshots/customization/share-delivery.png" alt="A real Flare public share page using the Delivery layout" caption="The Delivery layout gives a shared file a spacious presentation." />
 
-Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
+Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
 
 Upload profiles can select a share style for new files. A file with no stored style inherits the current instance default, so changing the default can change how those older files appear too.
 
@@ -98,7 +104,7 @@ Packs do not include accounts, uploaded files, storage credentials, custom CSS/h
 
 Existing installations retain their explicit color overrides. The Appearance section keeps the original theme controls alongside the studio, so you can continue using the classic look. A partial or empty legacy palette falls back to original Flare colors.
 
-Open **Classic color controls**, then **Advanced Color Options**, to set individual colors. They apply while **Use studio theme** is off. Each color is an HSL value such as `222.2 84% 4.9%` (hue 0 to 360, saturation and lightness 0 to 100) or a hex color such as `#1e293b`. The color picker and hex values are saved in HSL form: a hex value stays as you type it, and the field shows the saved HSL value once you leave it. A value that is neither shows a message under the field when you leave it and is not saved. It stays in the field until you correct it or choose **Discard**, and **Save settings** keeps the last valid color. The classic theme mode is `dark`, `light`, or `system`.
+Open **Classic color controls**, then **Advanced color options**, to set individual colors. They apply while **Use studio theme** is off. Each color is an HSL value such as `222.2 84% 4.9%` (hue 0 to 360, saturation and lightness 0 to 100) or a hex color such as `#1e293b`. The color picker and hex values are saved in HSL form: a hex value stays as you type it, and the field shows the saved HSL value once you leave it. A value that is neither shows a message under the field when you leave it and is not saved. It stays in the field until you correct it or choose **Discard**, and **Save settings** keeps the last valid color. The classic theme mode is `dark`, `light`, or `system`.
 
 <Screenshot src="/screenshots/customization/appearance-classic-colors.png" alt="Classic color controls with the Primary field set to red and a message saying classic colors must be HSL values or hex colors and that the value isn't saved" caption="An invalid classic color is flagged in place and never reaches the page." />
 

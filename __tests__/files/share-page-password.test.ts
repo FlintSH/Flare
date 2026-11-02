@@ -83,7 +83,7 @@ describe('share page password pause', () => {
     }
 
     const html = renderToStaticMarkup(await open(password))
-    expect(html).toContain('Too Many Attempts')
+    expect(html).toContain('Password-protected file')
     expect(html).toContain(
       'Too many incorrect passwords were entered for this file. Wait 15 min, then try again.'
     )

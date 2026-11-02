@@ -14,6 +14,12 @@ import {
   X,
 } from 'lucide-react'
 
+import {
+  type CheckerTone,
+  checkerClassName,
+  checkerToneFor,
+} from '@/components/file/checker-tone'
+
 import { cn } from '@/lib/utils'
 
 export interface LightboxImage {
@@ -214,6 +220,7 @@ function ImageStage({
   const [natural, setNatural] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState<number | null>(null)
   const [failed, setFailed] = useState(false)
+  const [tone, setTone] = useState<CheckerTone>(null)
   const ready = natural.width > 0
   const fit =
     ready && size.width > 0
@@ -356,14 +363,18 @@ function ImageStage({
                 src={image.src}
                 alt={image.name}
                 draggable={false}
-                onLoad={(event) =>
+                onLoad={(event) => {
+                  setTone(checkerToneFor(event.currentTarget))
                   setNatural({
                     width: event.currentTarget.naturalWidth,
                     height: event.currentTarget.naturalHeight,
                   })
-                }
+                }}
                 onError={() => setFailed(true)}
-                className="m-auto block max-w-none shrink-0 select-none"
+                className={cn(
+                  checkerClassName(tone),
+                  'm-auto block max-w-none shrink-0 select-none'
+                )}
                 style={{
                   width: ready ? natural.width * scale : undefined,
                   height: ready ? natural.height * scale : undefined,

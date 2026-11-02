@@ -27,12 +27,15 @@ export function SecurityProof({
   status,
   busy,
   requirePasskey = false,
+  showHint = true,
   onConfirmed,
   onBusyChange,
 }: {
   status: SecurityStatus
   busy: boolean
   requirePasskey?: boolean
+  /** Off when the dialog's description already asks for confirmation. */
+  showHint?: boolean
   onConfirmed: () => Promise<void>
   onBusyChange: (busy: boolean) => void
 }) {
@@ -89,22 +92,27 @@ export function SecurityProof({
     )
   }
 
+  // The fields sit directly in the dialog's form, without a box of their own.
   return (
-    <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
-      <p className="text-sm text-muted-foreground">
-        Confirm your identity to make this change.
-      </p>
+    <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="proof-password">Current password</Label>
         <Input
           id="proof-password"
           name="proof-password"
           type="password"
+          placeholder="Enter your current password"
           autoComplete="current-password"
           data-sensitive="true"
           required
           disabled={busy}
+          aria-describedby={showHint ? 'proof-password-hint' : undefined}
         />
+        {showHint && (
+          <p id="proof-password-hint" className="text-xs text-muted-foreground">
+            Confirm your identity to make this change.
+          </p>
+        )}
       </div>
       {status.twoFactorEnabled && (
         <div className="space-y-2">

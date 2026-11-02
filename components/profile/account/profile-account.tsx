@@ -32,6 +32,10 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const { data: security, refetch: refreshSecurity } = useSecurityStatus()
   const recentProof = security && hasRecentSecurityProof(security)
   const [emailChanged, setEmailChanged] = useState(false)
+  // Save changes waits for an edit, like every save on these tabs. The
+  // saved name is the baseline until the refreshed profile arrives.
+  const [savedName, setSavedName] = useState(user.name || '')
+  const [nameChanged, setNameChanged] = useState(false)
   const [proofNotice, setProofNotice] = useState<string | null>(null)
 
   const nameRef = useRef<HTMLInputElement>(null)
@@ -153,6 +157,8 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
       onUpdate()
 
+      setSavedName(data.name ?? '')
+      setNameChanged(false)
       setEmailChanged(false)
       if (emailPasswordRef.current) emailPasswordRef.current.value = ''
       if (emailSecurityCodeRef.current) emailSecurityCodeRef.current.value = ''
@@ -191,12 +197,11 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={triggerAvatarUpload}
             disabled={isLoading}
             className="mt-4 w-full"
           >
-            {isLoading ? 'Uploading...' : 'Change Avatar'}
+            {isLoading ? 'Uploading…' : 'Change avatar'}
           </Button>
           <Input
             ref={fileInputRef}
@@ -232,6 +237,9 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                   autoComplete="username"
                   required
                   disabled={isLoading}
+                  onChange={(event) =>
+                    setNameChanged(event.target.value !== savedName)
+                  }
                 />
               </div>
 
@@ -267,6 +275,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                         id="email-current-password"
                         ref={emailPasswordRef}
                         type="password"
+                        placeholder="Enter your current password"
                         autoComplete="current-password"
                         required
                         disabled={isLoading}
@@ -289,6 +298,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                           autoCapitalize="none"
                           spellCheck={false}
                           maxLength={32}
+                          placeholder="Enter an authenticator or recovery code"
                           required
                           disabled={isLoading}
                           data-sensitive="true"
@@ -304,7 +314,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                 !security.hasPassword &&
                 !recentProof &&
                 !security.canUseRecentSso && (
-                  <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                  <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
                     <p className="text-sm text-muted-foreground">
                       Confirm your identity with a fresh SSO sign-in, then
                       return here to change your email.
@@ -344,8 +354,12 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
             </div>
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save Changes'}
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                disabled={isLoading || (!nameChanged && !emailChanged)}
+              >
+                {isLoading ? 'Saving…' : 'Save changes'}
               </Button>
             </div>
           </form>

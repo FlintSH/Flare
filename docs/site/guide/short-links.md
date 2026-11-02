@@ -30,7 +30,7 @@ The dashboard does not offer a custom short code. Your account's vanity URL sett
 
 ## Manage existing links
 
-The table shows the short link, original destination, clicks, creation date, and available actions. Newer links appear first. On narrow screens, scroll the table horizontally to reach every column.
+The table shows each link's original destination, short link, clicks, creation date, and available actions. Newer links appear first. On phones, the destination takes the row's full width; the short link, clicks, and creation date sit under it, with the copy and delete actions beside them. On medium-width screens, only the creation date moves under the destination.
 
 Use the row's copy action to share an existing link, or open it to confirm where it leads. If clipboard access fails, select the link and copy it manually.
 

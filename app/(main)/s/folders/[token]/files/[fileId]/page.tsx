@@ -2,17 +2,20 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
+import {
+  FILE_PASSWORD_DESCRIPTION,
+  FILE_PASSWORD_TITLE,
+  FilePasswordForm,
+  filePasswordProblem,
+} from '@/components/auth/file-password-form'
 import { PublicState } from '@/components/auth/public-state'
 import { Footer } from '@/components/layout/footer'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess, retryAfterMinutes } from '@/lib/files/access'
+import { checkFileAccess } from '@/lib/files/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +23,9 @@ export const metadata: Metadata = {
   title: 'Protected file',
   description: 'This file is protected.',
   robots: { index: false, follow: false },
-  referrer: 'no-referrer',
+  // Only Flare itself receives this address (with the share token) as the
+  // referrer. The file page uses it to link back to the folder.
+  referrer: 'same-origin',
 }
 
 export default async function SharedFolderFilePage({
@@ -53,6 +58,7 @@ export default async function SharedFolderFilePage({
       visibility: true,
       password: true,
       urlPath: true,
+      folder: { select: { name: true } },
     },
   })
   if (!file) notFound()
@@ -81,63 +87,24 @@ export default async function SharedFolderFilePage({
   const showFooter =
     config.settings.customization.published.sharing.showFooter ??
     config.settings.general.credits.showFooter
-  const invalidPassword = access.reason === 'password_invalid'
-  const limited = access.reason === 'password_rate_limited'
-  const problem = limited
-    ? `Too many incorrect passwords were entered for this file. Wait ${retryAfterMinutes(access)} min, then try again.`
-    : invalidPassword
-      ? 'That password didn’t match. Check with the sender and try again.'
-      : null
   const opaquePath = `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}`
 
   return (
     <PublicState
-      compact
-      title={
-        limited
-          ? 'Too Many Attempts'
-          : invalidPassword
-            ? 'Incorrect Password'
-            : 'Password Protected File'
-      }
-      description={
-        limited
-          ? 'Password checks for this file are paused'
-          : invalidPassword
-            ? 'The password you entered is incorrect'
-            : 'This file requires a password to access'
-      }
+      title={FILE_PASSWORD_TITLE}
+      description={FILE_PASSWORD_DESCRIPTION}
       footer={showFooter ? <Footer /> : undefined}
+      backLink={
+        file.folder && {
+          href: `/s/folders/${encodeURIComponent(token)}`,
+          label: file.folder.name,
+        }
+      }
     >
-      <form className="space-y-4" action={opaquePath}>
-        <div className="space-y-2">
-          <Label htmlFor="share-password">File password</Label>
-          <Input
-            id="share-password"
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            placeholder="Enter the password from the sender"
-            className="h-11"
-            aria-invalid={invalidPassword}
-            aria-describedby={problem ? 'share-password-error' : undefined}
-            required
-            autoFocus
-          />
-          {problem && (
-            <p
-              id="share-password-error"
-              role="alert"
-              className="text-sm text-foreground"
-            >
-              {problem}
-            </p>
-          )}
-        </div>
-        <Button type="submit" className="h-11 w-full">
-          {invalidPassword || limited ? 'Try Again' : 'Access File'}
-        </Button>
-      </form>
+      <FilePasswordForm
+        action={opaquePath}
+        problem={filePasswordProblem(access)}
+      />
     </PublicState>
   )
 }

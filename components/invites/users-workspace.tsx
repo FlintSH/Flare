@@ -4,7 +4,10 @@ import { useState } from 'react'
 
 import { UserList } from '@/components/dashboard/user-list'
 import { InviteManager } from '@/components/invites/invite-manager'
+import { pagePanelClassName } from '@/components/layout/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+import { cn } from '@/lib/utils'
 
 type Tab = 'accounts' | 'invites'
 
@@ -20,7 +23,7 @@ export function UsersWorkspace({
   )
   if (!showInvites)
     return (
-      <div className="rounded-2xl border bg-card p-4 sm:p-6">
+      <div className={pagePanelClassName}>
         <UserList />
       </div>
     )
@@ -43,13 +46,15 @@ export function UsersWorkspace({
       </TabsList>
       <TabsContent
         value="accounts"
-        className="mt-0 rounded-2xl border bg-card p-4 sm:p-6"
+        tabIndex={-1}
+        className={cn('mt-0', pagePanelClassName)}
       >
         <UserList />
       </TabsContent>
       <TabsContent
         value="invites"
-        className="mt-0 rounded-2xl border bg-card p-4 sm:p-6"
+        tabIndex={-1}
+        className={cn('mt-0', pagePanelClassName)}
       >
         <InviteManager context="users" />
       </TabsContent>

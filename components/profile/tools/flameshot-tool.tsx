@@ -99,19 +99,19 @@ export function FlameshotTool() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h3 className="font-medium">Flameshot</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-medium">Flameshot</h3>
+        <p className="text-pretty text-sm text-muted-foreground">
           Capture and upload on Linux only. Choose your environment options,
           then run the downloaded script with Bash.
         </p>
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline">Download Script</Button>
+          <Button variant="outline">Download script</Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Flameshot Upload Script</DialogTitle>
+            <DialogTitle>Flameshot upload script</DialogTitle>
             <DialogDescription>
               Choose your Linux options. Your upload token is already included
               in the script.
@@ -124,22 +124,25 @@ export function FlameshotTool() {
               className="space-y-6"
             >
               {}
-              <div className="flex items-start space-x-3 rounded-md bg-blue-50 dark:bg-blue-950/50 p-3 text-blue-600 dark:text-blue-400">
-                <Terminal className="mt-0.5 h-5 w-5 flex-shrink-0" />
+              <div className="flex items-start gap-3 rounded-xl border border-info/30 bg-info/5 p-3">
+                <Terminal
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 text-info"
+                  aria-hidden="true"
+                />
                 <div className="space-y-1">
-                  <div className="text-sm opacity-90">
+                  <div className="text-sm text-muted-foreground">
                     Make sure you have these installed:
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         flameshot
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         curl
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         jq
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         xsel
                       </span>
                     </div>
@@ -150,7 +153,7 @@ export function FlameshotTool() {
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm font-medium mb-1">
-                    Environment Settings
+                    Environment settings
                   </h4>
                   <p className="text-sm text-muted-foreground">
                     Customize the script for your system configuration
@@ -174,7 +177,7 @@ export function FlameshotTool() {
                           </div>
                           <div className="space-y-0.5">
                             <FormLabel className="text-sm">
-                              Wayland Clipboard Support
+                              Wayland clipboard support
                             </FormLabel>
                             <FormDescription className="text-xs">
                               Enable if you&apos;re using Wayland
@@ -207,7 +210,7 @@ export function FlameshotTool() {
                           </div>
                           <div className="space-y-0.5">
                             <FormLabel className="text-sm">
-                              Hyprland Compatibility
+                              Hyprland compatibility
                             </FormLabel>
                             <FormDescription className="text-xs">
                               Enable if you&apos;re using Hyprland
@@ -233,10 +236,10 @@ export function FlameshotTool() {
                     variant="ghost"
                     onClick={() => form.reset()}
                   >
-                    Reset Options
+                    Reset options
                   </Button>
                   <Button type="submit" disabled={isLoading}>
-                    {isLoading ? 'Downloading...' : 'Download Script'}
+                    {isLoading ? 'Downloading…' : 'Download script'}
                   </Button>
                 </div>
               </DialogFooter>

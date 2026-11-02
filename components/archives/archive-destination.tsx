@@ -2,13 +2,18 @@
 
 import { useState } from 'react'
 
-import { Check, Folder, Inbox } from 'lucide-react'
+import { Folder, Inbox } from 'lucide-react'
 
+import {
+  FolderOption,
+  folderListClassName,
+} from '@/components/folders/folder-option'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import { folderPath } from '@/lib/folders/navigation'
 import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFolders } from '@/hooks/use-folders'
 
@@ -43,66 +48,53 @@ export function ArchiveDestination({
           onChange={(event) => setSearch(event.target.value)}
         />
       )}
-      <div
-        role="group"
-        aria-label="Destination folder"
-        className="max-h-36 overflow-y-auto rounded-xl border p-1"
-        aria-busy={loading}
-      >
-        <button
-          type="button"
-          aria-pressed={value === null}
-          onClick={() => onChange(null)}
-          className={cn(
-            'flex w-full items-center gap-3 rounded-lg p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-            value === null && 'bg-primary/10 text-primary'
-          )}
+      {/* The same list as the Move dialog; its height leaves half a row
+          showing when it scrolls. */}
+      <div className="rounded-xl border p-1">
+        <div
+          role="group"
+          aria-label="Destination folder"
+          ref={scrollFadeRef}
+          className={cn(folderListClassName, 'max-h-36')}
+          aria-busy={loading}
         >
-          <Inbox className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="flex-1">Unfiled</span>
-          {value === null && <Check className="h-4 w-4" aria-hidden="true" />}
-        </button>
-        {allowFolders &&
-          (loading ? (
-            <p role="status" className="p-3 text-sm text-muted-foreground">
-              Loading folders…
-            </p>
-          ) : error ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => void reload()}
-            >
-              Retry loading folders
-            </Button>
-          ) : (
-            matching.map((folder) => (
-              <button
-                key={folder.id}
+          <FolderOption
+            icon={<Inbox aria-hidden="true" />}
+            label="Unfiled"
+            selected={value === null}
+            onSelect={() => onChange(null)}
+          />
+          {allowFolders &&
+            (loading ? (
+              <p role="status" className="p-3 text-sm text-muted-foreground">
+                Loading folders…
+              </p>
+            ) : error ? (
+              <Button
                 type="button"
-                aria-pressed={value === folder.id}
-                onClick={() => onChange(folder.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-lg p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
-                  value === folder.id && 'bg-primary/10 text-primary'
-                )}
+                variant="ghost"
+                disabled={disabled}
+                onClick={() => void reload()}
               >
-                <Folder className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="min-w-0 flex-1 break-words">
-                  {folder.path}
-                </span>
-                {value === folder.id && (
-                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                )}
-              </button>
-            ))
-          ))}
-        {allowFolders && search && !loading && !error && !matching.length && (
-          <p className="p-3 text-sm text-muted-foreground">
-            No matching folders.
-          </p>
-        )}
+                Retry loading folders
+              </Button>
+            ) : (
+              matching.map((folder) => (
+                <FolderOption
+                  key={folder.id}
+                  icon={<Folder aria-hidden="true" />}
+                  label={folder.path}
+                  selected={value === folder.id}
+                  onSelect={() => onChange(folder.id)}
+                />
+              ))
+            ))}
+          {allowFolders && search && !loading && !error && !matching.length && (
+            <p className="p-3 text-sm text-muted-foreground">
+              No matching folders.
+            </p>
+          )}
+        </div>
       </div>
       {!allowFolders && (
         <p className="text-xs text-muted-foreground">

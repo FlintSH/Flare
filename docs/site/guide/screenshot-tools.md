@@ -46,7 +46,7 @@ If you want different behavior for different tasks, create profiles such as **Pu
 [iTake](https://github.com/SerStars/iTake) is an open-source menu-bar capture application for screenshots and screen recordings. Its published requirements are macOS 15 or later on Apple Silicon or Intel.
 
 1. Install iTake using its [installation instructions](https://github.com/SerStars/iTake#installing), open it, and allow screen-recording access when prompted.
-2. In Flare, choose **Set Up iTake → Download Config**. To select a particular upload profile, use that profile's **iTake** action instead.
+2. In Flare, choose **Set up iTake → Download config**. To select a particular upload profile, use that profile's **iTake** action instead.
 3. Open the `.itup` download and confirm import in iTake.
 4. In **Preferences → Uploader**, select **Flare — Account defaults** or the named Flare profile.
 5. Enable **Upload Automatically** and keep **Auto Copy Link** enabled for automatic sharing.
@@ -56,7 +56,7 @@ Both images and recordings still follow your Flare upload limits, visibility, an
 
 ## Flameshot on Linux
 
-Choose the Flameshot **Download Script** action, review the options, and download the generated Bash script. It can adjust capture behavior and includes switches for Wayland clipboard support and Hyprland compatibility.
+Choose the Flameshot **Download script** action, review the options, and download the generated Bash script. It can adjust capture behavior and includes switches for Wayland clipboard support and Hyprland compatibility.
 
 The generated script expects `flameshot`, `curl`, `jq`, and `xsel`. When Wayland support is selected, it also checks for `wl-copy`. Follow the installation notes at the top of the file, then run it with Bash:
 
@@ -70,7 +70,7 @@ Flare's generated Flameshot script supports Linux only. Use the iTake integratio
 
 ## Spectacle on KDE
 
-Open Spectacle's **Download Script** action and select **Screenshot** or **Screen Recording**.
+Open Spectacle's **Download script** action and select **Screenshot** or **Screen recording**.
 
 Screenshot choices include full desktop, current monitor, active window, or selected region. Recording choices include full desktop, current monitor, or selected region. The form also offers Wayland clipboard support and an option to include the mouse pointer.
 

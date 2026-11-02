@@ -4,6 +4,8 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { type LucideIcon, ShieldCheck } from 'lucide-react'
 
+import { PageHeader } from '@/components/layout/page-header'
+
 import { cn } from '@/lib/utils'
 
 export type PreferenceSection<T extends string = string> = {
@@ -38,46 +40,65 @@ export function PreferencesShell<T extends string>({
 }) {
   const selected = sections.find((section) => section.id === activeSection)
   const navigation = useRef<HTMLElement>(null)
+  // On narrow screens the section list scrolls sideways: fade whichever edge
+  // still has sections beyond it, so cut-off items read as "more".
+  const [edges, setEdges] = useState({ start: true, end: true })
 
   useEffect(() => {
-    const revealSelection = () => {
+    const nav = navigation.current
+    if (!nav) return
+    const update = () =>
+      setEdges({
+        start: nav.scrollLeft <= 1,
+        end: nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1,
+      })
+    update()
+    nav.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      nav.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  useEffect(() => {
+    const revealSelection = (centre: boolean) => {
       const nav = navigation.current
       const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
       if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return
       const container = nav.getBoundingClientRect()
       const item = active.getBoundingClientRect()
-      if (item.left < container.left)
+      // A new selection is centred, clear of the edge fades, with its
+      // neighbours showing on both sides so the strip still reads as
+      // scrollable.
+      if (centre)
+        nav.scrollLeft +=
+          item.left + item.width / 2 - (container.left + container.width / 2)
+      else if (item.left < container.left)
         nav.scrollLeft -= container.left - item.left
       else if (item.right > container.right)
         nav.scrollLeft += item.right - container.right
     }
-    revealSelection()
-    window.addEventListener('resize', revealSelection)
-    return () => window.removeEventListener('resize', revealSelection)
+    revealSelection(true)
+    // A resize (a phone's toolbar showing or hiding fires one) only brings
+    // the selection back into view, so it doesn't undo a swipe.
+    const onResize = () => revealSelection(false)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [activeSection])
 
   return (
-    <div className="relative isolate mx-auto w-full max-w-7xl pb-12">
+    <div className="relative isolate mx-auto w-full max-w-7xl">
       <div
         aria-hidden="true"
         className="pointer-events-none absolute -left-32 top-28 -z-10 h-96 w-96 rounded-full bg-primary/[.035] blur-3xl"
       />
-      <header className="flex flex-wrap items-start justify-between gap-5 border-b border-border/60 pb-7 pt-2 sm:pb-9">
-        <div className="max-w-2xl">
-          <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
-            {eyebrow}
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {title}
-          </h1>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            {description}
-          </p>
-        </div>
-        {actions && (
-          <div className="flex shrink-0 items-center gap-3">{actions}</div>
-        )}
-      </header>
+      <PageHeader
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        actions={actions}
+      />
 
       <div className="grid min-w-0 gap-7 pt-7 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-10 lg:pt-9">
         <aside className="min-w-0">
@@ -85,6 +106,13 @@ export function PreferencesShell<T extends string>({
             ref={navigation}
             aria-label={`${title} sections`}
             className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0"
+            style={
+              edges.start && edges.end
+                ? undefined
+                : {
+                    maskImage: `linear-gradient(to right, ${edges.start ? '#000' : 'transparent'}, #000 2rem, #000 calc(100% - 2rem), ${edges.end ? '#000' : 'transparent'})`,
+                  }
+            }
           >
             {sections.map((section) => (
               <button
@@ -118,7 +146,7 @@ export function PreferencesShell<T extends string>({
                       </span>
                     )}
                   </span>
-                  <span className="mt-1 hidden text-xs font-normal leading-relaxed text-muted-foreground lg:block">
+                  <span className="mt-1 hidden text-balance text-xs font-normal leading-relaxed text-muted-foreground lg:block">
                     {section.hint || section.description}
                   </span>
                 </span>

@@ -6,17 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { LogoutButton } from '@/app/(main)/dashboard/profile/logout-button'
 import { ProfileClientProps } from '@/types/components/profile'
-import {
-  Database,
-  Fingerprint,
-  HardDrive,
-  KeyRound,
-  Plug,
-  Trash2,
-  Upload,
-  UserPlus,
-  UserRound,
-} from 'lucide-react'
+import { Database, Plug, Upload, UserPlus, UserRound } from 'lucide-react'
 
 import { PersonalAppearanceSettings } from '@/components/customization/personal-appearance-settings'
 import { IntegrationsPanel } from '@/components/integrations/integrations-panel'
@@ -154,16 +144,11 @@ export function ProfileClient({
         </Card>
         <PermissionGate permission="profile.update">
           <Card>
-            <CardHeader className="space-y-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-                <Fingerprint className="h-5 w-5" />
-              </span>
-              <div className="space-y-1.5">
-                <CardTitle>A little about you</CardTitle>
-                <CardDescription>
-                  The name and photo people see when you share.
-                </CardDescription>
-              </div>
+            <CardHeader>
+              <CardTitle>A little about you</CardTitle>
+              <CardDescription>
+                The name and photo people see when you share.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <ProfileAccount user={user} onUpdate={handleRefresh} />
@@ -174,16 +159,11 @@ export function ProfileClient({
         <ProfileSessions />
         <PermissionGate permission="profile.update">
           <Card id="password" className="scroll-mt-28">
-            <CardHeader className="space-y-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-                <KeyRound className="h-5 w-5" />
-              </span>
-              <div className="space-y-1.5">
-                <CardTitle>Change your password</CardTitle>
-                <CardDescription>
-                  Use a strong password that you do not use elsewhere.
-                </CardDescription>
-              </div>
+            <CardHeader>
+              <CardTitle>Change your password</CardTitle>
+              <CardDescription>
+                Use a strong password that you do not use elsewhere.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <ProfileSecurity onUpdate={handleRefresh} />
@@ -204,9 +184,9 @@ export function ProfileClient({
               <Card id="upload-tools" className="scroll-mt-6">
                 <CardHeader>
                   <CardTitle>Screenshot tools and scripts</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-pretty">
                     Choose your tool and download a ready-to-use configuration.
-                    Your upload token is included automatically — no API key to
+                    It includes your upload token, so there is no API key to
                     create or paste.
                   </CardDescription>
                 </CardHeader>
@@ -258,16 +238,11 @@ export function ProfileClient({
       <PreferencesPanel active={displayedSection === 'data'}>
         <div className="space-y-6">
           <Card>
-            <CardHeader className="space-y-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-                <HardDrive className="h-5 w-5" />
-              </span>
-              <div className="space-y-1.5">
-                <CardTitle>Room for your files</CardTitle>
-                <CardDescription>
-                  Keep track of your files, links, and available storage.
-                </CardDescription>
-              </div>
+            <CardHeader>
+              <CardTitle>Room for your files</CardTitle>
+              <CardDescription>
+                Keep track of your files, links, and available storage.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <ProfileStorage
@@ -299,18 +274,13 @@ export function ProfileClient({
             </PermissionGate>
           </PermissionGate>
           <PermissionGate permission="profile.update">
-            <Card className="border-destructive/30">
-              <CardHeader className="space-y-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 text-destructive">
-                  <Trash2 className="h-5 w-5" />
-                </span>
-                <div className="space-y-1.5">
-                  <CardTitle>Delete your account</CardTitle>
-                  <CardDescription>
-                    Permanently remove your account and its data. Export
-                    anything you want to keep first.
-                  </CardDescription>
-                </div>
+            <Card className="border-danger/30">
+              <CardHeader>
+                <CardTitle>Delete your account</CardTitle>
+                <CardDescription>
+                  Permanently remove your account and its data. Export anything
+                  you want to keep first.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ProfileDeleteAccount />

@@ -185,7 +185,7 @@ async function checkMenus(admin, member, role, file) {
       response.request().method() === 'DELETE'
   )
   await expiryDialog
-    .getByRole('button', { name: 'Remove Expiration', exact: true })
+    .getByRole('button', { name: 'Remove expiration', exact: true })
     .click()
   assert.equal((await expiryResponse).status(), 200)
   await expect(expiryDialog).toBeHidden()

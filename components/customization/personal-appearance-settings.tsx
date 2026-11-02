@@ -2,14 +2,7 @@
 
 import { useState } from 'react'
 
-import {
-  Check,
-  Loader2,
-  Monitor,
-  Moon,
-  SlidersHorizontal,
-  Sun,
-} from 'lucide-react'
+import { Monitor, Moon, SlidersHorizontal, Sun } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -67,12 +60,12 @@ export function PersonalAppearanceSettings({
       {error && (
         <p
           role="alert"
-          className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-destructive"
         >
           {error}
         </p>
       )}
-      <Card className="bg-background/60 backdrop-blur-xl" data-flare-surface>
+      <Card>
         <CardHeader>
           <CardTitle>Your workspace, your preference</CardTitle>
           <CardDescription>
@@ -116,36 +109,37 @@ export function PersonalAppearanceSettings({
                 aria-pressed={preference.themeMode === item.value}
                 onClick={() => setPreference({ themeMode: item.value })}
                 className={cn(
-                  'text-left rounded-xl border p-5 transition-colors hover:bg-muted/40',
+                  // Buttons centre their content; keep icons and titles on
+                  // one line when a description wraps.
+                  'flex flex-col justify-start text-left rounded-xl border p-5 transition-colors hover:bg-muted/40',
                   preference.themeMode === item.value &&
-                    'border-primary bg-primary/5 ring-1 ring-primary'
+                    'border-primary bg-primary/5'
                 )}
               >
                 <item.icon className="h-5 w-5 mb-5 text-muted-foreground" />
                 <span className="font-medium text-sm block">{item.title}</span>
-                <span className="text-xs text-muted-foreground block mt-1">
+                <span className="mt-1 block text-balance text-xs text-muted-foreground">
                   {item.description}
                 </span>
               </button>
             ))}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground max-w-xl">
+            <p className="max-w-xl text-pretty text-sm text-muted-foreground">
               Public share pages keep the instance’s brand. Your preference
               changes your dashboard.
             </p>
+            {/* Form actions sit at the end, full width on phones. Like every
+                save on these tabs, it waits for a change and has no icon, so
+                a disabled button never reads as "saved". */}
             <Button
+              className="w-full sm:ml-auto sm:w-auto"
               disabled={
                 busy || preference.themeMode === savedPreference.themeMode
               }
               onClick={savePreference}
             >
-              {busy ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4 mr-2" />
-              )}
-              Save preference
+              {busy ? 'Saving…' : 'Save preference'}
             </Button>
           </div>
         </CardContent>

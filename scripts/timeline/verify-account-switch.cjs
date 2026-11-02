@@ -483,7 +483,7 @@ async function primary(browser) {
       .getByRole('link', { name: 'Profile', exact: true })
       .click()
     await replacement.tab
-      .getByRole('button', { name: 'Sign Out', exact: true })
+      .getByRole('button', { name: 'Sign out', exact: true })
       .click()
     await expect(
       page.getByText('Sign in to view your files.', { exact: true })
@@ -499,7 +499,7 @@ async function primary(browser) {
     )
     assert.deepEqual(state.errors, [])
     console.log(
-      'PASS: Real second-tab Sign Out clears private library content in the unchanged original document.'
+      'PASS: Real second-tab Sign out clears private library content in the unchanged original document.'
     )
   } finally {
     await ctx.close()

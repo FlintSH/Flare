@@ -1,16 +1,32 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 
-import CodeMirror from '@uiw/react-codemirror'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
+import { FileText } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
 import { getLanguageExtension } from '../../protected/language-utils'
 import { useFileViewer } from '../context'
+import { codeViewerTheme } from './code-theme'
 import { ErrorState } from './error-state'
 import { LoadingState } from './loading-state'
+import { PreviewPlaceholder } from './preview-placeholder'
+
+/** Markdown prose wraps to the width; code, logs and other text keep their
+ * lines and scroll sideways, so columns stay aligned. */
+const WRAPPED_LANGUAGES = new Set(['markdown'])
 
 export function TextContent({ language }: { language: string }) {
   const { file, state, fetchContent } = useFileViewer()
   const { resolvedTheme } = useTheme()
+  const dark = resolvedTheme !== 'light'
+  const extensions = useMemo(
+    () => [
+      getLanguageExtension(language),
+      codeViewerTheme(dark),
+      ...(WRAPPED_LANGUAGES.has(language) ? [EditorView.lineWrapping] : []),
+    ],
+    [language, dark]
+  )
 
   useEffect(() => {
     void fetchContent()
@@ -21,31 +37,34 @@ export function TextContent({ language }: { language: string }) {
     return <LoadingState message="Loading file content…" />
   }
 
+  if (!state.content)
+    return (
+      <div className="w-full px-6">
+        <PreviewPlaceholder icon={FileText} title="This file is empty" />
+      </div>
+    )
+
+  // Hairlines above and below set the scrolling text apart from the title
+  // and the actions.
   return (
-    <section className="w-full min-w-0" aria-label={`${file.name} preview`}>
-      {state.content ? (
-        <div className="min-w-0 overflow-auto text-sm [&_.cm-editor]:!bg-transparent [&_.cm-gutters]:!border-border [&_.cm-gutters]:!bg-muted/30 [&_.cm-scroller]:!font-mono">
-          <CodeMirror
-            value={state.content}
-            width="100%"
-            maxHeight="60vh"
-            extensions={[getLanguageExtension(language)]}
-            editable={false}
-            readOnly
-            theme={resolvedTheme === 'light' ? 'light' : 'dark'}
-            basicSetup={{
-              lineNumbers: true,
-              highlightActiveLineGutter: false,
-              highlightActiveLine: false,
-              foldGutter: language !== 'text',
-            }}
-          />
-        </div>
-      ) : (
-        <p className="p-8 text-center text-sm text-muted-foreground">
-          This file is empty.
-        </p>
-      )}
+    <section
+      className="w-full min-w-0 border-y border-border/60 font-mono text-[13px] sm:text-sm"
+      aria-label={`${file.name} preview`}
+    >
+      <CodeMirror
+        value={state.content}
+        extensions={extensions}
+        editable={false}
+        readOnly
+        theme="none"
+        basicSetup={{
+          lineNumbers: true,
+          // Every text view keeps the same gutter, foldable or not.
+          foldGutter: true,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+        }}
+      />
     </section>
   )
 }

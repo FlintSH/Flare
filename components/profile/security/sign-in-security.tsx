@@ -3,17 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
-import {
-  Check,
-  Fingerprint,
-  KeyRound,
-  Loader2,
-  Pencil,
-  Plus,
-  ShieldCheck,
-  Smartphone,
-  Trash2,
-} from 'lucide-react'
+import { Check, KeyRound, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 
 import {
@@ -22,6 +12,8 @@ import {
   passkeyError,
   securityRequest,
 } from '@/components/auth/security-api'
+import { MetaLine } from '@/components/profile/meta-line'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -315,16 +307,11 @@ function AccountSignInSecurity() {
 
   return (
     <Card id="sign-in-security" className="scroll-mt-28">
-      <CardHeader className="space-y-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border bg-muted/40">
-          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div className="space-y-1.5">
-          <CardTitle>Sign-in security</CardTitle>
-          <CardDescription>
-            Add another layer of protection, or sign in with a passkey.
-          </CardDescription>
-        </div>
+      <CardHeader>
+        <CardTitle>Sign-in security</CardTitle>
+        <CardDescription>
+          Add another layer of protection, or sign in with a passkey.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {isPending && (
@@ -354,32 +341,29 @@ function AccountSignInSecurity() {
               aria-labelledby="authenticator-heading"
               className="space-y-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <Smartphone
-                    className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <h3 id="authenticator-heading" className="font-medium">
-                      Authenticator app
-                    </h3>
-                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                      Use a six-digit code after your password when you sign in.
-                    </p>
-                  </div>
+              <div>
+                {/* Status badges follow the title on its line, at every
+                    width. Sub-section headings sit below the card title. */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h3
+                    id="authenticator-heading"
+                    className="text-sm font-medium"
+                  >
+                    Authenticator app
+                  </h3>
+                  <Badge
+                    variant={status.twoFactorEnabled ? 'success' : 'outline'}
+                  >
+                    {status.twoFactorEnabled && <Check aria-hidden="true" />}
+                    {status.twoFactorEnabled ? 'Enabled' : 'Not enabled'}
+                  </Badge>
                 </div>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${status.twoFactorEnabled ? 'border-primary/20 bg-primary/5 text-primary' : 'text-muted-foreground'}`}
-                >
-                  {status.twoFactorEnabled && (
-                    <Check className="h-3 w-3" aria-hidden="true" />
-                  )}
-                  {status.twoFactorEnabled ? 'Enabled' : 'Not enabled'}
-                </span>
+                <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                  Use a six-digit code after your password when you sign in.
+                </p>
               </div>
               {status.twoFactorEnabled ? (
-                <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
                   {status.passkeyRequired && (
                     <p className="text-sm text-muted-foreground">
                       Your authenticator is saved, but password and
@@ -427,12 +411,13 @@ function AccountSignInSecurity() {
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => openAction('setup')}
                 >
                   Set up authenticator
                 </Button>
               ) : (
-                <p className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                <p className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
                   Your account signs in through SSO. Manage two-factor
                   authentication with your identity provider. You can also add a
                   passkey below.
@@ -443,24 +428,18 @@ function AccountSignInSecurity() {
               aria-labelledby="passkeys-heading"
               className="space-y-4 border-t pt-6"
             >
-              <div className="flex items-start gap-3">
-                <Fingerprint
-                  className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h3 id="passkeys-heading" className="font-medium">
-                    Passkeys
-                  </h3>
-                  <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                    Sign in with your fingerprint, face, device PIN, or security
-                    key. A passkey replaces both your password and authenticator
-                    code.
-                  </p>
-                </div>
+              <div>
+                <h3 id="passkeys-heading" className="text-sm font-medium">
+                  Passkeys
+                </h3>
+                <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                  Sign in with your fingerprint, face, device PIN, or security
+                  key. A passkey replaces both your password and authenticator
+                  code.
+                </p>
               </div>
               {status.passkeys.length > 0 ? (
-                <ul className="divide-y rounded-xl border">
+                <ul className="divide-y rounded-xl border bg-muted/30">
                   {status.passkeys.map((passkey) => (
                     <li
                       key={passkey.id}
@@ -470,13 +449,21 @@ function AccountSignInSecurity() {
                         <p className="break-words text-sm font-medium">
                           {passkey.name}
                         </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Added{' '}
-                          {new Date(passkey.createdAt).toLocaleDateString()}
-                          {passkey.lastUsedAt
-                            ? ` · Last used ${new Date(passkey.lastUsedAt).toLocaleDateString()}`
-                            : ' · Not used yet'}
-                        </p>
+                        <MetaLine
+                          className="mt-1 text-xs text-muted-foreground"
+                          items={[
+                            {
+                              key: 'added',
+                              text: `Added ${new Date(passkey.createdAt).toLocaleDateString()}`,
+                            },
+                            {
+                              key: 'used',
+                              text: passkey.lastUsedAt
+                                ? `Last used ${new Date(passkey.lastUsedAt).toLocaleDateString()}`
+                                : 'Not used yet',
+                            },
+                          ]}
+                        />
                       </div>
                       <div className="flex gap-1">
                         <Button
@@ -506,7 +493,7 @@ function AccountSignInSecurity() {
                   ))}
                 </ul>
               ) : (
-                <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
                   No passkeys yet. Add one from a device or password manager you
                   trust.
                 </div>
@@ -514,6 +501,7 @@ function AccountSignInSecurity() {
               <Button
                 type="button"
                 variant="outline"
+                className="w-full sm:w-auto"
                 disabled={
                   !supported ||
                   !status.passkeysAvailable ||
@@ -521,11 +509,11 @@ function AccountSignInSecurity() {
                 }
                 onClick={() => openAction('add-passkey')}
               >
-                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                <Plus aria-hidden="true" />
                 Add a passkey
               </Button>
               {(!supported || !status.passkeysAvailable) && (
-                <p className="text-xs leading-relaxed text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Passkeys require a supported browser at your instance’s
                   configured HTTPS address, or localhost for development.
                 </p>
@@ -543,16 +531,16 @@ function AccountSignInSecurity() {
                 </p>
               )}
               {(status.passkeys.length > 0 || status.passkeyRequired) && (
-                <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h4 className="text-sm font-medium">
                       Require passkey to sign in
                     </h4>
-                    <span className="rounded-full border px-2.5 py-1 text-xs font-medium">
+                    <Badge variant="outline">
                       {status.passkeyRequired ? 'Required' : 'Optional'}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {status.passkeyRequired
                       ? 'Only a passkey or a dedicated passkey recovery code can sign in. Password, authenticator, and SSO sign-in are blocked until you explicitly allow them again.'
                       : 'Require a passkey and block password, authenticator, and SSO sign-in. You will save a separate set of emergency passkey recovery codes.'}
@@ -577,7 +565,7 @@ function AccountSignInSecurity() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-auto min-h-9 whitespace-normal"
+                          className="h-auto min-h-9 whitespace-normal py-1.5"
                           onClick={() => openAction('passkey-codes')}
                         >
                           Replace passkey recovery codes
@@ -586,7 +574,7 @@ function AccountSignInSecurity() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          className="h-auto min-h-9 whitespace-normal"
+                          className="h-auto min-h-9 whitespace-normal py-1.5"
                           onClick={() => openAction('allow-other-methods')}
                         >
                           Allow other sign-in methods
@@ -605,7 +593,7 @@ function AccountSignInSecurity() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-auto min-h-10 whitespace-normal"
+                        className="h-auto min-h-9 w-full whitespace-normal py-1.5 sm:w-auto"
                         disabled={
                           !session?.user.email ||
                           !supported ||
@@ -681,7 +669,7 @@ function AccountSignInSecurity() {
           {error && (
             <p
               role="alert"
-              className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm"
+              className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm"
             >
               {error}
             </p>
@@ -710,7 +698,7 @@ function AccountSignInSecurity() {
               <form onSubmit={submit} className="space-y-5" aria-busy={busy}>
                 {setup ? (
                   <>
-                    <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+                    <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
                       {setup.qr && (
                         <div className="mx-auto w-fit rounded-xl bg-white p-2">
                           <img
@@ -778,6 +766,7 @@ function AccountSignInSecurity() {
                       status={status}
                       busy={busy}
                       requirePasskey={action === 'require-passkey'}
+                      showHint={action !== 'setup'}
                       onBusyChange={setBusy}
                       onConfirmed={async () => {
                         const controller = lifecycle.current
@@ -801,7 +790,6 @@ function AccountSignInSecurity() {
                   </Button>
                   <Button
                     type="submit"
-                    className="h-auto min-h-10 whitespace-normal"
                     variant={
                       action === 'disable' || action === 'remove-passkey'
                         ? 'destructive'
@@ -813,10 +801,7 @@ function AccountSignInSecurity() {
                   >
                     {busy ? (
                       <>
-                        <Loader2
-                          className="mr-2 h-4 w-4 animate-spin"
-                          aria-hidden="true"
-                        />
+                        <Loader2 className="animate-spin" aria-hidden="true" />
                         Please wait…
                       </>
                     ) : action === 'setup' ? (

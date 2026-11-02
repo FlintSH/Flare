@@ -1,12 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 html {
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
-    overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  overflow-x: hidden;
 }
 
 body {
@@ -23,52 +22,255 @@ body {
 }
 
 @layer base {
+  /*
+   * Roles derived from the palette. The 19 palette colours (Settings →
+   * Appearance, or the original dark defaults) stay the source of truth; these
+   * keep text and controls legible whatever they hold.
+   *
+   * --destructive is a fill for white button text, which is often too dark
+   * (dark themes) or too light to read as text. Text utilities use
+   * --destructive-text instead: the same hue with a readable lightness.
+   *
+   * --control outlines inputs, selects and unchecked toggles. Blending the
+   * input colour with the secondary text colour keeps an admin's choice while
+   * reaching 3:1 against the page in the default themes.
+   */
+  :root,
+  .light {
+    --destructive-text: hsl(var(--destructive));
+    --destructive-fill: hsl(var(--destructive));
+    --control: color-mix(
+      in oklab,
+      hsl(var(--muted-foreground)) 55%,
+      hsl(var(--input))
+    );
+    /* Menus, popovers, dialogs and sheets, and the dimmed page behind a
+       dialog. A light theme dims toward the foreground so a white dialog
+       separates from a white page. */
+    --overlay: hsl(var(--popover));
+    --scrim: hsl(var(--foreground) / 0.32);
+    --scrim-solid: color-mix(
+      in srgb,
+      hsl(var(--foreground)) 32%,
+      hsl(var(--background))
+    );
+    /* Status colours: text, icons and 10% tints. */
+    --success: 163 94% 24%;
+    --warning: 26 90% 35%;
+    --danger: 0 74% 42%;
+    --info: 224 76% 48%;
+  }
+
+  .dark {
+    --destructive-text: hsl(var(--destructive));
+    --destructive-fill: hsl(var(--destructive));
+    --scrim: hsl(var(--background) / 0.7);
+    --scrim-solid: hsl(var(--background));
+    /* Overlays sit a step above the page: in a dark theme that's lighter. */
+    --overlay: color-mix(
+      in oklab,
+      hsl(var(--popover)) 93%,
+      hsl(var(--foreground))
+    );
+    --success: 158 64% 52%;
+    --warning: 43 96% 56%;
+    --danger: 0 91% 71%;
+    --info: 213 94% 68%;
+  }
+
+  @supports (color: oklch(from red l c h)) {
+    :root,
+    .light {
+      --destructive-text: oklch(from hsl(var(--destructive)) min(l, 0.52) c h);
+    }
+
+    .dark {
+      --destructive-text: oklch(
+        from hsl(var(--destructive)) max(l, 0.72) min(c, 0.17) h
+      );
+      /* Dark palettes keep a deep red for the fill (#7f1d1d by default),
+         which reads as disabled next to the readable red text: lift it to a
+         clear red that still carries light text. */
+      --destructive-fill: oklch(from hsl(var(--destructive)) max(l, 0.55) c h);
+    }
+  }
+
+  :root,
+  .light {
+    --checker-a: #e2e8f0;
+    --checker-b: #f8fafc;
+  }
+
+  .dark {
+    --checker-a: #475569;
+    --checker-b: #64748b;
+  }
+
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
   }
-}
 
-/* Glassmorphism Effects */
-.glass {
-  @apply bg-background/80 backdrop-blur-lg border border-white/10;
-}
+  ::selection {
+    background-color: hsl(var(--info) / 0.35);
+  }
 
-.glass-hover {
-  @apply hover:bg-background/90 transition-colors duration-200;
-}
+  /* The page keeps a stable scrollbar gutter that fixed overlays don't
+     cover; while a dialog's scrim is up, tint the gutter to match. (Menus
+     lock scrolling too but have no scrim.) */
+  html:has([data-flare-scrim][data-state='open']) {
+    background-color: var(--scrim-solid);
+  }
 
-.glass-card {
-  @apply glass rounded-lg shadow-lg;
-}
+  /* Focus rings draw their 2px gap in the page colour; on the lifted
+     overlay surface (dialogs, menus, popovers, bars) paint it in the
+     overlay colour instead, so the ring doesn't read as a double border. */
+  .bg-overlay :focus-visible {
+    --tw-ring-offset-color: var(--overlay) !important;
+  }
 
-/* Custom Gradients */
-.gradient-border {
-  @apply border border-transparent bg-gradient-to-r from-primary/50 via-primary/25 to-transparent;
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-}
+  .bg-overlay input[type='checkbox']:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--overlay),
+      0 0 0 4px hsl(var(--ring));
+  }
 
-.gradient-bg {
-  @apply bg-gradient-to-br from-background via-background/95 to-primary/10;
-}
+  /* Menu items and select options take focus as the pointer moves over
+     them, so :focus-visible can't tell a mouse from a keyboard there: their
+     ring shows only while the page is being used from the keyboard
+     (components/providers/input-modality.tsx). */
+  html[data-input='keyboard']
+    :is(
+      [role='option'],
+      [role='menuitem'],
+      [role='menuitemcheckbox'],
+      [role='menuitemradio']
+    )[data-highlighted] {
+    box-shadow: inset 0 0 0 2px hsl(var(--ring));
+  }
 
-/* Animation Utilities */
-.animate-fade-in {
-  @apply animate-in fade-in duration-500;
-}
+  /* Inline links and disclosures keep a small radius for the fallback ring
+     below, instead of a square box around the text. */
+  :where(a, summary):focus-visible {
+    border-radius: 0.25rem;
+  }
 
-.animate-slide-in {
-  @apply animate-in slide-in-from-bottom-4 duration-500;
-}
+  /* Links, summaries and plain buttons without a focus style of their own
+     get the same 2px ring with a gap as the shared controls, instead of the
+     browser's outline. Components that draw their own focus state override
+     this with utilities. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
 
-/* Custom Scrollbar */
-@layer utilities {
-  .scrollbar-custom {
-    @apply scrollbar-thin scrollbar-track-transparent scrollbar-thumb-primary/20 hover:scrollbar-thumb-primary/30;
+  /* One checkbox for every form: a 3:1 outline, the primary fill when
+     checked, and the shared focus ring. */
+  input[type='checkbox'] {
+    appearance: none;
+    display: inline-grid;
+    flex-shrink: 0;
+    place-content: center;
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    border: 1px solid var(--control);
+    border-radius: 0.3rem;
+    /* Takes the surface it sits on, like inputs (no dark well in dialogs). */
+    background-color: transparent;
+    cursor: pointer;
+    transition:
+      background-color 150ms,
+      border-color 150ms;
+  }
+
+  input[type='checkbox']::before {
+    content: '';
+    width: 0.625rem;
+    height: 0.625rem;
+    transform: scale(0);
+    background-color: hsl(var(--primary-foreground));
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+
+  input[type='checkbox']:checked,
+  input[type='checkbox']:indeterminate {
+    border-color: hsl(var(--primary));
+    background-color: hsl(var(--primary));
+  }
+
+  input[type='checkbox']:checked::before {
+    transform: scale(1);
+  }
+
+  input[type='checkbox']:indeterminate::before {
+    transform: scale(1);
+    clip-path: inset(38% 14%);
+  }
+
+  input[type='checkbox']:focus-visible {
+    /* Transparent rather than none, so forced colours still draw it. */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 2px hsl(var(--background)),
+      0 0 0 4px hsl(var(--ring));
+  }
+
+  /* Native disclosures use the app's chevron instead of the browser's
+     triangle. Summaries that draw their own control opt out with list-none. */
+  summary {
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary:not(.list-none)::before {
+    content: '';
+    display: inline-block;
+    width: 0.875em;
+    height: 0.875em;
+    margin-right: 0.375em;
+    vertical-align: -0.125em;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    transition: transform 150ms;
+  }
+
+  details[open] > summary:not(.list-none)::before {
+    transform: rotate(90deg);
+  }
+
+  input[type='checkbox']:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* Forced colours replace the drawn fill and tick: use the system's own
+     checkbox and a chevron in the text colour. */
+  @media (forced-colors: active) {
+    input[type='checkbox'] {
+      appearance: auto;
+    }
+
+    input[type='checkbox']::before {
+      content: none;
+    }
+
+    summary:not(.list-none)::before {
+      background-color: CanvasText;
+    }
   }
 }
 
@@ -92,4 +294,99 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground)) transparent;
+}
+
+/* Edge fades for scrolling lists (.scroll-fade with lib/utils/scroll-fade.ts):
+   registered so the fade eases in and out. */
+@property --scroll-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@layer utilities {
+  /* Fades a scrolling list's edge while there's more to scroll that way, so
+     a partly visible row reads as "more below". The ref callback in
+     lib/utils/scroll-fade.ts sets the attributes; a list that fits shows
+     no fade. */
+  .scroll-fade {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--scroll-fade-top),
+      #000 calc(100% - var(--scroll-fade-bottom)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--scroll-fade-top),
+      #000 calc(100% - var(--scroll-fade-bottom)),
+      transparent
+    );
+    transition:
+      --scroll-fade-top 150ms,
+      --scroll-fade-bottom 150ms;
+    /* Keyboard focus scrolls a control clear of the faded edges. */
+    scroll-padding-block: 0.75rem 1.25rem;
+  }
+
+  .scroll-fade[data-scroll-above] {
+    --scroll-fade-top: 0.75rem;
+  }
+
+  .scroll-fade[data-scroll-below] {
+    --scroll-fade-bottom: 1.25rem;
+  }
+
+  /* Form bodies: a deeper fade, so the cue reaches a field even when the
+     cut lands in the gap between two. */
+  .scroll-fade-tall {
+    scroll-padding-block-end: 3rem;
+  }
+
+  .scroll-fade-tall[data-scroll-below] {
+    --scroll-fade-bottom: 3rem;
+  }
+}
+
+@layer components {
+  /* Marks the transparent areas of an image. The dark theme uses mid-grey
+     squares, so dark artwork such as a black logo stays visible on a dark
+     page. Opaque images cover it completely. */
+  .bg-checker {
+    background-color: var(--checker-b);
+    background-image: conic-gradient(
+      var(--checker-a) 25%,
+      transparent 0 50%,
+      var(--checker-a) 0 75%,
+      transparent 0
+    );
+    background-size: 16px 16px;
+  }
+
+  /* Picked per image (components/file/checker-tone.ts): dark artwork on
+     the light board, light artwork on the dark one, in either theme. */
+  .checker-light {
+    --checker-a: #e2e8f0;
+    --checker-b: #f8fafc;
+  }
+
+  /* In dark mode the light board is a step dimmer, so it isn't the
+     brightest thing on the page; dark artwork still reads at 7:1 or more. */
+  .dark .checker-light {
+    --checker-a: #cbd5e1;
+    --checker-b: #e2e8f0;
+  }
+
+  .checker-dark {
+    --checker-a: #1e293b;
+    --checker-b: #334155;
+  }
 }

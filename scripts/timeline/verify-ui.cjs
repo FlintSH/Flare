@@ -129,7 +129,7 @@ async function verifyArchiveSelection(page) {
     await ready(page)
     await expect(selectedCards).toHaveCount(0, { timeout: 15_000 })
     await expect(
-      page.getByText('2 / 100 selected', { exact: true })
+      page.getByText('2 selected · up to 100', { exact: true })
     ).toBeInViewport()
     await page
       .getByRole('button', { name: 'Create archive', exact: true })
@@ -167,7 +167,7 @@ async function verifyArchiveSelection(page) {
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(dialog).toBeHidden()
     await expect(
-      page.getByText('0 / 100 selected', { exact: true })
+      page.getByText('0 selected · up to 100', { exact: true })
     ).toBeInViewport()
     assert.deepEqual(
       archiveRequests,
@@ -524,8 +524,10 @@ async function main() {
     await page
       .getByRole('checkbox', { name: 'Select visible files', exact: true })
       .check()
-    const selected = await page.getByText(/^\d+ \/ 100 selected$/).textContent()
-    assert.match(selected, /^[1-9]\d* \/ 100 selected$/)
+    const selected = await page
+      .getByText(/^\d+ selected · up to 100$/)
+      .textContent()
+    assert.match(selected, /^[1-9]\d* selected · up to 100$/)
     const retainedSelection = await page
       .locator('[data-file-index] input[type="checkbox"]:checked')
       .first()
@@ -811,7 +813,7 @@ async function main() {
       .getByRole('button', { name: 'Cancel', exact: true })
       .click()
     await expect(
-      page.getByText('0 / 100 selected', { exact: true })
+      page.getByText('0 selected · up to 100', { exact: true })
     ).toBeVisible()
     await page.getByRole('button', { name: 'Done', exact: true }).click()
     passed('Create archive retains every selected file after its card unmounts')
@@ -1013,7 +1015,7 @@ async function main() {
       .getByRole('searchbox', { name: 'Search files by name' })
       .fill('Northern lights')
     await expect(
-      page.getByText('0 / 100 selected', { exact: true })
+      page.getByText('0 selected · up to 100', { exact: true })
     ).toBeVisible()
     await page.getByRole('button', { name: 'Done', exact: true }).click()
     await page

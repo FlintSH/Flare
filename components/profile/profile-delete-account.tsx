@@ -73,7 +73,7 @@ export function ProfileDeleteAccount() {
               event.preventDefault()
               void removeAccount()
             }}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="bg-destructive-fill text-destructive-foreground hover:brightness-110"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {busy ? 'Deleting account…' : 'Delete account permanently'}
