@@ -1,5 +1,7 @@
 # Stage 1: Dependencies  
-FROM node:lts AS deps
+# Node.js 25 and later no longer bundle Corepack, which installs pnpm below.
+# Stay on Node.js 24 LTS, the version CI uses, rather than the moving node:lts.
+FROM node:24 AS deps
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
@@ -18,7 +20,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm prisma generate
 
 # Stage 2: Builder
-FROM node:lts AS builder
+FROM node:24 AS builder
 WORKDIR /app
 
 ARG METICULOUS_BUILD=false
@@ -40,7 +42,7 @@ ENV NODE_ENV=production
 RUN pnpm build
 
 # Stage 3: Runner
-FROM node:lts AS runner
+FROM node:24 AS runner
 WORKDIR /app
 
 ARG METICULOUS_BUILD=false
