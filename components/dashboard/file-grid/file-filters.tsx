@@ -101,7 +101,13 @@ function getFileTypeLabel(type: string) {
     'text/plain': 'Plain text',
     'image/svg+xml': 'SVG',
   }
-  return knownTypes[type] || (type.split('/')[1] || type).toUpperCase()
+  // Own keys only: a stored type such as "constructor" mustn't reach
+  // Object.prototype.
+  return (
+    (Object.prototype.hasOwnProperty.call(knownTypes, type) &&
+      knownTypes[type]) ||
+    (type.split('/')[1] || type).toUpperCase()
+  )
 }
 
 export const FileFilters = memo(function FileFilters({

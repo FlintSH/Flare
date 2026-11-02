@@ -18,6 +18,23 @@ describe('languageFromFilename', () => {
     expect(languageFromFilename('archive.tar.unknown')).toBe('text')
   })
 
+  it('reads the last extension', () => {
+    expect(languageFromFilename('report.final.py')).toBe('python')
+  })
+
+  // The share page passes the result to a client component, so anything but
+  // a string (such as Object's constructor) would stop the page rendering.
+  it('treats extensions named like Object members as plain text', () => {
+    for (const name of [
+      'notes.constructor',
+      'notes.__proto__',
+      'notes.toString',
+      'notes.hasOwnProperty',
+      'notes.valueOf',
+    ])
+      expect(languageFromFilename(name), name).toBe('text')
+  })
+
   it('only names languages that have a grammar', () => {
     for (const name of [
       'a.html',
