@@ -1,35 +1,112 @@
 'use client'
 
-import Link from 'next/link'
+import { useId } from 'react'
 
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+import { LogOut } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
+import { cn } from '@/lib/utils'
+
+import { useSignOut } from '@/hooks/use-sign-out'
+
+import { barMenuItemClassName, barMenuProps } from './nav'
+import { PROFILE_ITEM, isCurrentPage } from './navigation'
+
+/** The account menu: who is signed in, their profile, and signing out. */
 export function UserNav() {
   const { data: session } = useSession()
-  const initials = session?.user?.name
+  const pathname = usePathname()
+  const signOut = useSignOut()
+  const user = session?.user
+  const initials = user?.name
     ?.split(' ')
     .map((n) => n[0])
     .join('')
     .slice(0, 2)
     .toUpperCase()
+  const onProfile = isCurrentPage(pathname, PROFILE_ITEM.href)
+  const accountId = useId()
 
   return (
-    <Button variant="ghost" className="relative h-9 w-9 rounded-full" asChild>
-      <Link
-        href="/dashboard/profile"
-        aria-label="Open your profile and preferences"
-      >
-        <Avatar className="h-9 w-9">
-          <AvatarImage
-            src={session?.user?.image || undefined}
-            alt={session?.user?.name || ''}
-          />
-          <AvatarFallback>{initials || 'F'}</AvatarFallback>
-        </Avatar>
-      </Link>
-    </Button>
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          aria-label="Account menu"
+          aria-current={onProfile ? 'true' : undefined}
+          className={cn(
+            'relative h-9 w-9 rounded-full p-0 ring-offset-2 ring-offset-background',
+            // Profile has no place in the bar, so the avatar marks it instead,
+            // thinner than the focus ring so focus still shows.
+            onProfile
+              ? 'ring-1 ring-foreground/40'
+              : 'data-[state=open]:ring-2 data-[state=open]:ring-border'
+          )}
+        >
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={user?.image || undefined} alt="" />
+            {/* The edge keeps light initials from melting into a light bar. */}
+            <AvatarFallback className="border border-border">
+              {initials || 'F'}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      {/* Named after the account, so screen readers hear who is signed in. */}
+      <DropdownMenuContent {...barMenuProps} aria-labelledby={accountId}>
+        <DropdownMenuLabel
+          id={accountId}
+          className="flex flex-col px-2.5 py-2 font-normal"
+        >
+          <span
+            className="truncate text-sm font-medium text-foreground"
+            title={user?.name}
+          >
+            {user?.name}
+          </span>
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={user?.email}
+          >
+            {user?.email}
+          </span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="-mx-1.5" />
+        <DropdownMenuItem asChild className={barMenuItemClassName}>
+          <Link
+            href={PROFILE_ITEM.href}
+            aria-current={onProfile ? 'page' : undefined}
+          >
+            <PROFILE_ITEM.icon
+              className={cn(
+                'text-muted-foreground',
+                onProfile && 'text-primary'
+              )}
+              aria-hidden="true"
+            />
+            {PROFILE_ITEM.label}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="-mx-1.5" />
+        <DropdownMenuItem onSelect={signOut} className={barMenuItemClassName}>
+          <LogOut className="text-muted-foreground" aria-hidden="true" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

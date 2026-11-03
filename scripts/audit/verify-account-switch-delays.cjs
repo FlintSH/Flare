@@ -303,7 +303,8 @@ async function scenario(browser, name) {
     // Verify the new account in its actual UI as well as the shared-cookie API.
     // The original document is never reloaded to force session synchronization.
     await tab.bringToFront()
-    await tab.getByRole('link', { name: 'Profile', exact: true }).click()
+    await tab.getByRole('button', { name: 'Account menu', exact: true }).click()
+    await tab.getByRole('menuitem', { name: 'Profile', exact: true }).click()
     await tab.waitForURL((next) => next.pathname === '/dashboard/profile')
     await expect(tab.locator('#active-sessions')).toContainText(ip)
     await expect(

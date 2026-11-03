@@ -4,7 +4,7 @@ description: A practical map of Flare's instance settings, administrator respons
 
 # Administer your instance
 
-Flare gives administrators control over who can join, how files are stored, what the site looks like, and how account recovery works. Open **Settings** for instance-wide choices, **Users** for account management, and **Roles** for reusable permission groups. Each area and action follows your assigned permissions. Your own upload defaults, tokens, and account preferences remain in **Profile**.
+Flare gives administrators control over who can join, how files are stored, what the site looks like, and how account recovery works. Open the **Admin** menu at the end of the dashboard bar and choose **Settings** for instance-wide choices, **Users** for account management, **Roles** for reusable permission groups, or **Audit log** for instance activity. The menu lists only the pages your roles allow; when they allow just one, that page appears in the bar by itself. Each area and action follows your assigned permissions. Your own upload defaults, tokens, and account preferences remain in **Profile**, in the account menu under your avatar. [Find your way around](/guide/#find-your-way-around) shows both menus.
 
 ## Find the right control
 

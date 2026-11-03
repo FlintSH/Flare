@@ -161,10 +161,8 @@ async function inspectProfile(page, ip, forbiddenIp, sentinel, requests) {
     inspect()
   }, forbiddenIp)
   const before = requests.length
-  await page
-    .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('link', { name: 'Profile', exact: true })
-    .click()
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Profile', exact: true }).click()
   await page.waitForURL((url) => url.pathname === '/dashboard/profile')
   await expect(page.locator('#active-sessions')).toContainText(ip)
   await expect(page.locator('#login-history')).toContainText(ip)

@@ -4,7 +4,7 @@ description: Create reusable permission groups, combine roles, delegate administ
 
 # Roles and permissions
 
-Roles let you give people the tools they need: a contributor can upload, a moderator can review content, and a designer can publish appearance without changing storage or account access. Open **Roles** in the dashboard to manage them. You need **Manage roles** (`roles.manage`), or **Administrator**, to change roles.
+Roles let you give people the tools they need: a contributor can upload, a moderator can review content, and a designer can publish appearance without changing storage or account access. Choose **Admin → Roles** in the dashboard bar to manage them. You need **Manage roles** (`roles.manage`), or **Administrator**, to change roles.
 
 Every account receives **Everyone**, the instance's shared starting permissions. Additional roles add permissions to that baseline. A person can have several roles, and there is no separate “normal user” or “admin user” account type.
 
@@ -27,7 +27,7 @@ Everyone cannot be deleted, renamed, reordered, manually assigned, or granted Ad
 
 [Watch the recorded create-and-assign walkthrough](/demos#create-and-assign-a-role), then follow these steps on your own instance.
 
-1. Open **Roles** and choose **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color. Until you save it, the role list shows the new role as **Not saved yet**.
+1. Choose **Admin → Roles**, then **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color. Until you save it, the role list shows the new role as **Not saved yet**.
 2. Under **Permissions**, use the grouped switches, **Find a permission…**, or **Enable group** / **Clear group** to choose the grants. Choose individual permissions for a narrowly scoped role.
 3. Set **Position** below the roles that should manage it. Higher positions mean higher authority for managing roles and accounts; position does not add feature permissions.
 4. Choose **Save role** in the bar at the end of the editor. While the role has unsaved changes, that bar stays at the bottom of the screen as you scroll. Creating a role does not assign it to anyone.
@@ -111,7 +111,7 @@ Content moderation is instance-wide and does not use the account-management hier
 
 ### Manage permissions on a phone
 
-The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles**, then select a role or choose **Create role**. The page scrolls down to the role's editor, below the role list. Use its permission switches, then **Save role**. Role hierarchy and validation are the same as on desktop.
+The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles** under **Admin**, then select a role or choose **Create role**. The page scrolls down to the role's editor, below the role list. Use its permission switches, then **Save role**. Role hierarchy and validation are the same as on desktop.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/roles/roles-mobile.webp" alt="Mobile role editor with separate View all content, Edit all content, and Delete all content switches" caption="Content reading, editing, and deletion remain separate choices on a phone." />
@@ -186,5 +186,7 @@ node scripts/roles/verify-ui.cjs
 It verifies that sharing-only roles can save a file password, editing-only roles can open expiration controls and cancel a schedule, and a real `204` session-revocation response closes the confirmation and signs out the target. It also injects a plain-text `403` and JSON `409` to test error rendering; those failure cases are simulations, clearly labeled in the result output. The script temporarily changes Everyone, restores its original grants, and removes its own fixture account and role. Run the scripts sequentially so their permission fixtures do not interfere.
 
 Set `FLARE_ROLES_UI_SCREENSHOTS=docs/images/roles` only when intentionally refreshing the three documented UI regression screenshots from a production build. Review the captured images before committing them.
+
+To check that the dashboard bar follows the same permissions, run `node scripts/navigation/verify-ui.cjs` against this instance afterward. [Navigation browser checks](/contributing#navigation-browser-checks) describes what it covers.
 
 The separate [PostgreSQL regression recipe](/contributing#database-permission-and-avatar-regression-tests) verifies transaction, cleanup, and avatar-upload races. Set both `FLARE_ROLES_DATABASE_URL` and `FLARE_AVATAR_DATABASE_URL` to separate disposable databases; omitting either skips its suite. These are separate from the running browser-demo instance above.

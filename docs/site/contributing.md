@@ -511,6 +511,18 @@ pnpm exec vitest run __tests__/invites
 
 Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the policy and token unit tests still run. The PostgreSQL cases use the real route handlers to cover closed-registration sign-up, role grants and their recheck when a link is used, member limits, the Everyone switch and its permissions, revocation, paused links, concurrent use of a single-use link, rollback of a failed registration, deletion of a creator's account, audit records without tokens, batched permission reads that match single-account reads, and the joined-account index.
 
+## Navigation browser checks
+
+The [dashboard bar](/guide/#find-your-way-around) follows each account's permissions. `scripts/navigation/verify-ui.cjs` checks the real bar on the same disposable instance as the [role regression scripts](/admin/roles#reproduce-the-permission-checks-locally): Flare on `http://127.0.0.1:3060`, set up with the name **Alex**, the email `alex@example.test`, and the public fixture password `Roles-demo-only-2026!`. Everyone must keep its default grants. Run it after the role scripts finish, not alongside them:
+
+```sh
+node scripts/navigation/verify-ui.cjs
+```
+
+As Alex, the script checks the four places, the **Admin** menu's pages, order, and hints, one-click switching while the menu is open, the current-page markers on **Roles**, keyboard use (Enter, arrow keys, End, and Escape returning focus to **Admin**), the account menu, the 900-pixel breakpoint, and the phone sheet with its **Admin** and **Account** groups. It then creates two roles and three accounts: one with **View users** and **View audit log** gets an **Admin** menu of two, whose **Users** hint leaves out invites, one with only **View audit log** gets a plain **Audit log** link, and a member with neither gets the full bar from 768 pixels and an account menu that opens **Profile** and signs out. axe checks the bar and every open menu or sheet for serious WCAG 2.1 AA problems, and browser runtime errors fail the run. The script removes its roles and accounts when it finishes, including after a failure.
+
+`FLARE_NAVIGATION_TEST_ORIGIN` selects another loopback origin, `FLARE_NAVIGATION_PASSWORD` another fixture password, and `PW_CHROMIUM_EXECUTABLE_PATH` an installed Chromium. Set `FLARE_NAVIGATION_SCREENSHOTS` to a temporary directory, with a production build running, to capture `admin-menu.webp`, `account-menu.webp`, and `mobile-sheet.webp` for `docs/images/navigation/`, along with three images for review only. Captures use twice the pixel density, so the menus stay legible when the handbook scales them down. Inspect them before replacing the canonical copies.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

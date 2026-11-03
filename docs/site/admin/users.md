@@ -4,7 +4,7 @@ description: Manage registration, invite links, accounts, administrator roles, c
 
 # Users, roles, and access
 
-Open **Users** in the dashboard to find accounts by name or email, filter by role, and inspect file counts, storage use, and shortened links. The list is paginated so you can manage a larger instance without loading every account at once.
+Choose **Admin → Users** in the dashboard bar to find accounts by name or email, filter by role, and inspect file counts, storage use, and shortened links. The list is paginated so you can manage a larger instance without loading every account at once.
 
 <Screenshot src="/screenshots/roles/users-overview.webp" alt="Users page with the account table showing accounts, roles, file counts, and actions" caption="Administrators can manage accounts and open each user's content from one list." />
 
