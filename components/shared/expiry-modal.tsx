@@ -28,6 +28,18 @@ import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
 
+type Preset = 'hour' | 'day' | 'week' | 'month'
+
+const PRESETS: { value: Preset; label: string }[] = [
+  { value: 'hour', label: '1 hour' },
+  { value: 'day', label: '1 day' },
+  { value: 'week', label: '1 week' },
+  { value: 'month', label: '1 month' },
+]
+
+// One selected look for the dialog's choices, matching other selected cards.
+const selectedOption = 'border-primary bg-primary/5'
+
 interface ExpiryModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -44,17 +56,25 @@ export function ExpiryModal({
   onConfirm,
   initialDate,
   initialAction = ExpiryAction.DELETE,
-  title = 'Configure Expiration',
-  description = 'Set when this file should expire',
+  title = 'Configure expiration',
+  description = 'Set when this file should expire.',
 }: ExpiryModalProps) {
   const { can } = usePermissions()
-  const [expiresAt, setExpiresAt] = useState<Date | null>(initialDate || null)
+  const [expiresAt, setDate] = useState<Date | null>(initialDate || null)
+  // The quick option that produced the current date, if any. Any other edit
+  // clears it, so a highlighted option always matches the date shown.
+  const [preset, setPreset] = useState<Preset | null>(null)
   const [action, setAction] = useState<ExpiryAction>(initialAction)
   const [isLoading, setIsLoading] = useState(false)
+  const setExpiresAt = (date: Date | null) => {
+    setPreset(null)
+    setDate(date)
+  }
 
   useEffect(() => {
     if (isOpen) {
-      setExpiresAt(initialDate || null)
+      setDate(initialDate || null)
+      setPreset(null)
       setAction(initialAction)
       setIsLoading(false)
     }
@@ -77,31 +97,29 @@ export function ExpiryModal({
     onOpenChange(false)
   }
 
-  const setPresetExpiry = (
-    duration: number,
-    unit: 'hours' | 'days' | 'weeks' | 'months'
-  ) => {
+  const setPresetExpiry = (value: Preset) => {
     const date = new Date()
 
-    switch (unit) {
-      case 'hours':
-        date.setHours(date.getHours() + duration)
+    switch (value) {
+      case 'hour':
+        date.setHours(date.getHours() + 1)
         break
-      case 'days':
-        date.setDate(date.getDate() + duration)
+      case 'day':
+        date.setDate(date.getDate() + 1)
         date.setHours(23, 59, 59, 999)
         break
-      case 'weeks':
-        date.setDate(date.getDate() + duration * 7)
+      case 'week':
+        date.setDate(date.getDate() + 7)
         date.setHours(23, 59, 59, 999)
         break
-      case 'months':
-        date.setMonth(date.getMonth() + duration)
+      case 'month':
+        date.setMonth(date.getMonth() + 1)
         date.setHours(23, 59, 59, 999)
         break
     }
 
-    setExpiresAt(date)
+    setDate(date)
+    setPreset(value)
   }
 
   const clearExpiry = () => {
@@ -117,33 +135,33 @@ export function ExpiryModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">When file expires</Label>
+          <div
+            role="group"
+            aria-labelledby="expiry-action-label"
+            className="space-y-2"
+          >
+            <p id="expiry-action-label" className="text-sm font-medium">
+              When file expires
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 aria-pressed={action === ExpiryAction.DELETE}
                 disabled={!can('files.delete')}
                 onClick={() => setAction(ExpiryAction.DELETE)}
-                className={cn(
-                  action === ExpiryAction.DELETE &&
-                    'bg-primary/10 border-primary'
-                )}
+                className={cn(action === ExpiryAction.DELETE && selectedOption)}
               >
                 Delete file
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 aria-pressed={action === ExpiryAction.SET_PRIVATE}
                 disabled={!can('files.share')}
                 onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
-                  action === ExpiryAction.SET_PRIVATE &&
-                    'bg-primary/10 border-primary'
+                  action === ExpiryAction.SET_PRIVATE && selectedOption
                 )}
               >
                 Set to private
@@ -158,93 +176,53 @@ export function ExpiryModal({
               action is no longer allowed.
             </p>
           )}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Quick Options</Label>
+          <div
+            role="group"
+            aria-labelledby="expiry-quick-label"
+            className="space-y-2"
+          >
+            <p id="expiry-quick-label" className="text-sm font-medium">
+              Quick options
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPresetExpiry(1, 'hours')}
-                className={cn(
-                  expiresAt &&
-                    Math.abs(
-                      expiresAt.getTime() -
-                        new Date(Date.now() + 60 * 60 * 1000).getTime()
-                    ) <
-                      60 * 1000 &&
-                    'bg-primary/10 border-primary'
-                )}
-              >
-                1 Hour
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPresetExpiry(1, 'days')}
-                className={cn(
-                  expiresAt &&
-                    expiresAt.getDate() ===
-                      new Date(Date.now() + 24 * 60 * 60 * 1000).getDate() &&
-                    expiresAt.getHours() === 23 &&
-                    'bg-primary/10 border-primary'
-                )}
-              >
-                1 Day
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPresetExpiry(1, 'weeks')}
-                className={cn(
-                  expiresAt &&
-                    Math.abs(
-                      expiresAt.getTime() -
-                        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).getTime()
-                    ) <
-                      24 * 60 * 60 * 1000 &&
-                    'bg-primary/10 border-primary'
-                )}
-              >
-                1 Week
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPresetExpiry(1, 'months')}
-                className={cn(
-                  expiresAt &&
-                    expiresAt.getMonth() ===
-                      new Date(
-                        Date.now() + 30 * 24 * 60 * 60 * 1000
-                      ).getMonth() &&
-                    'bg-primary/10 border-primary'
-                )}
-              >
-                1 Month
-              </Button>
+              {PRESETS.map((option) => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant="outline"
+                  aria-pressed={preset === option.value}
+                  onClick={() => setPresetExpiry(option.value)}
+                  className={cn(preset === option.value && selectedOption)}
+                >
+                  {option.label}
+                </Button>
+              ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Custom Date & Time</Label>
+            <Label id="expiry-date-label" htmlFor="expiry-date">
+              Custom date and time
+            </Label>
             <Popover modal={true}>
               <PopoverTrigger asChild>
                 <Button
+                  id="expiry-date"
                   type="button"
+                  aria-labelledby="expiry-date-label expiry-date-value"
                   variant="outline"
                   className={cn(
                     'w-full justify-start text-left font-normal',
-                    !expiresAt && 'text-muted-foreground'
+                    !expiresAt && 'text-muted-foreground',
+                    expiresAt && !preset && selectedOption
                   )}
                 >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {expiresAt
-                    ? format(expiresAt, 'PPP p')
-                    : 'Pick a date and time'}
+                  <CalendarIcon className="h-4 w-4" aria-hidden="true" />
+                  <span id="expiry-date-value">
+                    {expiresAt
+                      ? format(expiresAt, 'PPP p')
+                      : 'Pick a date and time'}
+                  </span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent
@@ -432,9 +410,12 @@ export function ExpiryModal({
                         expiresAt.toDateString() ===
                           new Date().toDateString() &&
                         expiresAt <= new Date() && (
-                          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground">
-                            Time must be at least 5 minutes from now
-                          </div>
+                          <p
+                            role="alert"
+                            className="rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-foreground"
+                          >
+                            Time must be at least 5 minutes from now.
+                          </p>
                         )}
                     </div>
                   )}
@@ -450,24 +431,28 @@ export function ExpiryModal({
               onClick={clearExpiry}
               className="w-full"
             >
-              Remove Expiration
+              Remove expiration
             </Button>
           )}
 
           {expiresAt && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
               <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 shrink-0 text-primary" />
+                <CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <p className="text-sm font-medium">
                   {action === ExpiryAction.DELETE
                     ? 'Auto-delete scheduled'
                     : 'Auto-private scheduled'}
                 </p>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-pretty text-sm text-muted-foreground">
                 {action === ExpiryAction.DELETE
-                  ? `File will be permanently deleted on ${format(expiresAt, 'PPPP p')}`
-                  : `File will be set to private on ${format(expiresAt, 'PPPP p')}`}
+                  ? 'File will be permanently deleted on '
+                  : 'File will be set to private on '}
+                {format(expiresAt, 'PPPP')}{' '}
+                <span className="whitespace-nowrap">
+                  {format(expiresAt, 'p')}
+                </span>
               </p>
             </div>
           )}
@@ -491,11 +476,11 @@ export function ExpiryModal({
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {expiresAt ? 'Setting...' : 'Removing...'}
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {expiresAt ? 'Setting…' : 'Removing…'}
               </>
             ) : (
-              <>{expiresAt ? 'Set Expiration' : 'Remove Expiration'}</>
+              <>{expiresAt ? 'Set expiration' : 'Remove expiration'}</>
             )}
           </Button>
         </DialogFooter>

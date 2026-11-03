@@ -217,7 +217,7 @@ Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `library-ta
 
 ### Thumbnail browser regression
 
-With the same disposable timeline database and server running, check thumbnail delivery in the library and another account's **View Content** dialog:
+With the same disposable timeline database and server running, check thumbnail delivery in the library and another account's **View content** dialog:
 
 ```sh
 export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'

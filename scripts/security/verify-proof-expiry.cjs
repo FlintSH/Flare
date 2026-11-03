@@ -154,17 +154,17 @@ async function main() {
       passwordForm.getByLabel('Authenticator or recovery code', { exact: true })
     ).toHaveCount(0)
     await passwordForm
-      .getByLabel('Current Password', { exact: true })
+      .getByLabel('Current password', { exact: true })
       .fill(originalPassword)
     await passwordForm
-      .getByLabel('New Password', { exact: true })
+      .getByLabel('New password', { exact: true })
       .fill(replacementPassword)
     await passwordForm
-      .getByLabel('Confirm New Password', { exact: true })
+      .getByLabel('Confirm new password', { exact: true })
       .fill(replacementPassword)
     await expireExistingProof()
     await passwordForm
-      .getByRole('button', { name: 'Update Password', exact: true })
+      .getByRole('button', { name: 'Update password', exact: true })
       .click()
     await expect(passwordForm.getByRole('alert')).toContainText(
       'Enter an authenticator or recovery code to continue.'
@@ -178,7 +178,7 @@ async function main() {
       'Expired proof must reveal the code field before any password mutation'
     )
     await expect(
-      passwordForm.getByLabel('New Password', { exact: true })
+      passwordForm.getByLabel('New password', { exact: true })
     ).toHaveValue(replacementPassword)
     if (screenshotDirectory) {
       await mkdir(screenshotDirectory, { recursive: true })
@@ -195,7 +195,7 @@ async function main() {
       .getByLabel('Authenticator or recovery code', { exact: true })
       .fill(enrollment.recoveryCodes[1])
     await successfulSave(
-      passwordForm.getByRole('button', { name: 'Update Password', exact: true })
+      passwordForm.getByRole('button', { name: 'Update password', exact: true })
     )
     assert.equal(mutations.length, 1)
 
@@ -213,7 +213,7 @@ async function main() {
     ).toHaveCount(0)
     await expireExistingProof()
     await accountForm
-      .getByRole('button', { name: 'Save Changes', exact: true })
+      .getByRole('button', { name: 'Save changes', exact: true })
       .click()
     await expect(accountForm.getByRole('alert')).toContainText(
       'Enter your current password to continue.'
@@ -239,7 +239,7 @@ async function main() {
       .getByLabel('Authenticator or recovery code', { exact: true })
       .fill(enrollment.recoveryCodes[3])
     await successfulSave(
-      accountForm.getByRole('button', { name: 'Save Changes', exact: true })
+      accountForm.getByRole('button', { name: 'Save changes', exact: true })
     )
     assert.equal(mutations.length, 2)
 

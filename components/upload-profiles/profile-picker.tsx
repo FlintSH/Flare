@@ -121,12 +121,14 @@ export function ProfilePicker({
       : `${expiry}, then ${effective?.expiryAction === 'SET_PRIVATE' ? 'private' : 'deleted'}`
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
+      {/* One height with or without the link, so a field beside the picker
+          lines up with it. */}
+      <div className="flex min-h-5 items-center justify-between gap-3">
         <Label htmlFor="upload-profile">Upload profile</Label>
         <PermissionGate permission="uploadProfiles.manage">
           <Link
             href="/dashboard/profile?section=uploads"
-            className="text-sm underline underline-offset-4 text-muted-foreground"
+            className="rounded-sm text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Manage profiles
           </Link>
@@ -180,7 +182,7 @@ export function ProfilePicker({
           Your uploads are private because your roles do not allow sharing.
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-pretty text-xs text-muted-foreground">
         {archiveMode && !selectedId
           ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
           : archiveMode && selectedId && !profile
@@ -198,7 +200,7 @@ export function ProfilePicker({
         profile &&
         canShare &&
         effective?.visibility === 'PUBLIC' && (
-          <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-relaxed text-foreground">
+          <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs leading-relaxed text-foreground">
             This profile makes the output public. Anyone with its link can
             access content from your selected files, including content that was
             private.

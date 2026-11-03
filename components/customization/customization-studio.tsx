@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
 import {
+  AlertCircle,
   Check,
   Download,
   Globe2,
   ImagePlus,
+  InfoIcon,
   Layers3,
   Loader2,
   Palette as PaletteIcon,
@@ -18,6 +20,9 @@ import {
   Upload,
 } from 'lucide-react'
 
+import { colorSwatchClassName } from '@/components/settings/form-styles'
+import { SaveBar } from '@/components/settings/save-bar'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -37,12 +42,11 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
 import {
   type AppearanceCommand,
   type AppearanceDocument,
   type CustomizationState,
-  DARK_PALETTE,
-  LIGHT_PALETTE,
   type Palette,
   appearanceDocumentSchema,
   appearancePackSchema,
@@ -103,33 +107,54 @@ const styleOptions = [
 const palettePresets = [
   {
     name: 'Midnight',
-    accent: '#f8fafc',
-    lightAccent: '#0f172a',
-    background: '#020817',
+    ...PALETTE_PRESETS.midnight,
     swatches: ['#020817', '#1e293b', '#f8fafc'],
   },
   {
     name: 'Orbit',
-    accent: '#a78bfa',
-    lightAccent: '#7c3aed',
-    background: '#100d20',
+    ...PALETTE_PRESETS.orbit,
     swatches: ['#100d20', '#6d28d9', '#c4b5fd'],
   },
   {
     name: 'Tide',
-    accent: '#5eead4',
-    lightAccent: '#0f766e',
-    background: '#061c20',
+    ...PALETTE_PRESETS.tide,
     swatches: ['#061c20', '#0d9488', '#99f6e4'],
   },
   {
     name: 'Ember',
-    accent: '#fdba74',
-    lightAccent: '#c2410c',
-    background: '#1c1210',
+    ...PALETTE_PRESETS.ember,
     swatches: ['#1c1210', '#ea580c', '#fed7aa'],
   },
 ]
+
+/**
+ * Edge fades for a row that scrolls sideways, measured like the vertical
+ * list fades (lib/utils/scroll-fade.ts): an edge fades while there is more
+ * beyond it, so a cut-off tab reads as "more".
+ */
+function sidewaysFadeRef(element: HTMLElement | null) {
+  if (!element) return
+  const update = () => {
+    const start = element.scrollLeft > 1
+    const end =
+      element.scrollLeft + element.clientWidth < element.scrollWidth - 1
+    const mask =
+      start || end
+        ? `linear-gradient(to right, ${start ? 'transparent' : '#000'}, #000 2rem, #000 calc(100% - 2rem), ${end ? 'transparent' : '#000'})`
+        : ''
+    element.style.setProperty('mask-image', mask)
+    element.style.setProperty('-webkit-mask-image', mask)
+  }
+  update()
+  element.addEventListener('scroll', update, { passive: true })
+  const resize =
+    typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+  resize?.observe(element)
+  return () => {
+    element.removeEventListener('scroll', update)
+    resize?.disconnect()
+  }
+}
 
 function SettingRow({
   label,
@@ -179,6 +204,11 @@ export function CustomizationStudio({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
+  const sectionNav = useRef<HTMLElement | null>(null)
+  const sectionNavRef = useCallback((element: HTMLElement | null) => {
+    sectionNav.current = element
+    return sidewaysFadeRef(element)
+  }, [])
   const [logoBusy, setLogoBusy] = useState<string | null>(null)
   const dirty =
     document && state
@@ -189,6 +219,17 @@ export function CustomizationStudio({
   useEffect(() => {
     onDirtyChange?.(!!dirty)
   }, [dirty, onDirtyChange])
+
+  // On phones the section tabs scroll sideways: keep the chosen one in view,
+  // centred so its neighbours still show on both sides.
+  useEffect(() => {
+    const nav = sectionNav.current
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return
+    const box = nav.getBoundingClientRect()
+    const item = active.getBoundingClientRect()
+    nav.scrollLeft += item.left + item.width / 2 - (box.left + box.width / 2)
+  }, [section])
 
   const change = <K extends keyof AppearanceDocument>(
     key: K,
@@ -307,52 +348,56 @@ export function CustomizationStudio({
   return (
     <div className="space-y-8 pb-8">
       {recovery && (
-        <div
-          role="status"
-          className="rounded-xl border bg-muted/40 p-4 text-sm space-y-2"
-        >
-          <p className="font-medium">Appearance recovery mode</p>
-          <p className="text-muted-foreground">
-            This page uses Flare’s original appearance with custom CSS and head
-            HTML disabled. Your saved settings are unchanged. Restore a previous
-            appearance below, or{' '}
+        <Alert variant="info" role="status">
+          <InfoIcon aria-hidden="true" />
+          <AlertTitle>Appearance recovery mode</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p className="text-muted-foreground">
+              This page uses Flare’s original appearance with custom CSS and
+              head HTML disabled. Your saved settings are unchanged. Restore a
+              previous appearance below, or{' '}
+              <RecoveryLink
+                href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
+                className="underline underline-offset-4"
+              >
+                repair custom CSS and HTML below
+              </RecoveryLink>
+              .
+            </p>
             <RecoveryLink
-              href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
-              className="underline underline-offset-4"
+              href="/dashboard/settings?section=appearance"
+              className="inline-block underline underline-offset-4"
             >
-              repair custom CSS and HTML below
+              Return to the live appearance
             </RecoveryLink>
-            .
-          </p>
-          <RecoveryLink
-            href="/dashboard/settings?section=appearance"
-            className="inline-block underline underline-offset-4"
-          >
-            Return to the live appearance
-          </RecoveryLink>
-        </div>
+          </AlertDescription>
+        </Alert>
       )}
       {error && (
-        <div
-          role="alert"
-          className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive flex flex-wrap justify-between gap-3"
-        >
-          <p className="break-words">{error}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.location.reload()}
-          >
-            Reload saved state
-          </Button>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span className="break-words">{error}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => window.location.reload()}
+            >
+              Reload saved state
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
       {document && state && (
         <div className="space-y-6">
           <div className="space-y-6">
+            {/* The app's one segmented style, like the Users tabs. Narrow
+                screens keep one row that scrolls sideways, like the
+                settings sections; the padding leaves room for focus rings. */}
             <nav
+              ref={sectionNavRef}
               aria-label="Appearance sections"
-              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+              className="-m-1 flex gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {sections.map((item) => (
                 <button
@@ -360,30 +405,21 @@ export function CustomizationStudio({
                   type="button"
                   onClick={() => setSection(item.id)}
                   aria-current={section === item.id ? 'page' : undefined}
+                  title={item.description}
                   className={cn(
-                    'flex min-w-0 items-center gap-2 text-left rounded-xl border px-3 py-3 transition-colors',
+                    'inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                     section === item.id
-                      ? 'border-primary/60 bg-primary/5 text-foreground'
-                      : 'border-border text-muted-foreground hover:bg-muted/40'
+                      ? 'bg-secondary text-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
-                  <item.icon className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>
-                    <span className="text-sm font-medium block">
-                      {item.name}
-                    </span>
-                    <span className="hidden 2xl:block text-[11px] mt-1 font-normal text-muted-foreground leading-relaxed">
-                      {item.description}
-                    </span>
-                  </span>
+                  <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {item.name}
                 </button>
               ))}
             </nav>
             <div className="grid xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,.9fr)] gap-6 min-w-0">
-              <Card
-                className="min-w-0 bg-background/60 backdrop-blur-xl border-border/60"
-                data-flare-surface
-              >
+              <Card className="min-w-0" data-flare-surface>
                 {section === 'identity' && (
                   <>
                     <CardHeader>
@@ -433,13 +469,26 @@ export function CustomizationStudio({
                                 key={variant}
                                 className="border rounded-xl p-4 space-y-3"
                               >
+                                {/* Each logo on its mode's page colour from this
+                                    palette, with an edge so the tile shows on any
+                                    card. The empty icon takes that mode's muted
+                                    text colour, so it reads on its own tile. */}
                                 <div
-                                  className={cn(
-                                    'h-20 rounded-lg flex items-center justify-center',
-                                    variant === 'logoLight'
-                                      ? 'bg-slate-100'
-                                      : 'bg-slate-950'
-                                  )}
+                                  className="flex h-20 items-center justify-center rounded-lg border border-border"
+                                  style={{
+                                    backgroundColor:
+                                      document.theme[
+                                        variant === 'logoLight'
+                                          ? 'light'
+                                          : 'dark'
+                                      ].background,
+                                    color:
+                                      document.theme[
+                                        variant === 'logoLight'
+                                          ? 'light'
+                                          : 'dark'
+                                      ].mutedForeground,
+                                  }}
                                 >
                                   {document.brand[variant] ? (
                                     <img
@@ -448,10 +497,13 @@ export function CustomizationStudio({
                                       className="h-12 max-w-full object-contain"
                                     />
                                   ) : (
-                                    <ImagePlus className="h-6 w-6 text-slate-400" />
+                                    <ImagePlus
+                                      className="h-6 w-6"
+                                      aria-hidden="true"
+                                    />
                                   )}
                                 </div>
-                                <label className="text-xs font-medium cursor-pointer flex items-center gap-1.5">
+                                <label className="flex cursor-pointer items-center gap-1.5 rounded-md text-xs font-medium has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background">
                                   {logoBusy === variant ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
                                   ) : (
@@ -502,7 +554,7 @@ export function CustomizationStudio({
                           }
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-pretty text-xs text-muted-foreground">
                         Your favicon is below. Custom CSS and head HTML are
                         under{' '}
                         <a
@@ -513,7 +565,7 @@ export function CustomizationStudio({
                             if (styles instanceof HTMLDetailsElement)
                               styles.open = true
                           }}
-                          className="underline underline-offset-4"
+                          className="whitespace-nowrap underline underline-offset-4"
                         >
                           Custom CSS and HTML
                         </a>
@@ -553,19 +605,7 @@ export function CustomizationStudio({
                             onClick={() =>
                               change('theme', {
                                 enabled: true,
-                                light: {
-                                  ...LIGHT_PALETTE,
-                                  primary: preset.lightAccent,
-                                  ring: preset.lightAccent,
-                                },
-                                dark: {
-                                  ...DARK_PALETTE,
-                                  background: preset.background,
-                                  card: preset.background,
-                                  popover: preset.background,
-                                  primary: preset.accent,
-                                  ring: preset.accent,
-                                },
+                                ...presetPalettes(preset),
                               })
                             }
                           >
@@ -676,6 +716,10 @@ export function CustomizationStudio({
                             <Button
                               size="sm"
                               variant={mode === 'light' ? 'secondary' : 'ghost'}
+                              className={cn(
+                                mode !== 'light' && 'text-muted-foreground'
+                              )}
+                              aria-pressed={mode === 'light'}
                               onClick={() => setMode('light')}
                             >
                               Light
@@ -683,6 +727,10 @@ export function CustomizationStudio({
                             <Button
                               size="sm"
                               variant={mode === 'dark' ? 'secondary' : 'ghost'}
+                              className={cn(
+                                mode !== 'dark' && 'text-muted-foreground'
+                              )}
+                              aria-pressed={mode === 'dark'}
                               onClick={() => setMode('dark')}
                             >
                               Dark
@@ -723,7 +771,10 @@ export function CustomizationStudio({
                                       },
                                     })
                                   }
-                                  className="h-7 w-8 bg-transparent cursor-pointer border-0"
+                                  className={cn(
+                                    'h-7 w-8 shrink-0 cursor-pointer border-0 bg-transparent p-0',
+                                    colorSwatchClassName
+                                  )}
                                 />
                                 <span className="text-[11px] font-mono text-muted-foreground">
                                   {document.theme[mode][key]}
@@ -772,7 +823,10 @@ export function CustomizationStudio({
                                         },
                                       })
                                     }
-                                    className="h-7 w-8 bg-transparent"
+                                    className={cn(
+                                      'h-7 w-8 shrink-0 cursor-pointer border-0 bg-transparent p-0',
+                                      colorSwatchClassName
+                                    )}
                                   />
                                 </label>
                               ))}
@@ -803,14 +857,14 @@ export function CustomizationStudio({
                             className={cn(
                               'w-full flex gap-4 items-center text-left rounded-xl border p-4 transition-colors',
                               document.sharing.defaultStyle === style.value
-                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                                : 'hover:bg-muted/30'
+                                ? 'border-primary bg-primary/5'
+                                : 'hover:border-primary/50'
                             )}
                             onClick={() =>
                               change('sharing', { defaultStyle: style.value })
                             }
                           >
-                            <div className="w-12 h-12 rounded-lg bg-muted/60 flex items-center justify-center">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-lg border bg-muted/30">
                               <div
                                 className={cn(
                                   'w-7 h-6 bg-primary/20',
@@ -978,7 +1032,7 @@ export function CustomizationStudio({
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
-                      <div className="rounded-xl border border-dashed p-7 text-center space-y-4">
+                      <div className="space-y-4 rounded-xl border-2 border-dashed border-control bg-muted/20 p-7 text-center">
                         <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
                         <div>
                           <p className="font-medium text-sm">
@@ -1000,6 +1054,7 @@ export function CustomizationStudio({
                           type="file"
                           accept="application/json,.json"
                           className="sr-only"
+                          tabIndex={-1}
                           aria-label="Import appearance pack"
                           onChange={(event) =>
                             void importPack(event.target.files?.[0])
@@ -1012,17 +1067,21 @@ export function CustomizationStudio({
                           </p>
                         )}
                       </div>
-                      <div className="rounded-xl border p-5 space-y-3">
-                        <p className="font-medium text-sm">
-                          Take this appearance with you
-                        </p>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Export the design you are previewing: identity,
-                          embedded logos, both palettes, surfaces and share-page
-                          choices.
-                        </p>
+                      {/* An inset like the others in settings: title and
+                          description as one group, then the action. */}
+                      <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">
+                            Take this appearance with you
+                          </p>
+                          <p className="text-pretty text-sm text-muted-foreground">
+                            Export the design you are previewing: identity,
+                            embedded logos, both palettes, surfaces and
+                            share-page choices.
+                          </p>
+                        </div>
                         <Button variant="outline" onClick={exportPack}>
-                          <Download className="h-4 w-4 mr-2" />
+                          <Download aria-hidden="true" />
                           Export appearance
                         </Button>
                       </div>
@@ -1046,97 +1105,81 @@ export function CustomizationStudio({
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border bg-background/95 backdrop-blur-xl shadow-xl px-5 py-4 flex flex-wrap gap-4 items-center justify-between">
-            <div>
-              <p className="text-sm font-medium flex items-center gap-2">
-                <span
-                  className={cn(
-                    'w-2 h-2 rounded-full',
-                    dirty
-                      ? 'bg-amber-400'
-                      : state.draft
-                        ? 'bg-sky-400'
-                        : 'bg-emerald-400'
-                  )}
-                />
-                {dirty
-                  ? 'Unsaved changes'
-                  : state.draft
-                    ? 'Draft saved · ready to preview'
-                    : 'Published appearance'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {dirty || state.draft
-                  ? 'Your live instance stays the same until you publish.'
-                  : `Revision ${state.revision}${state.publishedAt ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}` : ' · Original Flare appearance'}`}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {state.previous && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() =>
-                    void act({ action: 'restore', revision: state.revision })
-                  }
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                  Restore previous
-                </Button>
-              )}
-              {(dirty || state.draft) && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() =>
-                    dirty && !state.draft
-                      ? setDocument(state.published)
-                      : void act({
-                          action: 'discard',
-                          revision: state.revision,
-                        })
-                  }
-                >
-                  Discard
-                </Button>
-              )}
+          <SaveBar
+            tone={dirty ? 'unsaved' : state.draft ? 'draft' : 'saved'}
+            title={
+              dirty
+                ? 'Unsaved changes'
+                : state.draft
+                  ? 'Draft saved · ready to preview'
+                  : 'Published appearance'
+            }
+            description={
+              dirty || state.draft
+                ? 'Your live instance stays the same until you publish.'
+                : `Revision ${state.revision}${state.publishedAt ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}` : ' · Original Flare appearance'}`
+            }
+          >
+            {state.previous && (
               <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || !dirty || !!logoBusy}
+                variant="ghost"
+                disabled={busy}
                 onClick={() =>
-                  void act({
-                    action: 'save',
-                    revision: state.revision,
-                    document,
-                  })
+                  void act({ action: 'restore', revision: state.revision })
                 }
               >
-                <Save className="h-3.5 w-3.5 mr-2" />
-                Save draft
+                <RotateCcw aria-hidden="true" />
+                Restore previous
               </Button>
+            )}
+            {(dirty || state.draft) && (
               <Button
-                size="sm"
-                disabled={busy || (!dirty && !state.draft) || !!logoBusy}
+                variant="ghost"
+                disabled={busy}
                 onClick={() =>
-                  void act({
-                    action: 'publish',
-                    revision: state.revision,
-                    document,
-                  })
+                  dirty && !state.draft
+                    ? setDocument(state.published)
+                    : void act({
+                        action: 'discard',
+                        revision: state.revision,
+                      })
                 }
               >
-                {busy ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 mr-2" />
-                )}
-                Publish appearance
+                Discard
               </Button>
-            </div>
-          </div>
+            )}
+            <Button
+              variant="outline"
+              disabled={busy || !dirty || !!logoBusy}
+              onClick={() =>
+                void act({
+                  action: 'save',
+                  revision: state.revision,
+                  document,
+                })
+              }
+            >
+              <Save aria-hidden="true" />
+              Save draft
+            </Button>
+            <Button
+              disabled={busy || (!dirty && !state.draft) || !!logoBusy}
+              onClick={() =>
+                void act({
+                  action: 'publish',
+                  revision: state.revision,
+                  document,
+                })
+              }
+            >
+              {busy ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles aria-hidden="true" />
+              )}
+              Publish appearance
+            </Button>
+          </SaveBar>
         </div>
       )}
       {!recovery && (

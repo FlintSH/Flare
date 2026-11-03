@@ -2,14 +2,27 @@
 
 import { type CSSProperties, useState } from 'react'
 
-import { Download, FileImage, Link2, Lock, Moon, Sun } from 'lucide-react'
+import {
+  Download,
+  FileImage,
+  InfoIcon,
+  Link2,
+  Lock,
+  Moon,
+  Sun,
+} from 'lucide-react'
 
 import { Icons } from '@/components/shared/icons'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import type { AppearanceDocument } from '@/lib/customization/schema'
 import { shareMetadataText } from '@/lib/customization/sharing'
 import { paletteVariables } from '@/lib/customization/theme'
+import { cn } from '@/lib/utils'
+
+const previewToggleClassName =
+  'h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground [&_svg]:size-3.5'
 
 export function AppearancePreview({
   document,
@@ -57,12 +70,16 @@ export function AppearancePreview({
             A preview of your draft
           </p>
         </div>
-        <div className="flex rounded-lg border p-1 gap-1">
+        {/* The app's segmented style: no track, the selected mode filled. */}
+        <div className="flex gap-1">
           <Button
             type="button"
             size="icon"
             variant={mode === 'light' ? 'secondary' : 'ghost'}
-            className="h-7 w-7"
+            className={cn(
+              'h-7 w-7',
+              mode !== 'light' && 'text-muted-foreground'
+            )}
             aria-label="Preview light theme"
             aria-pressed={mode === 'light'}
             onClick={() => onModeChange('light')}
@@ -73,7 +90,10 @@ export function AppearancePreview({
             type="button"
             size="icon"
             variant={mode === 'dark' ? 'secondary' : 'ghost'}
-            className="h-7 w-7"
+            className={cn(
+              'h-7 w-7',
+              mode !== 'dark' && 'text-muted-foreground'
+            )}
             aria-label="Preview dark theme"
             aria-pressed={mode === 'dark'}
             onClick={() => onModeChange('dark')}
@@ -202,8 +222,10 @@ export function AppearancePreview({
                     </div>
                   )}
                 </div>
+                {/* As on the live share page: Download is the filled
+                    primary action, Copy link the outline one. */}
                 <div className="flex gap-2 justify-center py-4">
-                  <span className="border rounded-md px-3 py-1.5 text-[10px] flex items-center gap-1.5">
+                  <span className="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1.5 text-[10px] text-primary-foreground">
                     <Download className="w-3 h-3" />
                     Download
                   </span>
@@ -222,27 +244,31 @@ export function AppearancePreview({
           )}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <button
+      {/* Two matching toggles. The row's negative margin cancels their
+          padding, so the labels line up with the preview's edges. */}
+      <div className="-mx-2 flex items-center justify-between gap-3">
+        <Button
           type="button"
-          className="flex items-center gap-1.5 hover:text-foreground"
+          variant="ghost"
+          size="sm"
+          className={previewToggleClassName}
           onClick={() => {
             setCodePreview(!codePreview)
             onProtectedChange(false)
           }}
         >
-          <FileImage className="h-3.5 w-3.5" />
+          <FileImage aria-hidden="true" />
           {codePreview ? 'Preview image' : 'Preview code'}
-        </button>
+        </Button>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 text-xs"
+          className={previewToggleClassName}
           aria-pressed={protectedPreview}
           onClick={() => onProtectedChange(!protectedPreview)}
         >
-          <Lock className="h-3 w-3 mr-1.5" />
+          <Lock aria-hidden="true" />
           {protectedPreview ? 'Show image' : 'Preview protected state'}
         </Button>
       </div>
@@ -258,11 +284,14 @@ export function AppearancePreview({
         </div>
       )}
       {!theme.enabled && (
-        <p className="text-xs text-muted-foreground border rounded-lg p-3">
-          The preview shows your studio palette. Turn on “Use studio theme” to
-          publish its colors and surfaces. Existing custom CSS remains active on
-          your live instance.
-        </p>
+        <Alert variant="info" role="status">
+          <InfoIcon aria-hidden="true" />
+          <AlertDescription>
+            The preview shows your studio palette. Turn on “Use studio theme” to
+            publish its colors and surfaces. Existing custom CSS remains active
+            on your live instance.
+          </AlertDescription>
+        </Alert>
       )}
     </section>
   )

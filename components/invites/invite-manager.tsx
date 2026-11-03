@@ -5,18 +5,28 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import {
+  AlertCircle,
   Check,
   Copy,
+  InfoIcon,
   Link2,
   Plus,
   RefreshCw,
   Share2,
-  UserPlus,
+  TriangleAlert,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { useAppearance } from '@/components/customization/appearance-provider'
-import { RoleBadges } from '@/components/roles/role-badges'
+import { MetaLine } from '@/components/profile/meta-line'
+import { RoleBadges, RoleChecklist } from '@/components/roles/role-badges'
+import {
+  destructiveActionClassName,
+  formDialogBodyClassName,
+  formDialogClassName,
+  formDialogFooterClassName,
+} from '@/components/settings/form-styles'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +37,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CardDescription } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +70,7 @@ import {
 } from '@/lib/invites/policy'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -78,13 +91,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return result
 }
 
-const statusStyles: Record<InviteStatus, string> = {
-  active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  paused: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  used: 'bg-muted text-muted-foreground',
-  expired: 'bg-muted text-muted-foreground',
-  revoked: 'bg-red-500/10 text-red-700 dark:text-red-400',
-}
+const statusVariants = {
+  active: 'success',
+  paused: 'warning',
+  used: 'neutral',
+  expired: 'neutral',
+  revoked: 'danger',
+} as const satisfies Record<InviteStatus, string>
 const statusLabels: Record<InviteStatus, string> = {
   active: 'Active',
   paused: 'Paused',
@@ -94,16 +107,7 @@ const statusLabels: Record<InviteStatus, string> = {
 }
 
 function StatusPill({ status }: { status: InviteStatus }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        statusStyles[status]
-      )}
-    >
-      {statusLabels[status]}
-    </span>
-  )
+  return <Badge variant={statusVariants[status]}>{statusLabels[status]}</Badge>
 }
 
 function absolute(value: string) {
@@ -123,8 +127,13 @@ function lifetime(invite: InviteView) {
 
 function usage(invite: InviteView) {
   return invite.maxUses === null
-    ? `${invite.uses} ${invite.uses === 1 ? 'person' : 'people'} joined · no use limit`
-    : `${invite.uses} of ${invite.maxUses} ${invite.maxUses === 1 ? 'use' : 'uses'}`
+    ? [
+        `${invite.uses} ${invite.uses === 1 ? 'person' : 'people'} joined`,
+        'no use limit',
+      ]
+    : [
+        `${invite.uses} of ${invite.maxUses} ${invite.maxUses === 1 ? 'use' : 'uses'}`,
+      ]
 }
 
 /** Remounts per account and browser session so another account's invites never flash. */
@@ -237,53 +246,71 @@ function InviteWorkspace({
   const pagination = list.data?.pagination
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <UserPlus className="h-5 w-5" aria-hidden="true" />
+      {/* The card header used on the other tabs: a plain title, the card
+          description below it, actions at the top right (after the
+          description on phones), and 24px to the content. */}
+      <div className="flex flex-col gap-3 pb-1 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1.5">
+          <h2 className="font-semibold leading-none tracking-tight">
             {context === 'profile' ? 'Invite people' : 'Invite links'}
           </h2>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+          <CardDescription className="max-w-xl">
             Anyone with an active link can create an account, even while
             registration is closed. Links stop working when they are used up,
             expire, or are revoked.
-          </p>
+          </CardDescription>
         </div>
-        {policy?.canCreate && (
+        <div className="flex shrink-0 flex-wrap gap-2 self-start">
+          {policy?.canCreate && (
+            <Button onClick={() => setCreating(true)} disabled={atLimit}>
+              <Plus aria-hidden="true" />
+              Create invite
+            </Button>
+          )}
           <Button
-            className="shrink-0 self-start"
-            onClick={() => setCreating(true)}
-            disabled={atLimit}
+            variant="outline"
+            onClick={() => void list.refetch()}
+            disabled={list.isFetching}
+            aria-label="Refresh invites"
           >
-            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-            Create invite
+            <RefreshCw
+              className={cn(list.isFetching && 'animate-spin')}
+              aria-hidden="true"
+            />
+            Refresh
           </Button>
-        )}
+        </div>
       </div>
 
       {limits && policy && (
-        <p
-          className="rounded-xl border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground"
+        <Alert
+          variant={atLimit ? 'warning' : 'info'}
+          role="status"
           data-testid="invite-limits"
         >
-          {atLimit
-            ? `You have ${policy.activeCount} active ${policy.activeCount === 1 ? 'invite' : 'invites'}, the most you can have at once. Revoke one or wait for one to be used or expire.`
-            : `You can have up to ${limits.activeInvites} active ${limits.activeInvites === 1 ? 'invite' : 'invites'} (${policy.activeCount} now).`}{' '}
-          Each link works{' '}
-          {limits.usesPerInvite === 1
-            ? 'once'
-            : `up to ${limits.usesPerInvite} times`}{' '}
-          and expires within {limits.lifetimeDays}{' '}
-          {limits.lifetimeDays === 1 ? 'day' : 'days'}.
-        </p>
+          {atLimit ? (
+            <TriangleAlert aria-hidden="true" />
+          ) : (
+            <InfoIcon aria-hidden="true" />
+          )}
+          <AlertDescription>
+            {atLimit
+              ? `You have ${policy.activeCount} active ${policy.activeCount === 1 ? 'invite' : 'invites'}, the most you can have at once. Revoke one or wait for one to be used or expire.`
+              : `You can have up to ${limits.activeInvites} active ${limits.activeInvites === 1 ? 'invite' : 'invites'} (${policy.activeCount} now).`}{' '}
+            Each link works{' '}
+            {limits.usesPerInvite === 1
+              ? 'once'
+              : `up to ${limits.usesPerInvite} times`}{' '}
+            and expires within {limits.lifetimeDays}{' '}
+            {limits.lifetimeDays === 1 ? 'day' : 'days'}.
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
         {manageAll && (
-          <div className="w-full space-y-1.5 sm:w-44">
-            <Label htmlFor="invite-scope" className="text-xs">
-              Created by
-            </Label>
+          <div className="w-full space-y-2 sm:w-44">
+            <Label htmlFor="invite-scope">Created by</Label>
             <Select
               value={scope}
               onValueChange={(value) => {
@@ -301,10 +328,8 @@ function InviteWorkspace({
             </Select>
           </div>
         )}
-        <div className="w-full space-y-1.5 sm:w-44">
-          <Label htmlFor="invite-status" className="text-xs">
-            Show
-          </Label>
+        <div className="w-full space-y-2 sm:w-44">
+          <Label htmlFor="invite-status">Show</Label>
           <Select
             value={status}
             onValueChange={(value) => {
@@ -322,20 +347,6 @@ function InviteWorkspace({
             </SelectContent>
           </Select>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto"
-          onClick={() => void list.refetch()}
-          disabled={list.isFetching}
-          aria-label="Refresh invites"
-        >
-          <RefreshCw
-            className={cn('mr-2 h-4 w-4', list.isFetching && 'animate-spin')}
-            aria-hidden="true"
-          />
-          Refresh
-        </Button>
       </div>
 
       {list.isPending && (
@@ -344,16 +355,19 @@ function InviteWorkspace({
         </p>
       )}
       {list.isError && (
-        <div role="alert" className="space-y-2 text-sm text-destructive">
-          <p>{list.error.message}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void list.refetch()}
-          >
-            Try again
-          </Button>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{list.error.message}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void list.refetch()}
+            >
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
       {list.isSuccess && invites.length === 0 && (
         <div className="rounded-xl border border-dashed p-8 text-center">
@@ -361,7 +375,7 @@ function InviteWorkspace({
             className="mx-auto mb-3 h-6 w-6 text-muted-foreground"
             aria-hidden="true"
           />
-          <p className="font-medium">
+          <p className="text-sm font-medium">
             {status === 'ended' ? 'No ended invites' : 'No invites yet'}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -378,45 +392,62 @@ function InviteWorkspace({
           {invites.map((invite) => (
             <li
               key={invite.id}
-              className="flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="truncate font-medium">
+                  <span className="truncate text-sm font-medium">
                     {invite.note || 'Invite link'}
                   </span>
                   <StatusPill status={invite.status} />
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {usage(invite)} ·{' '}
-                  <span
-                    title={
-                      invite.revokedAt
+                <MetaLine
+                  className="text-xs text-muted-foreground"
+                  items={[
+                    ...usage(invite).map((text, index) => ({
+                      key: `usage-${index}`,
+                      text,
+                    })),
+                    {
+                      key: 'lifetime',
+                      text: lifetime(invite),
+                      title: invite.revokedAt
                         ? absolute(invite.revokedAt)
                         : invite.expiresAt
                           ? absolute(invite.expiresAt)
-                          : undefined
-                    }
-                  >
-                    {lifetime(invite)}
-                  </span>
-                </p>
+                          : undefined,
+                    },
+                  ]}
+                />
                 {invite.status === 'paused' && (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <p className="text-xs text-warning">
                     Paused because its creator can no longer invite people or
                     grant its roles. It resumes if that access returns.
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  {scope === 'all' &&
-                    `Created by ${invite.creator.id === userId ? 'you' : invite.creator.name || 'a deleted account'} · `}
-                  <span title={absolute(invite.createdAt)}>
-                    Created{' '}
-                    {formatDistanceToNow(new Date(invite.createdAt), {
-                      addSuffix: true,
-                    })}
-                  </span>
-                </p>
+                {/* A long creator name may wrap; "Created …" stays whole. */}
+                <MetaLine
+                  className="text-xs text-muted-foreground"
+                  items={[
+                    ...(scope === 'all'
+                      ? [
+                          {
+                            key: 'creator',
+                            text: `Created by ${invite.creator.id === userId ? 'you' : invite.creator.name || 'a deleted account'}`,
+                            wrap: true,
+                          },
+                        ]
+                      : []),
+                    {
+                      key: 'created',
+                      text: `Created ${formatDistanceToNow(
+                        new Date(invite.createdAt),
+                        { addSuffix: true }
+                      )}`,
+                      title: absolute(invite.createdAt),
+                    },
+                  ]}
+                />
                 {invite.roles.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>Grants</span>
@@ -442,7 +473,7 @@ function InviteWorkspace({
                     onClick={() => void copy(invite)}
                     aria-label={`Copy link for ${invite.note || 'invite'}`}
                   >
-                    <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                    <Copy aria-hidden="true" />
                     Copy link
                   </Button>
                 )}
@@ -450,7 +481,7 @@ function InviteWorkspace({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-destructive hover:text-destructive"
+                    className="text-destructive hover:bg-danger/10 hover:text-destructive"
                     onClick={() => setRevoking(invite)}
                     disabled={busy}
                     aria-label={`Revoke ${invite.note || 'invite'}`}
@@ -514,8 +545,14 @@ function InviteWorkspace({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke this invite?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {revoking?.note ? `“${revoking.note}” ` : 'This link '}
+            <AlertDialogDescription className="break-words">
+              {revoking?.note ? (
+                <span className="font-medium text-foreground">
+                  “{revoking.note}”
+                </span>
+              ) : (
+                'This link'
+              )}{' '}
               stops working immediately. Accounts that already joined with it
               are not affected.
             </AlertDialogDescription>
@@ -528,7 +565,7 @@ function InviteWorkspace({
                 void revoke()
               }}
               disabled={busy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={destructiveActionClassName}
             >
               {busy ? 'Revoking…' : 'Revoke invite'}
             </AlertDialogAction>
@@ -658,7 +695,9 @@ function CreateInviteDialog({
         if (!next) reset()
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      {/* The form keeps its actions in view while the fields scroll; the
+          short result view scrolls as a whole, like other dialogs. */}
+      <DialogContent className={created ? undefined : formDialogClassName}>
         {created ? (
           <>
             <DialogHeader>
@@ -680,28 +719,41 @@ function CreateInviteDialog({
                 />
                 <Button onClick={() => void copyLink()} className="shrink-0">
                   {copied ? (
-                    <Check className="mr-2 h-4 w-4" aria-hidden="true" />
+                    <Check className="h-4 w-4" aria-hidden="true" />
                   ) : (
-                    <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
+                    <Copy className="h-4 w-4" aria-hidden="true" />
                   )}
                   {copied ? 'Copied' : 'Copy link'}
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {describeUses(created.maxUses)} ·{' '}
-                {created.expiresAt
-                  ? `Expires ${absolute(created.expiresAt)}`
-                  : 'Never expires'}
-                {created.roles.length > 0 &&
-                  ` · Grants ${created.roles.map((role) => role.name).join(', ')}`}
-              </p>
+              <MetaLine
+                className="text-sm text-muted-foreground"
+                items={[
+                  { key: 'uses', text: describeUses(created.maxUses) },
+                  {
+                    key: 'expires',
+                    text: created.expiresAt
+                      ? `Expires ${absolute(created.expiresAt)}`
+                      : 'Never expires',
+                  },
+                  ...(created.roles.length > 0
+                    ? [
+                        {
+                          key: 'roles',
+                          text: `Grants ${created.roles.map((role) => role.name).join(', ')}`,
+                          wrap: true,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
               {error && (
                 <p role="alert" className="text-sm text-destructive">
                   {error}
                 </p>
               )}
             </div>
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter>
               {typeof navigator !== 'undefined' &&
                 typeof navigator.share === 'function' && (
                   <Button
@@ -712,7 +764,7 @@ function CreateInviteDialog({
                         .catch(() => {})
                     }
                   >
-                    <Share2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                    <Share2 className="h-4 w-4" aria-hidden="true" />
                     Share…
                   </Button>
                 )}
@@ -727,156 +779,154 @@ function CreateInviteDialog({
             </DialogFooter>
           </>
         ) : (
-          <form onSubmit={submit} className="space-y-5">
-            <DialogHeader>
+          <>
+            <DialogHeader className="shrink-0">
               <DialogTitle>Create an invite link</DialogTitle>
               <DialogDescription>
                 The link lets someone create an account on this instance, even
                 while registration is closed.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="invite-note">Note (optional)</Label>
-              <Input
-                id="invite-note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                maxLength={INVITE_NOTE_MAX}
-                placeholder="Who is this for?"
-                autoComplete="off"
-              />
-              <p className="text-xs text-muted-foreground">
-                Only you and invite managers see this note.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="invite-uses">Uses</Label>
-                <Select value={uses} onValueChange={setUses}>
-                  <SelectTrigger id="invite-uses">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {usesOptions.map((option) => (
-                      <SelectItem
-                        key={String(option)}
-                        value={option === null ? 'unlimited' : String(option)}
-                      >
-                        {option === null
-                          ? 'No limit'
-                          : option === 1
-                            ? '1 person'
-                            : `${option} people`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invite-expiry">Expires after</Label>
-                <Select value={expiry} onValueChange={setExpiry}>
-                  <SelectTrigger id="invite-expiry">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {expiryOptions.map((option) => (
-                      <SelectItem
-                        key={String(option.hours)}
-                        value={
-                          option.hours === null ? 'never' : String(option.hours)
-                        }
-                      >
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {policy.canGrantRoles && (
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-medium">
-                  Roles for new accounts
-                </legend>
-                <p className="text-xs text-muted-foreground">
-                  Everyone applies automatically. Add roles only for people who
-                  need more access.
-                </p>
-                {roles.isPending && (
-                  <p className="text-sm text-muted-foreground">
-                    Loading roles…
+            <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+              {/* Fields scroll between the title and the actions. */}
+              <div ref={scrollFadeRef} className={formDialogBodyClassName}>
+                <div className="space-y-2">
+                  <Label htmlFor="invite-note">
+                    Note{' '}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="invite-note"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    maxLength={INVITE_NOTE_MAX}
+                    placeholder="Who is this for?"
+                    autoComplete="off"
+                  />
+                  <p className="text-pretty text-xs text-muted-foreground">
+                    Only you and invite managers see this note.
                   </p>
-                )}
-                {roles.isError && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {roles.error.message}
-                  </p>
-                )}
-                {roles.isSuccess && grantable.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No additional roles you can grant.
-                  </p>
-                )}
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {grantable.map((role) => (
-                    <label
-                      key={role.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-[hsl(var(--primary))]"
-                        checked={roleIds.includes(role.id)}
-                        onChange={(event) =>
-                          setRoleIds(
-                            event.target.checked
-                              ? [...roleIds, role.id]
-                              : roleIds.filter((id) => id !== role.id)
-                          )
-                        }
-                      />
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: role.color }}
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{role.name}</span>
-                    </label>
-                  ))}
                 </div>
-                {grantsAdministrator && (
-                  <p
-                    role="alert"
-                    className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm"
-                  >
-                    Anyone who uses this link becomes a full administrator of
-                    this instance. Prefer a single-use link with a short expiry.
-                  </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-uses">Uses</Label>
+                    <Select value={uses} onValueChange={setUses}>
+                      <SelectTrigger id="invite-uses">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {usesOptions.map((option) => (
+                          <SelectItem
+                            key={String(option)}
+                            value={
+                              option === null ? 'unlimited' : String(option)
+                            }
+                          >
+                            {option === null
+                              ? 'No limit'
+                              : option === 1
+                                ? '1 person'
+                                : `${option} people`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-expiry">Expires after</Label>
+                    <Select value={expiry} onValueChange={setExpiry}>
+                      <SelectTrigger id="invite-expiry">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {expiryOptions.map((option) => (
+                          <SelectItem
+                            key={String(option.hours)}
+                            value={
+                              option.hours === null
+                                ? 'never'
+                                : String(option.hours)
+                            }
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {policy.canGrantRoles && (
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">
+                      Roles for new accounts
+                    </legend>
+                    <p className="text-pretty text-xs text-muted-foreground">
+                      Everyone applies automatically. Add roles only for people
+                      who need more access.
+                    </p>
+                    {roles.isPending && (
+                      <p className="text-sm text-muted-foreground">
+                        Loading roles…
+                      </p>
+                    )}
+                    {roles.isError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {roles.error.message}
+                      </p>
+                    )}
+                    {roles.isSuccess && grantable.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No additional roles you can grant.
+                      </p>
+                    )}
+                    <RoleChecklist
+                      roles={grantable}
+                      selected={roleIds}
+                      onChange={setRoleIds}
+                    />
+                    {grantsAdministrator && (
+                      <Alert variant="destructive">
+                        <TriangleAlert aria-hidden="true" />
+                        <AlertDescription>
+                          Anyone who uses this link becomes a full administrator
+                          of this instance. Prefer a single-use link with a
+                          short expiry.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </fieldset>
                 )}
-              </fieldset>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  onOpenChange(false)
-                  reset()
-                }}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Creating…' : 'Create invite link'}
-              </Button>
-            </DialogFooter>
-          </form>
+              </div>
+              {/* Outside the scrolling fields, so it shows wherever they're
+                  scrolled to. */}
+              {error && (
+                <p
+                  role="alert"
+                  className="mt-4 shrink-0 text-sm text-destructive"
+                >
+                  {error}
+                </p>
+              )}
+              <DialogFooter className={formDialogFooterClassName}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    onOpenChange(false)
+                    reset()
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Creating…' : 'Create invite link'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
         )}
       </DialogContent>
     </Dialog>

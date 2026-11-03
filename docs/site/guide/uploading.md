@@ -16,8 +16,8 @@ Use **Upload** when you want to review settings before sending files. For quick 
 1. Open **Upload**.
 2. Click the file-selection area or drag files into it. You can select several files and add more to the queue before starting.
 3. Review filenames and sizes. Remove an individual file, or clear the queue if you want to start again.
-4. If you have folders, choose **Save to**. **Unfiled** leaves the upload outside a folder.
-5. Choose an upload profile and any one-time sharing options.
+4. Choose an **Upload profile**. The line under it sums up what the profile applies; the options below it change this upload only.
+5. If you have folders, choose **Save to**. **Unfiled** leaves the upload outside a folder. Then set any one-time sharing options.
 6. Start the upload. Wait for the completion links before closing the tab.
 
 The same selected options apply to the queued files. To give different files different passwords or destinations, upload them in separate batches. The open form keeps its chosen settings after a successful batch, including the password and visibility override. Review or reset them before uploading something different.
@@ -32,8 +32,8 @@ Anyone who can access a supported archive's [share page](./archives#browse-an-ar
 
 | Setting                 | What it does                                                                                                                                  |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Save to**             | Puts the file in one of your folders. A public file placed directly in a shared folder also appears on that folder's share page.              |
 | **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                                    |
+| **Save to**             | Puts the file in one of your folders. A public file placed directly in a shared folder also appears on that folder's share page.              |
 | **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                            |
 | **Password protection** | Requires recipients of a public file to enter the password before opening it. Eligible owners and accounts with `content.read` retain access. |
 | **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                               |

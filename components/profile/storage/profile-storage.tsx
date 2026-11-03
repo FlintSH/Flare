@@ -1,6 +1,7 @@
 'use client'
 
 import { ProfileStorageProps } from '@/types/components/profile'
+import { LinkIcon } from 'lucide-react'
 
 import { Icons } from '@/components/shared/icons'
 import { Progress } from '@/components/ui/progress'
@@ -25,13 +26,13 @@ export function ProfileStorage({
                 <div className="flex flex-col">
                   <span className="text-lg font-medium">{formattedUsed}</span>
                   <span className="text-sm text-muted-foreground">
-                    Used Space
+                    Used space
                   </span>
                 </div>
                 <div className="flex flex-col text-right">
                   <span className="text-lg font-medium">{formattedQuota}</span>
                   <span className="text-sm text-muted-foreground">
-                    Total Space
+                    Total space
                   </span>
                 </div>
               </div>
@@ -43,9 +44,9 @@ export function ProfileStorage({
                   className={cn(
                     'h-3',
                     usagePercentage > 90
-                      ? '[&>div]:bg-destructive'
+                      ? '[&>div]:bg-destructive-fill'
                       : usagePercentage > 75
-                        ? '[&>div]:bg-yellow-500'
+                        ? '[&>div]:bg-warning'
                         : '[&>div]:bg-primary'
                   )}
                 />
@@ -56,7 +57,7 @@ export function ProfileStorage({
                         'flex items-center gap-2 text-sm',
                         usagePercentage > 90
                           ? 'text-destructive'
-                          : 'text-yellow-500'
+                          : 'text-warning'
                       )}
                     >
                       <Icons.alertCircle className="h-4 w-4" />
@@ -73,7 +74,7 @@ export function ProfileStorage({
                       usagePercentage > 90
                         ? 'text-destructive'
                         : usagePercentage > 75
-                          ? 'text-yellow-500'
+                          ? 'text-warning'
                           : 'text-muted-foreground'
                     )}
                   >
@@ -84,35 +85,37 @@ export function ProfileStorage({
             </div>
           </>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-muted/50 rounded-lg p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-muted/30 p-4">
             <div className="flex flex-col">
               <span className="text-lg font-medium">{formattedUsed}</span>
               <span className="text-sm text-muted-foreground">
-                Total Space Used
+                Total space used
               </span>
             </div>
             <div className="flex items-center text-muted-foreground">
               <Icons.infinity className="h-5 w-5" />
-              <span className="ml-2 text-sm">Uncapped Storage</span>
+              <span className="ml-2 text-sm">Uncapped storage</span>
             </div>
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4">
+          <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
             <div className="flex flex-col">
               <span className="text-lg font-medium">{fileCount}</span>
-              <span className="text-sm text-muted-foreground">Total Files</span>
+              <span className="text-sm text-muted-foreground">Total files</span>
             </div>
             <Icons.file className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className="flex items-center justify-between bg-muted/50 rounded-lg p-4">
+          <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-4">
             <div className="flex flex-col">
               <span className="text-lg font-medium">{shortUrlCount}</span>
-              <span className="text-sm text-muted-foreground">
-                Shortened URLs
-              </span>
+              <span className="text-sm text-muted-foreground">Short links</span>
             </div>
-            <Icons.copy className="h-5 w-5 text-muted-foreground" />
+            {/* The navigation's Links icon; Copy means "copy" elsewhere. */}
+            <LinkIcon
+              className="h-5 w-5 text-muted-foreground"
+              aria-hidden="true"
+            />
           </div>
         </div>
       </div>

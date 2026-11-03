@@ -23,6 +23,8 @@ import {
 } from 'lucide-react'
 
 import { ImageLightbox } from '@/components/file/image-lightbox'
+import { PreviewPlaceholder } from '@/components/file/viewer/components/preview-placeholder'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
@@ -84,7 +86,7 @@ function RowIcon({ row }: { row: ArchiveRow }) {
     )
   if (row.issue)
     return (
-      <AlertTriangle className={cn(className, 'text-amber-500')} aria-hidden />
+      <AlertTriangle className={cn(className, 'text-warning')} aria-hidden />
     )
   const kind = archivePreviewKind(row.path)?.type
   const Icon = detectArchiveFormat(row.path)
@@ -302,29 +304,35 @@ export function ArchiveBrowserContent({
 
   if (unsupported)
     return (
-      <div className="space-y-3 rounded-xl border border-dashed p-6 text-sm">
-        <p className="font-medium">Flare can’t open this kind of archive.</p>
-        <p className="leading-relaxed text-muted-foreground">
-          ZIP, TAR, TAR.GZ (TGZ), and GZIP archives can be browsed here. RAR and
-          7z archives can still be downloaded and opened on your device.
-        </p>
-      </div>
+      <PreviewPlaceholder
+        icon={FileArchive}
+        title="Flare can’t open this kind of archive"
+        description="ZIP, TAR, TAR.GZ (TGZ), and GZIP archives can be browsed here. RAR and 7z archives can still be downloaded and opened on your device."
+      />
     )
 
   return (
     <div className="min-w-0 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {listing
-            ? `${listing.format.toUpperCase()} · ${count(listing.fileCount, 'file')} · ${count(tree.folderCount, 'folder')} · ${formatBytes(listing.totalBytes)} unpacked`
-            : indexing
-              ? `Reading ${indexing.format.toUpperCase()}… ${count(indexing.entriesFound, 'entry').replace('entrys', 'entries')} found`
-              : state.status === 'busy'
-                ? 'Flare is busy reading other archives. Trying again shortly…'
-                : source.kind === 'share'
-                  ? 'Loading file and folder details.'
-                  : 'Preview entries without adding them to your account.'}
-        </p>
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {listing
+              ? `${listing.format.toUpperCase()} · ${count(listing.fileCount, 'file')} · ${count(tree.folderCount, 'folder')} · ${formatBytes(listing.totalBytes)} unpacked`
+              : indexing
+                ? `Reading ${indexing.format.toUpperCase()}… ${count(indexing.entriesFound, 'entry').replace('entrys', 'entries')} found`
+                : state.status === 'busy'
+                  ? 'Flare is busy reading other archives. Trying again shortly…'
+                  : source.kind === 'share'
+                    ? 'Loading file and folder details.'
+                    : 'Preview entries without adding them to your account.'}
+          </p>
+          {/* Wider screens explain this in the empty preview panel. */}
+          {listing && (
+            <p className="text-pretty text-xs text-muted-foreground md:hidden">
+              Open a file to preview it or download it on its own.
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {source.kind === 'owner' && (
             <Button variant="outline" size="sm" asChild>
@@ -332,7 +340,7 @@ export function ArchiveBrowserContent({
                 href={`/api/files/${encodeURIComponent(file.id)}/download`}
                 download={file.name}
               >
-                <ArrowDownToLine className="mr-2 h-4 w-4" aria-hidden="true" />
+                <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
                 Download archive
               </a>
             </Button>
@@ -345,7 +353,7 @@ export function ArchiveBrowserContent({
               }
               onClick={() => listing && onExtract(listing)}
             >
-              <FolderOpen className="mr-2 h-4 w-4" aria-hidden="true" />
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
               Extract all
             </Button>
           )}
@@ -360,25 +368,29 @@ export function ArchiveBrowserContent({
           </p>
         )}
       {state.status === 'error' ? (
-        <div className="space-y-4 rounded-xl border border-destructive/25 bg-destructive/5 p-5">
-          <p role="alert" className="break-words text-sm font-medium">
+        <Alert variant="destructive">
+          <AlertTriangle aria-hidden="true" />
+          <AlertTitle className="break-words leading-snug">
             {state.message}
-          </p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Flare can browse ZIP, TAR, TAR.GZ (TGZ), and GZIP archives. If this
-            file was cut off during upload, upload it again. Otherwise, download
-            it to open it on your device.
-          </p>
-          {state.retryable && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAttempt((value) => value + 1)}
-            >
-              Retry
-            </Button>
-          )}
-        </div>
+          </AlertTitle>
+          <AlertDescription>
+            <p>
+              Flare can browse ZIP, TAR, TAR.GZ (TGZ), and GZIP archives. If
+              this file was cut off during upload, upload it again. Otherwise,
+              download it to open it on your device.
+            </p>
+            {state.retryable && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => setAttempt((value) => value + 1)}
+              >
+                Retry
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
       ) : !listing && !indexing ? (
         <div
           role="status"
@@ -410,24 +422,21 @@ export function ArchiveBrowserContent({
             </div>
           )}
           {notice && (
-            <p className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              <AlertTriangle
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500"
-                aria-hidden="true"
-              />
-              {notice}
-            </p>
+            <Alert variant="warning" role="status">
+              <AlertTriangle aria-hidden="true" />
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
           )}
           <div className="relative">
             <Search
-              className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               aria-label="Search archive"
-              placeholder="Search files and folders in this archive"
+              placeholder="Search archive"
               className="pl-9 pr-10"
             />
             {search && (
@@ -435,19 +444,20 @@ export function ArchiveBrowserContent({
                 type="button"
                 aria-label="Clear archive search"
                 onClick={() => setSearch('')}
-                className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </div>
+          {/* The negative margin lines the first label up with the column. */}
           <nav
             aria-label="Archive location"
-            className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground"
+            className="-ml-1 flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground"
           >
             <button
               type="button"
-              className="rounded px-1 py-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded px-1 py-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => openDirectory('')}
             >
               Archive root
@@ -466,7 +476,7 @@ export function ArchiveBrowserContent({
                   />
                   <button
                     type="button"
-                    className="min-w-0 break-words rounded px-1 py-1 text-left hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-w-0 break-words rounded px-1 py-1 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() =>
                       openDirectory(parts.slice(0, index + 1).join('/'))
                     }
@@ -564,7 +574,15 @@ export function ArchiveBrowserContent({
                 </p>
               )}
             </div>
-            <div ref={previewRef} className="min-w-0">
+            <div
+              ref={previewRef}
+              // On phones an empty preview cell would add a gap before the
+              // actions; it appears once a file is chosen.
+              className={cn(
+                'min-w-0',
+                !(selectedEntry && active) && 'hidden md:block'
+              )}
+            >
               {selectedEntry && active ? (
                 <ArchiveEntryPreview
                   key={selectedEntry.path}
@@ -584,14 +602,14 @@ export function ArchiveBrowserContent({
                   }}
                 />
               ) : (
-                <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  <File className="h-7 w-7 opacity-60" aria-hidden="true" />
-                  <p>Choose a file to preview or download it.</p>
-                  <p className="max-w-xs text-xs leading-relaxed">
-                    Images, video, audio, and text open here without extracting
-                    the archive.
-                  </p>
-                </div>
+                // On phones the preview opens under the list once a file is
+                // chosen, so the empty prompt would only push the actions down.
+                <PreviewPlaceholder
+                  icon={File}
+                  title="Choose a file to preview or download it"
+                  description="Images, video, audio, and text open here without extracting the archive."
+                  className="hidden min-h-40 md:flex"
+                />
               )}
             </div>
           </div>

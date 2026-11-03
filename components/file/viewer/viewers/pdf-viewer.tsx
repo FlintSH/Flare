@@ -7,10 +7,13 @@ export function PdfViewer() {
   if (!state.urls) return <LoadingState message="Loading document…" />
 
   return (
-    <div className="w-full min-w-0">
+    // Full width between hairlines, like images and text. The browser draws
+    // its own viewer inside, in its own colours.
+    <div className="w-[56rem] min-w-0 max-w-full border-y border-border/60 bg-muted/60 dark:bg-muted/30">
+      {/* Chromium otherwise opens a thumbnail sidebar that shrinks the page. */}
       <iframe
-        src={`${state.urls.fileUrl}#view=FitH`}
-        className="h-[70vh] min-h-80 w-full min-w-[min(600px,calc(100vw-3rem))] border-0"
+        src={`${state.urls.fileUrl}#navpanes=0&view=FitH`}
+        className="block h-[70vh] min-h-80 w-full"
         title={`${file.name} document preview`}
       />
     </div>

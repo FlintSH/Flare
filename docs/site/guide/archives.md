@@ -69,7 +69,7 @@ Flare keeps recently read file lists in memory, so reopening an archive is immed
 
 <Screenshot src="/screenshots/archives/image-gallery.webp" alt="Full-screen viewer showing image 2 of 20 from the photos folder inside the archive, with download and close controls" caption="Expand an image to page through every image in the folder." />
 
-<Screenshot src="/screenshots/archives/tgz-indexing.webp" alt="Render outputs.tar.gz being read: 64 MB of 336 MB read, 16 entries found, and the frames folder already listed" caption="A TAR.GZ is read once with visible progress. Files found so far can be opened right away." />
+<Screenshot src="/screenshots/archives/tgz-indexing.webp" alt="Render outputs.tar.gz being read, with a progress bar, the number of entries found so far, and the frames folder already listed" caption="A TAR.GZ is read once with visible progress. Files found so far can be opened right away." />
 
 <Screenshot src="/screenshots/archives/tgz-late-entry.webp" alt="The last file in Render outputs.tar.gz, summary/approved-cut.md, previewed after reading finished" caption="Later previews resume near the file instead of decompressing the archive from the start." />
 :::
@@ -98,7 +98,7 @@ If Flare can't read the archive's structure at all, for example an upload that w
 
 ## Browse an archive shared with you
 
-1. Open the normal Flare share link. If the public archive is protected, enter **File password** and choose **Access File**.
+1. Open the normal Flare share link. If the public archive is protected, enter **File password** and choose **Access file**.
 2. Under **Archive contents**, open folders or use **Search archive** to find member paths. **Archive root** returns to the top level.
 3. Select an entry to preview it, then choose **Download entry** to save that file. The share page remains open.
 4. Use the ordinary **Download** action below the viewer if you want the complete archive.
@@ -118,7 +118,7 @@ Each shared archive request checks the current file access rules. Making the arc
 On a protected archive, the password you enter is checked when the archive contents load. Previews and **Download entry** then use a cookie that only this file's archive requests receive. It lasts **one hour** and the open page renews it in the background; changing or removing the file's password ends it immediately. The password itself is never added to an entry's address. If previews stop loading after the owner changes the password, reload the share page and enter the new one.
 
 ::: details See the password gate and unlocked archive
-<Screenshot src="/screenshots/archives/share-password.webp" alt="Password Protected File page with an empty File password field and Access File button; archive contents are hidden" caption="A protected public archive requires its file password before a visitor can browse." />
+<Screenshot src="/screenshots/archives/share-password.webp" alt="Password-protected file page with an empty File password field and Access file button; archive contents are hidden" caption="A protected public archive requires its file password before a visitor can browse." />
 
 <Screenshot src="/screenshots/archives/share-unlocked.webp" alt="Previously protected archive after successful access, showing README search results, text preview, and Download entry" caption="After the real password check succeeds, the visitor can browse and download entries. No password value is shown." />
 :::

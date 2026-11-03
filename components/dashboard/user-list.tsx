@@ -15,7 +15,9 @@ import {
   File,
   FileText,
   FolderOpen,
+  Globe,
   Image as ImageIcon,
+  KeyRound,
   Link2,
   Lock,
   LogOut,
@@ -36,7 +38,13 @@ import {
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
 import { PermissionGate } from '@/components/roles/permission-gate'
-import { RoleBadges } from '@/components/roles/role-badges'
+import { RoleBadges, RoleChecklist } from '@/components/roles/role-badges'
+import {
+  destructiveActionClassName,
+  formDialogBodyClassName,
+  formDialogClassName,
+  formDialogFooterClassName,
+} from '@/components/settings/form-styles'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +56,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -97,8 +106,8 @@ import {
 
 import { filePasswordHint } from '@/lib/files/password-policy'
 import type { RoleSummary } from '@/lib/permissions/catalog'
-import { formatFileSize } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { cn, formatFileSize } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { sanitizeUrl } from '@/lib/utils/url'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -176,9 +185,15 @@ function UserTableSkeleton() {
             <TableHead className="pl-4">User</TableHead>
             <TableHead className="hidden sm:table-cell">Roles</TableHead>
             <TableHead className="hidden lg:table-cell">URL ID</TableHead>
-            <TableHead className="hidden lg:table-cell">Files</TableHead>
-            <TableHead className="hidden lg:table-cell">Storage Used</TableHead>
-            <TableHead className="hidden lg:table-cell">URLs</TableHead>
+            <TableHead className="hidden text-right lg:table-cell">
+              Files
+            </TableHead>
+            <TableHead className="hidden text-right lg:table-cell">
+              Storage used
+            </TableHead>
+            <TableHead className="hidden text-right lg:table-cell">
+              URLs
+            </TableHead>
             <TableHead className="pr-4 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -201,13 +216,13 @@ function UserTableSkeleton() {
                 <Skeleton className="h-4 w-14" />
               </TableCell>
               <TableCell className="hidden lg:table-cell">
-                <Skeleton className="h-4 w-8" />
+                <Skeleton className="ml-auto h-4 w-8" />
               </TableCell>
               <TableCell className="hidden lg:table-cell">
-                <Skeleton className="h-4 w-16" />
+                <Skeleton className="ml-auto h-4 w-16" />
               </TableCell>
               <TableCell className="hidden lg:table-cell">
-                <Skeleton className="h-4 w-8" />
+                <Skeleton className="ml-auto h-4 w-8" />
               </TableCell>
               <TableCell className="pr-4">
                 <Skeleton className="ml-auto h-8 w-24" />
@@ -218,6 +233,11 @@ function UserTableSkeleton() {
       </Table>
     </div>
   )
+}
+
+/** "1 file", "6 files", kept on one line (a no-break space). */
+function countOf(value: number, noun: string) {
+  return `${value.toLocaleString()}\u00a0${value === 1 ? noun : `${noun}s`}`
 }
 
 function getPaginationRange(
@@ -238,6 +258,33 @@ function getPaginationRange(
   }
 
   return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
+function VisibilityBadge({
+  file,
+  className,
+}: {
+  file: Pick<File, 'visibility' | 'password'>
+  className?: string
+}) {
+  // The user files API leaves out passwords and reports password-protected
+  // files as PROTECTED instead.
+  const isProtected =
+    Boolean(file.password) || (file.visibility as string) === 'PROTECTED'
+  const Icon = isProtected
+    ? KeyRound
+    : file.visibility === 'PRIVATE'
+      ? Lock
+      : Globe
+  // Private files are what a moderator scans for, so they take the amber
+  // status tone (as before this pass); public and password ones stay neutral.
+  const isPrivate = !isProtected && file.visibility === 'PRIVATE'
+  return (
+    <Badge variant={isPrivate ? 'warning' : 'neutral'} className={className}>
+      <Icon aria-hidden="true" />
+      {isProtected ? 'Password' : isPrivate ? 'Private' : 'Public'}
+    </Badge>
+  )
 }
 
 interface FileSettingsDialogProps {
@@ -282,13 +329,14 @@ function FileSettingsDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>File Settings</DialogTitle>
-          <DialogDescription>
-            Update visibility and protection settings for {file?.name}
+          <DialogTitle>File settings</DialogTitle>
+          <DialogDescription className="break-words">
+            Update visibility and password protection for{' '}
+            <span className="font-medium text-foreground">{file?.name}</span>.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="visibility">Visibility</Label>
               <Select
@@ -317,7 +365,7 @@ function FileSettingsDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password-protection">Password Protection</Label>
+              <Label htmlFor="password-protection">Password protection</Label>
               <Input
                 id="password-protection"
                 type="password"
@@ -337,12 +385,20 @@ function FileSettingsDialog({
           </div>
           <DialogFooter>
             <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
               type="submit"
               disabled={
                 isSubmitting || Boolean(password && filePasswordHint(password))
               }
             >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              {isSubmitting ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>
         </form>
@@ -661,10 +717,11 @@ export function UserList() {
     return <File className="h-4 w-4" />
   }
 
+  // A hairline keeps light screenshots from dissolving into the row.
   const getFilePreview = (file: File) => {
     if (file.mimeType.startsWith('image/')) {
       return (
-        <div className="relative w-10 h-10 rounded overflow-hidden flex items-center justify-center bg-muted">
+        <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
           <Image
             src={`/api/files/${file.id}/thumbnail`}
             alt={file.name}
@@ -680,7 +737,7 @@ export function UserList() {
       )
     }
     return (
-      <div className="w-10 h-10 rounded flex items-center justify-center bg-muted">
+      <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
         {getFileIcon(file.mimeType)}
       </div>
     )
@@ -841,7 +898,7 @@ export function UserList() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-0 basis-full sm:max-w-sm sm:flex-1 sm:basis-auto">
           <Search
-            className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
@@ -870,8 +927,8 @@ export function UserList() {
         </Select>
         <PermissionGate permission="users.create">
           <Button onClick={handleNew} className="ml-auto">
-            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-            New User
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New user
           </Button>
         </PermissionGate>
       </div>
@@ -909,7 +966,7 @@ export function UserList() {
             className="mt-3"
             onClick={() => fetchUsers(currentPage)}
           >
-            <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Try again
           </Button>
         </div>
@@ -932,16 +989,20 @@ export function UserList() {
               <TableHeader className="bg-muted/30">
                 <TableRow>
                   <TableHead className="pl-3 sm:pl-4">User</TableHead>
-                  <TableHead className="hidden w-24 sm:table-cell lg:w-auto">
+                  <TableHead className="hidden w-32 sm:table-cell lg:w-auto">
                     Roles
                   </TableHead>
                   <TableHead className="hidden lg:table-cell">URL ID</TableHead>
-                  <TableHead className="hidden lg:table-cell">Files</TableHead>
-                  <TableHead className="hidden whitespace-nowrap lg:table-cell">
-                    Storage Used
+                  <TableHead className="hidden text-right lg:table-cell">
+                    Files
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell">URLs</TableHead>
-                  <TableHead className="w-[140px] pr-3 text-right sm:pr-4 lg:w-auto">
+                  <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">
+                    Storage used
+                  </TableHead>
+                  <TableHead className="hidden text-right lg:table-cell">
+                    URLs
+                  </TableHead>
+                  <TableHead className="w-[140px] pr-3 text-right sm:w-[184px] sm:pr-4 lg:w-auto">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -981,21 +1042,29 @@ export function UserList() {
                             <p className="sm:hidden">
                               <RoleBadges roles={user.roles} />
                             </p>
-                            <p
-                              className="truncate font-mono"
-                              title={
-                                user.vanityId
-                                  ? `${user.urlId} / ${user.vanityId}`
-                                  : user.urlId
-                              }
-                            >
-                              {user.urlId}
-                              {user.vanityId && ` / ${user.vanityId}`}
+                            <p className="flex min-w-0 flex-wrap items-center gap-1 text-foreground">
+                              <code className="rounded bg-muted px-1.5 py-0.5">
+                                {user.urlId}
+                              </code>
+                              {user.vanityId && (
+                                <code
+                                  className="max-w-full truncate rounded bg-primary/10 px-1.5 py-0.5"
+                                  title={user.vanityId}
+                                >
+                                  {user.vanityId}
+                                </code>
+                              )}
                             </p>
-                            <p className="flex flex-wrap gap-x-2">
-                              <span>{user._count.files} files</span>
-                              <span>{formatFileSize(user.storageUsed)}</span>
-                              <span>{user._count.shortenedUrls} URLs</span>
+                            {/* Each separator wraps with the item after it,
+                                so no line ends in one. */}
+                            <p className="tabular-nums">
+                              {countOf(user._count.files, 'file')}{' '}
+                              <span className="whitespace-nowrap">
+                                · {formatFileSize(user.storageUsed)}
+                              </span>{' '}
+                              <span className="whitespace-nowrap">
+                                · {countOf(user._count.shortenedUrls, 'URL')}
+                              </span>
                             </p>
                           </div>
                         </div>
@@ -1019,23 +1088,27 @@ export function UserList() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden tabular-nums lg:table-cell">
-                      {user._count.files}
+                    <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                      {user._count.files.toLocaleString()}
                     </TableCell>
-                    <TableCell className="hidden whitespace-nowrap tabular-nums lg:table-cell">
+                    <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">
                       {formatFileSize(user.storageUsed)}
                     </TableCell>
-                    <TableCell className="hidden tabular-nums lg:table-cell">
-                      {user._count.shortenedUrls}
+                    <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                      {user._count.shortenedUrls.toLocaleString()}
                     </TableCell>
                     <TableCell className="pr-3 sm:pr-4">
-                      <div className="flex justify-end gap-0.5">
+                      {/* One row of icons in steady columns. Phones keep
+                          edit, content and delete in view and move the rarer
+                          session and avatar actions into a menu. The negative
+                          margin lines the last icon up with the header. */}
+                      <div className="-mr-2 flex justify-end sm:gap-0.5">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className="h-8 w-8 shrink-0"
                               disabled={
                                 !canManageUser(user) ||
                                 (!can('users.update') &&
@@ -1048,14 +1121,14 @@ export function UserList() {
                               <Edit2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Edit User</TooltipContent>
+                          <TooltipContent>Edit user</TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8"
+                              className="h-8 w-8 shrink-0"
                               disabled={!can('content.read')}
                               onClick={() => handleViewFiles(user)}
                               aria-label={`View content for ${user.name}`}
@@ -1066,15 +1139,59 @@ export function UserList() {
                               />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>View Content</TooltipContent>
+                          <TooltipContent>View content</TooltipContent>
                         </Tooltip>
+                        {can('users.sessions') || user.image ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 sm:hidden"
+                                aria-label={`More actions for ${user.name}`}
+                              >
+                                <MoreVertical
+                                  className="h-4 w-4"
+                                  aria-hidden="true"
+                                />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {can('users.sessions') && (
+                                <DropdownMenuItem
+                                  disabled={!canManageUser(user)}
+                                  onSelect={() => setUserToSignOut(user)}
+                                >
+                                  <LogOut aria-hidden="true" />
+                                  Revoke sessions
+                                </DropdownMenuItem>
+                              )}
+                              {user.image && (
+                                <DropdownMenuItem
+                                  disabled={
+                                    !can('users.update') || !canManageUser(user)
+                                  }
+                                  onSelect={() => handleRemoveAvatar(user.id)}
+                                >
+                                  <UserX aria-hidden="true" />
+                                  Remove avatar
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <span
+                            className="h-8 w-8 shrink-0 sm:hidden"
+                            aria-hidden="true"
+                          />
+                        )}
                         {can('users.sessions') && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="hidden h-8 w-8 shrink-0 sm:inline-flex"
                                 disabled={!canManageUser(user)}
                                 onClick={() => setUserToSignOut(user)}
                                 aria-label={`Revoke sessions for ${user.name}`}
@@ -1085,16 +1202,16 @@ export function UserList() {
                                 />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Revoke Sessions</TooltipContent>
+                            <TooltipContent>Revoke sessions</TooltipContent>
                           </Tooltip>
                         )}
-                        {user.image && (
+                        {user.image ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8"
+                                className="hidden h-8 w-8 shrink-0 sm:inline-flex"
                                 disabled={
                                   !can('users.update') || !canManageUser(user)
                                 }
@@ -1104,15 +1221,21 @@ export function UserList() {
                                 <UserX className="h-4 w-4" aria-hidden="true" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Remove Avatar</TooltipContent>
+                            <TooltipContent>Remove avatar</TooltipContent>
                           </Tooltip>
+                        ) : (
+                          // Keeps the action icons in columns across rows.
+                          <span
+                            className="hidden h-8 w-8 shrink-0 sm:block"
+                            aria-hidden="true"
+                          />
                         )}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                              className="h-8 w-8 shrink-0 text-destructive hover:bg-danger/10 hover:text-destructive"
                               onClick={() => {
                                 setUserToDelete(user)
                                 setIsDeleteDialogOpen(true)
@@ -1125,7 +1248,7 @@ export function UserList() {
                               <Trash2 className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Delete User</TooltipContent>
+                          <TooltipContent>Delete user</TooltipContent>
                         </Tooltip>
                       </div>
                     </TableCell>
@@ -1138,184 +1261,207 @@ export function UserList() {
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingUser ? 'Edit User' : 'New User'}</DialogTitle>
+        {/* The form can be taller than a phone screen, so the fields scroll
+            between the title and the actions, which stay in view below a
+            hairline. The scrolling edge fades while there is more. */}
+        <DialogContent className={formDialogClassName}>
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{editingUser ? 'Edit user' : 'New user'}</DialogTitle>
             <DialogDescription>
               {editingUser
                 ? 'Edit user details and permissions.'
                 : 'Create a new user account.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Username</Label>
-                <Input
-                  id="name"
-                  disabled={!!editingUser && !can('users.update')}
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="Username"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  disabled={!!editingUser && !can('users.update')}
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-              {!editingUser && (
+          <form
+            onSubmit={handleSubmit}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div ref={scrollFadeRef} className={formDialogBodyClassName}>
+              <div className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="name">Username</Label>
                   <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
+                    id="name"
+                    disabled={!!editingUser && !can('users.update')}
+                    value={formData.name}
                     onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
+                      setFormData({ ...formData, name: e.target.value })
                     }
-                    placeholder="••••••••"
+                    placeholder="Their name or handle"
                     required
                   />
                 </div>
-              )}
-              {editingUser && (
                 <div className="space-y-2">
-                  <Label htmlFor="newPassword">
-                    New Password
-                    <span className="text-sm text-muted-foreground ml-2">
-                      (Leave empty to keep current password)
-                    </span>
-                  </Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="newPassword"
+                    id="email"
                     disabled={!!editingUser && !can('users.update')}
-                    type="password"
-                    value={formData.password}
+                    type="email"
+                    value={formData.email}
                     onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
+                      setFormData({ ...formData, email: e.target.value })
                     }
-                    placeholder="••••••••"
+                    placeholder="name@example.com"
+                    required
                   />
                 </div>
-              )}
-              <fieldset disabled={!can('users.roles')} className="space-y-2">
-                <legend className="text-sm font-medium">Roles</legend>
-                <p className="text-xs text-muted-foreground">
-                  Everyone applies automatically. Assigned roles add their
-                  permissions together.
-                </p>
-                {roleLoadError && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {roleLoadError}
-                  </p>
+                {!editingUser && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      placeholder="At least 8 characters"
+                      autoComplete="new-password"
+                      required
+                    />
+                  </div>
                 )}
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
-                  {availableRoles
-                    .filter((role) => role.systemKey !== 'everyone')
-                    .map((role) => (
-                      <label
-                        key={role.id}
-                        className="flex items-center gap-3 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-primary"
-                          checked={formData.roleIds?.includes(role.id) ?? false}
-                          disabled={
-                            !can('administrator') &&
-                            (role.position >= highestPosition ||
-                              role.permissions.some(
-                                (permission) =>
-                                  !(
-                                    actor?.permissions as
-                                      readonly string[] | undefined
-                                  )?.includes(permission)
-                              ))
-                          }
-                          onChange={(event) =>
-                            setFormData({
-                              ...formData,
-                              roleIds: event.target.checked
-                                ? [...(formData.roleIds ?? []), role.id]
-                                : (formData.roleIds ?? []).filter(
-                                    (id) => id !== role.id
-                                  ),
-                            })
-                          }
-                        />
-                        <RoleBadges roles={[role]} />
-                      </label>
-                    ))}
-                </div>
-                {!can('users.roles') && (
+                {editingUser && (
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword">
+                      New password{' '}
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    </Label>
+                    <Input
+                      id="newPassword"
+                      disabled={!!editingUser && !can('users.update')}
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
+                      placeholder="At least 8 characters"
+                      autoComplete="new-password"
+                      aria-describedby="newPassword-help"
+                    />
+                    <p
+                      id="newPassword-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Leave empty to keep the current password.
+                    </p>
+                  </div>
+                )}
+                <fieldset disabled={!can('users.roles')} className="space-y-2">
+                  <legend className="text-sm font-medium">Roles</legend>
                   <p className="text-xs text-muted-foreground">
-                    Your roles do not allow assigning roles.
+                    Everyone applies automatically. Assigned roles add their
+                    permissions together.
                   </p>
+                  {roleLoadError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {roleLoadError}
+                    </p>
+                  )}
+                  <RoleChecklist
+                    roles={availableRoles.filter(
+                      (role) => role.systemKey !== 'everyone'
+                    )}
+                    selected={formData.roleIds ?? []}
+                    onChange={(roleIds) =>
+                      setFormData({ ...formData, roleIds })
+                    }
+                    isDisabled={(role) =>
+                      !can('administrator') &&
+                      (role.position >= highestPosition ||
+                        role.permissions.some(
+                          (permission) =>
+                            !(
+                              actor?.permissions as
+                                readonly string[] | undefined
+                            )?.includes(permission)
+                        ))
+                    }
+                  />
+                  {!can('users.roles') && (
+                    <p className="text-xs text-muted-foreground">
+                      Your roles do not allow assigning roles.
+                    </p>
+                  )}
+                </fieldset>
+                {editingUser && (
+                  <div className="space-y-2">
+                    <Label htmlFor="urlId">URL ID</Label>
+                    <Input
+                      id="urlId"
+                      spellCheck={false}
+                      disabled={!!editingUser && !can('users.update')}
+                      value={formData.urlId || ''}
+                      onChange={(e) => {
+                        const value = e.target.value.toUpperCase()
+                        if (/^[A-Z0-9]*$/.test(value) && value.length <= 5) {
+                          setFormData({ ...formData, urlId: value })
+                        }
+                      }}
+                      placeholder="e.g. ABC12"
+                      maxLength={5}
+                      aria-describedby="urlId-help"
+                    />
+                    <p
+                      id="urlId-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Exactly 5 letters or numbers.
+                    </p>
+                  </div>
                 )}
-              </fieldset>
-              {editingUser && (
-                <div className="space-y-2">
-                  <Label htmlFor="urlId">
-                    URL ID
-                    <span className="text-sm text-muted-foreground ml-2">
-                      (5 characters, alphanumeric)
-                    </span>
-                  </Label>
-                  <Input
-                    id="urlId"
-                    disabled={!!editingUser && !can('users.update')}
-                    value={formData.urlId || ''}
-                    onChange={(e) => {
-                      const value = e.target.value.toUpperCase()
-                      if (/^[A-Z0-9]*$/.test(value) && value.length <= 5) {
-                        setFormData({ ...formData, urlId: value })
-                      }
-                    }}
-                    placeholder="e.g. ABC12"
-                    maxLength={5}
-                  />
-                </div>
-              )}
-              {editingUser && (
-                <div className="space-y-2">
-                  <Label htmlFor="vanityId">
-                    Vanity URL
-                    <span className="text-sm text-muted-foreground ml-2">
-                      (3-32 characters, optional)
-                    </span>
-                  </Label>
-                  <Input
-                    id="vanityId"
-                    disabled={!!editingUser && !can('users.update')}
-                    value={formData.vanityId || ''}
-                    onChange={(e) => {
-                      const value = e.target.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9-]/g, '')
-                      if (value.length <= 32) {
-                        setFormData({ ...formData, vanityId: value })
-                      }
-                    }}
-                    placeholder="e.g. my-custom-url"
-                    maxLength={32}
-                  />
-                </div>
+                {editingUser && (
+                  <div className="space-y-2">
+                    <Label htmlFor="vanityId">
+                      Vanity URL{' '}
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    </Label>
+                    <Input
+                      id="vanityId"
+                      spellCheck={false}
+                      disabled={!!editingUser && !can('users.update')}
+                      value={formData.vanityId || ''}
+                      onChange={(e) => {
+                        const value = e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, '')
+                        if (value.length <= 32) {
+                          setFormData({ ...formData, vanityId: value })
+                        }
+                      }}
+                      placeholder="e.g. my-custom-url"
+                      maxLength={32}
+                      aria-describedby="vanityId-help"
+                    />
+                    <p
+                      id="vanityId-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      3–32 letters, numbers or inner hyphens.
+                    </p>
+                  </div>
+                )}
+              </div>
+              {editingUser && can('users.email') && (
+                <UserEmailControls
+                  key={editingUser.id}
+                  userId={editingUser.id}
+                />
               )}
             </div>
-            <DialogFooter>
+            <DialogFooter className={formDialogFooterClassName}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancel
+              </Button>
               <Button
                 type="submit"
                 disabled={
@@ -1328,14 +1474,11 @@ export function UserList() {
                 {isLoading
                   ? 'Saving…'
                   : editingUser
-                    ? 'Save Changes'
-                    : 'Create User'}
+                    ? 'Save changes'
+                    : 'Create user'}
               </Button>
             </DialogFooter>
           </form>
-          {editingUser && can('users.email') && (
-            <UserEmailControls key={editingUser.id} userId={editingUser.id} />
-          )}
         </DialogContent>
       </Dialog>
 
@@ -1350,133 +1493,179 @@ export function UserList() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{viewingUser?.name}&apos;s Content</DialogTitle>
+        <DialogContent className={cn(formDialogClassName, 'max-w-4xl')}>
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{viewingUser?.name}&apos;s content</DialogTitle>
             <DialogDescription>
-              View and manage user&apos;s files and shortened URLs
+              View and manage this user&apos;s files and shortened URLs.
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="files" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="files">
-                Files ({filePagination?.total || 0})
-              </TabsTrigger>
-              <TabsTrigger value="urls">
-                URLs ({urlPagination?.total || 0})
-              </TabsTrigger>
-            </TabsList>
+          {/* The tables scroll under the title, with a fade while more
+              rows follow. */}
+          <div ref={scrollFadeRef} className={formDialogBodyClassName}>
+            <Tabs defaultValue="files" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 sm:inline-grid sm:w-auto">
+                <TabsTrigger value="files">
+                  Files ({filePagination?.total || 0})
+                </TabsTrigger>
+                <TabsTrigger value="urls">
+                  URLs ({urlPagination?.total || 0})
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="files">
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-3">
-                  <div className="flex-1">
-                    <Input
-                      aria-label="Search this user’s files"
-                      placeholder="Search files..."
-                      value={fileFilters.search}
-                      onChange={(e) =>
-                        handleFileFilterChange({ search: e.target.value })
+              <TabsContent value="files" tabIndex={-1}>
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    <div className="relative min-w-0 basis-full sm:flex-1 sm:basis-auto">
+                      <Search
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        aria-label="Search this user’s files"
+                        placeholder="Search files…"
+                        value={fileFilters.search}
+                        onChange={(e) =>
+                          handleFileFilterChange({ search: e.target.value })
+                        }
+                        className="pl-9"
+                      />
+                    </div>
+                    <Select
+                      value={fileFilters.visibility || 'all'}
+                      onValueChange={(value) =>
+                        handleFileFilterChange({
+                          visibility:
+                            value === 'all'
+                              ? null
+                              : (value as 'PUBLIC' | 'PRIVATE'),
+                        })
                       }
-                      className="w-full"
-                    />
+                    >
+                      <SelectTrigger
+                        aria-label="Filter user files by visibility"
+                        className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                      >
+                        <SelectValue placeholder="Any visibility" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Any visibility</SelectItem>
+                        <SelectItem value="PUBLIC">Public</SelectItem>
+                        <SelectItem value="PRIVATE">Private</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={fileFilters.type || 'all'}
+                      onValueChange={(value) =>
+                        handleFileFilterChange({
+                          type: value === 'all' ? '' : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        aria-label="Filter user files by type"
+                        className="min-w-0 flex-1 sm:w-40 sm:flex-none"
+                      >
+                        <SelectValue placeholder="All file types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All file types</SelectItem>
+                        <SelectItem value="image/">Images</SelectItem>
+                        <SelectItem value="text/">Text</SelectItem>
+                        <SelectItem value="application/">Documents</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Select
-                    value={fileFilters.visibility || 'all'}
-                    onValueChange={(value) =>
-                      handleFileFilterChange({
-                        visibility:
-                          value === 'all'
-                            ? null
-                            : (value as 'PUBLIC' | 'PRIVATE'),
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      aria-label="Filter user files by visibility"
-                      className="w-full sm:w-[150px]"
-                    >
-                      <SelectValue placeholder="Visibility" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="PUBLIC">Public</SelectItem>
-                      <SelectItem value="PRIVATE">Private</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={fileFilters.type || 'all'}
-                    onValueChange={(value) =>
-                      handleFileFilterChange({
-                        type: value === 'all' ? '' : value,
-                      })
-                    }
-                  >
-                    <SelectTrigger
-                      aria-label="Filter user files by type"
-                      className="w-full sm:w-[150px]"
-                    >
-                      <SelectValue placeholder="File Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="image/">Images</SelectItem>
-                      <SelectItem value="text/">Text</SelectItem>
-                      <SelectItem value="application/">Documents</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]"></TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Size</TableHead>
-                        <TableHead>Visibility</TableHead>
-                        <TableHead>Uploaded</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(filesLoading || userFiles.length === 0) && (
+                  <div className="overflow-hidden rounded-xl border">
+                    {/* Columns drop away on narrow screens; their details move
+                      under the name and the menu stays on the right. */}
+                    <Table
+                      className="table-fixed"
+                      aria-label={`Files uploaded by ${viewingUser?.name ?? 'this user'}`}
+                    >
+                      <TableHeader className="bg-muted/30">
                         <TableRow>
-                          <TableCell
-                            colSpan={6}
-                            className="h-28 text-center text-sm text-muted-foreground"
-                          >
-                            {filesLoading
-                              ? 'Loading files…'
-                              : 'No files match this view.'}
-                          </TableCell>
+                          <TableHead className="w-14">
+                            <span className="sr-only">Preview</span>
+                          </TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead className="hidden w-32 lg:table-cell">
+                            Type
+                          </TableHead>
+                          <TableHead className="hidden w-[6.5rem] sm:table-cell">
+                            Visibility
+                          </TableHead>
+                          <TableHead className="hidden w-24 text-right sm:table-cell">
+                            Size
+                          </TableHead>
+                          <TableHead className="hidden w-24 text-right md:table-cell">
+                            Uploaded
+                          </TableHead>
+                          <TableHead className="w-12 px-2 text-center sm:w-20">
+                            <span className="sr-only sm:not-sr-only">
+                              Actions
+                            </span>
+                          </TableHead>
                         </TableRow>
-                      )}
-                      {!filesLoading &&
-                        userFiles.map((file: File) => (
-                          <TableRow key={file.id}>
-                            <TableCell className="w-[50px]">
-                              <div className="flex items-center justify-center">
-                                {getFilePreview(file)}
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-medium max-w-[300px]">
-                              <div className="flex items-center justify-between gap-2">
-                                <a
-                                  href={sanitizeUrl(file.urlPath)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:underline flex items-center gap-2 truncate"
-                                >
-                                  {file.name}
-                                </a>
-                                <div className="flex-shrink-0">
+                      </TableHeader>
+                      <TableBody>
+                        {!filesLoading &&
+                          userFiles.map((file: File) => {
+                            const uploaded = new Date(
+                              file.uploadedAt
+                            ).toLocaleDateString()
+                            return (
+                              <TableRow key={file.id}>
+                                <TableCell>{getFilePreview(file)}</TableCell>
+                                <TableCell className="py-3">
+                                  <a
+                                    href={sanitizeUrl(file.urlPath)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={file.name}
+                                    className="block truncate rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                                  >
+                                    {file.name}
+                                  </a>
+                                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground md:hidden">
+                                    <VisibilityBadge
+                                      file={file}
+                                      className="sm:hidden"
+                                    />
+                                    <span className="tabular-nums">
+                                      <span className="sm:hidden">
+                                        {formatFileSize(file.size)} ·{' '}
+                                      </span>
+                                      {uploaded}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="hidden lg:table-cell">
+                                  <span
+                                    className="block truncate"
+                                    title={file.mimeType}
+                                  >
+                                    {file.mimeType}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell">
+                                  <VisibilityBadge file={file} />
+                                </TableCell>
+                                <TableCell className="hidden whitespace-nowrap text-right tabular-nums sm:table-cell">
+                                  {formatFileSize(file.size)}
+                                </TableCell>
+                                <TableCell className="hidden whitespace-nowrap text-right text-muted-foreground md:table-cell">
+                                  {uploaded}
+                                </TableCell>
+                                <TableCell className="px-2 text-center">
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button
                                         variant="ghost"
                                         size="icon"
+                                        className="h-8 w-8"
                                         aria-label={`Actions for ${file.name}`}
                                       >
                                         <MoreVertical className="h-4 w-4" />
@@ -1490,267 +1679,317 @@ export function UserList() {
                                           setIsFileSettingsOpen(true)
                                         }}
                                       >
-                                        <Lock className="h-4 w-4 mr-2" />
+                                        <Lock className="h-4 w-4" />
                                         Settings
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         disabled={!can('content.delete')}
-                                        className="text-destructive"
+                                        className="text-destructive focus:text-destructive"
                                         onClick={() => {
                                           setSelectedFile(file)
                                           setIsFileDeleteDialogOpen(true)
                                         }}
                                       >
-                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        <Trash2 className="h-4 w-4" />
                                         Delete
                                       </DropdownMenuItem>
                                     </DropdownMenuContent>
                                   </DropdownMenu>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="max-w-[200px]">
-                              <span
-                                className="truncate block"
-                                title={file.mimeType}
-                              >
-                                {file.mimeType}
-                              </span>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              {formatFileSize(file.size)}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              <span
-                                className={cn(
-                                  'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                                  file.password
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-100'
-                                    : file.visibility === 'PRIVATE'
-                                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-100'
-                                      : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100'
-                                )}
-                              >
-                                {file.password ? 'PROTECTED' : file.visibility}
-                              </span>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              {new Date(file.uploadedAt).toLocaleDateString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                      </TableBody>
+                    </Table>
+                    {/* Outside the table: a spanning cell would upset the
+                      fixed column widths when columns are hidden. */}
+                    {(filesLoading || userFiles.length === 0) && (
+                      <p
+                        role="status"
+                        className="grid h-28 place-items-center px-4 text-center text-sm text-muted-foreground"
+                      >
+                        {filesLoading
+                          ? 'Loading files…'
+                          : 'No files match this view.'}
+                      </p>
+                    )}
+                  </div>
 
-                {filePagination && filePagination.pages > 1 && (
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.preventDefault()
-                            if (viewingUser) {
-                              fetchUserFiles(viewingUser.id, filePage - 1)
-                            }
-                          }}
-                          disabled={filePage === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                      </PaginationItem>
-                      {getPaginationRange(filePage, filePagination.pages).map(
-                        (p) => (
-                          <PaginationItem key={p}>
-                            <PaginationLink
-                              href="#"
-                              onClick={(
-                                e: React.MouseEvent<HTMLAnchorElement>
-                              ) => {
-                                e.preventDefault()
-                                if (viewingUser) {
-                                  fetchUserFiles(viewingUser.id, p)
-                                }
-                              }}
-                              isActive={p === filePage}
-                            >
-                              {p}
-                            </PaginationLink>
-                          </PaginationItem>
-                        )
-                      )}
-                      <PaginationItem>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.preventDefault()
-                            if (viewingUser) {
-                              fetchUserFiles(viewingUser.id, filePage + 1)
-                            }
-                          }}
-                          disabled={filePage === filePagination.pages}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="urls">
-              <div className="space-y-4">
-                <Input
-                  aria-label="Search this user’s links"
-                  placeholder="Search links..."
-                  value={urlSearch}
-                  onChange={(e) => handleUrlSearchChange(e.target.value)}
-                  className="w-full"
-                />
-
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Short URL</TableHead>
-                        <TableHead>Target URL</TableHead>
-                        <TableHead>Clicks</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(urlsLoading || userUrls.length === 0) && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={4}
-                            className="h-28 text-center text-sm text-muted-foreground"
+                  {filePagination && filePagination.pages > 1 && (
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Previous files page"
+                            onClick={(
+                              e: React.MouseEvent<HTMLButtonElement>
+                            ) => {
+                              e.preventDefault()
+                              if (viewingUser) {
+                                fetchUserFiles(viewingUser.id, filePage - 1)
+                              }
+                            }}
+                            disabled={filePage === 1}
                           >
-                            {urlsLoading
-                              ? 'Loading links…'
-                              : 'No links match this view.'}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {!urlsLoading &&
-                        userUrls.map((url) => (
-                          <TableRow key={url.id}>
-                            <TableCell className="font-medium">
-                              <div className="flex items-center justify-between">
-                                <a
-                                  href={`/u/${url.shortCode}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="hover:underline flex items-center gap-2"
-                                >
-                                  <Link2 className="h-4 w-4" />
-                                  {url.shortCode}
-                                </a>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label={`Actions for ${url.shortCode}`}
-                                    >
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      disabled={!can('content.delete')}
-                                      className="text-destructive"
-                                      onClick={() => handleDeleteUrl(url.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </TableCell>
-                            <TableCell className="max-w-[300px] truncate">
-                              <a
-                                href={url.targetUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:underline"
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                        {getPaginationRange(filePage, filePagination.pages).map(
+                          (p) => (
+                            <PaginationItem key={p}>
+                              <PaginationLink
+                                href="#"
+                                onClick={(
+                                  e: React.MouseEvent<HTMLAnchorElement>
+                                ) => {
+                                  e.preventDefault()
+                                  if (viewingUser) {
+                                    fetchUserFiles(viewingUser.id, p)
+                                  }
+                                }}
+                                isActive={p === filePage}
                               >
-                                {url.targetUrl}
-                              </a>
-                            </TableCell>
-                            <TableCell>{url.clicks}</TableCell>
-                            <TableCell>
-                              {new Date(url.createdAt).toLocaleDateString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
+                                {p}
+                              </PaginationLink>
+                            </PaginationItem>
+                          )
+                        )}
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Next files page"
+                            onClick={(
+                              e: React.MouseEvent<HTMLButtonElement>
+                            ) => {
+                              e.preventDefault()
+                              if (viewingUser) {
+                                fetchUserFiles(viewingUser.id, filePage + 1)
+                              }
+                            }}
+                            disabled={filePage === filePagination.pages}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  )}
                 </div>
+              </TabsContent>
 
-                {urlPagination && urlPagination.pages > 1 && (
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.preventDefault()
-                            if (viewingUser) {
-                              fetchUserUrls(viewingUser.id, urlPage - 1)
-                            }
-                          }}
-                          disabled={urlPage === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                      </PaginationItem>
-                      {getPaginationRange(urlPage, urlPagination.pages).map(
-                        (p) => (
-                          <PaginationItem key={p}>
-                            <PaginationLink
-                              href="#"
-                              onClick={(
-                                e: React.MouseEvent<HTMLAnchorElement>
-                              ) => {
-                                e.preventDefault()
-                                if (viewingUser) {
-                                  fetchUserUrls(viewingUser.id, p)
-                                }
-                              }}
-                              isActive={p === urlPage}
-                            >
-                              {p}
-                            </PaginationLink>
-                          </PaginationItem>
-                        )
-                      )}
-                      <PaginationItem>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                            e.preventDefault()
-                            if (viewingUser) {
-                              fetchUserUrls(viewingUser.id, urlPage + 1)
-                            }
-                          }}
-                          disabled={urlPage === urlPagination.pages}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="urls" tabIndex={-1}>
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <Input
+                      aria-label="Search this user’s links"
+                      placeholder="Search links…"
+                      value={urlSearch}
+                      onChange={(e) => handleUrlSearchChange(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border">
+                    <Table
+                      className="table-fixed"
+                      aria-label={`Short links created by ${viewingUser?.name ?? 'this user'}`}
+                    >
+                      <TableHeader className="bg-muted/30">
+                        <TableRow>
+                          <TableHead className="pl-4 sm:w-40">
+                            Short URL
+                          </TableHead>
+                          <TableHead className="hidden sm:table-cell">
+                            Target URL
+                          </TableHead>
+                          <TableHead className="hidden w-20 text-right sm:table-cell">
+                            Clicks
+                          </TableHead>
+                          <TableHead className="hidden w-28 text-right md:table-cell">
+                            Created
+                          </TableHead>
+                          <TableHead className="w-12 px-2 text-center sm:w-20">
+                            <span className="sr-only sm:not-sr-only">
+                              Actions
+                            </span>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {!urlsLoading &&
+                          userUrls.map((url) => {
+                            const created = new Date(
+                              url.createdAt
+                            ).toLocaleDateString()
+                            return (
+                              <TableRow key={url.id}>
+                                <TableCell className="py-3 pl-4">
+                                  <a
+                                    href={`/u/${url.shortCode}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex max-w-full items-center gap-2 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                                  >
+                                    <Link2
+                                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                                      aria-hidden="true"
+                                    />
+                                    <span className="truncate">
+                                      {url.shortCode}
+                                    </span>
+                                  </a>
+                                  <div className="mt-1 space-y-0.5 text-xs text-muted-foreground md:hidden">
+                                    <a
+                                      href={url.targetUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title={url.targetUrl}
+                                      className="block truncate rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:hidden"
+                                    >
+                                      {url.targetUrl}
+                                    </a>
+                                    {/* Breaks only between the two facts. */}
+                                    <p>
+                                      <span className="whitespace-nowrap tabular-nums sm:hidden">
+                                        {countOf(url.clicks, 'click')} ·
+                                      </span>{' '}
+                                      <span className="whitespace-nowrap">
+                                        Created {created}
+                                      </span>
+                                    </p>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell">
+                                  <a
+                                    href={url.targetUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={url.targetUrl}
+                                    className="block truncate rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                                  >
+                                    {url.targetUrl}
+                                  </a>
+                                </TableCell>
+                                <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                                  {url.clicks.toLocaleString()}
+                                </TableCell>
+                                <TableCell className="hidden whitespace-nowrap text-right text-muted-foreground md:table-cell">
+                                  {created}
+                                </TableCell>
+                                <TableCell className="px-2 text-center">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        aria-label={`Actions for ${url.shortCode}`}
+                                      >
+                                        <MoreVertical className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        disabled={!can('content.delete')}
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => handleDeleteUrl(url.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                      </TableBody>
+                    </Table>
+                    {(urlsLoading || userUrls.length === 0) && (
+                      <p
+                        role="status"
+                        className="grid h-28 place-items-center px-4 text-center text-sm text-muted-foreground"
+                      >
+                        {urlsLoading
+                          ? 'Loading links…'
+                          : 'No links match this view.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {urlPagination && urlPagination.pages > 1 && (
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Previous links page"
+                            onClick={(
+                              e: React.MouseEvent<HTMLButtonElement>
+                            ) => {
+                              e.preventDefault()
+                              if (viewingUser) {
+                                fetchUserUrls(viewingUser.id, urlPage - 1)
+                              }
+                            }}
+                            disabled={urlPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                        {getPaginationRange(urlPage, urlPagination.pages).map(
+                          (p) => (
+                            <PaginationItem key={p}>
+                              <PaginationLink
+                                href="#"
+                                onClick={(
+                                  e: React.MouseEvent<HTMLAnchorElement>
+                                ) => {
+                                  e.preventDefault()
+                                  if (viewingUser) {
+                                    fetchUserUrls(viewingUser.id, p)
+                                  }
+                                }}
+                                isActive={p === urlPage}
+                              >
+                                {p}
+                              </PaginationLink>
+                            </PaginationItem>
+                          )
+                        )}
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Next links page"
+                            onClick={(
+                              e: React.MouseEvent<HTMLButtonElement>
+                            ) => {
+                              e.preventDefault()
+                              if (viewingUser) {
+                                fetchUserUrls(viewingUser.id, urlPage + 1)
+                              }
+                            }}
+                            disabled={urlPage === urlPagination.pages}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1770,10 +2009,13 @@ export function UserList() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete File</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {selectedFile?.name}? This action
-              cannot be undone.
+            <AlertDialogTitle>Delete file</AlertDialogTitle>
+            <AlertDialogDescription className="break-words">
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-foreground">
+                {selectedFile?.name}
+              </span>
+              ? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1786,7 +2028,7 @@ export function UserList() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={destructiveActionClassName}
               onClick={() => {
                 if (selectedFile) {
                   handleDeleteFile(selectedFile.id)
@@ -1795,7 +2037,7 @@ export function UserList() {
                 setIsFileDeleteDialogOpen(false)
               }}
             >
-              Delete File
+              Delete file
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1807,11 +2049,14 @@ export function UserList() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {userToDelete?.name}? This action
-              cannot be undone. All of their files and data will be permanently
-              deleted.
+            <AlertDialogTitle>Delete user</AlertDialogTitle>
+            <AlertDialogDescription className="break-words">
+              Are you sure you want to delete{' '}
+              <span className="font-medium text-foreground">
+                {userToDelete?.name}
+              </span>
+              ? This action cannot be undone. All of their files and data will
+              be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1824,14 +2069,14 @@ export function UserList() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={destructiveActionClassName}
               onClick={() => {
                 if (userToDelete) {
                   handleDeleteUser(userToDelete.id)
                 }
               }}
             >
-              Delete User
+              Delete user
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

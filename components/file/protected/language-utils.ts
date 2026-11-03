@@ -6,7 +6,7 @@ import { java } from '@codemirror/lang-java'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { less } from '@codemirror/lang-less'
-import { markdown } from '@codemirror/lang-markdown'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { php } from '@codemirror/lang-php'
 import { python } from '@codemirror/lang-python'
 import { rust } from '@codemirror/lang-rust'
@@ -35,7 +35,8 @@ export function getLanguageExtension(language: string) {
     case 'python':
       return python()
     case 'markdown':
-      return markdown()
+      // GitHub-flavoured, so task boxes such as [x] aren't read as links.
+      return markdown({ base: markdownLanguage })
     case 'yaml':
       return yaml()
     case 'java':
@@ -62,6 +63,8 @@ export function getLanguageExtension(language: string) {
     case 'less':
       return less()
     default:
-      return javascript()
+      // Plain text and unknown languages get no grammar, so prose and logs
+      // aren't coloured as JavaScript.
+      return []
   }
 }

@@ -117,7 +117,7 @@ export function DashboardNav() {
             : '/dashboard/profile'
         }
         aria-label="Go to your dashboard"
-        className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:max-w-[220px]"
+        className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background xl:max-w-[220px]"
       >
         <InstanceBrand iconClassName="h-6 w-6 text-primary" />
       </Link>
@@ -138,16 +138,26 @@ export function DashboardNav() {
               {routes.map((route) => (
                 <Button
                   key={route.href}
-                  variant={pathname === route.href ? 'default' : 'ghost'}
+                  variant="ghost"
                   asChild
-                  className="h-10 w-full justify-start gap-2 rounded-lg"
+                  className={cn(
+                    'h-10 w-full justify-start gap-2 rounded-lg border border-transparent text-muted-foreground hover:text-foreground',
+                    pathname === route.href &&
+                      'border-border/60 bg-accent text-accent-foreground'
+                  )}
                 >
                   <Link
                     href={route.href}
                     onClick={() => setOpen(false)}
                     aria-current={pathname === route.href ? 'page' : undefined}
                   >
-                    <route.icon className="h-4 w-4" aria-hidden="true" />
+                    <route.icon
+                      className={cn(
+                        'h-4 w-4',
+                        pathname === route.href && 'text-primary'
+                      )}
+                      aria-hidden="true"
+                    />
                     {route.label}
                   </Link>
                 </Button>
@@ -158,7 +168,9 @@ export function DashboardNav() {
       </div>
 
       <div className="hidden min-w-0 flex-1 justify-center xl:flex">
-        <div className="flex items-center gap-1 rounded-xl border border-border/40 bg-muted/25 p-1">
+        {/* In light mode the track is a step darker, so the raised white
+            pill of the current page stands out from it. */}
+        <div className="flex items-center gap-1 rounded-xl border border-border/40 bg-muted/60 p-1 dark:bg-muted/25">
           {routes.map((route) => {
             const isActive = pathname === route.href
             return (
@@ -168,7 +180,7 @@ export function DashboardNav() {
                 className={cn(
                   'h-9 gap-2 rounded-lg border border-transparent px-3.5 text-sm font-medium text-muted-foreground hover:bg-background/60 hover:text-foreground',
                   isActive &&
-                    'border-border/60 bg-background text-foreground shadow-sm'
+                    'border-border bg-background text-foreground shadow-sm dark:border-border/60'
                 )}
                 asChild
               >

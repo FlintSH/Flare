@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { History, Laptop, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Laptop, RefreshCw } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 
+import { MetaLine } from '@/components/profile/meta-line'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -63,24 +65,6 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       result.error || 'Unable to load account activity. Please try again.'
     )
   return result
-}
-
-function Badge({
-  children,
-  variant,
-  className = '',
-}: {
-  children: React.ReactNode
-  variant: 'secondary' | 'destructive'
-  className?: string
-}) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variant === 'destructive' ? 'bg-red-500/10 text-red-700 dark:text-red-400' : 'bg-muted text-muted-foreground'} ${className}`}
-    >
-      {children}
-    </span>
-  )
 }
 
 function methodName(method: string) {
@@ -229,22 +213,19 @@ function AccountSessions({
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1.5">
-              <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5" />
-                Active sessions
-              </CardTitle>
+              <CardTitle>Active sessions</CardTitle>
               <CardDescription>
                 See where you are signed in and end access to a browser.
               </CardDescription>
             </div>
             <Button
               variant="outline"
-              size="sm"
+              className="shrink-0"
               onClick={() => void sessions.refetch()}
               disabled={sessions.isFetching}
               aria-label="Refresh active sessions"
             >
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCw />
               Refresh
             </Button>
           </div>
@@ -268,22 +249,30 @@ function AccountSessions({
           {sessions.data?.sessions.map((session) => (
             <div
               key={session.id}
-              className="flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Laptop className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">
+                  <Laptop
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  {/* Row titles and metadata use one size on every tab. */}
+                  <span className="text-sm font-medium">
                     {deviceName(session.userAgent)}
                   </span>
-                  {session.current && (
-                    <Badge variant="secondary">This browser</Badge>
-                  )}
+                  {session.current && <Badge>This browser</Badge>}
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {methodName(session.authMethod)} ·{' '}
-                  {session.ipAddress || 'IP unavailable'}
-                </p>
+                <MetaLine
+                  className="text-xs text-muted-foreground"
+                  items={[
+                    { key: 'method', text: methodName(session.authMethod) },
+                    {
+                      key: 'address',
+                      text: session.ipAddress || 'IP unavailable',
+                    },
+                  ]}
+                />
                 <dl className="space-y-1 text-xs text-muted-foreground">
                   <div>
                     <dt className="inline">Signed in: </dt>
@@ -310,11 +299,10 @@ function AccountSessions({
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0 self-start"
+                className="shrink-0 self-start text-destructive hover:bg-danger/10 hover:text-destructive"
                 onClick={() => setPending(session)}
                 disabled={revoking}
               >
-                <LogOut className="mr-2 h-4 w-4" />
                 Revoke session
               </Button>
             </div>
@@ -327,7 +315,7 @@ function AccountSessions({
             </p>
             <Button
               variant="destructive"
-              className="shrink-0 self-start"
+              className="w-full shrink-0 sm:w-auto"
               onClick={() => setPending('all')}
               disabled={revoking || !sessions.data?.sessions.length}
             >
@@ -340,10 +328,7 @@ function AccountSessions({
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1.5">
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Login history
-              </CardTitle>
+              <CardTitle>Login history</CardTitle>
               <CardDescription>
                 Your successful and failed sign-in attempts from the last 90
                 days.
@@ -392,26 +377,31 @@ function AccountSessions({
           {attempts.map((attempt) => (
             <div
               key={attempt.id}
-              className="flex flex-col gap-2 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              className="space-y-1 rounded-xl border bg-muted/30 px-4 py-3"
             >
-              <div className="min-w-0 space-y-1">
-                <p className="text-sm font-medium">
+              {/* The outcome follows the title on its line, like the other
+                  status badges. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="min-w-0 text-sm font-medium">
                   {methodName(attempt.authMethod)} ·{' '}
                   {deviceName(attempt.userAgent)}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {date(attempt.createdAt)} ·{' '}
-                  {attempt.ipAddress || 'IP unavailable'}
-                </p>
+                <Badge
+                  variant={attempt.outcome === 'success' ? 'success' : 'danger'}
+                >
+                  {attempt.outcome === 'success' ? 'Successful' : 'Failed'}
+                </Badge>
               </div>
-              <Badge
-                className="self-start"
-                variant={
-                  attempt.outcome === 'success' ? 'secondary' : 'destructive'
-                }
-              >
-                {attempt.outcome === 'success' ? 'Successful' : 'Failed'}
-              </Badge>
+              <MetaLine
+                className="text-xs text-muted-foreground"
+                items={[
+                  { key: 'date', text: date(attempt.createdAt) },
+                  {
+                    key: 'address',
+                    text: attempt.ipAddress || 'IP unavailable',
+                  },
+                ]}
+              />
             </div>
           ))}
           {history.hasNextPage && (

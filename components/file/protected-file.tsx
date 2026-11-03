@@ -38,7 +38,7 @@ export function ProtectedFile({
               verifiedPassword={currentVerifiedPassword}
             />
 
-            <div className="flex items-center justify-center px-4 pb-4 sm:px-6">
+            <div className="flex items-center justify-center px-6 pb-4">
               <FileActions
                 urlPath={sanitizeUrl(file.urlPath)}
                 name={file.name}

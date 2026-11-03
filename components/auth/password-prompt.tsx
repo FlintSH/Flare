@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 
+import { AlertCircle } from 'lucide-react'
+
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -18,25 +21,34 @@ interface PasswordPromptProps {
   onSuccess: () => void
 }
 
+// Matches the server-rendered prompt in components/auth/file-password-form.tsx.
 export function PasswordPrompt({ onSubmit, onSuccess }: PasswordPromptProps) {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    message: string
+    invalid: boolean
+  } | null>(null)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setIsLoading(true)
-    setError('')
+    setError(null)
     try {
       if (await onSubmit(password)) {
         onSuccess()
       } else {
-        setError(
-          'That password didn’t match. Check with the sender and try again.'
-        )
+        setError({
+          message:
+            'That password didn’t match. Check with the sender and try again.',
+          invalid: true,
+        })
       }
     } catch {
-      setError('We couldn’t check the password. Please try again.')
+      setError({
+        message: 'We couldn’t check the password. Please try again.',
+        invalid: false,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -50,7 +62,7 @@ export function PasswordPrompt({ onSubmit, onSuccess }: PasswordPromptProps) {
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Password Protected File</DialogTitle>
+          <DialogTitle>Password-protected file</DialogTitle>
           <DialogDescription>
             Enter the password from the sender to open this file.
           </DialogDescription>
@@ -66,26 +78,25 @@ export function PasswordPrompt({ onSubmit, onSuccess }: PasswordPromptProps) {
               id="protected-file-password"
               type="password"
               autoComplete="current-password"
+              placeholder="Enter the file password"
+              className="h-11"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               disabled={isLoading}
-              aria-invalid={Boolean(error)}
+              aria-invalid={error?.invalid || undefined}
               aria-describedby={error ? 'protected-file-error' : undefined}
               required
               autoFocus
             />
-            {error && (
-              <p
-                id="protected-file-error"
-                className="text-sm text-foreground"
-                role="alert"
-              >
-                {error}
-              </p>
-            )}
           </div>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? 'Checking password…' : 'Open file'}
+          {error && (
+            <Alert id="protected-file-error" variant="destructive">
+              <AlertCircle aria-hidden="true" />
+              <AlertDescription>{error.message}</AlertDescription>
+            </Alert>
+          )}
+          <Button type="submit" className="h-11 w-full" disabled={isLoading}>
+            {isLoading ? 'Checking password…' : 'Access file'}
           </Button>
         </form>
       </DialogContent>

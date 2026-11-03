@@ -27,18 +27,18 @@ Everyone cannot be deleted, renamed, reordered, manually assigned, or granted Ad
 
 [Watch the recorded create-and-assign walkthrough](/demos#create-and-assign-a-role), then follow these steps on your own instance.
 
-1. Open **Roles** and choose **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color.
+1. Open **Roles** and choose **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color. Until you save it, the role list shows the new role as **Not saved yet**.
 2. Under **Permissions**, use the grouped switches, **Find a permission…**, or **Enable group** / **Clear group** to choose the grants. Choose individual permissions for a narrowly scoped role.
 3. Set **Position** below the roles that should manage it. Higher positions mean higher authority for managing roles and accounts; position does not add feature permissions.
-4. Choose **Save role**. Creating it does not assign it to anyone.
-5. In **Users**, open **Edit User → Roles** and select the additional roles it should receive. Everyone is already included automatically. Save the account.
+4. Choose **Save role** in the bar at the end of the editor. While the role has unsaved changes, that bar stays at the bottom of the screen as you scroll. Creating a role does not assign it to anyone.
+5. In **Users**, open **Edit user → Roles** and select the additional roles it should receive. Everyone is already included automatically. Save the account.
 6. Ask the person to refresh their workspace. Confirm that their intended workflow works and unrelated administrative actions are unavailable.
 
 Role names are 1–50 characters, descriptions up to 300 characters, and colors use six-digit hex values. An instance can have at most 100 roles, including Everyone and Admin. Several roles may have the same permissions. Use a small set of clear responsibilities before introducing many overlapping roles.
 
 <Screenshot src="/screenshots/roles/role-editor.webp" alt="Moderator role editor filtered to the content moderation group, showing read, edit, and delete switches" caption="Search for a permission or group, review the grants, then save the role." />
 
-<Screenshot src="/screenshots/roles/user-roles.webp" alt="Edit User dialog with both Moderator and Creator selected while Everyone applies automatically" caption="An account can combine several roles. Clearing one selection does not remove grants from its other roles." />
+<Screenshot src="/screenshots/roles/user-roles.webp" alt="Edit user dialog with both Moderator and Creator selected while Everyone applies automatically" caption="An account can combine several roles. Clearing one selection does not remove grants from its other roles." />
 
 ## How permissions combine
 
@@ -111,7 +111,7 @@ Content moderation is instance-wide and does not use the account-management hier
 
 ### Manage permissions on a phone
 
-The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles**, select a role, then use its permission switches and **Save role**. Role hierarchy and validation are the same as on desktop.
+The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles**, then select a role or choose **Create role**. The page scrolls down to the role's editor, below the role list. Use its permission switches, then **Save role**. Role hierarchy and validation are the same as on desktop.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/roles/roles-mobile.webp" alt="Mobile role editor with separate View all content, Edit all content, and Delete all content switches" caption="Content reading, editing, and deletion remain separate choices on a phone." />

@@ -25,7 +25,7 @@ Scroll normally with your mouse, trackpad, or touch screen. More files load as y
 
 Flare keeps cards and nearby file data in a limited window around your position. Returning to an earlier part of a large library may briefly show loading placeholders while those files load again. The file count describes the whole filtered result, not just the cards currently on screen. Your browser's Find command only searches rendered content; use the library's search field to find files anywhere in your account.
 
-With **Newest first** or **Oldest first**, a slim date rail on the right helps you stay oriented. Its date label appears while you scroll, hover, or focus it, then recedes when you finish. Click or drag along the rail to jump through the matching upload history. Flare loads files near your destination without first downloading every file you passed.
+With **Newest first** or **Oldest first**, a slim date rail on the right helps you stay oriented. Its date label appears while you scroll, hover, or focus it, then recedes when you finish. On wide screens the rail stays faintly visible in the page margin; on tablets and phones, where it would sit over the content, it appears only while you scroll or use it. Click or drag along the rail to jump through the matching upload history. Flare loads files near your destination without first downloading every file you passed.
 
 For very large libraries, the browser's own scrollbar follows the section you are browsing and extends as you continue. The date rail always covers the full matching history, so use it to jump straight to a distant date.
 
@@ -130,6 +130,8 @@ The card menu and the buttons shown when you hover a file follow the same permis
 Choose **Select**, then select individual cards or **Select visible files**. The latter selects loaded cards currently on screen, up to the selection limit; it does not select your whole library or files loaded just beyond the screen. Scroll to add files from another part of the library. Your selection stays selected as cards leave the screen, and the selection bar remains available while you scroll.
 
 You can select up to **100 files** at a time, then choose **Edit tags**, **Move**, or **Create archive** where your permissions allow. Deselect individual files to make room, or finish the current batch before starting another.
+
+The selection bar counts your selection against that limit, for example **2 selected · up to 100**. **Select visible files** shows a dash when only some of the files on screen are selected; choose it to add the others. When it is checked, choosing it again removes the files on screen from your selection and keeps the rest.
 
 Before **Edit tags**, **Move**, or **Create archive** opens, Flare fetches current details for every selected file, including cards outside the visible window. If that check fails, retry the action. If a selected file is no longer available, choose **Done** and select the remaining files again.
 

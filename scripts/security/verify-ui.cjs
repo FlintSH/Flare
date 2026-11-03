@@ -130,7 +130,7 @@ async function profile(page) {
 
 async function signOut(page) {
   await profile(page)
-  await page.getByRole('button', { name: 'Sign Out', exact: true }).click()
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click()
   await page.waitForURL('**/auth/login*')
 }
 

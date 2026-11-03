@@ -4,9 +4,12 @@ import { useEffect } from 'react'
 
 import Link from 'next/link'
 
+import { AlertCircle } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
+import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { Icons } from '@/components/shared/icons'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
@@ -34,39 +37,39 @@ export function OidcAutoRedirect({
   }, [])
 
   return (
-    <div className="space-y-6">
-      <p
-        role={errorCode ? 'alert' : 'status'}
-        className={
-          errorCode
-            ? 'rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm leading-relaxed text-foreground'
-            : 'text-sm leading-relaxed text-muted-foreground'
-        }
-      >
-        {errorCode
-          ? getOidcErrorMessage(errorCode)
-          : 'Taking you to your organization’s sign-in page…'}
-      </p>
-      <Button
-        type="button"
-        className="w-full h-11 font-medium bg-primary hover:bg-primary/90 transition-colors"
-        onClick={redirectToOidc}
-      >
+    <div>
+      <div className="space-y-6">
         {errorCode ? (
-          buttonText
+          <Alert variant="destructive">
+            <AlertCircle aria-hidden="true" />
+            <AlertDescription>
+              {getOidcErrorMessage(errorCode)}
+            </AlertDescription>
+          </Alert>
         ) : (
-          <>
-            <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-            {buttonText}
-          </>
+          <p
+            role="status"
+            className="text-center text-sm leading-relaxed text-muted-foreground"
+          >
+            Taking you to your organization’s sign-in page…
+          </p>
         )}
-      </Button>
-      <Link
-        href="/auth/login?local=1"
-        className="block border-t border-border/60 pt-5 text-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-      >
-        Use local sign-in instead
-      </Link>
+        <Button type="button" className="h-11 w-full" onClick={redirectToOidc}>
+          {errorCode ? (
+            buttonText
+          ) : (
+            <>
+              <Icons.spinner className="animate-spin" aria-hidden="true" />
+              {buttonText}
+            </>
+          )}
+        </Button>
+      </div>
+      <AuthFooter>
+        <Link href="/auth/login?local=1" className={authLinkClassName}>
+          Use local sign-in instead
+        </Link>
+      </AuthFooter>
     </div>
   )
 }

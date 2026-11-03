@@ -51,3 +51,40 @@ export async function getSharedFolder(token: string, page = 1) {
     })),
   }
 }
+
+/**
+ * A visitor who opened this file from a shared folder gets a link back to it.
+ * Shared folder pages send their address as the referrer to this origin only,
+ * so the folder's share token never has to appear in the file's own URL. The
+ * link appears only while the file is still a public member of that folder.
+ */
+export async function sharedFolderBackLink(
+  file: { folderId: string | null; visibility: string },
+  referer: string | null
+): Promise<{ href: string; label: string } | null> {
+  if (!referer || !file.folderId || file.visibility !== 'PUBLIC') return null
+  let from: URL
+  try {
+    from = new URL(referer)
+  } catch {
+    return null
+  }
+  const match =
+    /^\/s\/folders\/([A-Za-z0-9_-]{20,100})(\/files\/[^/]+)?\/?$/.exec(
+      from.pathname
+    )
+  if (!match) return null
+  const [, token, viaFileRoute] = match
+  const folder = await prisma.vaultFolder.findUnique({
+    where: { shareToken: token },
+    select: { id: true, name: true },
+  })
+  if (!folder || folder.id !== file.folderId) return null
+  // Return to the listing page the visitor came from.
+  const page = viaFileRoute ? 1 : Number(from.searchParams.get('page') ?? 1)
+  const query =
+    Number.isSafeInteger(page) && page > 1 && page <= 100000
+      ? `?page=${page}`
+      : ''
+  return { href: `/s/folders/${token}${query}`, label: folder.name }
+}

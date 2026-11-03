@@ -1,7 +1,13 @@
 # Folder UI evidence
 
 Captured on September 24, 2026 from the production Next.js build using local
-Playwright Chromium and an isolated PostgreSQL 16 database. Accounts, files, tags,
+Playwright Chromium and an isolated PostgreSQL 16 database.
+
+Refreshed on November 2, 2026 for the visual polish, because the handbook shows
+them: the three demos (MP4 and GIF), [Folder](folder-desktop.jpg) and
+[Public folder](shared-folder-desktop.jpg). They were recorded the same way, on a
+disposable instance seeded through Flare's own API, and follow the transcripts in
+`docs/site/demos.md`. The other screenshots below are the September captures. Accounts, files, tags,
 folder links, and uploads are disposable fixtures. Screenshots show the rendered
 application; the demos record real browser interactions and application requests.
 No production data or external visual-testing credits were used.
@@ -13,8 +19,8 @@ recorded resolution.
 
 | Demo                                | Recording                                                       | Shows                                                                                                                  |
 | ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Organize and upload (23 seconds)    | [GIF](organizing-demo.gif) · [MP4](organizing-demo.mp4)         | Create a folder, move two files, create a subfolder, upload directly into it, and open the uploaded file's folder.     |
-| Share and revoke (15 seconds)       | [GIF](sharing-demo.gif) · [MP4](sharing-demo.mp4)               | Folder sharing controls, the public collection, protected-file presentation, disabling the link, and the revoked page. |
+| Organize and upload (17 seconds)    | [GIF](organizing-demo.gif) · [MP4](organizing-demo.mp4)         | Create a folder, move two files, create a subfolder, upload directly into it, and open the uploaded file's folder.     |
+| Share and revoke (13 seconds)       | [GIF](sharing-demo.gif) · [MP4](sharing-demo.mp4)               | Folder sharing controls, the public collection, protected-file presentation, disabling the link, and the revoked page. |
 | Protected-file handoff (11 seconds) | [GIF](protected-file-demo.gif) · [MP4](protected-file-demo.mp4) | Open a protected tile, retry an incorrect password, then reveal the filename and existing viewer after verification.   |
 
 | Screenshot                                                     | Surface                                                                     |

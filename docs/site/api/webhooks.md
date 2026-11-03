@@ -141,7 +141,7 @@ There are **five total attempts**, with delays after failures of **1 minute, 5 m
 | `failed`     | A permanent failure or the attempt limit was reached.                                           |
 | `cancelled`  | Paused destination or an invalidated source-file event.                                         |
 
-In **Profile → Integrations**, delivery history includes attempts, the next available time, delivery time, and a sanitized error. It shows the **latest 50 deliveries**. Terminal history (`delivered`, `failed`, `cancelled`) is removed after **30 days**, with cleanup checked hourly by the worker.
+In **Profile → Integrations**, **Delivery history** shows the **latest 50 deliveries**: each one's webhook, event (**Test event** or **File ready**), status, attempts out of five, creation time, and sanitized last error. Failed deliveries offer **Retry**. The list reloads every five seconds while the page is open; **Refresh** in the card's header reloads it immediately. Terminal history (`delivered`, `failed`, `cancelled`) is removed after **30 days**, with cleanup checked hourly by the worker.
 
 ### Retry, pause, or remove a destination
 

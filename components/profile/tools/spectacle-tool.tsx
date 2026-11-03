@@ -110,19 +110,19 @@ export function SpectacleTool() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h3 className="font-medium">Spectacle</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-medium">Spectacle</h3>
+        <p className="text-pretty text-sm text-muted-foreground">
           Screenshots and screen recordings on KDE. Choose your capture options,
           then run the downloaded script with Bash.
         </p>
       </div>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline">Download Script</Button>
+          <Button variant="outline">Download script</Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Spectacle Upload Script</DialogTitle>
+            <DialogTitle>Spectacle upload script</DialogTitle>
             <DialogDescription>
               Choose your KDE capture options. Your upload token is already
               included in the script.
@@ -135,22 +135,25 @@ export function SpectacleTool() {
               className="space-y-6"
             >
               {}
-              <div className="flex items-start space-x-3 rounded-md bg-blue-50 dark:bg-blue-950/50 p-3 text-blue-600 dark:text-blue-400">
-                <Terminal className="mt-0.5 h-5 w-5 flex-shrink-0" />
+              <div className="flex items-start gap-3 rounded-xl border border-info/30 bg-info/5 p-3">
+                <Terminal
+                  className="mt-0.5 h-4 w-4 flex-shrink-0 text-info"
+                  aria-hidden="true"
+                />
                 <div className="space-y-1">
-                  <div className="text-sm opacity-90">
+                  <div className="text-sm text-muted-foreground">
                     Make sure you have these installed:
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         spectacle
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         curl
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         jq
                       </span>
-                      <span className="inline-flex items-center rounded-md bg-blue-100/50 dark:bg-blue-900/50 px-2 py-1 text-xs font-medium">
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 font-mono text-xs text-foreground">
                         xsel
                       </span>
                     </div>
@@ -161,7 +164,7 @@ export function SpectacleTool() {
               {}
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Script Type</h4>
+                  <h4 className="text-sm font-medium mb-2">Script type</h4>
                   <FormField
                     control={form.control}
                     name="scriptType"
@@ -199,7 +202,7 @@ export function SpectacleTool() {
                                   htmlFor="recording"
                                   className="text-sm font-medium cursor-pointer"
                                 >
-                                  Screen Recording
+                                  Screen recording
                                 </label>
                               </div>
                             </div>
@@ -213,7 +216,7 @@ export function SpectacleTool() {
                 {}
                 {scriptType === 'screenshot' && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Capture Mode</h4>
+                    <h4 className="text-sm font-medium mb-2">Capture mode</h4>
                     <FormField
                       control={form.control}
                       name="captureMode"
@@ -234,7 +237,7 @@ export function SpectacleTool() {
                                   htmlFor="fullscreen"
                                   className="text-xs cursor-pointer"
                                 >
-                                  Full Desktop
+                                  Full desktop
                                 </label>
                               </div>
                               <div className="flex items-center space-x-2 rounded-lg border p-2">
@@ -243,7 +246,7 @@ export function SpectacleTool() {
                                   htmlFor="current"
                                   className="text-xs cursor-pointer"
                                 >
-                                  Current Monitor
+                                  Current monitor
                                 </label>
                               </div>
                               <div className="flex items-center space-x-2 rounded-lg border p-2">
@@ -255,7 +258,7 @@ export function SpectacleTool() {
                                   htmlFor="activewindow"
                                   className="text-xs cursor-pointer"
                                 >
-                                  Active Window
+                                  Active window
                                 </label>
                               </div>
                               <div className="flex items-center space-x-2 rounded-lg border p-2">
@@ -264,7 +267,7 @@ export function SpectacleTool() {
                                   htmlFor="region"
                                   className="text-xs cursor-pointer"
                                 >
-                                  Select Region
+                                  Select region
                                 </label>
                               </div>
                             </RadioGroup>
@@ -278,7 +281,7 @@ export function SpectacleTool() {
                 {}
                 {scriptType === 'recording' && (
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Recording Mode</h4>
+                    <h4 className="text-sm font-medium mb-2">Recording mode</h4>
                     <FormField
                       control={form.control}
                       name="recordingMode"
@@ -299,7 +302,7 @@ export function SpectacleTool() {
                                   htmlFor="rec-fullscreen"
                                   className="text-sm cursor-pointer"
                                 >
-                                  Full Desktop Recording
+                                  Full desktop recording
                                 </label>
                               </div>
                               <div className="flex items-center space-x-2 rounded-lg border p-2">
@@ -311,7 +314,7 @@ export function SpectacleTool() {
                                   htmlFor="rec-current"
                                   className="text-sm cursor-pointer"
                                 >
-                                  Current Monitor Recording
+                                  Current monitor recording
                                 </label>
                               </div>
                               <div className="flex items-center space-x-2 rounded-lg border p-2">
@@ -323,7 +326,7 @@ export function SpectacleTool() {
                                   htmlFor="rec-region"
                                   className="text-sm cursor-pointer"
                                 >
-                                  Select Region Recording
+                                  Select region recording
                                 </label>
                               </div>
                             </RadioGroup>
@@ -337,7 +340,7 @@ export function SpectacleTool() {
                 {}
                 <div>
                   <h4 className="text-sm font-medium mb-2">
-                    Environment Settings
+                    Environment settings
                   </h4>
                   <div className="rounded-lg border bg-card divide-y">
                     <FormField
@@ -356,7 +359,7 @@ export function SpectacleTool() {
                             </div>
                             <div className="space-y-0.5">
                               <FormLabel className="text-sm">
-                                Wayland Clipboard Support
+                                Wayland clipboard support
                               </FormLabel>
                               <FormDescription className="text-xs">
                                 Enable if you&apos;re using Wayland
@@ -382,7 +385,7 @@ export function SpectacleTool() {
                             <Monitor className="h-5 w-5 flex-shrink-0" />
                             <div className="space-y-0.5">
                               <FormLabel className="text-sm">
-                                Include Mouse Pointer
+                                Include mouse pointer
                               </FormLabel>
                               <FormDescription className="text-xs">
                                 Show cursor in screenshots/recordings
@@ -409,12 +412,12 @@ export function SpectacleTool() {
                     variant="ghost"
                     onClick={() => form.reset()}
                   >
-                    Reset Options
+                    Reset options
                   </Button>
                   <Button type="submit" disabled={isLoading}>
                     {isLoading
-                      ? 'Downloading...'
-                      : `Download ${scriptType === 'screenshot' ? 'Screenshot' : 'Recording'} Script`}
+                      ? 'Downloading…'
+                      : `Download ${scriptType === 'screenshot' ? 'screenshot' : 'recording'} script`}
                   </Button>
                 </div>
               </DialogFooter>

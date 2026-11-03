@@ -66,6 +66,8 @@ Folders start private. To publish a collection:
 
 The shared page uses a link under `/s/folders/…`. It lists up to 48 files per page and follows changes to the collection: newly added public files appear, and files moved out or made private disappear.
 
+A visitor who opens a file from the shared page sees **Back to** and the folder's name above the file, including on the password page of a locked tile, to return to the listing. Flare shows the link only while the file is still a public member of that folder. The file's own link doesn't change: the folder pages pass their address, as the browser's referrer, only to your Flare instance, so the folder link never appears in a file URL or reaches other sites. A browser set to send no referrer opens the file without the link.
+
 <Screenshot src="/evidence/vault-folders/shared-folder-desktop.jpg" alt="Public shared collection with public files and a generic password-protected tile" caption="The public collection excludes private files and hides the filename and preview of locked files." />
 
 | Item in your folder                   | What a visitor sees                                                                 |

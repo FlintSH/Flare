@@ -5,6 +5,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   FolderOpen,
@@ -12,6 +13,7 @@ import {
   Lock,
 } from 'lucide-react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   DialogDescription,
@@ -26,6 +28,7 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { folderPath } from '@/lib/folders/navigation'
 import { formatBytes } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -154,7 +157,7 @@ export function ArchiveExtractForm({
             folder. The original archive is unchanged.
           </DialogDescription>
         </DialogHeader>
-        <p className="rounded-xl border bg-muted/20 p-4 text-sm">
+        <p className="rounded-xl border bg-muted/30 p-4 text-sm">
           {formatBytes(result.totalBytes)} saved
           {profileId
             ? ' using your selected upload profile'
@@ -184,8 +187,9 @@ export function ArchiveExtractForm({
         <DialogTitle>Extract archive</DialogTitle>
         <DialogDescription className="break-words">
           Extract all {manifest.fileCount}{' '}
-          {manifest.fileCount === 1 ? 'file' : 'files'} from {file.name} into a
-          new account folder.
+          {manifest.fileCount === 1 ? 'file' : 'files'} from{' '}
+          <span className="font-medium text-foreground">{file.name}</span> into
+          a new account folder.
         </DialogDescription>
       </DialogHeader>
       <form
@@ -193,7 +197,10 @@ export function ArchiveExtractForm({
         onSubmit={extract}
         aria-busy={busy}
       >
-        <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+        <div
+          ref={scrollFadeRef}
+          className="scroll-fade scroll-fade-tall -ml-1 min-h-0 space-y-5 overflow-y-auto pl-1 pr-1"
+        >
           <ArchiveDestination
             value={folderId}
             onChange={setFolderId}
@@ -228,34 +235,37 @@ export function ArchiveExtractForm({
             onSnapshotChange={setProfileSnapshot}
             disabled={busy}
           />
-          <div className="flex gap-3 rounded-xl border bg-muted/20 p-4 text-sm leading-relaxed">
-            <Lock
-              className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p>
+          <Alert variant="info" role="status">
+            <Lock aria-hidden="true" />
+            <AlertDescription>
               Files keep their archive folder structure and use the settings
               shown above. No file password is inherited. Your original archive
               stays in place. This uses up to {formatBytes(manifest.totalBytes)}{' '}
               of account storage.
-            </p>
-          </div>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive"
-            >
-              {error}
-            </p>
-          )}
-          {busy && (
-            <p role="status" className="text-sm text-muted-foreground">
-              Extracting files… This can take up to two minutes. Keep this
-              dialog open.
-            </p>
-          )}
+            </AlertDescription>
+          </Alert>
         </div>
-        <DialogFooter className="shrink-0 border-t pt-4 mt-4">
+        {/* Outside the scrolling fields, so they show wherever the fields
+            are scrolled to. */}
+        {(error || busy) && (
+          <div className="mr-1 mt-4 shrink-0 space-y-3">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {busy && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Extracting files… This can take up to two minutes. Keep this
+                dialog open.
+              </p>
+            )}
+          </div>
+        )}
+        {/* A margin, not padding, so the divider ends with the fields above
+            it (the body keeps a 4px gutter on the right). */}
+        <DialogFooter className="mr-1 mt-4 shrink-0 border-t pt-4">
           <Button
             type="button"
             variant="outline"

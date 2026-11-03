@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 
+import { Sheet } from 'lucide-react'
 import Papa from 'papaparse'
 
 import { MAX_CSV_SIZE } from '../../protected/mime-types'
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
+import { PreviewPlaceholder } from '../components/preview-placeholder'
 import { useFileViewer } from '../context'
 
 export function CsvViewer() {
@@ -61,9 +63,9 @@ export function CsvViewer() {
   if (error) return <ErrorState error={error} />
   if (csvData.length === 0)
     return (
-      <p className="w-full p-8 text-center text-sm text-muted-foreground">
-        This spreadsheet is empty.
-      </p>
+      <div className="w-full px-6">
+        <PreviewPlaceholder icon={Sheet} title="This spreadsheet is empty" />
+      </div>
     )
 
   return (

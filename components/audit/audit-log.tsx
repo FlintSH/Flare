@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 
 import {
   Activity,
@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Filter,
   RefreshCw,
   Search,
   Shield,
@@ -17,9 +16,13 @@ import {
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
+import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 
 import type { AuditEventView } from '@/lib/audit/types'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -57,11 +60,51 @@ const emptyFilters: Filters = {
   targetId: '',
   requestId: '',
 }
-const selectClass =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
+const ACRONYMS = new Set([
+  'api',
+  'csv',
+  'http',
+  'id',
+  'oidc',
+  'ocr',
+  'sso',
+  'url',
+])
+const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head'])
+
+/** "http.get" -> "HTTP GET", "file_tag.createMany" -> "File tag create many". */
 function describeAction(action: string) {
-  return action.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[._]/g, ' ')
+  const words = action
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .split(/[._\s]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase())
+  return words
+    .map((word, index) => {
+      if (
+        ACRONYMS.has(word) ||
+        (words[index - 1] === 'http' && HTTP_METHODS.has(word))
+      )
+        return word.toUpperCase()
+      return index === 0 ? word[0].toUpperCase() + word.slice(1) : word
+    })
+    .join(' ')
+}
+
+/**
+ * Lets request paths and member paths wrap after a slash instead of
+ * mid-word ("/api/customization/" then "preferences", never a lone "s").
+ * <wbr> adds no characters, so copied text stays the same.
+ */
+function wrapAfterSlashes(text: string) {
+  return text.split('/').map((part, index, parts) => (
+    <Fragment key={index}>
+      {part}
+      {index < parts.length - 1 && '/'}
+      {index > 0 && index < parts.length - 1 && <wbr />}
+    </Fragment>
+  ))
 }
 
 function FilterSelect({
@@ -79,14 +122,13 @@ function FilterSelect({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <select
+      <NativeSelect
         id={id}
-        className={selectClass}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
-      </select>
+      </NativeSelect>
     </div>
   )
 }
@@ -106,22 +148,28 @@ function EventRow({
         : CheckCircle2
   return (
     <details className="group border-b last:border-0">
-      <summary className="grid cursor-pointer list-none gap-3 px-4 py-4 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.2fr)_7rem] md:items-center sm:px-5">
+      {/* Phones show each event in four short lines: the action with its
+          outcome, then the time, the actor, and the target. The actor and
+          target lines run under the outcome too, so paths keep the full
+          width. */}
+      <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-6 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.2fr)_7rem] md:items-center md:gap-3 md:py-4">
         <div className="flex min-w-0 items-start gap-3">
           <div
             className={cn(
               'mt-0.5 rounded-full p-2',
+              // The outcome chip already marks success; only exceptions
+              // repeat it in colour.
               event.outcome === 'success'
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                ? 'bg-muted text-muted-foreground'
                 : event.outcome === 'denied'
-                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                  : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                  ? 'bg-warning/10 text-warning'
+                  : 'bg-danger/10 text-danger'
             )}
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <p className="break-words text-sm font-medium capitalize">
+            <p className="break-words text-sm font-medium">
               {describeAction(event.action)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -131,47 +179,56 @@ function EventRow({
             </p>
           </div>
         </div>
-        <div className="min-w-0 pl-11 md:pl-0">
-          <p className="break-words text-sm font-medium">
-            {event.actorName ?? (event.actorId ? 'Deleted account' : 'System')}
-          </p>
-          <p className="mt-1 text-xs capitalize text-muted-foreground">
-            {event.category}
+        <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
+          <p className="break-words text-xs md:text-sm">
+            <span className="font-medium">
+              {event.actorName ??
+                (event.actorId ? 'Deleted account' : 'System')}
+            </span>
+            <span className="text-muted-foreground md:hidden"> · </span>
+            <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
+              {event.category}
+            </span>
           </p>
         </div>
-        <div className="min-w-0 pl-11 md:pl-0">
-          <p className="break-words text-sm">
-            {event.targetName ??
-              event.targetType ??
-              event.route ??
-              'Instance activity'}
-          </p>
-          {event.targetName && (
-            <p className="mt-1 text-xs capitalize text-muted-foreground">
-              {event.targetType}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-3 pl-11 md:pl-0">
-          <span
-            className={cn(
-              'rounded-full px-2.5 py-1 text-xs font-medium capitalize',
-              event.outcome === 'success'
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                : event.outcome === 'denied'
-                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                  : 'bg-red-500/10 text-red-700 dark:text-red-400'
+        <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
+          <p className="break-words text-xs md:text-sm">
+            {wrapAfterSlashes(
+              event.targetName ??
+                event.targetType ??
+                event.route ??
+                'Instance activity'
             )}
+            {event.targetName && (
+              <>
+                <span className="text-muted-foreground md:hidden"> · </span>
+                <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
+                  {event.targetType}
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="col-start-2 row-start-1 flex items-center gap-2 md:col-start-auto md:row-start-auto md:justify-between md:gap-3">
+          <Badge
+            className="capitalize"
+            variant={
+              event.outcome === 'success'
+                ? 'success'
+                : event.outcome === 'denied'
+                  ? 'warning'
+                  : 'danger'
+            }
           >
             {event.outcome}
-          </span>
+          </Badge>
           <ChevronDown
             className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
             aria-hidden="true"
           />
         </div>
       </summary>
-      <div className="space-y-4 border-t bg-muted/20 px-4 py-5 sm:px-5">
+      <div className="space-y-4 border-t bg-muted/20 px-6 py-5">
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-xs text-muted-foreground">Event</dt>
@@ -186,8 +243,8 @@ function EventRow({
           {event.route && (
             <div>
               <dt className="text-xs text-muted-foreground">Request</dt>
-              <dd className="mt-1 break-all font-mono text-xs">
-                {event.method} {event.route}
+              <dd className="mt-1 break-words font-mono text-xs">
+                {event.method} {wrapAfterSlashes(event.route)}
                 {event.status ? ` · ${event.status}` : ''}
               </dd>
             </div>
@@ -328,52 +385,50 @@ function AccountAuditLog() {
   ).length
 
   return (
-    <div className="container space-y-6">
-      <header className="rounded-2xl border bg-card p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-primary">
-              <Activity className="h-4 w-4" aria-hidden="true" />
-              Instance activity
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">Audit log</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              Trace file activity, sign-ins, account changes, and background
-              processing across your instance.
-            </p>
-          </div>
+    <div className="container space-y-7">
+      <PageHeader
+        eyebrow="Your instance"
+        title="Audit log"
+        description={
+          <>
+            Trace file activity, sign-ins, account changes, and background
+            processing across your instance.
+            {/* Balanced: the header's pretty wrapping (inherited) still
+                left a three-word last line. */}
+            <span className="mt-2 block text-balance text-xs leading-relaxed">
+              Includes private filenames and historical account names. Events
+              are retained after account or file deletion. History begins when
+              audit logging was installed.
+            </span>
+          </>
+        }
+        actions={
           <Button
             variant="outline"
             onClick={() => setRefresh((value) => value + 1)}
             disabled={loading}
           >
             <RefreshCw
-              className={cn('mr-2 h-4 w-4', loading && 'animate-spin')}
+              className={cn('h-4 w-4', loading && 'animate-spin')}
               aria-hidden="true"
             />
             Refresh
           </Button>
-        </div>
-        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          Includes private filenames and historical account names. Events are
-          retained after account or file deletion. History begins when audit
-          logging was installed.
-        </p>
-      </header>
+        }
+      />
 
       <form
-        className="space-y-4 rounded-2xl border bg-card p-4 sm:p-5"
+        className={cn(pagePanelClassName, 'space-y-4')}
         onSubmit={(event) => {
           event.preventDefault()
           setActive({ ...draft })
           setPage(1)
         }}
       >
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Filter className="h-4 w-4" aria-hidden="true" />
-          Filter activity
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold">Filter activity</h2>
           {activeCount > 0 && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
               {activeCount} active
             </span>
           )}
@@ -383,13 +438,13 @@ function AccountAuditLog() {
             <Label htmlFor="audit-search">Search activity</Label>
             <div className="relative">
               <Search
-                className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
                 id="audit-search"
                 className="pl-9"
-                placeholder="Filename, person, action, or request ID…"
+                placeholder="File, person, action, or ID…"
                 value={draft.q}
                 maxLength={200}
                 onChange={(event) => update('q', event.target.value)}
@@ -462,7 +517,7 @@ function AccountAuditLog() {
             undefined
           }
         >
-          <summary className="w-fit cursor-pointer text-sm text-muted-foreground">
+          <summary className="w-fit cursor-pointer rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             Filter by actor, target, or request ID
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -505,31 +560,27 @@ function AccountAuditLog() {
       </form>
 
       {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
-        >
-          <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <div>
-            <p>{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
             <Button
-              className="mt-2"
               variant="outline"
               size="sm"
               onClick={() => setRefresh((value) => value + 1)}
             >
               Try again
             </Button>
-          </div>
-        </div>
+          </AlertDescription>
+        </Alert>
       )}
       <section
-        className="overflow-hidden rounded-2xl border bg-card"
+        className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-xl"
         aria-label="Audit events"
         aria-busy={loading}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-4 sm:px-5">
-          <h2 className="font-semibold">Activity</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-4">
+          <h2 className="text-base font-semibold">Activity</h2>
           <p className="text-xs text-muted-foreground" role="status">
             {loading
               ? 'Loading activity…'
@@ -555,7 +606,7 @@ function AccountAuditLog() {
           </div>
         )}
         {!error && result && result.total > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
             <p className="text-xs text-muted-foreground">
               Page {result.page} of {result.pages} · up to {result.limit} events
               per page
@@ -567,7 +618,7 @@ function AccountAuditLog() {
                 disabled={loading || page <= 1}
                 onClick={() => setPage((value) => value - 1)}
               >
-                <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 Previous
               </Button>
               <Button
@@ -577,7 +628,7 @@ function AccountAuditLog() {
                 onClick={() => setPage((value) => value + 1)}
               >
                 Next
-                <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" />
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
           </div>

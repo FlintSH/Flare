@@ -32,7 +32,7 @@ export function FileGridPagination({
   return (
     <nav
       aria-label="File library pages"
-      className="mx-auto flex w-fit max-w-full items-center gap-0.5 rounded-xl border border-border/60 bg-background/70 p-1 shadow-sm backdrop-blur-xl sm:gap-1 sm:p-2"
+      className="mx-auto flex w-fit max-w-full items-center gap-0.5 rounded-xl border border-border/60 bg-card/80 p-1 shadow-sm backdrop-blur-xl sm:gap-1 sm:p-2"
     >
       <Button
         variant="ghost"
@@ -138,7 +138,7 @@ export function PaginationSkeleton() {
   return (
     <div
       aria-hidden="true"
-      className="mx-auto h-[50px] w-64 animate-pulse rounded-xl border border-border/60 bg-background/70"
+      className="mx-auto h-[50px] w-64 animate-pulse rounded-xl border border-border/60 bg-card/80"
     />
   )
 }

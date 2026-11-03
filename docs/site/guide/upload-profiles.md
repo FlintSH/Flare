@@ -17,7 +17,7 @@ Open **Profile → Uploads** to manage profiles. [Try the upload-options lab](/d
 2. Start a new profile or select a starter.
 3. Give it a clear name.
 4. Choose the values you want the profile to control. Leave other fields on **Inherit**.
-5. Save the profile.
+5. Choose **Save profile**. It becomes available once the profile has a name and, for a saved profile, once you change something.
 6. Choose **Make default** if it should apply when an upload does not explicitly select another profile.
 
 The built-in starters are starting points you can review and edit:
@@ -78,7 +78,7 @@ Server limits, file restrictions, and quotas apply regardless of profiles. A pro
 Under **Profile → Uploads → Account upload defaults**, you can set:
 
 - **Vanity URL:** use a memorable path in place of the account's generated ID.
-- **Randomize File URLs:** choose random names for future uploads unless a profile overrides it.
+- **Randomize file URLs:** choose random names for future uploads unless a profile overrides it.
 - **When files expire:** choose delete or set private as the default expiry action.
 - **Default expiration:** disabled, one hour, one day, one week, or one month.
 

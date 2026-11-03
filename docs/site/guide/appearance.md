@@ -16,7 +16,7 @@ Every account can choose how the signed-in workspace looks. Administrators can a
 1. Open **Profile → Account**.
 2. Find **Your workspace, your preference**.
 3. Choose a mode.
-4. Select **Save preference**.
+4. Select **Save preference**. It becomes available once you choose a mode other than your saved one.
 
 | Mode              | What happens                                                  |
 | ----------------- | ------------------------------------------------------------- |

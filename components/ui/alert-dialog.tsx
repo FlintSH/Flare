@@ -19,8 +19,9 @@ const AlertDialogOverlay = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
+    data-flare-scrim=""
     className={cn(
-      'fixed inset-0 z-50 bg-background/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+      'fixed inset-0 z-50 bg-scrim backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
     )}
     {...props}
@@ -35,10 +36,13 @@ const AlertDialogContent = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay />
+    {/* Centred by auto margins rather than a -50% transform, which can land
+        the dialog on a half pixel and blur its 1px lines. The content stays
+        the portal's direct child, so it still animates out. */}
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-[calc(100%-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-border/60 bg-background/90 p-5 shadow-xl backdrop-blur-xl sm:p-6 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+        'fixed inset-0 z-50 m-auto grid h-fit w-[calc(100%-2rem)] max-h-[90dvh] overflow-y-auto max-w-lg gap-4 rounded-2xl border border-border bg-overlay p-5 text-popover-foreground shadow-xl shadow-black/30 sm:p-6 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         className
       )}
       {...props}
@@ -83,7 +87,7 @@ const AlertDialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold', className)}
+    className={cn('text-lg font-semibold tracking-tight', className)}
     {...props}
   />
 ))
@@ -95,7 +99,7 @@ const AlertDialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-pretty text-sm text-muted-foreground', className)}
     {...props}
   />
 ))
@@ -120,11 +124,7 @@ const AlertDialogCancel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
-    className={cn(
-      buttonVariants({ variant: 'outline' }),
-      'mt-2 sm:mt-0',
-      className
-    )}
+    className={cn(buttonVariants({ variant: 'outline' }), className)}
     {...props}
   />
 ))

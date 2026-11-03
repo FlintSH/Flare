@@ -1,41 +1,30 @@
-import {
-  type AppearanceDocument,
-  DARK_PALETTE,
-  LIGHT_PALETTE,
-} from '@/lib/customization/schema'
+import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
+import type { AppearanceDocument } from '@/lib/customization/schema'
 
 export const SETUP_APPEARANCE_PRESETS = [
   {
     id: 'flare',
     name: 'Flare default',
     description: 'The original, familiar Flare.',
-    accent: '#f8fafc',
-    lightAccent: '#0f172a',
-    background: '#020817',
+    ...PALETTE_PRESETS.midnight,
   },
   {
     id: 'orbit',
     name: 'Orbit',
     description: 'A little violet after dark.',
-    accent: '#a78bfa',
-    lightAccent: '#7c3aed',
-    background: '#100d20',
+    ...PALETTE_PRESETS.orbit,
   },
   {
     id: 'tide',
     name: 'Tide',
     description: 'Deep teal, fresh perspective.',
-    accent: '#5eead4',
-    lightAccent: '#0f766e',
-    background: '#061c20',
+    ...PALETTE_PRESETS.tide,
   },
   {
     id: 'ember',
     name: 'Ember',
     description: 'A warm welcome for your files.',
-    accent: '#fdba74',
-    lightAccent: '#c2410c',
-    background: '#1c1210',
+    ...PALETTE_PRESETS.ember,
   },
 ] as const
 
@@ -63,19 +52,7 @@ export function createSetupAppearance(
   document.theme = {
     ...document.theme,
     enabled: true,
-    light: {
-      ...LIGHT_PALETTE,
-      primary: preset.lightAccent,
-      ring: preset.lightAccent,
-    },
-    dark: {
-      ...DARK_PALETTE,
-      background: preset.background,
-      card: preset.background,
-      popover: preset.background,
-      primary: preset.accent,
-      ring: preset.accent,
-    },
+    ...presetPalettes(preset),
   }
   return document
 }

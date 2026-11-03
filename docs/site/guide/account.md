@@ -68,9 +68,9 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## Update your name and avatar
 
-Under **Profile → Account**, update **Username** and choose **Save Changes**. The name can appear as uploader attribution on share pages when the administrator enables it.
+Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. The name can appear as uploader attribution on share pages when the administrator enables it.
 
-Choose **Change Avatar** and select an image to update your photo. Flare checks that the supplied content is an image. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
+Choose **Change avatar** and select an image to update your photo. Flare checks that the supplied content is an image. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
 Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
 
@@ -78,11 +78,11 @@ Changing your username does not automatically change file URL paths. For a memor
 
 ## Change your password
 
-In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. Choose **Update Password**, then sign in again; registered factors remain in place.
+In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place.
 
 If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
 
-If that recent sign-in expires while you fill in the form, **Update Password** first reveals the code field and asks **Enter an authenticator or recovery code to continue.** Your entered passwords stay in the form; enter a fresh code and submit again. Flare checks the current confirmation requirements before sending the password change.
+If that recent sign-in expires while you fill in the form, **Update password** first reveals the code field and asks **Enter an authenticator or recovery code to continue.** Your entered passwords stay in the form; enter a fresh code and submit again. Flare checks the current confirmation requirements before sending the password change.
 
 <Screenshot src="/screenshots/security/proof-expired.webp" alt="Change your password form preserves concealed password entries and asks for an authenticator or recovery code after recent sign-in proof expires" caption="The real form requests a fresh code before sending the change. This regression capture uses a disposable session with its sign-in time adjusted beyond five minutes; password values are masked." />
 
@@ -92,7 +92,7 @@ For an account managed entirely through SSO, change your identity-provider passw
 
 If your instance offers password recovery, use the login page's password-recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy. Resetting your password does not remove two-factor authentication, either recovery-code set, registered passkeys, or a passkey requirement. When passkeys are required, use a passkey or [dedicated passkey recovery code](./security#recover-when-required-passkeys-are-unavailable); resetting the password does not restore password or SSO sign-in.
 
-Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again. If email recovery is unavailable, contact your instance administrator.
+Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again; on an incomplete link, choose **Request a new link**. If email recovery is unavailable, the recovery page says so; contact your instance administrator.
 
 ## Sign in with SSO
 
@@ -110,7 +110,7 @@ For SSO accounts, Flare may require a recent SSO sign-in instead of a password b
 
 If you require passkeys, starting email enrollment requires a recent passkey or dedicated passkey-recovery sign-in instead, including for SSO-only accounts. This confirmation does not waive mailbox verification.
 
-Your administrator can make verification optional, require it for new users, or require it more broadly after a grace period. Follow the deadline shown in your account. If verification is required before continuing, the verification page provides the next available steps.
+Your administrator can make verification optional, require it for new users, or require it more broadly after a grace period. Follow the deadline shown in your account. If verification is required before continuing, the verification page provides the next available steps. Opened while you are signed out, it asks you to **Sign in** first so it can show your status. The confirmation link in the email works without signing in.
 
 <Screenshot src="/screenshots/email/account.png" alt="Account email verification and address management controls" caption="Email features show their current status and the actions your instance allows." />
 
@@ -139,7 +139,7 @@ These behaviors depend on the administrator's [email settings](../admin/email). 
 
 Open **Profile → Your data** to see space used, your available quota when enabled, total files, and shortened-link count. The usage bar highlights accounts approaching their quota.
 
-**Uncapped Storage** means the instance is not enforcing the displayed account quota. Physical disk or object-storage capacity and the maximum size of an individual upload still matter.
+**Uncapped storage** means the instance is not enforcing the displayed account quota. Physical disk or object-storage capacity and the maximum size of an individual upload still matter.
 
 To free space, download anything you need and delete unwanted files. Switching files to private, moving them into folders, removing tags, or deleting short links does not reclaim uploaded-file storage.
 
@@ -149,7 +149,7 @@ To free space, download anything you need and delete unwanted files. Switching f
 
 ## Export your data
 
-Choose **Export All Data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
+Choose **Export all data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
 
 The archive contains:
 

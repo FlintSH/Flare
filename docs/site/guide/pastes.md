@@ -19,7 +19,7 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 4. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
 5. Keep visibility from the profile or explicitly choose **Public** or **Private**.
 6. Add a password if you want recipients of a public paste to unlock it.
-7. Choose **Create Paste**.
+7. Choose **Create paste**.
 
 Whitespace-only content cannot be submitted. While the request is running, the controls are disabled to avoid duplicate submissions.
 
@@ -31,7 +31,19 @@ After creation, use **Copy link**, **Open paste**, or **Create another paste**. 
 
 A meaningful filename helps recipients and future searches. Include an extension appropriate to the content, such as `.js`, `.py`, `.json`, `.md`, or `.txt`.
 
-The current paste form saves content as `text/plain`. An extension helps a recipient open the download in the right application, but does not by itself enable syntax highlighting for a paste. Flare's code viewer uses the stored MIME type; uploaded files with supported code MIME types receive syntax highlighting.
+The paste form saves content as `text/plain`, and the share page picks the syntax highlighting from the extension:
+
+| Highlighting    | Extensions                                                                      |
+| --------------- | ------------------------------------------------------------------------------- |
+| JavaScript, JSX | `.js`, `.mjs`, `.cjs`, `.jsx`                                                   |
+| TypeScript, TSX | `.ts`, `.mts`, `.cts`, `.tsx`                                                   |
+| Web             | `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.xml`, `.svg`              |
+| Data and docs   | `.json`, `.yaml`, `.yml`, `.md`, `.markdown`, `.sql`                            |
+| Other languages | `.py`, `.java`, `.c`, `.h`, `.cpp`, `.cc`, `.hpp`, `.rs`, `.php`, `.go`, `.wat` |
+
+Flare reads the last extension, in any case: `notes.MD` is Markdown and `report.final.py` is Python. Any other extension, including `.txt` and `.log`, shows plain text without coloring. Uploaded files with a code MIME type, such as `text/x-python`, are highlighted by that type when it's one of the languages above. Code in other languages, such as shell scripts, Ruby or TOML, shows plain text. The extension also helps a recipient open the download in the right application.
+
+Markdown pastes wrap long lines to fit the screen, so they stay readable on a phone. Code, logs and other plain text keep their line breaks and scroll sideways, so columns stay aligned; the bottom edge fades while more lines follow.
 
 The viewer is read-only. HTML and Markdown shown as text/code are not a hosted website or a collaborative editor. If you need to revise the content, create a new paste and distribute its new link; the paste form does not edit an existing file.
 

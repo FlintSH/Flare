@@ -22,6 +22,9 @@ import { checkProfileProof } from './profile-proof'
 export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [proofNotice, setProofNotice] = useState<string | null>(null)
+  // Update password waits until the form has something in it, like every
+  // save on these tabs.
+  const [hasInput, setHasInput] = useState(false)
   const { toast } = useToast()
   const { data: security, refetch: refreshSecurity } = useSecurityStatus()
   const recentProof = security && hasRecentSecurityProof(security)
@@ -89,6 +92,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
       if (newPasswordRef.current) newPasswordRef.current.value = ''
       if (confirmPasswordRef.current) confirmPasswordRef.current.value = ''
       if (securityCodeRef.current) securityCodeRef.current.value = ''
+      setHasInput(false)
       await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch (error) {
       if (mutationStarted) void refreshSecurity()
@@ -105,7 +109,17 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handlePasswordChange} className="space-y-4">
+      <form
+        onSubmit={handlePasswordChange}
+        onChange={() =>
+          setHasInput(
+            [currentPasswordRef, newPasswordRef, confirmPasswordRef].some(
+              (field) => Boolean(field.current?.value)
+            )
+          )
+        }
+        className="space-y-4"
+      >
         {proofNotice && (
           <p role="alert" className="rounded-xl border bg-muted/30 p-3 text-sm">
             {proofNotice}
@@ -113,7 +127,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         )}
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="current-password">Current password</Label>
             <Input
               id="current-password"
               type="password"
@@ -126,7 +140,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
+            <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
               type="password"
@@ -140,7 +154,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-password">Confirm new password</Label>
             <Input
               id="confirm-password"
               type="password"
@@ -197,8 +211,12 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         </div>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? 'Updating...' : 'Update Password'}
+          <Button
+            type="submit"
+            className="w-full sm:w-auto"
+            disabled={isLoading || !hasInput}
+          >
+            {isLoading ? 'Updating…' : 'Update password'}
           </Button>
         </div>
       </form>

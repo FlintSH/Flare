@@ -9,6 +9,8 @@ export interface FileViewerFile {
   password: string | null
   userId: string
   archiveFormat?: ArchiveFormat | null
+  /** Highlighting for text/plain files, from the real filename. */
+  textLanguage?: string
 }
 
 export interface FileViewerUrls {

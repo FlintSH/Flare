@@ -2,8 +2,6 @@
 
 import { useState } from 'react'
 
-import { Archive } from 'lucide-react'
-
 import {
   Dialog,
   DialogContent,
@@ -66,12 +64,11 @@ export function ArchiveBrowserDialog({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="flex items-center justify-center gap-2 sm:justify-start">
-                <Archive className="h-5 w-5 text-primary" aria-hidden="true" />
-                Browse archive
-              </DialogTitle>
+              <DialogTitle>Browse archive</DialogTitle>
               <DialogDescription className="break-words">
-                {file.name}
+                Contents of{' '}
+                <span className="font-medium text-foreground">{file.name}</span>
+                .
               </DialogDescription>
             </DialogHeader>
           </>

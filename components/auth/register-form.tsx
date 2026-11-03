@@ -5,11 +5,14 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
+import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -111,23 +114,24 @@ export function RegisterForm({
   return (
     <form onSubmit={onSubmit} aria-busy={isLoading}>
       {notice && (
-        <p
-          role="status"
-          className="mb-5 rounded-xl border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground"
-        >
-          {notice}
-        </p>
+        <Alert variant="warning" role="status" className="mb-4">
+          <TriangleAlert aria-hidden="true" />
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
       )}
       {inviteRoles.length > 0 && (
-        <div className="mb-5 space-y-2 rounded-xl border border-border bg-muted/30 p-3 text-sm">
+        <div className="mb-4 space-y-2 rounded-xl border bg-muted/30 p-3 text-sm">
           <p className="text-muted-foreground">You’ll join with these roles:</p>
           <RoleBadges roles={inviteRoles} />
         </div>
       )}
       {verificationRequired && (
-        <p className="mb-5 rounded-xl border border-border bg-muted/30 p-3 text-sm leading-relaxed text-muted-foreground">
-          We’ll ask you to confirm your email before using your account.
-        </p>
+        <Alert variant="info" role="status" className="mb-4">
+          <MailCheck aria-hidden="true" />
+          <AlertDescription>
+            We’ll ask you to confirm your email before using your account.
+          </AlertDescription>
+        </Alert>
       )}
       <div className="space-y-4">
         <div className="space-y-2">
@@ -172,7 +176,7 @@ export function RegisterForm({
             disabled={isLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="new-password"
-            placeholder="At least 8 characters"
+            placeholder="Create a password"
             minLength={8}
             aria-describedby="password-hint"
           />
@@ -196,45 +200,30 @@ export function RegisterForm({
           />
         </div>
         {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-foreground"
-          >
-            <Icons.alertCircle
-              className="mt-0.5 h-4 w-4 shrink-0"
-              aria-hidden="true"
-            />
-            <span>{error}</span>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
       </div>
       <div className="pt-6">
-        <div className="flex flex-col space-y-4">
-          <Button
-            type="submit"
-            className="w-full h-11 font-medium bg-primary hover:bg-primary/90 transition-colors"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-            )}
-          </Button>
-          <div className="border-t border-border/60 pt-5 text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link
-              href="/auth/login"
-              className="text-primary hover:text-primary/90 hover:underline transition-colors font-medium"
-            >
-              Sign in
-            </Link>
-          </div>
-        </div>
+        <Button type="submit" className="h-11 w-full" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Icons.spinner className="animate-spin" aria-hidden="true" />
+              Creating account…
+            </>
+          ) : (
+            'Create account'
+          )}
+        </Button>
       </div>
+      <AuthFooter>
+        Already have an account?{' '}
+        <Link href="/auth/login" className={authLinkClassName}>
+          Sign in
+        </Link>
+      </AuthFooter>
     </form>
   )
 }

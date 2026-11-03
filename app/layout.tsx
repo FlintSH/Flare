@@ -4,6 +4,7 @@ import localFont from 'next/font/local'
 import { AppearanceProvider } from '@/components/customization/appearance-provider'
 import { CustomHead } from '@/components/layout/custom-head'
 import { AuthProvider } from '@/components/providers/auth-provider'
+import { InputModality } from '@/components/providers/input-modality'
 import { MeticulousContext } from '@/components/providers/meticulous-context'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { SetupChecker } from '@/components/setup-checker'
@@ -148,6 +149,7 @@ export default async function RootLayout({
             </AuthProvider>
           </QueryProvider>
           <Toaster />
+          <InputModality />
         </ThemeProvider>
       </body>
     </html>

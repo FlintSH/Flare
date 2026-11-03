@@ -37,7 +37,9 @@ import {
   PreferencesPanel,
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
+import { numberFieldClassName } from '@/components/settings/form-styles'
 import { InstanceVersion } from '@/components/settings/instance-version'
+import { SaveBar } from '@/components/settings/save-bar'
 import { Icons } from '@/components/shared/icons'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -67,6 +69,7 @@ import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
 } from '@/lib/preferences/navigation'
+import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { usePreferenceSection } from '@/hooks/use-preference-section'
@@ -279,7 +282,7 @@ export function InstanceSettings({
 
     toast({
       title: 'Changes discarded',
-      description: 'All changes have been reverted to the saved state',
+      description: 'All changes have been reverted to the saved state.',
     })
   }
 
@@ -505,8 +508,8 @@ export function InstanceSettings({
       asideNote="These settings apply to everyone on your instance. Personal preferences live in Profile."
     >
       {recovery && activeSection !== 'appearance' && (
-        <Alert>
-          <InfoIcon className="h-4 w-4" />
+        <Alert variant="info" role="status">
+          <InfoIcon aria-hidden="true" />
           <AlertDescription>
             Appearance recovery is active. Custom CSS and head HTML are disabled
             on this page.{' '}
@@ -531,25 +534,25 @@ export function InstanceSettings({
             <Card>
               <CardHeader>
                 <CardTitle>Image search</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-pretty">
                   Find your images by the words inside them.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label>Background OCR Processing</Label>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Background OCR processing</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
                       Enable OCR to allow searching through text content in
                       uploaded images.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isFieldChanged('general', ['ocr', 'enabled']) && (
                       <ChangeIndicator />
                     )}
                     <Switch
-                      aria-label="Background OCR Processing"
+                      aria-label="Background OCR processing"
                       checked={workingConfig.settings.general.ocr.enabled}
                       onCheckedChange={(checked) =>
                         handleSettingChange('general', {
@@ -565,24 +568,24 @@ export function InstanceSettings({
             <Card>
               <CardHeader>
                 <CardTitle>Credits</CardTitle>
-                <CardDescription>
-                  Manage footer credits visibility
+                <CardDescription className="text-pretty">
+                  Manage footer credits visibility.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label>Show Credits Footer</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Display Flare credits in the footer
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Show credits footer</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Display Flare credits in the footer.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isFieldChanged('general', ['credits', 'showFooter']) && (
                       <ChangeIndicator />
                     )}
                     <Switch
-                      aria-label="Show Credits Footer"
+                      aria-label="Show credits footer"
                       checked={
                         workingConfig.settings.general.credits.showFooter
                       }
@@ -599,22 +602,20 @@ export function InstanceSettings({
                   </div>
                 </div>
 
-                <Alert>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <InfoIcon className="h-4 w-4 flex-shrink-0" />
-                    <AlertDescription className="mt-0">
-                      If you disable credits, please consider sponsoring the
-                      project to support its development.
-                    </AlertDescription>
-                  </div>
+                <Alert variant="info" role="status">
+                  <InfoIcon aria-hidden="true" />
+                  <AlertDescription>
+                    If you disable credits, please consider sponsoring the
+                    project to support its development.
+                  </AlertDescription>
                 </Alert>
               </CardContent>
             </Card>
             <Card id="instance-information" className="scroll-mt-28">
               <CardHeader>
-                <CardTitle>Instance Information</CardTitle>
-                <CardDescription>
-                  View and manage your Flare instance details
+                <CardTitle>Instance information</CardTitle>
+                <CardDescription className="text-pretty">
+                  View and manage your Flare instance details.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -627,7 +628,7 @@ export function InstanceSettings({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <Github className="mr-2 h-4 w-4" />
+                      <Github aria-hidden="true" />
                       View on GitHub
                     </a>
                   </Button>
@@ -637,7 +638,7 @@ export function InstanceSettings({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <Heart className="mr-2 h-4 w-4" />
+                      <Heart aria-hidden="true" />
                       Sponsor
                     </a>
                   </Button>
@@ -658,25 +659,25 @@ export function InstanceSettings({
             <Card>
               <CardHeader>
                 <CardTitle>Registration</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-pretty">
                   Decide whether your instance is open to new accounts.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label>Allow Registrations</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable or disable new user registrations
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Allow registrations</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Enable or disable new user registrations.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isFieldChanged('general', [
                       'registrations',
                       'enabled',
                     ]) && <ChangeIndicator />}
                     <Switch
-                      aria-label="Allow Registrations"
+                      aria-label="Allow registrations"
                       checked={
                         workingConfig.settings.general.registrations.enabled
                       }
@@ -697,10 +698,10 @@ export function InstanceSettings({
                 </div>
                 {!workingConfig.settings.general.registrations.enabled && (
                   <div className="space-y-2">
-                    <Label>Registration Disabled Message</Label>
-                    <div className="flex min-w-0 items-center gap-2">
+                    <Label>Registration disabled message</Label>
+                    <div className="flex shrink-0 items-center gap-2">
                       <Input
-                        aria-label="Registration Disabled Message"
+                        aria-label="Registration disabled message"
                         placeholder="Registrations are currently disabled"
                         value={
                           workingConfig.settings.general.registrations
@@ -724,14 +725,14 @@ export function InstanceSettings({
                         'disabledMessage',
                       ]) && <ChangeIndicator />}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-pretty text-sm text-muted-foreground">
                       This message will be shown to users on the login page when
-                      registrations are disabled
+                      registrations are disabled.
                     </p>
                   </div>
                 )}
                 {!workingConfig.settings.general.registrations.enabled && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-pretty text-sm text-muted-foreground">
                     People with an active invite link can still create an
                     account.
                   </p>
@@ -741,24 +742,24 @@ export function InstanceSettings({
             <Card id="invites" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Invites</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-pretty">
                   Invite links let people create an account, even while
                   registration is closed. Administrators can always create them.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <Label htmlFor="everyone-can-invite">
                       Let everyone create invites
                     </Label>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-pretty text-sm text-muted-foreground">
                       Every account can invite people from Profile → Invites.
                       This grants Create invites to the Everyone role; use Roles
                       to allow only some people instead.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {inviteAccessChanged && <ChangeIndicator />}
                     <Switch
                       id="everyone-can-invite"
@@ -779,10 +780,10 @@ export function InstanceSettings({
                     invites yourself.
                   </p>
                 )}
-                <div className="space-y-4 rounded-lg border p-4">
+                <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
                   <div className="space-y-1">
                     <p className="text-sm font-medium">Limits for members</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-pretty text-sm text-muted-foreground">
                       Apply to people who can invite but cannot create accounts
                       directly. Changes affect invites created afterward.
                     </p>
@@ -797,7 +798,7 @@ export function InstanceSettings({
                     ).map(([field, label, min, max]) => (
                       <div key={field} className="space-y-2">
                         <Label htmlFor={`invite-limit-${field}`}>{label}</Label>
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2">
                           <Input
                             id={`invite-limit-${field}`}
                             type="number"
@@ -829,11 +830,14 @@ export function InstanceSettings({
                                 },
                               })
                             }}
-                            className={getFieldClasses('general', [
-                              'registrations',
-                              'inviteLimits',
-                              field,
-                            ])}
+                            className={cn(
+                              numberFieldClassName,
+                              getFieldClasses('general', [
+                                'registrations',
+                                'inviteLimits',
+                                field,
+                              ])
+                            )}
                           />
                           {isFieldChanged('general', [
                             'registrations',
@@ -866,26 +870,26 @@ export function InstanceSettings({
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Single Sign-On (OIDC)</CardTitle>
-                <CardDescription>
+                <CardTitle>Single sign-on (OIDC)</CardTitle>
+                <CardDescription className="text-pretty">
                   Let users sign in through an external OpenID Connect identity
-                  provider
+                  provider.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label>Enable OIDC Sign-In</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable or disable single sign-on with OIDC
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Enable OIDC sign-in</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Enable or disable single sign-on with OIDC.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isFieldChanged('general', ['oidc', 'enabled']) && (
                       <ChangeIndicator />
                     )}
                     <Switch
-                      aria-label="Enable OIDC Sign-In"
+                      aria-label="Enable OIDC sign-in"
                       checked={workingConfig.settings.general.oidc.enabled}
                       onCheckedChange={(checked) =>
                         handleSettingChange('general', {
@@ -904,10 +908,10 @@ export function InstanceSettings({
                 </div>
 
                 {workingConfig.settings.general.oidc.enabled && (
-                  <div className="space-y-4 border rounded-lg p-4">
+                  <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
                     <div className="space-y-2">
                       <Label>Issuer URL</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
                           aria-label="Issuer URL"
                           value={workingConfig.settings.general.oidc.issuer}
@@ -929,17 +933,18 @@ export function InstanceSettings({
                           <ChangeIndicator />
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-pretty text-sm text-muted-foreground">
                         Flare discovers the provider&apos;s endpoints from{' '}
                         <code>
                           {'{issuer}'}/.well-known/openid-configuration
                         </code>
+                        .
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label>Client ID</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
                           aria-label="Client ID"
                           value={workingConfig.settings.general.oidc.clientId}
@@ -963,10 +968,10 @@ export function InstanceSettings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Client Secret</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>Client secret</Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="Client Secret"
+                          aria-label="Client secret"
                           type="password"
                           value={
                             workingConfig.settings.general.oidc.clientSecret
@@ -992,10 +997,10 @@ export function InstanceSettings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Sign-In Button Text</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>Sign-in button text</Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="Sign-In Button Text"
+                          aria-label="Sign-in button text"
                           value={workingConfig.settings.general.oidc.buttonText}
                           onChange={(e) =>
                             handleSettingChange('general', {
@@ -1018,20 +1023,20 @@ export function InstanceSettings({
                     </div>
 
                     <div className="flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <Label>Auto-Provision Users</Label>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <Label>Auto-provision users</Label>
+                        <p className="text-pretty text-sm text-muted-foreground">
                           Create a new account automatically the first time
-                          someone signs in through the provider
+                          someone signs in through the provider.
                         </p>
                       </div>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         {isFieldChanged('general', [
                           'oidc',
                           'autoProvision',
                         ]) && <ChangeIndicator />}
                         <Switch
-                          aria-label="Auto-Provision Users"
+                          aria-label="Auto-provision users"
                           checked={
                             workingConfig.settings.general.oidc.autoProvision
                           }
@@ -1051,28 +1056,28 @@ export function InstanceSettings({
                       </div>
                     </div>
 
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-pretty text-sm text-muted-foreground">
                       SSO identities are not automatically linked to existing
                       accounts by email. Existing users must use local sign-in
                       or their previously linked SSO identity.
                     </p>
 
                     <div className="flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <Label>Require Verified Email</Label>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <Label>Require verified email</Label>
+                        <p className="text-pretty text-sm text-muted-foreground">
                           Require OIDC provider to confirm user email is
                           verified. Disable only if you trust all accounts that
                           may register with your provider.
                         </p>
                       </div>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         {isFieldChanged('general', [
                           'oidc',
                           'requireEmailVerified',
                         ]) && <ChangeIndicator />}
                         <Switch
-                          aria-label="Require Verified Email"
+                          aria-label="Require verified email"
                           checked={
                             workingConfig.settings.general.oidc
                               .requireEmailVerified
@@ -1094,20 +1099,20 @@ export function InstanceSettings({
                     </div>
 
                     <div className="flex items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <Label>OIDC Auto-login</Label>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <Label>OIDC auto-login</Label>
+                        <p className="text-pretty text-sm text-muted-foreground">
                           Skip the login form and redirect straight to the
                           provider. Visit <code>/auth/login?local=1</code> to
                           reach the password login if you get locked out.
                         </p>
                       </div>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         {isFieldChanged('general', ['oidc', 'enforceSso']) && (
                           <ChangeIndicator />
                         )}
                         <Switch
-                          aria-label="OIDC Auto-login"
+                          aria-label="OIDC auto-login"
                           checked={
                             workingConfig.settings.general.oidc.enforceSso
                           }
@@ -1144,14 +1149,14 @@ export function InstanceSettings({
             <Card>
               <CardHeader>
                 <CardTitle>File storage</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-pretty">
                   Choose where uploads live and how large each file can be.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label>Storage Provider</Label>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <Label>Storage provider</Label>
+                  <div className="flex shrink-0 items-center gap-2">
                     <Select
                       value={workingConfig.settings.general.storage.provider}
                       onValueChange={(value) =>
@@ -1164,7 +1169,7 @@ export function InstanceSettings({
                       }
                     >
                       <SelectTrigger
-                        aria-label="Storage Provider"
+                        aria-label="Storage provider"
                         className={getFieldClasses('general', [
                           'storage',
                           'provider',
@@ -1173,8 +1178,8 @@ export function InstanceSettings({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="local">Local Storage</SelectItem>
-                        <SelectItem value="s3">S3 Storage</SelectItem>
+                        <SelectItem value="local">Local storage</SelectItem>
+                        <SelectItem value="s3">S3 storage</SelectItem>
                       </SelectContent>
                     </Select>
                     {isFieldChanged('general', ['storage', 'provider']) && (
@@ -1183,12 +1188,12 @@ export function InstanceSettings({
                   </div>
                 </div>
                 {workingConfig.settings.general.storage.provider === 's3' && (
-                  <div className="space-y-4 border rounded-lg p-4">
+                  <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
                     <div className="space-y-2">
-                      <Label>S3 Bucket</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>S3 bucket</Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="S3 Bucket"
+                          aria-label="S3 bucket"
                           value={
                             workingConfig.settings.general.storage.s3.bucket
                           }
@@ -1220,7 +1225,7 @@ export function InstanceSettings({
 
                     <div className="space-y-2">
                       <Label>Region</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
                           aria-label="Region"
                           value={
@@ -1253,10 +1258,10 @@ export function InstanceSettings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Access Key ID</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>Access key ID</Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="Access Key ID"
+                          aria-label="Access key ID"
                           type="password"
                           value={
                             workingConfig.settings.general.storage.s3
@@ -1289,10 +1294,10 @@ export function InstanceSettings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Secret Access Key</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>Secret access key</Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="Secret Access Key"
+                          aria-label="Secret access key"
                           type="password"
                           value={
                             workingConfig.settings.general.storage.s3
@@ -1325,10 +1330,15 @@ export function InstanceSettings({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Custom Endpoint (Optional)</Label>
-                      <div className="flex min-w-0 items-center gap-2">
+                      <Label>
+                        Custom endpoint{' '}
+                        <span className="font-normal text-muted-foreground">
+                          (optional)
+                        </span>
+                      </Label>
+                      <div className="flex shrink-0 items-center gap-2">
                         <Input
-                          aria-label="Custom Endpoint (Optional)"
+                          aria-label="Custom endpoint (optional)"
                           value={
                             workingConfig.settings.general.storage.s3
                               .endpoint || ''
@@ -1357,16 +1367,28 @@ export function InstanceSettings({
                           'endpoint',
                         ]) && <ChangeIndicator />}
                       </div>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-pretty text-sm text-muted-foreground">
                         For S3-compatible services like MinIO or DigitalOcean
-                        Spaces
+                        Spaces.
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <Label>Force path style</Label>
+                        <p className="text-pretty text-sm text-muted-foreground">
+                          Enable this for S3-compatible services that require
+                          path-style URLs.
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {isFieldChanged('general', [
+                          'storage',
+                          's3',
+                          'forcePathStyle',
+                        ]) && <ChangeIndicator />}
                         <Switch
-                          aria-label="Force Path Style"
+                          aria-label="Force path style"
                           checked={
                             workingConfig.settings.general.storage.s3
                               .forcePathStyle
@@ -1388,27 +1410,18 @@ export function InstanceSettings({
                             'forcePathStyle',
                           ])}
                         />
-                        {isFieldChanged('general', [
-                          'storage',
-                          's3',
-                          'forcePathStyle',
-                        ]) && <ChangeIndicator />}
                       </div>
-                      <Label>Force Path Style</Label>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Enable this for S3-compatible services that require
-                      path-style URLs
-                    </p>
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>Maximum Upload Size</Label>
-                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Label>Maximum upload size</Label>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <Input
-                        aria-label="Maximum Upload Size"
+                        aria-label="Maximum upload size"
                         type="number"
+                        inputMode="numeric"
                         value={
                           workingConfig.settings.general.storage.maxUploadSize
                             .value
@@ -1417,11 +1430,14 @@ export function InstanceSettings({
                           handleMaxUploadSizeChange(e.target.value)
                         }
                         placeholder="10"
-                        className={getFieldClasses('general', [
-                          'storage',
-                          'maxUploadSize',
-                          'value',
-                        ])}
+                        className={cn(
+                          numberFieldClassName,
+                          getFieldClasses('general', [
+                            'storage',
+                            'maxUploadSize',
+                            'value',
+                          ])
+                        )}
                       />
                       {isFieldChanged('general', [
                         'storage',
@@ -1429,7 +1445,7 @@ export function InstanceSettings({
                         'value',
                       ]) && <ChangeIndicator />}
                     </div>
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Select
                         value={
                           workingConfig.settings.general.storage.maxUploadSize
@@ -1449,8 +1465,15 @@ export function InstanceSettings({
                         }
                       >
                         <SelectTrigger
-                          aria-label="Maximum Upload Size unit"
-                          className={`w-[110px] ${getFieldClasses('general', ['storage', 'maxUploadSize', 'unit'])}`}
+                          aria-label="Maximum upload size unit"
+                          className={cn(
+                            numberFieldClassName,
+                            getFieldClasses('general', [
+                              'storage',
+                              'maxUploadSize',
+                              'unit',
+                            ])
+                          )}
                         >
                           <SelectValue placeholder="Unit" />
                         </SelectTrigger>
@@ -1472,26 +1495,26 @@ export function InstanceSettings({
             <Card>
               <CardHeader>
                 <CardTitle>Storage quotas</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-pretty">
                   Set a fair amount of space for each account.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <Label>User Quotas</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable storage limits per user
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>User quotas</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Enable storage limits per user.
                     </p>
                   </div>
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isFieldChanged('general', [
                       'storage',
                       'quotas',
                       'enabled',
                     ]) && <ChangeIndicator />}
                     <Switch
-                      aria-label="User Quotas"
+                      aria-label="User quotas"
                       checked={
                         workingConfig.settings.general.storage.quotas.enabled
                       }
@@ -1514,13 +1537,14 @@ export function InstanceSettings({
                     />
                   </div>
                 </div>
-                <div>
-                  <Label>Data Quota per User</Label>
-                  <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="space-y-2">
+                  <Label>Data quota per user</Label>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <Input
-                        aria-label="Data Quota per User"
+                        aria-label="Data quota per user"
                         type="number"
+                        inputMode="numeric"
                         value={
                           workingConfig.settings.general.storage.quotas.default
                             .value
@@ -1529,12 +1553,15 @@ export function InstanceSettings({
                           handleStorageQuotaChange(e.target.value)
                         }
                         placeholder="500"
-                        className={getFieldClasses('general', [
-                          'storage',
-                          'quotas',
-                          'default',
-                          'value',
-                        ])}
+                        className={cn(
+                          numberFieldClassName,
+                          getFieldClasses('general', [
+                            'storage',
+                            'quotas',
+                            'default',
+                            'value',
+                          ])
+                        )}
                       />
                       {isFieldChanged('general', [
                         'storage',
@@ -1543,7 +1570,7 @@ export function InstanceSettings({
                         'value',
                       ]) && <ChangeIndicator />}
                     </div>
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Select
                         value={
                           workingConfig.settings.general.storage.quotas.default
@@ -1567,8 +1594,16 @@ export function InstanceSettings({
                         }
                       >
                         <SelectTrigger
-                          aria-label="Data Quota per User unit"
-                          className={`w-[110px] ${getFieldClasses('general', ['storage', 'quotas', 'default', 'unit'])}`}
+                          aria-label="Data quota per user unit"
+                          className={cn(
+                            numberFieldClassName,
+                            getFieldClasses('general', [
+                              'storage',
+                              'quotas',
+                              'default',
+                              'unit',
+                            ])
+                          )}
                         >
                           <SelectValue placeholder="Unit" />
                         </SelectTrigger>
@@ -1602,19 +1637,19 @@ export function InstanceSettings({
                 onDirtyChange={setStudioDirty}
               />
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
+                <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                  <div className="space-y-1.5">
                     <CardTitle>Favicon</CardTitle>
-                    <CardDescription>
-                      Upload a custom favicon for your instance
+                    <CardDescription className="text-pretty">
+                      Upload a custom favicon for your instance.
                     </CardDescription>
                   </div>
                   {hasFaviconChanged() && <ChangeIndicator />}
                 </CardHeader>
                 <CardContent>
-                  <div className="mt-2">
+                  <div>
                     <div className="flex items-center justify-center w-full">
-                      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted relative">
+                      <label className="relative flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 transition-colors hover:border-primary hover:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background">
                         {(workingConfig?.settings.appearance.favicon ||
                           faviconPreviewUrl) && (
                           <div className="absolute top-4 left-4">
@@ -1638,17 +1673,18 @@ export function InstanceSettings({
                         )}
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                           <Upload className="h-8 w-8 mb-2 text-muted-foreground" />
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-pretty text-sm text-muted-foreground">
                             Upload favicon
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            PNG up to 1MB
+                            PNG up to 1 MB
                           </p>
                         </div>
                         <input
                           type="file"
                           disabled={isSaving}
-                          className="hidden"
+                          className="sr-only"
+                          aria-label="Upload favicon"
                           accept="image/png"
                           onChange={async (e) => {
                             const file = e.target.files?.[0]
@@ -1658,7 +1694,7 @@ export function InstanceSettings({
                               toast({
                                 title: 'File too large',
                                 description:
-                                  'Please upload a file smaller than 1MB',
+                                  'Please upload a file smaller than 1 MB.',
                                 variant: 'destructive',
                               })
                               return
@@ -1667,7 +1703,7 @@ export function InstanceSettings({
                             if (file.type !== 'image/png') {
                               toast({
                                 title: 'Invalid file type',
-                                description: 'Please upload a PNG image file',
+                                description: 'Please upload a PNG image file.',
                                 variant: 'destructive',
                               })
                               return
@@ -1686,13 +1722,13 @@ export function InstanceSettings({
                               toast({
                                 title: 'Favicon changed',
                                 description:
-                                  'Save your changes to apply the new favicon',
+                                  'Save your changes to apply the new favicon.',
                               })
                             } catch (error) {
                               console.error('Failed to handle favicon:', error)
                               toast({
                                 title: 'Failed to update favicon',
-                                description: 'Please try again',
+                                description: 'Please try again.',
                                 variant: 'destructive',
                               })
                             }
@@ -1749,15 +1785,15 @@ export function InstanceSettings({
                   <div className="mt-5 space-y-6">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Custom Styling</CardTitle>
-                        <CardDescription>
-                          Add custom CSS to your instance
+                        <CardTitle>Custom styling</CardTitle>
+                        <CardDescription className="text-pretty">
+                          Add custom CSS to your instance.
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-4">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex shrink-0 items-center gap-2">
                               <Label>Custom CSS</Label>
                               {isFieldChanged('advanced', ['customCSS']) && (
                                 <ChangeIndicator />
@@ -1768,19 +1804,19 @@ export function InstanceSettings({
                               size="sm"
                               onClick={() => setCssEditorOpen(!cssEditorOpen)}
                             >
-                              <Code className="mr-2 h-4 w-4" />
-                              {cssEditorOpen ? 'Close Editor' : 'Open Editor'}
+                              <Code aria-hidden="true" />
+                              {cssEditorOpen ? 'Close editor' : 'Open editor'}
                             </Button>
                           </div>
                           {cssEditorOpen && (
                             <Card
-                              className={`mt-4 ${isFieldChanged('advanced', ['customCSS']) ? 'border-primary' : ''}`}
+                              className={`mt-4 rounded-xl ${isFieldChanged('advanced', ['customCSS']) ? 'border-primary' : ''}`}
                             >
                               <CardHeader className="flex flex-row items-center justify-between">
                                 <div>
-                                  <CardTitle>Custom CSS Editor</CardTitle>
-                                  <CardDescription>
-                                    Add custom CSS to customize your instance
+                                  <CardTitle>Custom CSS editor</CardTitle>
+                                  <CardDescription className="text-pretty">
+                                    Add custom CSS to customize your instance.
                                   </CardDescription>
                                 </div>
                                 {isFieldChanged('advanced', ['customCSS']) && (
@@ -1810,15 +1846,15 @@ export function InstanceSettings({
                     </Card>
                     <Card>
                       <CardHeader>
-                        <CardTitle>HTML Head Content</CardTitle>
-                        <CardDescription>
-                          Add custom HTML to the head section
+                        <CardTitle>HTML head content</CardTitle>
+                        <CardDescription className="text-pretty">
+                          Add custom HTML to the head section.
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-4">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex shrink-0 items-center gap-2">
                               <Label>Custom HTML</Label>
                               {isFieldChanged('advanced', ['customHead']) && (
                                 <ChangeIndicator />
@@ -1829,19 +1865,20 @@ export function InstanceSettings({
                               size="sm"
                               onClick={() => setHtmlEditorOpen(!htmlEditorOpen)}
                             >
-                              <FileCode className="mr-2 h-4 w-4" />
-                              {htmlEditorOpen ? 'Close Editor' : 'Open Editor'}
+                              <FileCode aria-hidden="true" />
+                              {htmlEditorOpen ? 'Close editor' : 'Open editor'}
                             </Button>
                           </div>
                           {htmlEditorOpen && (
                             <Card
-                              className={`mt-4 ${isFieldChanged('advanced', ['customHead']) ? 'border-primary' : ''}`}
+                              className={`mt-4 rounded-xl ${isFieldChanged('advanced', ['customHead']) ? 'border-primary' : ''}`}
                             >
                               <CardHeader className="flex flex-row items-center justify-between">
                                 <div>
-                                  <CardTitle>Custom HTML Editor</CardTitle>
-                                  <CardDescription>
-                                    Add custom HTML to the head of your instance
+                                  <CardTitle>Custom HTML editor</CardTitle>
+                                  <CardDescription className="text-pretty">
+                                    Add custom HTML to the head of your
+                                    instance.
                                   </CardDescription>
                                 </div>
                                 {isFieldChanged('advanced', ['customHead']) && (
@@ -1896,43 +1933,32 @@ export function InstanceSettings({
 
       {hasChanges &&
         createPortal(
-          <div
+          // The save bar every editor uses, floating while any section has
+          // unsaved instance settings.
+          <SaveBar
             role="status"
-            className="fixed bottom-4 inset-x-4 z-40 mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border bg-background/95 p-4 shadow-xl backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between"
+            tone="unsaved"
+            title="You have unsaved instance settings"
+            description={`${changedSettingsGroups.join(', ')}${pendingFaviconFile ? ' · Favicon' : ''}`}
+            className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20"
           >
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                You have unsaved instance settings
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {changedSettingsGroups.join(', ')}
-                {pendingFaviconFile ? ' · Favicon' : ''}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={discardChanges}
-                disabled={isSaving}
-                className="flex-1 sm:flex-none"
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Discard
-              </Button>
-              <Button
-                onClick={saveChanges}
-                disabled={isSaving}
-                className="flex-1 sm:flex-none"
-              >
-                {isSaving ? (
-                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                {isSaving ? 'Saving…' : 'Save settings'}
-              </Button>
-            </div>
-          </div>,
+            <Button
+              variant="outline"
+              onClick={discardChanges}
+              disabled={isSaving}
+            >
+              <XCircle aria-hidden="true" />
+              Discard
+            </Button>
+            <Button onClick={saveChanges} disabled={isSaving}>
+              {isSaving ? (
+                <Icons.spinner className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Save aria-hidden="true" />
+              )}
+              {isSaving ? 'Saving…' : 'Save settings'}
+            </Button>
+          </SaveBar>,
           document.body
         )}
     </PreferencesShell>

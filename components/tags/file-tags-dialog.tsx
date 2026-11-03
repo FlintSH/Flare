@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 import type { FileType } from '@/types/components/file'
-import { Check, Loader2, Minus, Plus, Tag } from 'lucide-react'
+import { Loader2, Plus, Tag } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFileTagMemberships } from '@/hooks/use-file-tag-memberships'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -120,15 +121,24 @@ export function FileTagsDialog({
         if (!open && !busy) onClose()
       }}
     >
-      <DialogContent className="max-w-sm">
+      {/* The same width as the other file dialogs. */}
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
             {files.length === 1 ? 'Edit tags' : `Tag ${files.length} files`}
           </DialogTitle>
           <DialogDescription className="break-words">
-            {files.length === 1
-              ? files[0].name
-              : 'Add or remove a tag across your selection. Other tags stay as they are.'}
+            {files.length === 1 ? (
+              <>
+                Add or remove tags for{' '}
+                <span className="font-medium text-foreground">
+                  {files[0].name}
+                </span>
+                .
+              </>
+            ) : (
+              'Add or remove a tag across your selection. Other tags stay as they are.'
+            )}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -148,7 +158,8 @@ export function FileTagsDialog({
           />
         </form>
         <div
-          className="max-h-64 space-y-1 overflow-y-auto"
+          ref={scrollFadeRef}
+          className="scroll-fade max-h-64 space-y-1 overflow-y-auto overscroll-contain"
           aria-busy={busy || loading || memberships.loading}
         >
           {memberships.loading && (
@@ -188,20 +199,27 @@ export function FileTagsDialog({
                   aria-checked={all ? true : count ? 'mixed' : false}
                   disabled={busy || !ready}
                   onClick={() => void toggle(tag, all)}
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60"
                 >
+                  {/* Drawn like the native checkboxes (app/globals.css): a
+                      3:1 outline when off, and the same filled tick and dash. */}
                   <span
+                    aria-hidden="true"
                     className={cn(
-                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
-                      (all || count > 0) &&
-                        'border-primary bg-primary text-primary-foreground'
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3rem] border border-control',
+                      (all || count > 0) && 'border-primary bg-primary'
                     )}
                   >
-                    {all ? (
-                      <Check className="h-3 w-3" />
-                    ) : count > 0 ? (
-                      <Minus className="h-3 w-3" />
-                    ) : null}
+                    {(all || count > 0) && (
+                      <span
+                        className={cn(
+                          'h-2.5 w-2.5 bg-primary-foreground',
+                          all
+                            ? '[clip-path:polygon(14%_44%,0_65%,50%_100%,100%_16%,80%_0%,43%_62%)]'
+                            : '[clip-path:inset(42%_12%)]'
+                        )}
+                      />
+                    )}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{tag.name}</span>
                   {currentFiles.length > 1 && count > 0 && (
@@ -225,7 +243,8 @@ export function FileTagsDialog({
             ) && (
               <Button
                 variant="ghost"
-                className="h-auto w-full justify-start gap-2 whitespace-normal py-3 text-left"
+                // On the rows' columns: the plus over the checkboxes.
+                className="h-auto w-full justify-start gap-3 whitespace-normal rounded-lg px-2 py-2.5 text-left font-normal"
                 disabled={busy || !ready}
                 onClick={() => void create()}
               >
@@ -245,7 +264,7 @@ export function FileTagsDialog({
           {announcement}
         </p>
         <DialogFooter>
-          <span className="flex flex-1 items-center text-xs text-muted-foreground">
+          <span className="order-1 flex flex-1 items-center text-xs text-muted-foreground sm:order-none">
             {busy ? (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />

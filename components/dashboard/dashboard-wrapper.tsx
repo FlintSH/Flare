@@ -29,11 +29,19 @@ export function DashboardWrapper({
       >
         Skip to content
       </a>
-      <header className="fixed inset-x-0 top-0 z-40 px-4 pt-4">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 rounded-2xl border border-border/60 bg-background/80 px-4 shadow-sm backdrop-blur-xl sm:px-6">
-          <DashboardNav />
-          <div className="ml-auto shrink-0">
-            <UserNav />
+      {/* The bar shares the content column's width and gutters. */}
+      <header className="fixed inset-x-0 top-0 z-40 pt-4">
+        {/* Fades scrolled content out above and behind the floating bar. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background via-background/70 to-transparent"
+        />
+        <div className="relative mx-auto max-w-7xl px-4">
+          <div className="flex h-16 items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-4 shadow-sm backdrop-blur-xl sm:px-6">
+            <DashboardNav />
+            <div className="ml-auto flex shrink-0 items-center">
+              <UserNav />
+            </div>
           </div>
         </div>
       </header>

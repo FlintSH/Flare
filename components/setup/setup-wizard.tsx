@@ -1,8 +1,8 @@
 'use client'
 
 import {
+  type CSSProperties,
   type FormEvent,
-  type ReactNode,
   useEffect,
   useRef,
   useState,
@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -20,8 +21,10 @@ import {
   Cloud,
   Folder,
   HardDrive,
+  InfoIcon,
   KeyRound,
   Mail,
+  MailCheck,
   Paintbrush,
   ShieldCheck,
   Sparkles,
@@ -32,6 +35,7 @@ import { signIn } from 'next-auth/react'
 import { EmailSettings } from '@/components/email/email-settings'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -42,6 +46,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 
 import {
@@ -58,7 +63,13 @@ import {
 import { cn } from '@/lib/utils'
 import { markSetupAsCompleted } from '@/lib/utils/setup-cache'
 
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from './setup-actions'
 import { SetupAppearance } from './setup-appearance'
+import { SetupOption, SetupOptionIcon } from './setup-option'
 
 const steps = [
   {
@@ -117,7 +128,19 @@ const steps = [
 ] as const
 
 type Step = (typeof steps)[number]['id']
+
 type FormError = { message: string; field?: string }
+
+// Phones show the steps in one row. A long label ("Appearance") gets a wider
+// column, so the current step's outline fits around it without crowding its
+// neighbours.
+const stepColumns = steps
+  .map((item) => (item.label.length > 8 ? 'minmax(0,1.3fr)' : 'minmax(0,1fr)'))
+  .join(' ')
+
+// The ready step's next-step links, on the same surface as the cards.
+const nextStepClassName =
+  'group rounded-2xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
 
 const initialData: SetupData = {
   admin: { name: '', email: '', password: '' },
@@ -133,62 +156,6 @@ const initialData: SetupData = {
     },
   },
   registrations: { enabled: true, disabledMessage: '' },
-}
-
-function Choice({
-  selected,
-  onSelect,
-  icon,
-  title,
-  description,
-  name,
-  disabled = false,
-}: {
-  selected: boolean
-  onSelect: () => void
-  icon: ReactNode
-  title: string
-  description: string
-  name: string
-  disabled?: boolean
-}) {
-  return (
-    <label
-      className={cn(
-        'relative flex cursor-pointer flex-col gap-4 rounded-xl border p-5 transition-colors hover:bg-muted/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
-        selected ? 'border-primary bg-primary/5' : 'bg-background/40'
-      )}
-    >
-      <input
-        type="radio"
-        className="sr-only"
-        name={name}
-        disabled={disabled}
-        checked={selected}
-        onChange={onSelect}
-      />
-      <div className="flex items-center justify-between">
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg border bg-background">
-          {icon}
-        </span>
-        <span
-          aria-hidden="true"
-          className={cn(
-            'flex h-5 w-5 items-center justify-center rounded-full border',
-            selected && 'border-primary bg-primary text-primary-foreground'
-          )}
-        >
-          {selected && <Check className="h-3 w-3" />}
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        <span className="block font-medium">{title}</span>
-        <span className="block text-sm leading-relaxed text-muted-foreground">
-          {description}
-        </span>
-      </div>
-    </label>
-  )
 }
 
 export function SetupWizard({
@@ -215,7 +182,6 @@ export function SetupWizard({
   const [emailRecoveryEnabled, setEmailRecoveryEnabled] = useState(
     initialEmailRecoveryEnabled
   )
-  const [emailBusy, setEmailBusy] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
   const submitting = useRef(false)
   const index = steps.findIndex((item) => item.id === step)
@@ -332,10 +298,21 @@ export function SetupWizard({
       hint?: string
       placeholder?: string
       autoComplete?: string
+      optional?: boolean
     } = {}
   ) => (
     <div className="space-y-2">
-      <Label htmlFor={`setup-${path}`}>{label}</Label>
+      <Label htmlFor={`setup-${path}`}>
+        {label}
+        {options.optional && (
+          <>
+            {' '}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </>
+        )}
+      </Label>
       <Input
         id={`setup-${path}`}
         type={options.type || 'text'}
@@ -343,7 +320,6 @@ export function SetupWizard({
         onChange={(event) => onChange(event.target.value)}
         placeholder={options.placeholder}
         autoComplete={options.autoComplete}
-        className="h-11"
         disabled={busy}
         aria-invalid={error?.field === path}
         aria-describedby={options.hint ? `setup-${path}-hint` : undefined}
@@ -351,7 +327,7 @@ export function SetupWizard({
       {options.hint && (
         <p
           id={`setup-${path}-hint`}
-          className="text-sm leading-relaxed text-muted-foreground"
+          className="text-pretty text-xs text-muted-foreground"
         >
           {options.hint}
         </p>
@@ -387,8 +363,9 @@ export function SetupWizard({
             </span>
             <span className="flare-text text-2xl tracking-tight">Flare</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden rounded-full border bg-card/70 px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">
+          <div className="flex items-center gap-4">
+            {/* A greeting, not a control: plain text beside the guide. */}
+            <span className="hidden text-sm text-muted-foreground sm:inline">
               Welcome home
             </span>
             <Button variant="outline" asChild>
@@ -409,7 +386,10 @@ export function SetupWizard({
           <aside>
             <div className="lg:sticky lg:top-8">
               <nav aria-label="Setup progress">
-                <ol className="grid grid-cols-6 gap-1 lg:grid-cols-1 lg:gap-2">
+                <ol
+                  className="grid grid-cols-[var(--setup-steps)] gap-1 lg:grid-cols-1 lg:gap-2"
+                  style={{ '--setup-steps': stepColumns } as CSSProperties}
+                >
                   {steps.map((item, position) => {
                     const done = position < index
                     const active = position === index
@@ -418,13 +398,18 @@ export function SetupWizard({
                       <li
                         key={item.id}
                         aria-current={active ? 'step' : undefined}
+                        className="flex justify-center lg:block"
                       >
+                        {/* On phones a tile is at least its column's width
+                            and grows evenly past it if its label is longer,
+                            so the label stays inside the current step's
+                            outline. */}
                         <button
                           type="button"
                           disabled={!canReturn}
                           onClick={() => go(item.id)}
                           className={cn(
-                            'flex w-full flex-col items-center gap-2 rounded-xl px-1 py-3 text-center disabled:cursor-default lg:flex-row lg:gap-3 lg:px-3 lg:text-left',
+                            'flex w-max min-w-full shrink-0 flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-center disabled:cursor-default lg:w-full lg:flex-row lg:gap-3 lg:px-3 lg:text-left',
                             active && 'border bg-card/80 shadow-sm',
                             !active && 'border border-transparent',
                             canReturn && 'hover:bg-muted/30'
@@ -491,7 +476,7 @@ export function SetupWizard({
               >
                 {needsSignIn ? 'Your account is ready.' : current.title}
               </h1>
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
                 {needsSignIn
                   ? 'Your instance was created successfully. Sign in to finish the optional steps.'
                   : current.description}
@@ -511,7 +496,7 @@ export function SetupWizard({
                   <Button asChild>
                     <Link href={getSetupSignInPath(step)}>
                       Sign in to continue
-                      <ArrowRight className="ml-2 h-4 w-4" />
+                      <ArrowRight aria-hidden="true" />
                     </Link>
                   </Button>
                 </CardContent>
@@ -526,28 +511,20 @@ export function SetupWizard({
               />
             ) : step === 'email' ? (
               <div className="space-y-5">
-                <div className="flex flex-col gap-4 rounded-xl border bg-card/70 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium">
-                      Prefer to do this later?
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      You can add a mail provider in Settings → Email.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => go('ready')}
-                    disabled={emailBusy}
-                  >
-                    Set up email later
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </div>
+                {/* The form is long, so say where the way to skip it is:
+                    the footer every step shares. */}
+                <Alert variant="info" role="status">
+                  <InfoIcon aria-hidden="true" />
+                  <AlertTitle>Prefer to do this later?</AlertTitle>
+                  <AlertDescription>
+                    Choose <strong>Set up email later</strong> at the end of
+                    this step. You can add a mail provider any time in{' '}
+                    <strong>Settings → Email</strong>.
+                  </AlertDescription>
+                </Alert>
                 <EmailSettings
                   setup
-                  onBusyChange={setEmailBusy}
+                  onSkip={() => go('ready')}
                   onComplete={(config) => {
                     setEmailEnabled(config.enabled)
                     setEmailRecoveryEnabled(
@@ -574,32 +551,32 @@ export function SetupWizard({
                   </CardHeader>
                   <CardContent className="space-y-5">
                     {emailEnabled && (
-                      <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-relaxed">
-                        Email is configured.{' '}
-                        <Link
-                          href="/auth/verify-email"
-                          className="font-medium underline underline-offset-4"
-                        >
-                          Verify your email address
-                        </Link>{' '}
-                        {emailRecoveryEnabled
-                          ? 'to make password recovery available for your account.'
-                          : 'to confirm the address associated with your account.'}
-                      </div>
+                      <Alert variant="info" role="status">
+                        <MailCheck aria-hidden="true" />
+                        <AlertDescription>
+                          Email is configured.{' '}
+                          <Link
+                            href="/auth/verify-email"
+                            className="font-medium underline underline-offset-4"
+                          >
+                            Verify your email address
+                          </Link>{' '}
+                          {emailRecoveryEnabled
+                            ? 'to make password recovery available for your account.'
+                            : 'to confirm the address associated with your account.'}
+                        </AlertDescription>
+                      </Alert>
                     )}
                     <Button asChild className="h-11 w-full sm:w-auto">
                       <Link href="/dashboard">
                         Open my workspace
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight aria-hidden="true" />
                       </Link>
                     </Button>
                   </CardContent>
                 </Card>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Link
-                    href="/dashboard/upload"
-                    className="group rounded-xl border bg-card p-5 transition-colors hover:bg-muted/30"
-                  >
+                  <Link href="/dashboard/upload" className={nextStepClassName}>
                     <Folder className="mb-4 h-5 w-5 text-muted-foreground" />
                     <p className="font-medium">
                       Share your first file
@@ -610,13 +587,13 @@ export function SetupWizard({
                         →
                       </span>
                     </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
+                    <p className="mt-2 text-pretty text-sm text-muted-foreground">
                       Drop in a screenshot and make your first link.
                     </p>
                   </Link>
                   <Link
                     href="/dashboard/settings?section=appearance"
-                    className="group rounded-xl border bg-card p-5 transition-colors hover:bg-muted/30"
+                    className={nextStepClassName}
                   >
                     <Sparkles className="mb-4 h-5 w-5 text-muted-foreground" />
                     <p className="font-medium">
@@ -628,7 +605,7 @@ export function SetupWizard({
                         →
                       </span>
                     </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
+                    <p className="mt-2 text-pretty text-sm text-muted-foreground">
                       Explore themes, branding, and your share pages.
                     </p>
                   </Link>
@@ -687,53 +664,62 @@ export function SetupWizard({
                   <>
                     <Card>
                       <CardHeader>
-                        <CardTitle>Choose your storage</CardTitle>
+                        <CardTitle id="setup-storage-title">
+                          Choose your storage
+                        </CardTitle>
                         <CardDescription>
                           Flare will use this location for new uploads.
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-5">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Choice
-                            disabled={busy}
-                            name="storage-provider"
+                        <RadioGroup
+                          value={data.storage.provider}
+                          onValueChange={(value) =>
+                            setData((previous) => ({
+                              ...previous,
+                              storage: {
+                                ...previous.storage,
+                                provider: value as 'local' | 's3',
+                              },
+                            }))
+                          }
+                          disabled={busy}
+                          aria-labelledby="setup-storage-title"
+                          className="gap-3 sm:grid-cols-2"
+                        >
+                          <SetupOption
+                            id="setup-storage-local"
+                            value="local"
+                            selected={data.storage.provider === 'local'}
+                            visual={
+                              <SetupOptionIcon>
+                                <HardDrive aria-hidden="true" />
+                              </SetupOptionIcon>
+                            }
                             title="Local storage"
                             description="Simple and ready to go. Store uploads on your Flare server."
-                            icon={<HardDrive className="h-5 w-5" />}
-                            selected={data.storage.provider === 'local'}
-                            onSelect={() =>
-                              setData((previous) => ({
-                                ...previous,
-                                storage: {
-                                  ...previous.storage,
-                                  provider: 'local',
-                                },
-                              }))
-                            }
                           />
-                          <Choice
-                            disabled={busy}
-                            name="storage-provider"
+                          <SetupOption
+                            id="setup-storage-s3"
+                            value="s3"
+                            selected={data.storage.provider === 's3'}
+                            visual={
+                              <SetupOptionIcon>
+                                <Cloud aria-hidden="true" />
+                              </SetupOptionIcon>
+                            }
                             title="S3-compatible storage"
                             description="Use a bucket from Amazon S3, MinIO, or another compatible provider."
-                            icon={<Cloud className="h-5 w-5" />}
-                            selected={data.storage.provider === 's3'}
-                            onSelect={() =>
-                              setData((previous) => ({
-                                ...previous,
-                                storage: {
-                                  ...previous.storage,
-                                  provider: 's3',
-                                },
-                              }))
-                            }
                           />
-                        </div>
+                        </RadioGroup>
                         {data.storage.provider === 'local' && (
-                          <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-relaxed text-muted-foreground">
-                            Keep your uploads directory on a persistent volume
-                            and include it in your backups.
-                          </div>
+                          <Alert variant="info" role="status">
+                            <InfoIcon aria-hidden="true" />
+                            <AlertDescription>
+                              Keep your uploads directory on a persistent volume
+                              and include it in your backups.
+                            </AlertDescription>
+                          </Alert>
                         )}
                       </CardContent>
                     </Card>
@@ -779,21 +765,23 @@ export function SetupWizard({
                           </div>
                           {field(
                             'storage.s3.endpoint',
-                            'Custom endpoint (optional)',
+                            'Custom endpoint',
                             data.storage.s3.endpoint || '',
                             (value) => updateS3('endpoint', value),
                             {
                               type: 'url',
                               placeholder: 'https://storage.example.com',
                               hint: 'Leave blank for Amazon S3. Use the endpoint your provider supplies for other services.',
+                              optional: true,
                             }
                           )}
-                          <div className="flex items-start justify-between gap-5 rounded-lg border p-4">
-                            <div className="space-y-1">
+                          {/* The switch row used across Settings. */}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="min-w-0 flex-1 space-y-0.5">
                               <Label htmlFor="setup-path-style">
                                 Use path-style URLs
                               </Label>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-pretty text-sm text-muted-foreground">
                                 Enable if your S3-compatible provider requires
                                 it.
                               </p>
@@ -816,52 +804,60 @@ export function SetupWizard({
                   <>
                     <Card>
                       <CardHeader>
-                        <CardTitle>Who can create an account?</CardTitle>
+                        <CardTitle id="setup-access-title">
+                          Who can create an account?
+                        </CardTitle>
                         <CardDescription>
                           Your administrator account is included either way.
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-5">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Choice
-                            disabled={busy}
-                            name="registration"
+                        <RadioGroup
+                          value={
+                            data.registrations.enabled ? 'open' : 'private'
+                          }
+                          onValueChange={(value) =>
+                            setData((previous) => ({
+                              ...previous,
+                              registrations: {
+                                ...previous.registrations,
+                                enabled: value === 'open',
+                              },
+                            }))
+                          }
+                          disabled={busy}
+                          aria-labelledby="setup-access-title"
+                          className="gap-3 sm:grid-cols-2"
+                        >
+                          <SetupOption
+                            id="setup-access-open"
+                            value="open"
+                            selected={data.registrations.enabled}
+                            visual={
+                              <SetupOptionIcon>
+                                <Users aria-hidden="true" />
+                              </SetupOptionIcon>
+                            }
                             title="Open registration"
                             description="Let people create their own accounts on your instance."
-                            icon={<Users className="h-5 w-5" />}
-                            selected={data.registrations.enabled}
-                            onSelect={() =>
-                              setData((previous) => ({
-                                ...previous,
-                                registrations: {
-                                  ...previous.registrations,
-                                  enabled: true,
-                                },
-                              }))
-                            }
                           />
-                          <Choice
-                            disabled={busy}
-                            name="registration"
+                          <SetupOption
+                            id="setup-access-private"
+                            value="private"
+                            selected={!data.registrations.enabled}
+                            visual={
+                              <SetupOptionIcon>
+                                <ShieldCheck aria-hidden="true" />
+                              </SetupOptionIcon>
+                            }
                             title="Private instance"
                             description="Keep sign-ups closed. You can create accounts for others later."
-                            icon={<ShieldCheck className="h-5 w-5" />}
-                            selected={!data.registrations.enabled}
-                            onSelect={() =>
-                              setData((previous) => ({
-                                ...previous,
-                                registrations: {
-                                  ...previous.registrations,
-                                  enabled: false,
-                                },
-                              }))
-                            }
                           />
-                        </div>
+                        </RadioGroup>
                         {!data.registrations.enabled &&
                           field(
                             'registrations.disabledMessage',
-                            'Message for visitors (optional)',
+                            'Message for visitors',
                             data.registrations.disabledMessage || '',
                             (value) =>
                               setData((previous) => ({
@@ -872,59 +868,60 @@ export function SetupWizard({
                                 },
                               })),
                             {
-                              placeholder:
-                                'This is a private Flare. Contact me for access.',
+                              placeholder: 'Ask me for an invite.',
+                              optional: true,
                             }
                           )}
                       </CardContent>
                     </Card>
-                    <div className="rounded-xl border bg-card/70 p-5">
-                      <p className="mb-4 text-sm font-medium">
-                        Ready to create your instance
-                      </p>
-                      <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                        <div>
-                          <dt className="text-muted-foreground">
-                            Administrator
-                          </dt>
-                          <dd className="mt-1 break-words font-medium">
-                            {data.admin.email}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Storage</dt>
-                          <dd className="mt-1 font-medium">
-                            {data.storage.provider === 'local'
-                              ? 'Local storage'
-                              : 'S3-compatible storage'}
-                          </dd>
-                        </div>
-                      </dl>
-                      <p className="mt-4 border-t pt-4 text-xs leading-relaxed text-muted-foreground">
-                        Next, you can personalize your instance and add email.
-                        Both are optional.
-                      </p>
-                    </div>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Ready to create your instance</CardTitle>
+                        <CardDescription>
+                          Next, you can personalize your instance and add email.
+                          Both are optional.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="text-muted-foreground">
+                              Administrator
+                            </dt>
+                            <dd className="mt-1 break-words font-medium">
+                              {data.admin.email}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Storage</dt>
+                            <dd className="mt-1 font-medium">
+                              {data.storage.provider === 'local'
+                                ? 'Local storage'
+                                : 'S3-compatible storage'}
+                            </dd>
+                          </div>
+                        </dl>
+                      </CardContent>
+                    </Card>
                   </>
                 )}
 
                 {error && (
-                  <p
-                    role="alert"
-                    className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
-                  >
-                    {error.message}
-                  </p>
+                  <Alert variant="destructive">
+                    <AlertCircle aria-hidden="true" />
+                    <AlertDescription>{error.message}</AlertDescription>
+                  </Alert>
                 )}
-                <div className="flex items-center justify-between gap-3 border-t pt-5">
+                <SetupActions>
                   {index > 0 ? (
                     <Button
                       type="button"
                       variant="outline"
                       disabled={busy}
                       onClick={() => go(steps[index - 1].id)}
+                      className={setupSecondaryActionClassName}
                     >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      <ArrowLeft aria-hidden="true" />
                       Back
                     </Button>
                   ) : (
@@ -935,21 +932,24 @@ export function SetupWizard({
                   <Button
                     type="submit"
                     disabled={busy}
-                    className="ml-auto h-11 min-w-36"
+                    className={setupPrimaryActionClassName}
                   >
                     {busy ? (
                       <>
-                        <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                        <Icons.spinner
+                          className="animate-spin"
+                          aria-hidden="true"
+                        />
                         Creating your instance…
                       </>
                     ) : (
                       <>
                         {step === 'access' ? 'Create my instance' : 'Continue'}
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight aria-hidden="true" />
                       </>
                     )}
                   </Button>
-                </div>
+                </SetupActions>
               </form>
             )}
           </main>

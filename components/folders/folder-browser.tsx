@@ -26,6 +26,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -64,13 +65,16 @@ export function FolderBrowser({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className="h-8 w-8 shrink-0 data-[state=open]:bg-accent"
           aria-label={`Manage folder ${folder.name}`}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      {/* Titled and sized like the file card's menu. */}
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>Manage folder</DropdownMenuLabel>
+        <DropdownMenuSeparator />
         <PermissionGate permission="folders.manage">
           <DropdownMenuItem
             onSelect={() => setAction({ kind: 'rename', folder })}
@@ -95,10 +99,10 @@ export function FolderBrowser({
             New subfolder
           </DropdownMenuItem>
         </PermissionGate>
-        <DropdownMenuSeparator />
         <PermissionGate permission="folders.manage">
+          <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
+            className="text-destructive focus:bg-danger/10 focus:text-destructive"
             onSelect={() => setAction({ kind: 'delete', folder })}
           >
             <Trash2 />
@@ -119,6 +123,10 @@ export function FolderBrowser({
             <Button
               variant={value === null ? 'secondary' : 'ghost'}
               size="sm"
+              className={cn(
+                'text-sm',
+                value !== null && 'text-muted-foreground'
+              )}
               aria-current={value === null ? 'page' : undefined}
               onClick={() => onChange(null)}
             >
@@ -127,6 +135,10 @@ export function FolderBrowser({
             <Button
               variant={value === 'unfiled' ? 'secondary' : 'ghost'}
               size="sm"
+              className={cn(
+                'text-sm',
+                value !== 'unfiled' && 'text-muted-foreground'
+              )}
               aria-current={value === 'unfiled' ? 'page' : undefined}
               onClick={() => onChange('unfiled')}
             >
@@ -197,15 +209,18 @@ export function FolderBrowser({
         </p>
       ) : (
         <>
+          {/* One line at every width: long folder names truncate rather than
+              wrap, so a separator never starts a line. The trail's text and
+              the Upload here button's ink sit on the content edges. */}
           {current && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-4 flex items-center justify-between gap-3">
               <nav aria-label="Folder breadcrumbs" className="min-w-0 flex-1">
-                <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-                  <li>
+                <ol className="-ml-1 flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                  <li className="shrink-0">
                     <button
                       type="button"
                       onClick={() => onChange(null)}
-                      className="rounded px-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      className="rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     >
                       Folders
                     </button>
@@ -213,7 +228,7 @@ export function FolderBrowser({
                   {trail.map((folder, index) => (
                     <li
                       key={folder.id}
-                      className="flex min-w-0 items-center gap-1"
+                      className="flex min-w-0 shrink items-center gap-1"
                     >
                       <ChevronRight
                         aria-hidden="true"
@@ -227,7 +242,7 @@ export function FolderBrowser({
                         }
                         title={folder.name}
                         className={cn(
-                          'max-w-56 truncate rounded px-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+                          'max-w-56 truncate rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                           index === trail.length - 1 &&
                             'font-medium text-foreground'
                         )}
@@ -239,7 +254,12 @@ export function FolderBrowser({
                 </ol>
               </nav>
               <PermissionGate permission="files.upload">
-                <Button variant="ghost" size="sm" className="gap-2" asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-mr-3 shrink-0 gap-2"
+                  asChild
+                >
                   <Link href={`/dashboard/upload?folder=${current.id}`}>
                     <Upload className="h-4 w-4" />
                     Upload here

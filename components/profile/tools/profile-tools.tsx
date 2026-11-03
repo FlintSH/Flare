@@ -29,7 +29,7 @@ export function ProfileTools({
 
   return (
     <div className="space-y-6">
-      <div className="divide-y rounded-xl border bg-background/40 px-4 sm:px-5 [&>div]:py-5">
+      <div className="divide-y rounded-xl border bg-muted/30 px-4 [&>div]:py-4">
         <ShareXTool />
         <ITakeTool />
         <FlameshotTool />
@@ -56,18 +56,18 @@ export function ProfileTools({
         </PermissionGate>
       </div>
       <Collapsible
-        className="rounded-xl border bg-background/40"
+        className="rounded-xl border bg-muted/30"
         onOpenChange={(open) => {
           if (open) setManualSetupVisited(true)
         }}
       >
-        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
           Manual setup and upload token
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
         <CollapsibleContent
           forceMount
-          className="px-4 pb-4 data-[state=closed]:hidden sm:px-5 sm:pb-5"
+          className="px-4 pb-4 data-[state=closed]:hidden"
         >
           {manualSetupVisited && <UploadToken />}
         </CollapsibleContent>

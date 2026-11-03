@@ -6,19 +6,24 @@ import { type VariantProps, cva } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-50 disabled:grayscale [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&>svg:not(.ml-auto)]:mx-0',
   {
     variants: {
       variant: {
+        // Disabled filled buttons become a faint outline with muted text, so
+        // they match disabled outline buttons in every palette instead of a
+        // grey that follows the accent.
         default:
-          'bg-primary text-primary-foreground shadow hover:bg-primary/90',
+          'border border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/90 disabled:border-control disabled:bg-transparent disabled:shadow-none',
         destructive:
-          'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
+          'border border-transparent bg-destructive-fill text-destructive-foreground shadow-sm hover:brightness-110 disabled:border-control disabled:bg-transparent disabled:shadow-none',
+        // Outline buttons take the surface they sit on, so they don't read as
+        // recessed slots on lifted dialogs.
         outline:
-          'border border-input bg-background shadow-sm hover:bg-primary/10 hover:text-foreground hover:border-primary/20',
+          'border border-control bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary:
-          'bg-secondary text-secondary-foreground shadow-sm hover:bg-primary/20 hover:text-foreground',
-        ghost: 'hover:bg-primary/20 hover:text-foreground',
+          'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

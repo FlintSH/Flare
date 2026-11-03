@@ -53,10 +53,10 @@ export function BashTool() {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 space-y-1">
-        <h3 className="font-medium">Bash Script</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-medium">Bash script</h3>
+        <p className="text-pretty text-sm text-muted-foreground">
           Upload from your terminal. Run{' '}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+          <code className="whitespace-nowrap rounded bg-muted px-1 py-0.5 text-xs">
             bash &lt;script.sh&gt; &lt;file&gt;
           </code>{' '}
           with your downloaded script and the file to upload.
@@ -67,7 +67,7 @@ export function BashTool() {
         onClick={handleBashDownload}
         disabled={isLoading}
       >
-        {isLoading ? 'Downloading...' : 'Download Script'}
+        {isLoading ? 'Downloading…' : 'Download script'}
       </Button>
     </div>
   )

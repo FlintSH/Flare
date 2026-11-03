@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/popover'
 
 import { cn } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useTags } from '@/hooks/use-tags'
 
@@ -47,8 +48,8 @@ export function TagFilter({
           variant="outline"
           aria-label="Filter by tag"
           className={cn(
-            'h-10 w-10 shrink-0 gap-2 rounded-lg bg-background/70 p-0 sm:w-auto sm:px-3',
-            value && 'border-primary/40 bg-primary/5'
+            'h-10 w-10 shrink-0 gap-2 rounded-lg bg-background/70 p-0 data-[state=open]:bg-accent sm:w-auto sm:px-3',
+            value && 'border-primary bg-primary/10 [&_svg]:text-foreground'
           )}
         >
           <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -65,8 +66,11 @@ export function TagFilter({
           onChange={(event) => setSearch(event.target.value)}
           className="mb-2 h-9"
         />
+        {/* Rows match the toolbar's other lists (32px, check on the left).
+            The height leaves half a row showing when the list scrolls. */}
         <div
-          className="max-h-64 overflow-y-auto"
+          ref={scrollFadeRef}
+          className="scroll-fade max-h-60 overflow-y-auto overscroll-contain"
           role="group"
           aria-label="Filter files by tag"
         >
@@ -82,7 +86,7 @@ export function TagFilter({
               type="button"
               aria-pressed={value === tag.id}
               onClick={() => choose(tag.id)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <Check
                 className={cn(
@@ -123,9 +127,11 @@ export function TagFilter({
         </div>
         <div className="mt-2 border-t pt-2">
           <PermissionGate permission="tags.manage">
+            {/* On the options' columns: icon over the checks, label over
+                the names. */}
             <Button
               variant="ghost"
-              className="w-full justify-start gap-2"
+              className="h-8 w-full justify-start px-2 font-normal"
               onClick={() => {
                 setOpen(false)
                 onManage()

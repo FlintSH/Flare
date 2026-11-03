@@ -4,13 +4,14 @@ import { useState } from 'react'
 
 import Link from 'next/link'
 
-import { ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 
 import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -154,9 +155,9 @@ export function PasteForm() {
           {created.url && (
             <Button onClick={copyLink}>
               {copied ? (
-                <Check className="mr-2 h-4 w-4" />
+                <Check className="h-4 w-4" />
               ) : (
-                <Copy className="mr-2 h-4 w-4" />
+                <Copy className="h-4 w-4" />
               )}
               {copied ? 'Copied' : 'Copy link'}
             </Button>
@@ -164,7 +165,7 @@ export function PasteForm() {
           <Button asChild variant="outline">
             <Link href={created.pagePath}>
               Open paste
-              <ArrowUpRight className="ml-2 h-4 w-4" />
+              <ArrowUpRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button
@@ -226,7 +227,10 @@ export function PasteForm() {
             disabled={isSubmitting}
             aria-describedby="filename-help"
           />
-          <p id="filename-help" className="text-xs text-muted-foreground">
+          <p
+            id="filename-help"
+            className="text-pretty text-xs text-muted-foreground"
+          >
             Add an extension such as .js, .py, or .md for syntax highlighting.
           </p>
         </div>
@@ -274,13 +278,10 @@ export function PasteForm() {
         </div>
       </PermissionGate>
       {error && (
-        <p
-          id="paste-error"
-          role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground"
-        >
-          {error}
-        </p>
+        <Alert id="paste-error" variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       <Button
         type="submit"
@@ -291,8 +292,8 @@ export function PasteForm() {
           Boolean(password && filePasswordHint(password))
         }
       >
-        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {isSubmitting ? 'Creating paste…' : 'Create Paste'}
+        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+        {isSubmitting ? 'Creating paste…' : 'Create paste'}
       </Button>
     </form>
   )

@@ -23,8 +23,10 @@ export function archiveSelectionSize(files: { size: number }[]) {
 export const TEXT_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.textPreviewBytes
 export const IMAGE_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.imagePreviewBytes
 
+// The archive forms scroll between their title and actions, like the other
+// long form dialogs (components/settings/form-styles.ts).
 export const ARCHIVE_FORM_DIALOG_CLASS =
-  'max-h-[calc(100dvh-2rem)] overflow-hidden [&>div:first-child]:flex [&>div:first-child]:max-h-[calc(100dvh-7rem)] [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
+  'flex max-h-[calc(100dvh-2rem)] flex-col [&>div:first-child]:flex [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
 
 export type ArchiveProfileSnapshot = {
   id: string

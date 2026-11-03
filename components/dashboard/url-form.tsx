@@ -3,9 +3,10 @@
 import { useState } from 'react'
 
 import { CreateUrlSchema } from '@/types/dto/url'
-import { ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 import { z } from 'zod'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -98,20 +99,20 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
             disabled={isLoading || !url.trim()}
             className="shrink-0"
           >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             {isLoading ? 'Creating…' : 'Shorten'}
           </Button>
         </div>
         {error ? (
-          <p
-            id="url-error"
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-foreground"
-          >
-            {error}
-          </p>
+          <Alert id="url-error" variant="destructive">
+            <AlertCircle aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : (
-          <p id="url-help" className="text-xs text-muted-foreground">
+          <p
+            id="url-help"
+            className="text-pretty text-xs text-muted-foreground"
+          >
             Use a complete web address starting with https:// or http://.
           </p>
         )}
@@ -119,7 +120,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
       {createdUrl && (
         <div
           role="status"
-          className="space-y-2 rounded-lg border bg-muted/20 p-3"
+          className="space-y-2 rounded-xl border bg-muted/30 p-3"
         >
           <p className="text-sm font-medium">Short link created</p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -138,16 +139,16 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
                 className="flex-1 sm:flex-initial"
               >
                 {copied ? (
-                  <Check className="mr-2 h-4 w-4" />
+                  <Check className="h-4 w-4" />
                 ) : (
-                  <Copy className="mr-2 h-4 w-4" />
+                  <Copy className="h-4 w-4" />
                 )}
                 {copied ? 'Copied' : 'Copy link'}
               </Button>
               <Button asChild variant="ghost">
                 <a href={createdUrl} target="_blank" rel="noopener noreferrer">
                   Open
-                  <ArrowUpRight className="ml-2 h-4 w-4" />
+                  <ArrowUpRight className="h-4 w-4" />
                 </a>
               </Button>
             </div>

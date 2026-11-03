@@ -421,7 +421,7 @@ export function VirtualFiles({
         role="list"
         aria-label="Your files"
         aria-busy={loading}
-        className="relative mr-6 sm:mr-8"
+        className="relative mr-6 sm:mr-8 min-[1360px]:mr-0"
         style={{ height: virtualizer.getTotalSize(), overflowAnchor: 'none' }}
         onFocusCapture={(event) => {
           const row = (event.target as HTMLElement).closest<HTMLElement>(
@@ -448,7 +448,7 @@ export function VirtualFiles({
               {heading ? (
                 <h2 className="flex h-7 items-center gap-3 text-sm font-medium text-muted-foreground">
                   {bucketLabel(heading, timeline!.groupBy, timeline!.timezone)}
-                  <span className="text-xs font-normal text-muted-foreground/60">
+                  <span className="text-xs font-normal tabular-nums text-muted-foreground">
                     {heading.count.toLocaleString()}
                   </span>
                 </h2>

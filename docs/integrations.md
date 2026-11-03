@@ -23,8 +23,8 @@ newer**, on Apple Silicon or Intel.
 1. [Install iTake](https://github.com/SerStars/iTake/releases/latest) and open it.
    Follow its [installation instructions](https://github.com/SerStars/iTake#installing)
    if macOS blocks the first launch. Allow screen recording access when prompted.
-2. In Flare, open **Profile → Uploads → Screenshot tools and scripts → Set Up iTake**
-   and click **Download Config**. To use a specific saved upload profile, click
+2. In Flare, open **Profile → Uploads → Screenshot tools and scripts → Set up iTake**
+   and click **Download config**. To use a specific saved upload profile, click
    **iTake** under that profile's **Use this profile in your tools** section instead.
 3. Open the downloaded `.itup` file and confirm **Import** in iTake. The server URL
    and upload token are already included; no manual fields or API key setup are needed.
