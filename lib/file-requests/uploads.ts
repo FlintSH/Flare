@@ -695,7 +695,14 @@ export async function completeRequestUpload(
     where: { id: uploadId, touchedAt: { gt: idleCutoff() } },
     data: { touchedAt: new Date() },
   })
-  if (!live.count) throw uploadNotFound()
+  if (!live.count) {
+    // An overlapping completion may have just delivered it: delivery removes
+    // the reservation in the transaction this update waited for.
+    const finished = await findCommitted()
+    if (finished)
+      return deliveredResponse(metadata.fileRequest.requestId, finished)
+    throw uploadNotFound()
+  }
   const presentedToken = token as string
   // Resolve the provider before entering the lock, as dashboard uploads do.
   const storage = await getUploadStorage(metadata)

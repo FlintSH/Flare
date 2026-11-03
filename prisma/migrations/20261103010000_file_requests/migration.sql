@@ -16,6 +16,8 @@ CREATE TABLE "FileRequest" (
     "closedAt" TIMESTAMP(3),
     "notify" BOOLEAN NOT NULL DEFAULT false,
     "notifiedAt" TIMESTAMP(3),
+    "notifiedFiles" INTEGER NOT NULL DEFAULT 0,
+    "notifiedBytes" BIGINT NOT NULL DEFAULT 0,
     "fileCount" INTEGER NOT NULL DEFAULT 0,
     "bytesReceived" BIGINT NOT NULL DEFAULT 0,
     "lastReceivedAt" TIMESTAMP(3),

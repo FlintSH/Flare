@@ -349,6 +349,9 @@ model FileRequest {
   closedAt       DateTime?
   notify         Boolean                 @default(false)
   notifiedAt     DateTime?
+  // The fileCount and bytesReceived already reported by email.
+  notifiedFiles  Int                     @default(0)
+  notifiedBytes  BigInt                  @default(0)
   // Deliveries, not current files: deleting a received file never refunds a limit.
   fileCount      Int                     @default(0)
   bytesReceived  BigInt                  @default(0)

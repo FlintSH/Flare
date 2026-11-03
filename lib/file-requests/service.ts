@@ -593,10 +593,14 @@ export async function updateFileRequest(
     if (input.expiresInHours !== undefined)
       data.expiresAt = expiryFrom(input.expiresInHours)
     if (input.notify !== undefined) data.notify = input.notify
-    // Email starts with recent arrivals, not everything received so far, and
-    // the first one isn't held back by the interval between emails.
-    if (input.notify && !current.notify)
+    // Email reports what arrives from now on, not everything received so far,
+    // and the first one isn't held back by the interval between emails. The
+    // row is locked, so these counts include every committed delivery.
+    if (input.notify && !current.notify) {
       data.notifiedAt = new Date(now.getTime() - NOTIFICATION_INTERVAL_MS)
+      data.notifiedFiles = current.fileCount
+      data.notifiedBytes = current.bytesReceived
+    }
     if (input.closed !== undefined)
       data.closedAt = input.closed ? (current.closedAt ?? now) : null
     if (input.replaceLink) data.token = createFileRequestToken()

@@ -31,7 +31,10 @@ type NotifyState = {
   title: string
   notify: boolean
   notifiedAt: Date | null
-  lastReceivedAt: Date | null
+  fileCount: number
+  bytesReceived: bigint
+  notifiedFiles: number
+  notifiedBytes: bigint
 }
 
 /**
@@ -54,7 +57,10 @@ async function withNotifyLock<T>(
         title: true,
         notify: true,
         notifiedAt: true,
-        lastReceivedAt: true,
+        fileCount: true,
+        bytesReceived: true,
+        notifiedFiles: true,
+        notifiedBytes: true,
       },
     })
     return request ? action(tx, request) : null
@@ -62,9 +68,7 @@ async function withNotifyLock<T>(
 }
 
 const hasNews = (request: NotifyState) =>
-  request.notify &&
-  request.lastReceivedAt !== null &&
-  (!request.notifiedAt || request.lastReceivedAt > request.notifiedAt)
+  request.notify && request.fileCount > request.notifiedFiles
 
 const dueAt = (request: NotifyState, now: Date) =>
   request.notifiedAt
@@ -100,11 +104,16 @@ async function scheduleDigest(
 }
 
 /**
- * Queues the email for everything that arrived since the last one, then marks
- * it reported, in the same transaction: a failure leaves the arrivals
- * unreported, so the next delivery or scheduled digest tries again. When mail
- * is off, the owner has no verified address, or a cap applies, the arrivals
- * are marked reported without an email.
+ * Queues the email for every delivery since the last one, then marks them
+ * reported, in the same transaction: a failure leaves them unreported, so the
+ * next delivery or scheduled digest tries again. When mail is off, the owner
+ * has no verified address, or a cap applies, they are marked reported without
+ * an email.
+ *
+ * Deliveries are counted with the request's own counters, which a delivery
+ * updates as it commits, rather than by when files arrived: one that is still
+ * committing isn't in the counts read here, so it is left for the next email
+ * instead of falling behind the new mark.
  */
 async function sendDigest(
   tx: Prisma.TransactionClient,
@@ -115,7 +124,11 @@ async function sendDigest(
   await queueDigestEmail(tx, request, config, now)
   await tx.fileRequest.update({
     where: { id: request.id },
-    data: { notifiedAt: now },
+    data: {
+      notifiedAt: now,
+      notifiedFiles: request.fileCount,
+      notifiedBytes: request.bytesReceived,
+    },
     select: { id: true },
   })
   await tx.event.deleteMany({ where: waiting(request.id) })
@@ -139,27 +152,16 @@ async function queueDigestEmail(
     },
   })
   if (!owner?.email || !hasVerifiedEmail(owner, config)) return
-  // Files the owner already deleted are not news.
-  const totals = await tx.file.aggregate({
-    where: {
-      userId: request.userId,
-      uploadedAt: { gt: request.notifiedAt ?? new Date(0), lte: now },
-      fileRequestSubmission: { requestId: request.id },
-    },
-    _count: { _all: true },
-    _sum: { size: true },
-  })
-  if (!totals._count._all) return
+  const fileCount = request.fileCount - request.notifiedFiles
+  const bytes = Number(request.bytesReceived - request.notifiedBytes)
   const url = new URL('/dashboard/requests', config.publicUrl)
   url.searchParams.set('id', request.id)
   // Names and notes senders typed stay in the dashboard, out of email.
   const message = renderFileRequestEmail(config, {
     username: owner.name || undefined,
     title: request.title,
-    fileCount: totals._count._all,
-    totalSize: formatRequestBytes(
-      Math.round((totals._sum.size ?? 0) * 1024 * 1024)
-    ),
+    fileCount,
+    totalSize: formatRequestBytes(bytes),
     url: url.toString(),
   })
   const day = new Date(now)

@@ -1031,6 +1031,70 @@ suite('file requests against disposable PostgreSQL', () => {
     expect(await prisma.fileRequestUpload.count()).toBe(0)
   })
 
+  /** Holds each delivery open for a second after it releases its reservation. */
+  async function pauseDeliveries() {
+    await prisma.$executeRawUnsafe(
+      `CREATE OR REPLACE FUNCTION pause_delivery() RETURNS trigger AS $$ BEGIN PERFORM pg_sleep(1); RETURN OLD; END $$ LANGUAGE plpgsql`
+    )
+    await prisma.$executeRawUnsafe(
+      'CREATE OR REPLACE TRIGGER pause_delivery AFTER DELETE ON "FileRequestUpload" FOR EACH ROW EXECUTE FUNCTION pause_delivery()'
+    )
+    return async () => {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER pause_delivery ON "FileRequestUpload"'
+      )
+      await prisma.$executeRawUnsafe('DROP FUNCTION pause_delivery()')
+    }
+  }
+
+  async function deliveryPaused() {
+    for (let attempt = 0; attempt < 250; attempt++) {
+      const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT count(*) FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event = 'PgSleep'`
+      if (count > BigInt(0)) return
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    throw new Error('No delivery paused.')
+  }
+
+  it('answers a completion retry that overlaps its delivery', async () => {
+    const request = await createRequest()
+    const sender = (await startBatch(request.token)).body.submission
+    const started = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain'
+    )
+    await putPart(
+      request.token,
+      sender.key,
+      started.body.uploadId,
+      1,
+      text('abc')
+    )
+    const resume = await pauseDeliveries()
+    try {
+      const first = complete(request.token, sender.key, started.body.uploadId)
+      // The retry arrives after the first released the file's reservation,
+      // before it commits.
+      await deliveryPaused()
+      const retry = await complete(
+        request.token,
+        sender.key,
+        started.body.uploadId
+      )
+      const delivered = await first
+      expect(delivered.status).toBe(200)
+      expect(retry).toEqual(delivered)
+    } finally {
+      await resume()
+    }
+    expect(await prisma.file.count()).toBe(1)
+  })
+
   it('serializes quota holds across all of an owner’s requests', async () => {
     const one = await createRequest({ title: 'One' })
     const two = await createRequest({ title: 'Two' })
@@ -1468,20 +1532,58 @@ suite('file requests against disposable PostgreSQL', () => {
     ).toBe(0)
   })
 
+  it('leaves a delivery still committing for the next email', async () => {
+    await enableEmail()
+    const request = await createRequest({ notify: true })
+    const sender = (await startBatch(request.token)).body.submission
+    await send(request.token, sender, 'one.txt', text('one'))
+    const started = await begin(
+      request.token,
+      sender,
+      'two.txt',
+      text('two!'),
+      'text/plain'
+    )
+    await putPart(
+      request.token,
+      sender.key,
+      started.body.uploadId,
+      1,
+      text('two!')
+    )
+    const resume = await pauseDeliveries()
+    try {
+      const second = complete(request.token, sender.key, started.body.uploadId)
+      // The email is written while the second file is still committing.
+      await deliveryPaused()
+      await notify.sendScheduledDigest(request.id)
+      expect((await second).status).toBe(200)
+    } finally {
+      await resume()
+    }
+    const [first] = await prisma.mailOutbox.findMany()
+    expect(await mailText(first.id)).toContain('received 1 file (3 B).')
+    // The second file waits for the next email instead of being skipped.
+    await prisma.fileRequest.update({
+      where: { id: request.id },
+      data: { notifiedAt: new Date(Date.now() - 11 * 60 * 1000) },
+    })
+    await notify.sendScheduledDigest(request.id)
+    const mails = await prisma.mailOutbox.findMany({
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(mails).toHaveLength(2)
+    expect(await mailText(mails[1].id)).toContain('received 1 file (4 B).')
+  })
+
   it('starts email from now and keeps it within daily caps', async () => {
     await enableEmail()
     const request = await createRequest()
     const early = (await startBatch(request.token)).body.submission
     await send(request.token, early, 'early.txt', text('early'))
     await finish(request.token, early)
-    const anHourAgo = new Date(Date.now() - 3_600_000)
-    await prisma.file.updateMany({ data: { uploadedAt: anHourAgo } })
-    await prisma.fileRequest.update({
-      where: { id: request.id },
-      data: { lastReceivedAt: anHourAgo },
-    })
-    // Turning email on later doesn't report older arrivals, and the first
-    // email isn't held back.
+    // Turning email on later reports only what arrives afterward, even a
+    // file from a moment ago, and the first email isn't held back.
     await detail.PATCH(
       call(`/api/file-requests/${request.id}`, 'PATCH', { notify: true }),
       params({ id: request.id })

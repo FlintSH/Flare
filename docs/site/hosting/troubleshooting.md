@@ -113,6 +113,8 @@ Open Settings → Email and inspect delivery status and sanitized errors. A mess
 
 Missing recovery mail can also be expected: recovery requires a verified address on a local password account. The public form does not disclose whether an address is eligible. An old account's saved address is not automatically proof of mailbox ownership.
 
+[File request emails](/guide/file-requests#get-notified) are sparse by design: at most one per request every 10 minutes and 24 per owner a day, none once the instance has used 80% of its daily email limit, and only to a verified address. Arrivals skipped by a cap are not emailed later; the owner's Requests page still shows **New files**. A summary that fails to queue stays scheduled, and the event worker retries it.
+
 If a managed field cannot be edited, its environment override is active. If decryption errors started after redeployment, restore the original encryption key. For policy lockout, see [email recovery](/admin/email#recover-from-an-email-lockout).
 
 ## Webhook deliveries fail
