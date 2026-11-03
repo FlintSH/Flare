@@ -43,6 +43,7 @@ The log combines application mutations, selected file-access activity, authentic
 | Accounts and authentication | Sign-in/session events, account changes, credential-management actions, and failed or denied operations where attribution is available. |
 | Roles and assignments       | Changed roles, permissions, membership, and the acting account.                                                                         |
 | Invites                     | Invite creation, uses, revocation, account-deletion removal, and the accounts that joined, without invite tokens.                       |
+| File requests               | Request creation, changes, and deletion, senders' batches, and each file delivered through a request, without links or sender text.     |
 | Instance configuration      | Settings, email, storage, and appearance changes with safe changed-field metadata.                                                      |
 | Integrations                | Credential and webhook configuration/lifecycle activity without secret values.                                                          |
 
@@ -65,6 +66,8 @@ For [archive activity](/guide/archives), filter **Category** to `archives`. `arc
 For [invite links](/admin/users#invite-links), filter **Category** to `invites`. `invite.create` records the note, creator, use limit, expiry, and granted role IDs. `invite.update` records a use or a revocation. `invite.redeem` records the account that joined, with its name and the role IDs it received; registration is anonymous, so its actor is not an existing account. `invite.delete` appears when deleting an account removes the invites it created. Invite tokens and their digests are never recorded.
 
 <Screenshot src="/screenshots/invites/audit-invites.webp" alt="Audit log filtered to the invites category showing invite update, redeem, and create events with their actors and invite notes" caption="Invite events trace who created each link and which account used it." />
+
+For [file requests](/guide/file-requests), filter **Category** to `file_requests`. `file_request.create`, `file_request.update`, and `file_request.delete` record the owner's changes with the title, owner, profile and folder IDs, file limit, deadline, closing time, and whether email is on. `file_request_submission.create` records a sender starting a batch, and `file_request_submission.deleteMany` removes batches that never delivered a file after a day. `file_request.received` links each delivered file to its request ID and owner, alongside the usual `file.create` for the file. Senders don't sign in, so their events show **Anonymous** as the actor. Request links, submission keys, and the names and notes senders type are never recorded. Delivery counters and the owner opening a request are bookkeeping, not change events.
 
 <Screenshot src="/screenshots/audit/archive-events.webp" alt="Audit log filtered to archives showing real extraction and member events for Team handoff.zip alongside denied and failed archive requests" caption="Archive activity keeps source and output context alongside request outcomes. This capture comes from real operations on the disposable demonstration instance." />
 

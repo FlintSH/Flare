@@ -105,6 +105,12 @@ Settings → Email shows pending, processing, accepted/sent, and failed deliveri
 
 SMTP delivery is at-least-once: a crash after acceptance can cause the same message to be sent again. Account tokens are still single-use. Disabling email through the settings save cancels pending/processing mail. SMTP failure does not automatically relax verification policy or make container liveness fail.
 
+## File request notifications
+
+People who [request files](/guide/file-requests) can turn on **Email me when files arrive** for each request. Flare then emails the request's owner when a sender finishes, at most once every 10 minutes per request, and summarizes later arrivals in the next email. These messages use the purpose `file_request` in the delivery history. They go only to an owner whose address is verified and say only the request's title, how many files arrived, and their total size: no senders' names, notes, files, or links to individual files, so people with a request link can't put text in mail from your instance.
+
+Because anyone with a link can trigger them, these emails have their own limits on top of the daily admission cap they count toward. Each owner receives at most 24 a day across all their requests, and none are sent once the instance has used 80% of its daily cap, which keeps room for verification, reset, and change emails. A notification over a limit is skipped rather than queued for later. Turning email off, or an owner losing their verified address, stops these notifications without changing the requests.
+
 ## Environment-managed configuration
 
 For deployment-managed SMTP, add settings to the app's environment. This example uses a mounted password file:

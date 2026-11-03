@@ -44,6 +44,12 @@ const features = [
   ],
   [
     'Share',
+    'File requests',
+    'Collect files from anyone with a link, even people without an account. Large files are fine, and everything arrives privately in your library.',
+    '/guide/file-requests',
+  ],
+  [
+    'Share',
     'Screenshot tools',
     'Download account-ready configurations for ShareX and iTake, or scripts for Flameshot, Spectacle, and Bash.',
     '/guide/screenshot-tools',

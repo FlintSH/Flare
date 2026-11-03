@@ -22,6 +22,8 @@ Private files deliberately return a not-found response to people without access.
 
 The signed-in library is account-specific. When an open tab detects a different account or replacement browser session, it discards the previous files, selection, and dialogs before loading the current account's library. [Saved URL filters still apply](./library#change-accounts-or-sign-in-again); they do not grant access to the previous account's files.
 
+Files people send you through a [file request](./file-requests) always arrive private, even if the request's upload profile is public. Share them like any other file once you've reviewed them. A request link only lets people send files; it never shows them your library or what others sent.
+
 Flare is operated by your instance administrator. Private files and file passwords are access controls in the application; they do not provide end-to-end encryption from the server operator.
 
 ## Activity visible to administrators

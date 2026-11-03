@@ -181,10 +181,12 @@ For `PATCH /api/settings`, send a partial `{ "settings": { ... } }` body. Every 
 
 Whether Everyone can create invites is stored on the Everyone role, not in settings. Change it with `PUT /api/settings/invites`, which needs `settings.security` and the caller's own `invites.create`; see [invite contracts](./invites#change-who-can-invite).
 
+Whether Everyone can request files is also stored on the Everyone role. Change it with `PUT /api/settings/file-requests`, which needs `settings.general` and the caller's own `fileRequests.manage`; see [file request contracts](./file-requests#change-who-can-request-files).
+
 Empty/unknown sections do not grant an escape from these checks. Custom CSS/head HTML can execute code in the instance browser context and therefore requires Administrator. `settings.appearance` accepts only `dark`, `light`, or `system` for `theme` and HSL or hex values for `customColors`, because both are written into every page; other values return `400` with a message such as `Classic colors must be HSL values such as 222.2 84% 4.9% or hex colors such as #1e293b.` See [saved appearance fields](/hosting/configuration#saved-appearance-fields). The legacy whole-settings `POST /api/settings` operation also requires Administrator. Email and the appearance studio retain their dedicated routes. Reading settings does not grant permission to write any section; writing a section does not authorize replacing the whole configuration.
 
 ## Tokens, events, and compatibility
 
 Named-token scope names and their supported paths are unchanged. They now intersect the owner's current permissions: for example `files:upload` also needs `files.upload`; creating a link with `urls:write` needs `links.create`, and deleting one needs `links.delete`. See [authentication](/api/authentication#scopes-and-account-roles).
 
-Role edits, account assignments, and invite changes do not emit a webhook event. The existing `file.ready` payload, version, signing format, retry policy, and event JSON Schema are unchanged. Webhook management itself requires `webhooks.manage`; it is not a named-token capability.
+Role edits, account assignments, invite changes, and file request changes do not emit a webhook event. The existing `file.ready` payload, version, signing format, retry policy, and event JSON Schema are unchanged. Webhook management itself requires `webhooks.manage`; it is not a named-token capability.

@@ -56,6 +56,7 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   webhooks                    Webhook[]
+  fileRequests                FileRequest[]
 
   @@index([inviteId])
 }
@@ -116,17 +117,17 @@ model AuthRateLimit {
 }
 
 model BrowserSession {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   sessionVersion Int
   authMethod     String
   ipAddress      String?
   userAgent      String?
-  createdAt      DateTime @default(now())
-  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
   expiresAt      DateTime
   revokedAt      DateTime?
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt, expiresAt])
   @@index([expiresAt])
@@ -234,31 +235,35 @@ model EmailRateLimit {
 }
 
 model File {
-  id               String         @id @default(cuid())
-  name             String
-  urlPath          String         @unique
-  mimeType         String
-  size             Float
-  visibility       FileVisibility @default(PUBLIC)
-  uploadedAt       DateTime       @default(now())
-  userId           String
-  path             String
-  storageTarget    Json?
-  isOcrProcessed   Boolean        @default(false)
-  ocrText          String?
-  password         String?
-  isPaste          Boolean        @default(false)
-  ocrConfidence    Float?
-  ocrTagsPendingAt DateTime?
-  views            Int            @default(0)
-  downloads        Int            @default(0)
-  uploadOptions    Json           @default("{}")
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags             VaultFileTag[]
-  folderId         String?        @map("vaultFolderId")
-  folder           VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  id                      String                 @id @default(cuid())
+  name                    String
+  urlPath                 String                 @unique
+  mimeType                String
+  size                    Float
+  visibility              FileVisibility         @default(PUBLIC)
+  uploadedAt              DateTime               @default(now())
+  userId                  String
+  path                    String
+  storageTarget           Json?
+  isOcrProcessed          Boolean                @default(false)
+  ocrText                 String?
+  password                String?
+  isPaste                 Boolean                @default(false)
+  ocrConfidence           Float?
+  ocrTagsPendingAt        DateTime?
+  views                   Int                    @default(0)
+  downloads               Int                    @default(0)
+  uploadOptions           Json                   @default("{}")
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags                    VaultFileTag[]
+  folderId                String?                @map("vaultFolderId")
+  folder                  VaultFolder?           @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  // Set when someone sent this file through one of the owner's file requests.
+  fileRequestSubmissionId String?
+  fileRequestSubmission   FileRequestSubmission? @relation(fields: [fileRequestSubmissionId], references: [id], onDelete: SetNull)
 
   @@index([ocrTagsPendingAt])
+  @@index([fileRequestSubmissionId])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
 }
@@ -277,6 +282,7 @@ model VaultFolder {
   parent         VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
   children       VaultFolder[] @relation("FolderTree")
   files          File[]
+  fileRequests   FileRequest[]
 
   // Root names are also unique through a partial index in the migration.
   @@unique([userId, parentId, normalizedName])
@@ -312,15 +318,91 @@ model VaultFileTag {
 }
 
 model UploadProfile {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  options   Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  options      Json
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  fileRequests FileRequest[]
 
   @@unique([userId, name])
+}
+
+// A link that lets people without an account send files to its owner. Files
+// arrive as ordinary private files; deleting a request keeps them.
+model FileRequest {
+  id             String                  @id @default(cuid())
+  userId         String
+  token          String                  @unique
+  title          String
+  message        String                  @default("")
+  // off, optional or required
+  senderName     String                  @default("optional")
+  // Null follows the owner's account default, including a default profile.
+  profileId      String?
+  folderId       String?
+  maxFiles       Int?
+  maxBytes       BigInt?
+  expiresAt      DateTime?
+  closedAt       DateTime?
+  notify         Boolean                 @default(false)
+  notifiedAt     DateTime?
+  // Deliveries, not current files: deleting a received file never refunds a limit.
+  fileCount      Int                     @default(0)
+  bytesReceived  BigInt                  @default(0)
+  lastReceivedAt DateTime?
+  seenAt         DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile        UploadProfile?          @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  folder         VaultFolder?            @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  submissions    FileRequestSubmission[]
+  uploads        FileRequestUpload[]
+
+  @@index([userId, createdAt])
+  @@index([profileId])
+  @@index([folderId])
+}
+
+// One sender's visit: their optional name and note, and the files they sent.
+// The sender's browser holds the key; only its digest is stored.
+model FileRequestSubmission {
+  id          String              @id @default(cuid())
+  requestId   String
+  keyHash     String              @unique
+  senderName  String              @default("")
+  note        String              @default("")
+  fileCount   Int                 @default(0)
+  bytes       BigInt              @default(0)
+  createdAt   DateTime            @default(now())
+  completedAt DateTime?
+  request     FileRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  files       File[]
+  uploads     FileRequestUpload[]
+
+  @@index([requestId, createdAt])
+  @@index([requestId, completedAt])
+}
+
+// A file a sender has started but not finished. Its declared size counts
+// against the request's limits and the owner's quota until it completes,
+// fails, or sits idle for an hour.
+model FileRequestUpload {
+  // The chunk upload session's ID.
+  id           String                @id
+  requestId    String
+  submissionId String
+  bytes        BigInt
+  touchedAt    DateTime              @default(now())
+  createdAt    DateTime              @default(now())
+  request      FileRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  submission   FileRequestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, touchedAt])
+  @@index([submissionId])
 }
 
 model ApiToken {

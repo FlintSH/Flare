@@ -58,6 +58,8 @@ export const PUBLIC_PATHS = [
   '/auth/reset-password',
   '/auth/verify-email',
   '/s/folders/',
+  // File request pages for people without an account.
+  '/r/',
 ]
 
 export const SETUP_PATHS = ['/setup', '/api/setup']

@@ -52,6 +52,7 @@ Preview the full site with `npm ci --prefix docs/site` then
 - ⚙️ **Configurable**
   - User storage quotas, registration controls, and instance settings
   - [Invite links](https://flintsh.github.io/Flare/guide/invites.html): let people join a private instance with single- or multi-use links, optional roles, and member limits
+  - [File requests](https://flintsh.github.io/Flare/guide/file-requests.html): send a link and collect files from anyone, even without an account, straight into your library
   - [Unified setup](https://flintsh.github.io/Flare/admin/setup.html): account, storage, access, optional personalization and email in one guided flow
   - [Appearance studio](https://flintsh.github.io/Flare/admin/appearance.html): branding, paired palettes, share layouts, previews and portable packs
   - [Upload profiles](https://flintsh.github.io/Flare/guide/upload-profiles.html): reusable defaults and recipes across browser and screenshot tools

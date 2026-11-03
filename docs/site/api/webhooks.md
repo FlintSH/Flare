@@ -28,6 +28,8 @@ Webhook management uses your signed-in dashboard session. A named API token cann
 
 Flare currently emits one event type: **`file.ready`**, payload **version 1**. It is recorded in the same database transaction that publishes a successful upload. Multipart and chunked uploads use the same contract. Failed uploads do not create a normal event.
 
+Files someone sends through one of your [file requests](./file-requests) are published to your account, so your webhooks receive the same `file.ready` event for each one, with `visibility` set to `PRIVATE`. The payload does not say a file came from a request, and no event is sent when a request is created, changed, or deleted.
+
 [Archive extraction and creation](./archives) use that same event contract for newly published files: extraction can produce one event per extracted file, while creation produces one for the new archive. Listing an archive and reading or downloading its entries do not create file-ready events. The version-1 JSON Schema, signature, retry, and deduplication rules remain unchanged; optional OCR still finishes separately.
 
 ```json

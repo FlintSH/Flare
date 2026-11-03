@@ -63,6 +63,8 @@ export interface StorageProvider {
     uploadId: string,
     parts: { ETag: string; PartNumber: number }[]
   ): Promise<void>
+  /** Discards an unfinished multipart upload and its parts. Missing uploads are not an error. */
+  abortMultipartUpload(path: string, uploadId: string): Promise<void>
   /**
    * Returns a URL a client can be redirected to in order to fetch the object
    * directly from the backend (e.g. an S3 presigned/public URL), or `null` when

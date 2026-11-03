@@ -188,6 +188,22 @@ These routes require a browser session; named API tokens and the legacy upload c
 | `/api/invites/{id}`     | DELETE    | Revoke: `invites.create` for your own invite, or `invites.manage` for anyone's. Returns the revoked invite as JSON.                                                                                      |
 | `/api/settings/invites` | GET, PUT  | GET: `settings.read`; PUT: `settings.security` and your own `invites.create`. Read member limits, or add/remove `invites.create` on Everyone.                                                            |
 
+## File request routes
+
+Owner routes require a browser session; named API tokens and the legacy upload credential cannot authorize them. Mutations reject cross-origin requests, and request bodies must be JSON. Public routes need no account: the request link's token authorizes them, and every step after the first also needs the batch's `X-Flare-Submission-Key` header. [File request contracts](./file-requests) cover objects, limits, the sending protocol, and error codes.
+
+| Path                                                   | Methods            | Required permission and purpose                                                                                                                                                                    |
+| ------------------------------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/file-requests`                                   | GET, POST          | GET: `fileRequests.manage`; list your requests and the creation policy. POST: `fileRequests.manage` and `files.upload`; create a request.                                                          |
+| `/api/file-requests/{id}`                              | GET, PATCH, DELETE | `fileRequests.manage` on your own request. GET adds what arrived and marks it seen; PATCH also needs `files.upload` and edits, closes, reopens, or replaces the link; DELETE keeps received files. |
+| `/api/settings/file-requests`                          | GET, PUT           | GET: `settings.read`; PUT: `settings.general` and your own `fileRequests.manage`. Add or remove `fileRequests.manage` on Everyone.                                                                 |
+| `/api/r/{token}/submissions`                           | POST               | Public. Start a sender's batch with an optional name and note; returns the submission key.                                                                                                         |
+| `/api/r/{token}/submissions/{id}/complete`             | POST               | Public with the key. Finish a batch so the owner can be notified.                                                                                                                                  |
+| `/api/r/{token}/uploads`                               | POST               | Public with the key. Start one file and receive its part size.                                                                                                                                     |
+| `/api/r/{token}/uploads/{uploadId}/parts/{partNumber}` | PUT                | Public with the key. Send one part as the raw body. Not rate-limited; bound to its upload.                                                                                                         |
+| `/api/r/{token}/uploads/{uploadId}/complete`           | POST               | Public with the key. Assemble the recorded parts and deliver the file privately to the request's owner.                                                                                            |
+| `/api/r/{token}/uploads/{uploadId}`                    | DELETE             | Public with the key. Cancel a started file: discard its parts and give its room in the request back.                                                                                               |
+
 ## Delegated administration session routes
 
 These operations require a browser session and the permission listed below. Administrator grants every permission. Account writes and role assignments also check hierarchy; role/account mutations preserve an accessible administrator. Named tokens do not inherit these capabilities from their owner. [Role and account request/response contracts](./roles) document replacement of the old scalar role field.

@@ -193,6 +193,12 @@ export function auditRoutePath(url: string): string {
     'preferences',
     'f',
     's',
+    'file-requests',
+    'r',
+    'submissions',
+    'uploads',
+    'parts',
+    'complete',
   ])
   return (
     '/' +

@@ -105,6 +105,10 @@ export type EventTypeMap = {
     size: number
     action: ExpiryAction
   }
+  /** Sends the owner a digest of files that arrived through a file request. */
+  'file-request.notify': {
+    requestId: string
+  }
 }
 
 export type EventType = keyof EventTypeMap

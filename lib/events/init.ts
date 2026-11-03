@@ -1,3 +1,4 @@
+import { registerFileRequestHandlers } from '@/lib/file-requests/notify'
 import { loggers } from '@/lib/logger'
 
 import { registerFileExpiryHandlers } from './handlers/file-expiry'
@@ -17,6 +18,7 @@ export async function initializeEventSystem() {
     logger.info('Initializing event system...')
 
     await registerFileExpiryHandlers()
+    await registerFileRequestHandlers()
 
     await events.startWorker({
       batchSize: 10,

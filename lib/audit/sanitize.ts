@@ -75,6 +75,13 @@ const keys = new Set([
   'uses',
   'accountId',
   'accountName',
+  // File request metadata; links, key digests, and sender text are never recorded.
+  'title',
+  'requestId',
+  'maxFiles',
+  'closedAt',
+  'notify',
+  'fileCount',
   // Audit retention summaries.
   'retentionDays',
   'cutoff',

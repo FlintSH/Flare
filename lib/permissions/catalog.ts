@@ -116,6 +116,19 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    id: 'requests',
+    label: 'File requests',
+    description: 'Let people without an account send you files.',
+    permissions: [
+      {
+        key: 'fileRequests.manage',
+        label: 'Request files',
+        description:
+          'Create file request links that anyone with the link can use to send you files. Received files count toward your storage; also requires Upload files.',
+      },
+    ],
+  },
+  {
     id: 'invites',
     label: 'Invitations',
     description: 'Bring new people to this instance with invite links.',

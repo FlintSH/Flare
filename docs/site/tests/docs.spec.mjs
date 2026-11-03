@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 32')
+  await expect(page.getByRole('status')).toContainText('3 of 33')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -220,6 +220,8 @@ for (const width of [390, 1440]) {
       './api/archives.html',
       './guide/invites.html',
       './api/invites.html',
+      './guide/file-requests.html',
+      './api/file-requests.html',
       './admin/users.html',
     ]) {
       await page.goto(url)
@@ -287,6 +289,8 @@ for (const theme of ['dark', 'light']) {
       './guide/sharing.html',
       './guide/invites.html',
       './api/invites.html',
+      './guide/file-requests.html',
+      './api/file-requests.html',
       './admin/users.html',
     ]) {
       await page.goto(path)
@@ -669,6 +673,90 @@ test('invite guides, walkthrough, and recordings are discoverable', async ({
             () => {
               clearTimeout(timeout)
               reject(new Error('Invite recording failed to load'))
+            },
+            { once: true }
+          )
+          element.load()
+        })
+    )
+    expect(duration).toBeGreaterThan(1)
+  }
+})
+
+test('file request guides, walkthrough, and recordings are discoverable', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Find a capability').fill('collect files')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/file-requests\.html$/)
+  await expect(page.locator('h1')).toHaveText('File requests')
+  for (const name of [
+    'requests-list',
+    'create-request',
+    'request-link',
+    'send-ready',
+    'send-done',
+    'send-page-phone',
+    'send-closed',
+    'request-detail',
+    'requests-list-phone',
+  ]) {
+    const screenshot = page.locator(
+      `.screenshot-button img[src$="${name}.webp"]`
+    )
+    await screenshot.scrollIntoViewIfNeeded()
+    await expect(screenshot).toBeVisible()
+    await expect
+      .poll(() => screenshot.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  await page.goto('./admin/index.html#file-requests')
+  const settings = page.locator(
+    '.screenshot-button img[src$="settings-file-requests.webp"]'
+  )
+  await settings.scrollIntoViewIfNeeded()
+  await expect
+    .poll(() => settings.evaluate((image) => image.naturalWidth))
+    .toBeGreaterThan(0)
+  await page.goto('./demos.html')
+  await page.getByRole('button', { name: '13. Request', exact: true }).click()
+  await expect(page.locator('.tour-description')).toContainText(
+    'Collect files from anyone'
+  )
+  await expect(page.locator('.tour-description a')).toHaveAttribute(
+    'href',
+    /guide\/file-requests\.html$/
+  )
+  for (const name of [
+    'create-request.webm',
+    'send-files.webm',
+    'review-files.webm',
+  ]) {
+    const video = page.locator(`video[src$="${name}"]`)
+    await expect(video).toHaveAttribute('preload', 'none')
+    expect(await video.getAttribute('autoplay')).toBeNull()
+    const duration = await video.evaluate(
+      (element) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error('Recording metadata timed out')),
+            10000
+          )
+          element.addEventListener(
+            'loadedmetadata',
+            () => {
+              clearTimeout(timeout)
+              resolve(element.duration)
+            },
+            { once: true }
+          )
+          element.addEventListener(
+            'error',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('File request recording failed to load'))
             },
             { once: true }
           )

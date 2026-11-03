@@ -9,6 +9,7 @@ import {
   Activity,
   FileText,
   FolderOpen,
+  Inbox,
   LinkIcon,
   Menu,
   Settings,
@@ -58,6 +59,12 @@ const baseRoutes = [
     permission: 'links.read',
   },
   {
+    href: '/dashboard/requests',
+    label: 'Requests',
+    icon: Inbox,
+    permission: 'fileRequests.manage',
+  },
+  {
     href: '/dashboard/profile',
     label: 'Profile',
     icon: UserRound,
@@ -101,7 +108,8 @@ export function DashboardNav() {
     (route) =>
       !route.permission ||
       (hasPermission(session?.user, route.permission as Permission) &&
-        (route.permission !== 'pastes.create' ||
+        // Pastes and file requests both create uploads.
+        (!['pastes.create', 'fileRequests.manage'].includes(route.permission) ||
           hasPermission(session?.user, 'files.upload')))
   )
 

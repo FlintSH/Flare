@@ -59,3 +59,7 @@ Yes. [Create a role](./admin/roles) with the relevant account/content permission
 ## How do people join if registration is closed?
 
 Send them an [invite link](./guide/invites). Administrators can create invites from **Users → Invites** or **Profile → Invites**, and can let other people invite through **Settings → Access → Invites** or a role. Each link can be limited by uses and expiry, can grant roles, and can be revoked at any time. [Who can invite and member limits](./admin/users#invite-links).
+
+## Can people without an account send me files?
+
+Yes. Create a [file request](./guide/file-requests) and send its link. Senders choose files on a simple page, large files included, and everything arrives privately in your library with your account defaults or an upload profile you pick. Only administrators can create requests at first; an administrator can let everyone request files in [Settings → General](./admin/#file-requests) or allow selected people through a role.

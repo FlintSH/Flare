@@ -85,6 +85,37 @@ const models: Record<
     target: 'token',
     fields: ['id', 'name', 'userId', 'scopes', 'expiresAt', 'revokedAt'],
   },
+  // Link tokens and submission key digests never enter audit details, and
+  // neither do the names and notes senders type.
+  FileRequest: {
+    category: 'file_requests',
+    target: 'file_request',
+    fields: [
+      'id',
+      'title',
+      'userId',
+      'profileId',
+      'folderId',
+      'maxFiles',
+      'expiresAt',
+      'closedAt',
+      'notify',
+      'fileCount',
+    ],
+    counters: [
+      'fileCount',
+      'bytesReceived',
+      'lastReceivedAt',
+      'seenAt',
+      'notifiedAt',
+    ],
+  },
+  FileRequestSubmission: {
+    category: 'file_requests',
+    target: 'file_request_submission',
+    fields: ['id', 'requestId', 'fileCount'],
+    counters: ['fileCount', 'bytes', 'completedAt'],
+  },
   UploadProfile: {
     category: 'profiles',
     target: 'upload_profile',

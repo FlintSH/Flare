@@ -47,6 +47,7 @@ Continue with [uploading files](./uploading) and [sharing and privacy](./sharing
 | **Upload**                 | Queue files and choose the destination, upload profile, visibility, password, and expiration. |
 | **Paste**                  | Save text or code as a shareable file.                                                        |
 | **Links**                  | Create short redirects under your instance's domain and see their click counts.               |
+| **Requests**               | Send a link that lets anyone send you files, then review what arrived.                        |
 | **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.             |
 | **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.            |
 | **Profile → Integrations** | Create scoped API tokens and outgoing webhooks.                                               |
@@ -68,6 +69,10 @@ Create a private upload profile and make it your default. Use [folders](./folder
 
 ::: details I send temporary reviews or recordings
 Use a profile with public visibility, a relative expiration, and **Make private** as its expiry action. The public link stops being accessible after the scheduled action runs, while the file remains in your library. Choose **Delete file** instead if you also want Flare to remove the stored copy.
+:::
+
+::: details I collect files from other people
+Create a [file request](./file-requests) and send its link. Senders don't need an account, and their files arrive privately in your library, in the folder and with the upload profile you chose. Turn on email to hear when something arrives.
 :::
 
 ::: details I want to automate uploads

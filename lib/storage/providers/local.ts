@@ -81,6 +81,13 @@ export class LocalStorageProvider implements StorageProvider {
     return `local://${uploadId}/${partNumber}`
   }
 
+  async abortMultipartUpload(_path: string, uploadId: string): Promise<void> {
+    await rm(this.getMultipartPartsDir(uploadId), {
+      recursive: true,
+      force: true,
+    })
+  }
+
   async completeMultipartUpload(
     path: string,
     uploadId: string,

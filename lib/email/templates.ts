@@ -132,3 +132,48 @@ export function renderAccountEmail(
   const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"></head><body style="margin:0;background:#f5f5f5;font-family:Arial,sans-serif;color:#171717"><main style="max-width:560px;margin:32px auto;padding:32px;background:#fff;border-radius:12px">${logo}<h1 style="font-size:24px">${escapeHtml(instance)}</h1><p>${escapeHtml(greeting)}</p>${branding.introText ? `<p>${escapeHtml(branding.introText)}</p>` : ''}<p style="line-height:1.6">${escapeHtml(message.body)}</p>${action}${url ? '<p style="font-size:12px;color:#666">Account links are single-use. Do not share them.</p>' : ''}${support ? `<p>${escapeHtml(support)}</p>` : ''}${branding.footer ? `<hr style="border:0;border-top:1px solid #e5e5e5"><p style="font-size:12px;color:#666">${escapeHtml(branding.footer)}</p>` : ''}</main></body></html>`
   return { subject, text, html }
 }
+
+export interface FileRequestEmailInput {
+  username?: string
+  title: string
+  fileCount: number
+  totalSize: string
+  url: string
+}
+
+/**
+ * Arrivals at a file request, batched so a busy request sends few emails.
+ * Only the owner's own title appears: senders can't put text in this email.
+ */
+export function renderFileRequestEmail(
+  config: EmailConfig,
+  input: FileRequestEmailInput
+): RenderedEmail {
+  const { branding } = config
+  const instance = branding.instanceName || config.fromName || 'Flare'
+  const url = safeUrl(input.url)
+  const files = `${input.fileCount} ${input.fileCount === 1 ? 'file' : 'files'}`
+  const title = input.title.replace(/[\r\n]/g, ' ')
+  const subject = [branding.subjectPrefix, `New files for “${title}”`]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/[\r\n]/g, ' ')
+  const greeting = input.username ? `Hello ${input.username},` : 'Hello,'
+  const body = `Your file request “${title}” received ${files} (${input.totalSize}). They are private in your ${instance} library until you share them.`
+  const footnote =
+    'You receive these emails because notifications are on for this request. Turn them off in Requests.'
+  const support = branding.supportAddress
+    ? `Need help? Contact ${branding.supportAddress}.`
+    : ''
+  const text = [greeting, body, url, footnote, support, branding.footer]
+    .filter(Boolean)
+    .join('\n\n')
+  const accent = /^#[0-9a-fA-F]{6}$/.test(branding.accentColor)
+    ? branding.accentColor
+    : '#f97316'
+  const logo = branding.logoUrl
+    ? `<img src="${escapeHtml(safeUrl(branding.logoUrl))}" alt="${escapeHtml(instance)}" style="max-height:56px;max-width:240px">`
+    : ''
+  const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"></head><body style="margin:0;background:#f5f5f5;font-family:Arial,sans-serif;color:#171717"><main style="max-width:560px;margin:32px auto;padding:32px;background:#fff;border-radius:12px">${logo}<h1 style="font-size:24px">${escapeHtml(instance)}</h1><p>${escapeHtml(greeting)}</p><p style="line-height:1.6">${escapeHtml(body)}</p><p style="margin:28px 0"><a href="${escapeHtml(url)}" style="background:${accent};color:#111827;padding:12px 20px;border-radius:8px;display:inline-block;text-decoration:none;font-weight:bold">Review files</a></p><p style="font-size:12px;color:#666">${escapeHtml(footnote)}</p>${support ? `<p>${escapeHtml(support)}</p>` : ''}${branding.footer ? `<hr style="border:0;border-top:1px solid #e5e5e5"><p style="font-size:12px;color:#666">${escapeHtml(branding.footer)}</p>` : ''}</main></body></html>`
+  return { subject, text, html }
+}

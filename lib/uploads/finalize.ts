@@ -13,7 +13,11 @@ import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
+import {
+  type UserAccess,
+  getUserAccess,
+  lockRoleChanges,
+} from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
@@ -42,6 +46,22 @@ export async function prepareUploadDestination(
   }
 }
 
+/**
+ * Lets a caller that publishes on someone else's behalf, such as a file
+ * request, add its own checks and bookkeeping to the publishing transaction.
+ */
+export interface UploadDelivery {
+  /** Records the file as sent through this file request submission. */
+  fileRequestSubmissionId: string
+  /** Runs after the policy and account locks, before the file exists. */
+  check(tx: Prisma.TransactionClient, access: UserAccess): Promise<void>
+  /** Runs in the same transaction once the file exists. */
+  record(
+    tx: Prisma.TransactionClient,
+    file: { id: string; size: number }
+  ): Promise<void>
+}
+
 type UploadInput = {
   user: AuthenticatedUser
   storage: StorageProvider
@@ -56,6 +76,7 @@ type UploadInput = {
   signal?: AbortSignal
   /** Chunk assembly already holds an upload lock on this transaction. */
   transaction?: Prisma.TransactionClient
+  delivery?: UploadDelivery
 }
 
 const validatedUpload = Symbol('validated upload')
@@ -142,6 +163,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       where: { userId: user.id, path: filePath },
     })
     if (existing) return { file: existing, created: false }
+    await input.delivery?.check(tx, access)
     // Folder mutations take the same user lock, keeping this ownership check
     // and file publication atomic with folder removal.
     const folderId = await validateOwnedFolderId(
@@ -226,9 +248,11 @@ export async function publishPreparedUpload(input: PreparedUpload) {
         password: passwordHash,
         userId: user.id,
         folderId,
+        fileRequestSubmissionId: input.delivery?.fileRequestSubmissionId,
         uploadOptions: persistedOptions as Prisma.InputJsonValue,
       },
     })
+    await input.delivery?.record(tx, file)
     await applyProfileTags(tx, file, options.tagIds ?? [])
     await applyAutomaticTags(file.id, 'filename', tx)
     await tx.user.update({

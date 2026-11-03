@@ -167,6 +167,42 @@ Afterward the single-use link is spent: opening it again shows **Invite unavaila
 
 The member has no role picker because they cannot assign roles. [Read about member limits](./guide/invites#limits-for-members).
 
+### Request files from anyone
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Request files from anyone: silent Flare recording of creating a file request with its link blurred" :poster="withBase('/screenshots/file-requests/create-request.webp')" :src="withBase('/demos/create-request.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. As the demonstration administrator **Alex Morgan**, open **Requests**. It shows **No file requests yet**.
+2. Choose **New request**. Enter **Brand assets for the Acme launch** and the message **Logos, fonts, and the latest brand guide. Zip folders are fine.**
+3. Under **Upload profile**, choose **Client deliveries**. The summary says received files arrive private and are kept until you delete them, with random filenames and one tag.
+4. Choose **Acme rebrand** under **Save to** and **30 days** under **Closes after**.
+5. Choose **Create request link**. **Your request link is ready** shows the link, blurred in this recording. Choose **Copy link**; the button changes to **Copied**.
+6. Choose **Done**. The request appears as **Open**, saving to Acme rebrand with the Client deliveries profile.
+
+This recording creates a real request on an isolated instance. [Read how to create a request](./guide/file-requests#create-a-request).
+
+### Send files without an account
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Send files without an account: silent Flare recording of a signed-out visitor sending three files" :poster="withBase('/screenshots/file-requests/send-ready.webp')" :src="withBase('/demos/send-files.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. In a separate signed-out browser, open the request link from the previous recording. The page shows **Brand assets for the Acme launch**, **From Alex Morgan**, the message, and **Up to 2 GB per file**.
+2. Enter the name **Sam Lee**.
+3. Choose three files: **acme-logo.png**, **brand-guide.pdf**, and the 12 MB **acme-fonts.zip**.
+4. Add the note **Everything from the agency. The fonts are licensed for web use.**
+5. Choose **Send 3 files**. Each file shows its progress; the archive goes up in three parts.
+6. **Files sent** confirms that **3 files (12 MB) went to Alex Morgan.**
+
+The visitor never signs in and never sees Alex's library. [Read what senders see](./guide/file-requests#what-senders-see).
+
+### Review files that arrived
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Review files that arrived: silent Flare recording of a file request's received files" :poster="withBase('/screenshots/file-requests/request-detail.webp')" :src="withBase('/demos/review-files.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Back as **Alex Morgan**, open **Requests**. The request shows **New files** and **3 files** received.
+2. Open **Brand assets for the Acme launch**. **Received** lists **Sam Lee** with the note and the three files, each linking to its page.
+3. Return to **Requests**. **New files** is gone because the arrivals were opened.
+
+The browser check also confirms that all three files are private in Alex's library and carry the profile's **Clients** tag. [Read how to review what arrived](./guide/file-requests#review-what-arrived).
+
 ### Enable, use, and recover two-factor authentication
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Enable, use, and recover two-factor authentication: silent Flare recording" :src="withBase('/demos/two-factor-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>

@@ -101,6 +101,16 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### File requests migration
+
+Migration `20261103010000_file_requests` adds the `FileRequest`, `FileRequestSubmission`, and `FileRequestUpload` tables (the last holds files still on their way) and an optional, indexed `File.fileRequestSubmissionId` reference. Normal image startup applies it; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing files, roles, settings, tokens, and webhooks are unchanged, and no data backfill or new environment variable is required. The new column is empty on existing files, so adding it does not rewrite them.
+
+After the upgrade, **only administrators can request files**, because Administrator includes the new `fileRequests.manage` permission while Everyone does not receive it. Review [Settings → General → File requests](/admin/#file-requests) and [roles](/admin/roles) before announcing the feature. Test by creating a request with a small file limit, sending a file to it from a private window, and checking that the file arrived private in your library.
+
+Senders' uploads use the same 5 MiB parts (larger only for files over about 50 GB) and temporary upload sessions as the dashboard's large uploads, so an instance whose proxy already accepts dashboard uploads needs no change. From this release, a chunked upload idle for an hour, from a sender or the dashboard, also has its unfinished parts discarded: the local `tmp/local-multipart` directory, or the S3 multipart upload. On S3, a lifecycle rule that aborts incomplete multipart uploads after a day remains a good backstop for parts left by a crash. Request links carry their token in the URL path; treat access logs that record `/r/…` and `/api/r/…` paths as sensitive while requests are open.
+
+Backups contain requests, their links, sender names and notes, and which files arrived through them. Restoring an older backup can reopen links that were closed, replaced, or deleted after that backup; replace or close them after a restore. To roll back, use the recorded old image with its matching pre-upgrade database and file backup, as described in [Rollback](#rollback). Files received after that backup are not in it.
+
 ### Next.js 16 and React 19
 
 Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup and upgrade steps above. There are no new settings, environment variables, or database migrations, and existing sessions stay signed in.

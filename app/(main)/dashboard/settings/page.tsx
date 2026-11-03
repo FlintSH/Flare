@@ -6,6 +6,7 @@ import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { redactEmailConfig } from '@/lib/email/config'
+import { everyoneCanRequestFiles } from '@/lib/file-requests/service'
 import { everyoneCanInvite } from '@/lib/invites/service'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { redactSettings } from '@/lib/permissions/settings'
@@ -25,12 +26,14 @@ export default async function SettingsPage({
   if (!session?.user?.id) redirect('/auth/login')
   if (!hasPermission(session.user, 'settings.read'))
     redirect('/dashboard/profile')
-  const [config, recovery, params, inviteAccess] = await Promise.all([
-    getConfig(),
-    isAppearanceRecovery(),
-    searchParams,
-    everyoneCanInvite(),
-  ])
+  const [config, recovery, params, inviteAccess, requestAccess] =
+    await Promise.all([
+      getConfig(),
+      isAppearanceRecovery(),
+      searchParams,
+      everyoneCanInvite(),
+      everyoneCanRequestFiles(),
+    ])
   return (
     <InstanceSettings
       initialConfig={redactSettings({
@@ -49,6 +52,7 @@ export default async function SettingsPage({
       buildInfo={getBuildInfo()}
       recovery={recovery}
       initialEveryoneCanInvite={inviteAccess}
+      initialEveryoneCanRequestFiles={requestAccess}
     />
   )
 }

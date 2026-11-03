@@ -47,6 +47,21 @@ describe('permission-aware dashboard navigation', () => {
     )
   })
 
+  it('requires upload and request permissions for file requests', () => {
+    mocks.user.permissions = ['fileRequests.manage']
+    expect(
+      renderToStaticMarkup(React.createElement(DashboardNav))
+    ).not.toContain('href="/dashboard/requests"')
+    mocks.user.permissions.push('files.upload')
+    expect(renderToStaticMarkup(React.createElement(DashboardNav))).toContain(
+      'href="/dashboard/requests"'
+    )
+    mocks.user.permissions = ['files.upload', 'files.read']
+    expect(
+      renderToStaticMarkup(React.createElement(DashboardNav))
+    ).not.toContain('href="/dashboard/requests"')
+  })
+
   it('shows audit access independently from account and settings administration', () => {
     mocks.user.permissions = ['audit.read']
     const html = renderToStaticMarkup(React.createElement(DashboardNav))
@@ -62,6 +77,7 @@ describe('permission-aware dashboard navigation', () => {
       'upload',
       'paste',
       'urls',
+      'requests',
       'users',
       'roles',
       'settings',

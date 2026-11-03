@@ -1,7 +1,11 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
+
+import { Inbox } from 'lucide-react'
 
 import { UploadForm } from '@/components/file/upload-form'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import { Button } from '@/components/ui/button'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
@@ -43,6 +47,17 @@ export default async function UploadPage() {
         eyebrow="Your files"
         title="Upload files"
         description="Upload and share files, with optional password protection."
+        actions={
+          // Getting files from someone else starts from the same place.
+          hasPermission(session.user, 'fileRequests.manage') && (
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/requests">
+                <Inbox aria-hidden="true" />
+                Request files
+              </Link>
+            </Button>
+          )
+        }
       />
       <div className={pagePanelClassName}>
         <UploadForm

@@ -653,6 +653,22 @@ export class S3StorageProvider implements StorageProvider {
     )
   }
 
+  async abortMultipartUpload(path: string, uploadId: string): Promise<void> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+    try {
+      await this.client.send(
+        new AbortMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+        })
+      )
+    } catch (error) {
+      // Completed or already aborted uploads have nothing left to discard.
+      if ((error as { name?: string }).name !== 'NoSuchUpload') throw error
+    }
+  }
+
   async uploadPart(
     path: string,
     uploadId: string,

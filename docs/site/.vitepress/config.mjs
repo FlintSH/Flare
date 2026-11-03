@@ -87,6 +87,7 @@ export default defineConfig({
         ['Tags & OCR', '/guide/tags'],
         ['Pastes & code', '/guide/pastes'],
         ['Short links', '/guide/short-links'],
+        ['File requests', '/guide/file-requests'],
         ['Upload profiles', '/guide/upload-profiles'],
         ['Screenshot tools', '/guide/screenshot-tools'],
         ['Your account', '/guide/account'],
@@ -126,6 +127,7 @@ export default defineConfig({
         ['Sign-in security contracts', '/api/security'],
         ['Sessions & audit contracts', '/api/activity'],
         ['Invite contracts', '/api/invites'],
+        ['File request contracts', '/api/file-requests'],
         ['Endpoint inventory', '/api/endpoint-inventory'],
       ]),
       group('Project', [

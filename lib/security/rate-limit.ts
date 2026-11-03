@@ -22,6 +22,20 @@ export const uploadLimiter = new RateLimiterMemory({
   keyPrefix: 'upload',
 })
 
+// Senders using a file request link: starting files, batches, and completions.
+export const fileRequestLimiter = new RateLimiterMemory({
+  points: 120,
+  duration: 60,
+  keyPrefix: 'file-request',
+})
+
+// Parts of those files, generous enough for about 150 MB/s of 5 MiB parts.
+export const fileRequestPartLimiter = new RateLimiterMemory({
+  points: 1800,
+  duration: 60,
+  keyPrefix: 'file-request-part',
+})
+
 export const generalLimiter = new RateLimiterMemory({
   points: 60,
   duration: 60,

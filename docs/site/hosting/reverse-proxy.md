@@ -77,6 +77,8 @@ An upload crosses several independent limits: browser/tool behavior, CDN or tunn
 
 Flare defaults to a **100 MB** maximum file size, calculated in binary units. The nginx example leaves extra room above that for a multipart request. If you increase the application limit, increase the proxy ceiling to fit the largest request you intend to accept. Chunking can reduce the size of individual requests, but direct upload clients still send their whole file in one request.
 
+[File request](/guide/file-requests) senders always upload in parts through `/api/r/`, whatever the file's size: 5 MiB, growing to at most 64 MiB only for files over about 50 GB. A proxy that allows the dashboard's chunked uploads allows these too, unless your maximum file size admits files that large. Their public pages live under `/r/`; route both paths to Flare like the rest of the application.
+
 Builds before this fix cut every API request body off at 10 MB inside Flare itself, whatever the proxy allowed. Next.js copies a request's body when its proxy (formerly called middleware) runs for it and keeps only the first 10 MB of the copy the route reads. A direct upload larger than that failed with `500` and "Upload could not be completed." A chunk part between 10 MB and 64 MiB was stored short, so completing that upload failed with `400` and "Uploaded size does not match the declared file size." and Flare discarded it; no shortened file was published. Browser uploads were unaffected because the dashboard sends 5 MiB parts. Flare's proxy no longer runs for `/api` routes, so request bodies reach them whole, up to your configured limits. Retry uploads that failed this way after upgrading.
 
 ## Keep access decisions in Flare
@@ -88,6 +90,8 @@ Flare sends `Cache-Control: private, no-store` with content, downloads, signed-U
 Earlier releases sent `public, max-age=31536000` for every video at `/api/files/{path}`, including private and password-protected ones. If a CDN or shared cache sits in front of Flare, purge its cached `/api/files/` paths once after upgrading. Purging the whole prefix is simplest; public content is fetched again on the next request.
 
 For S3, Flare can issue temporary signed object URLs after authorizing access. Those URLs are bearer links until they expire; see [S3 access behavior](/hosting/storage#private-files-and-signed-links).
+
+File request links carry their token in the path (`/r/{token}` and `/api/r/{token}/…`). Access logs that record full paths therefore hold working links until a request closes or its link is replaced; treat those logs as sensitive.
 
 Flare uses forwarded client addresses for request throttling and session history. Keep the app port private to the proxy and replace untrusted headers at the edge, as described in [client addresses and rate limits](#client-addresses-and-rate-limits).
 

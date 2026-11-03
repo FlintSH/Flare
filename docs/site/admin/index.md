@@ -10,7 +10,7 @@ Flare gives administrators control over who can join, how files are stored, what
 
 | Section                   | What you can do                                                                                                                   | Detailed guide                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Settings → General**    | Enable background image OCR, show credits, inspect installed version and update information                                       | [General](#general)                      |
+| **Settings → General**    | Enable background image OCR, let everyone request files, show credits, inspect installed version and update information           | [General](#general)                      |
 | **Settings → Access**     | Open/close registration, set the closed-registration message, choose who can invite and member invite limits, configure OIDC      | [Users](/admin/users), [SSO](/admin/sso) |
 | **Settings → Storage**    | Select local/S3 storage, set maximum file size, enable storage quotas                                                             | [Storage](/hosting/storage)              |
 | **Settings → Appearance** | Brand the instance, design light/dark themes and share pages, import/export packs, edit legacy colors/favicon and custom CSS/HTML | [Appearance](/admin/appearance)          |
@@ -42,6 +42,14 @@ Reading instance settings needs `settings.read`; changing General needs `setting
 OCR extracts text from uploaded images so it can be searched and used by OCR-based tag rules. It is enabled by default. Disable **Background OCR processing** if you do not need it or want to reduce processing work on a small server.
 
 OCR processing outcomes can be investigated in [Audit log](./audit); the audit details do not include extracted text. Changing this switch does not erase existing OCR text. Upload options can opt individual uploads out of OCR, and extracting text is asynchronous. A successful upload does not mean text recognition is already finished or that the image contains recognizable text.
+
+### File requests
+
+[File requests](/guide/file-requests) give people a link they can use to send files into an account without signing up. Administrators can always create them. **Let everyone request files** grants **Request files** (`fileRequests.manage`) to the Everyone role, so every account that can upload gets **Requests** in its navigation. Use [Roles](./roles) instead to allow only some people. Changing the switch needs `settings.general` and your own Request files permission. New and upgraded instances start with it off.
+
+<Screenshot src="/screenshots/file-requests/settings-file-requests.webp" alt="Settings General File requests card with the Let everyone request files switch turned on and a Manage roles button" caption="One switch lets every account request files." />
+
+Received files count toward each owner's storage quota and arrive private, so a request link cannot publish anything on your instance by itself. Anyone with a link can still use your storage up to the owner's quota and the request's limits. To stop a member's links, remove Request files from their roles or turn the switch off: their requests pause immediately and resume if access returns. Deleting an account deletes its requests. Every delivery is recorded in the [audit log](./audit) under the `file_requests` category.
 
 ### Credits
 

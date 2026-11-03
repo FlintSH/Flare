@@ -88,6 +88,13 @@ const steps = [
     text: 'Keep registration closed and send invite links instead. Choose how many people each link admits and when it expires, see who joined, and revoke a link anytime.',
     link: '/guide/invites',
   },
+  {
+    title: 'Collect files from anyone',
+    label: 'Request',
+    src: '/screenshots/file-requests/request-detail.webp',
+    text: 'Send a request link and people send you files without an account. Their files arrive privately in your library, grouped by sender, in the folder and with the upload profile you chose.',
+    link: '/guide/file-requests',
+  },
 ]
 const step = computed(() => steps[current.value])
 </script>

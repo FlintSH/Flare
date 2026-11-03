@@ -22,6 +22,7 @@ Reading for a particular installation? [Browse dated documentation releases and 
 | Set up a personal file host                                    | [Docker Compose](./hosting/docker) → [first-run setup](./admin/setup)                                                                          |
 | Run a shared instance                                          | [Roles and permissions](./admin/roles) → [users](./admin/users) → [email](./admin/email) → [backups](./hosting/maintenance)                    |
 | Let people join a private instance                             | [Invite links](./guide/invites) → [who can invite](./admin/users#invite-links)                                                                 |
+| Collect files from people without an account                   | [File requests](./guide/file-requests) → [who can request files](./admin/#file-requests)                                                       |
 | Send screenshots straight to your domain                       | [Screenshot tools](./guide/screenshot-tools) → [upload profiles](./guide/upload-profiles)                                                      |
 | Share a collection                                             | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                                                            |
 | Find an older upload in a large library                        | [Continuous scrolling and the date rail](./guide/library#scroll-through-your-library) → [recorded walkthrough](./demos#browse-a-large-library) |

@@ -511,6 +511,52 @@ pnpm exec vitest run __tests__/invites
 
 Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the policy and token unit tests still run. The PostgreSQL cases use the real route handlers to cover closed-registration sign-up, role grants and their recheck when a link is used, member limits, the Everyone switch and its permissions, revocation, paused links, concurrent use of a single-use link, rollback of a failed registration, deletion of a creator's account, audit records without tokens, batched permission reads that match single-account reads, and the joined-account index.
 
+## File request browser checks and demos
+
+The [file request guide](/guide/file-requests), [Settings switch](/admin/#file-requests), and [recorded walkthroughs](/demos#request-files-from-anyone) use real application operations with disposable accounts. Nothing is simulated: the script creates requests in the dashboard, sends real files to them from signed-out browsers, including a 12 MB file in three parts, and toggles the Everyone grant.
+
+Create a **disposable local PostgreSQL database named exactly `flare_file_requests_demo`**. The seed guard accepts only `localhost` or `127.0.0.1`, with `schema` omitted or set once to `public`; other names, schemas, and URL query parameters are rejected. Never point this recipe at an existing application database: the seed deletes every file request, replaces its demonstration accounts and their files, clears security rate counters and audit events, closes registration, removes Request files from Everyone, and sets a 2 GB maximum file size.
+
+With application dependencies installed, run from the repository root:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_file_requests_demo'
+export NEXTAUTH_URL='http://localhost:3075'
+export NEXTAUTH_SECRET='public-disposable-file-request-demo-secret-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm start --port 3075
+```
+
+`pnpm dev --port 3075` also works for quick checks; the published captures use the production build. Open `http://localhost:3075/auth/login` once so the app initializes its configuration. In a second terminal with the same `DATABASE_URL`, run:
+
+```sh
+npm ci --prefix docs/site
+cd docs/site
+npx playwright install chromium
+cd ../..
+node scripts/file-requests/seed.cjs
+node scripts/file-requests/verify-ui.cjs
+```
+
+The deliberately public fixture password is `Request-demo-only-2026!`. The accounts are **Alex Morgan** (`request-demo-alex@example.test`, administrator, with a **Clients** tag, an **Acme rebrand** folder, and a **Client deliveries** upload profile) and **Jamie Rivera** (`request-demo-jamie@example.test`, Everyone only). Use `FLARE_FILE_REQUESTS_TEST_ORIGIN` to select another `localhost` origin; the default is `http://localhost:3075`. The script uses the documentation Playwright installation. On a Linux host without Chromium's system libraries, install them with `npx playwright install-deps chromium` as a machine administrator.
+
+As Alex, the script creates a request in **Requests** with the Client deliveries profile and Acme rebrand folder, copies its link, and later reviews the arrivals. A signed-out browser sends a PNG, a PDF, and a 12 MB ZIP with a name and note. The script checks that all three files are private and tagged, that **New files** clears after opening the request, that closing shows **This request is closed**, that a replaced link shows **This link isn’t valid**, and that a one-file request with a required name blocks extra files and then shows **This request is full**. On another one-file request it makes every part fail, as on a dropped connection, and checks that the page frees the request's only slot so the file can be sent again. It confirms Jamie has neither **Requests** nor the Upload page's **Request files** shortcut until **Let everyone request files** is saved, and sends a file from a phone-sized screen without horizontal overflow. Each fixture browser sends a different reserved documentation address in `X-Forwarded-For`; these are not real visitors.
+
+Capture screenshots and videos in separate runs, reseeding before each. Set only `FLARE_FILE_REQUESTS_SCREENSHOTS` to a temporary directory for the twelve desktop/mobile stills; for the recording pass, leave it unset and set only `FLARE_FILE_REQUESTS_VIDEOS`, which records `create-request.webm`, `send-files.webm`, and `review-files.webm` with visible typing. Both modes blur request links; review every frame anyway for links, credentials, and private data. Then replace the canonical sources under `docs/images/file-requests/` and `.github/assets/file-requests/` and update the transcripts on the demos page. Discard the database afterward.
+
+### File request database regression checks
+
+Create and migrate a separate local PostgreSQL database whose name starts with **`flare_file_requests_test_`**, for example `flare_file_requests_test_local`. The tests erase users, roles, settings, requests, events, mail, and audit events in that database.
+
+```sh
+export FLARE_FILE_REQUESTS_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_file_requests_test_local'
+DATABASE_URL="$FLARE_FILE_REQUESTS_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/file-requests
+```
+
+Without `FLARE_FILE_REQUESTS_DATABASE_URL`, database cases are skipped while the policy, token, and email unit tests still run. The PostgreSQL cases use the real route handlers with in-memory storage to cover session-only owner routes, destination validation against the owner's roles, private delivery with profile tags, folder, expiry, and counters, repeatable completion and exact part sizes, files on their way counted against limits with per-batch caps and idle expiry, file limits under concurrent completions, parts and completions refused after closing or replacing a link with their parts discarded, a folder deleted mid-upload, required names and quotas, paused links that don't reveal the owner's problem while edits still save, isolation between senders and the owner's chunk routes, batched notification emails without sender text, the window and daily caps for those emails, and the Everyone switch.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

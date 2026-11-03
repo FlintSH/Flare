@@ -15,6 +15,7 @@ import { z } from 'zod'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
+import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -46,6 +47,44 @@ import {
 } from './schema'
 
 const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
+/** Sessions without a part or completion for this long are removed. */
+export const UPLOAD_SESSION_IDLE_MS = 3_600_000
+
+/**
+ * Removes an idle session and what it left behind: its unfinished multipart
+ * upload and, for a file request, its hold on the request's limits. Aborting
+ * an upload that already completed is harmless on every provider.
+ */
+async function expireUploadSession(
+  id: string,
+  path: string,
+  metadata: UploadMetadata
+) {
+  await unlink(path).catch(() => {})
+  try {
+    if (metadata.fileRequest)
+      await prisma.fileRequestUpload.deleteMany({ where: { id } })
+    const storage = await getStorageProvider()
+    const target = parseStorageTarget(metadata.storageTarget)
+    if (target && sameStorageTarget(target, captureStorageTarget(storage)))
+      await storage.abortMultipartUpload(metadata.fileKey, metadata.s3UploadId)
+  } catch (error) {
+    loggers.files.warn('Could not discard an idle upload session', { error })
+  }
+}
+
+/** Ends a session now, whatever its age: a cancelled or lapsed sender upload. */
+export async function discardUploadSession(id: string) {
+  if (!/^[a-z0-9]{1,100}$/.test(id)) return
+  const path = safeJoin(TEMP_DIR, `meta-${validatePathSegment(id)}`)
+  try {
+    const metadata = JSON.parse(await readFile(path, 'utf8')) as UploadMetadata
+    await expireUploadSession(id, path, metadata)
+  } catch {
+    /* Already removed, or never written. */
+  }
+}
+
 const cleanupTimer = setInterval(async () => {
   try {
     for (const name of await readdir(TEMP_DIR)) {
@@ -55,7 +94,8 @@ const cleanupTimer = setInterval(async () => {
         const metadata = JSON.parse(
           await readFile(path, 'utf8')
         ) as UploadMetadata
-        if (Date.now() - metadata.lastActivity > 3_600_000) await unlink(path)
+        if (Date.now() - metadata.lastActivity > UPLOAD_SESSION_IDLE_MS)
+          await expireUploadSession(name.slice('meta-'.length), path, metadata)
       } catch {
         /* Another process may have removed the expired session. */
       }
@@ -63,7 +103,7 @@ const cleanupTimer = setInterval(async () => {
   } catch {
     /* The directory is created on the first chunk upload. */
   }
-}, 3_600_000)
+}, UPLOAD_SESSION_IDLE_MS)
 cleanupTimer.unref()
 export interface UploadMetadata {
   fileKey: string
@@ -80,6 +120,10 @@ export interface UploadMetadata {
   options?: ResolvedUploadOptions
   storageFingerprint?: string
   storageTarget?: StorageTarget
+  /** A sender's upload through a file request. Only its public routes use it. */
+  fileRequest?: { requestId: string; submissionId: string }
+  /** Parts recorded by the server, so completion needs no client part list. */
+  parts?: { PartNumber: number; ETag: string; size: number }[]
 }
 
 /** A multipart ID belongs to the backend which initialized it, including fallback. */
@@ -94,7 +138,7 @@ export async function getUploadStorage(metadata: UploadMetadata) {
   return storage
 }
 
-async function fingerprint(tx?: Prisma.TransactionClient) {
+export async function fingerprint(tx?: Prisma.TransactionClient) {
   const row = tx
     ? await tx.config.findUnique({ where: { key: 'flare_config' } })
     : null
@@ -116,8 +160,8 @@ export async function getUploadMetadata(
   const path = safeJoin(TEMP_DIR, `meta-${validatePathSegment(id)}`)
   try {
     const value = JSON.parse(await readFile(path, 'utf8')) as UploadMetadata
-    if (Date.now() - value.lastActivity > 3_600_000) {
-      await unlink(path)
+    if (Date.now() - value.lastActivity > UPLOAD_SESSION_IDLE_MS) {
+      await expireUploadSession(id, path, value)
       return null
     }
     return value
@@ -143,7 +187,8 @@ export async function requireUploadMetadata(
   transaction?: Prisma.TransactionClient
 ) {
   const metadata = await getUploadMetadata(id)
-  if (!metadata || metadata.userId !== user.id)
+  // A sender's file request upload belongs to its link, not to the owner's session.
+  if (!metadata || metadata.userId !== user.id || metadata.fileRequest)
     throw new UploadError('Upload not found.', 404)
   if (
     user.apiToken?.profileId &&

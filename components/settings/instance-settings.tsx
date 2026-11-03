@@ -112,12 +112,14 @@ export function InstanceSettings({
   buildInfo,
   recovery = false,
   initialEveryoneCanInvite = false,
+  initialEveryoneCanRequestFiles = false,
 }: {
   initialConfig: FlareConfig
   initialSection: (typeof SETTINGS_SECTIONS)[number]
   buildInfo: BuildInfo
   recovery?: boolean
   initialEveryoneCanInvite?: boolean
+  initialEveryoneCanRequestFiles?: boolean
 }) {
   const { can } = usePermissions()
   const [activeSection, setSection] = usePreferenceSection(
@@ -163,11 +165,20 @@ export function InstanceSettings({
     initialEveryoneCanInvite
   )
   const inviteAccessChanged = everyoneCanInvite !== savedEveryoneCanInvite
+  // Also stored on the Everyone role.
+  const [savedEveryoneCanRequestFiles, setSavedEveryoneCanRequestFiles] =
+    useState(initialEveryoneCanRequestFiles)
+  const [everyoneCanRequestFiles, setEveryoneCanRequestFiles] = useState(
+    initialEveryoneCanRequestFiles
+  )
+  const requestAccessChanged =
+    everyoneCanRequestFiles !== savedEveryoneCanRequestFiles
 
   const hasChanges =
     !deepEqual(savedConfig, workingConfig) ||
     pendingFaviconFile !== null ||
-    inviteAccessChanged
+    inviteAccessChanged ||
+    requestAccessChanged
 
   function changedFields(previous: unknown, next: unknown): unknown {
     if (deepEqual(previous, next)) return undefined
@@ -243,6 +254,21 @@ export function InstanceSettings({
         }
         setSavedEveryoneCanInvite(requested)
       }
+      if (requestAccessChanged) {
+        const requested = everyoneCanRequestFiles
+        const response = await fetch('/api/settings/file-requests', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ everyoneCanRequestFiles: requested }),
+        })
+        if (!response.ok) {
+          const body = await response.json().catch(() => null)
+          throw new Error(
+            body?.error || 'Who can request files could not be saved.'
+          )
+        }
+        setSavedEveryoneCanRequestFiles(requested)
+      }
       router.refresh()
       toast({
         title: 'Settings updated',
@@ -279,6 +305,7 @@ export function InstanceSettings({
 
     setWorkingConfig(structuredClone(savedConfig))
     setEveryoneCanInvite(savedEveryoneCanInvite)
+    setEveryoneCanRequestFiles(savedEveryoneCanRequestFiles)
 
     toast({
       title: 'Changes discarded',
@@ -402,6 +429,7 @@ export function InstanceSettings({
         'Manage everyday features and keep your instance up to date.',
       icon: Settings2,
       dirty:
+        requestAccessChanged ||
         !deepEqual(
           savedConfig.settings.general.ocr,
           workingConfig.settings.general.ocr
@@ -563,6 +591,55 @@ export function InstanceSettings({
                     />
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+            <Card id="file-requests" className="scroll-mt-28">
+              <CardHeader>
+                <CardTitle>File requests</CardTitle>
+                <CardDescription className="text-pretty">
+                  Request links let anyone send files to an account without
+                  signing up. Administrators can always create them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label htmlFor="everyone-can-request-files">
+                      Let everyone request files
+                    </Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Every account that can upload gets Requests in its
+                      navigation. This grants Request files to the Everyone
+                      role; use Roles to allow only some people instead.
+                      Received files count toward each person’s storage.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {requestAccessChanged && <ChangeIndicator />}
+                    <Switch
+                      id="everyone-can-request-files"
+                      checked={everyoneCanRequestFiles}
+                      onCheckedChange={setEveryoneCanRequestFiles}
+                      disabled={!can('fileRequests.manage')}
+                      className={
+                        requestAccessChanged
+                          ? 'border-primary ring-1 ring-primary bg-primary/5'
+                          : ''
+                      }
+                    />
+                  </div>
+                </div>
+                {!can('fileRequests.manage') && (
+                  <p className="text-xs text-muted-foreground">
+                    You can change this only if your roles let you request files
+                    yourself.
+                  </p>
+                )}
+                {can('roles.manage') && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/dashboard/roles">Manage roles</Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
             <Card>
