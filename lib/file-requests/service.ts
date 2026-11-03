@@ -24,6 +24,7 @@ import {
   uploadProfileOptionsSchema,
 } from '@/lib/uploads/schema'
 
+import { lockRequestNotifications } from './notify'
 import {
   FILE_REQUEST_LINK_MESSAGES,
   type FileRequestCreateInput,
@@ -570,6 +571,9 @@ export async function updateFileRequest(
   input: FileRequestUpdateInput
 ) {
   const record = await prisma.$transaction(async (tx) => {
+    // Waits for an email already being written, which would otherwise save
+    // its older counts over the ones turning email on resets.
+    if (input.notify !== undefined) await lockRequestNotifications(tx, id)
     await lockRoleChanges(tx)
     const access = await requireRequestAccess(tx, userId)
     // Deliveries lock the same row, so limits and links change atomically.

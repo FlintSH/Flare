@@ -38,17 +38,26 @@ type NotifyState = {
 }
 
 /**
- * One notification decision per request at a time. An advisory lock, not the
- * request row: the email's outbox row references the owner's account, and
- * deliveries lock the account row before the request row. The request row is
- * only updated last, after the email is queued.
+ * One notification decision per request at a time: an email, or the owner
+ * turning email on or off, so an email being written can't undo the counts
+ * that turning it on resets. Take it before any other lock. An advisory lock,
+ * not the request row: the email's outbox row references the owner's account,
+ * and deliveries lock the account row before the request row. The request row
+ * is only updated last, after the email is queued.
  */
+export async function lockRequestNotifications(
+  tx: Prisma.TransactionClient,
+  requestId: string
+) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347220, hashtext(${requestId}))`
+}
+
 async function withNotifyLock<T>(
   requestId: string,
   action: (tx: Prisma.TransactionClient, request: NotifyState) => Promise<T>
 ): Promise<T | null> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347220, hashtext(${requestId}))`
+    await lockRequestNotifications(tx, requestId)
     const request = await tx.fileRequest.findUnique({
       where: { id: requestId },
       select: {

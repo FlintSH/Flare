@@ -1031,32 +1031,38 @@ suite('file requests against disposable PostgreSQL', () => {
     expect(await prisma.fileRequestUpload.count()).toBe(0)
   })
 
-  /** Holds each delivery open for a second after it releases its reservation. */
-  async function pauseDeliveries() {
+  /** Holds each transaction that fires this trigger open for a second. */
+  async function pauseOn(when: string, table: string) {
     await prisma.$executeRawUnsafe(
-      `CREATE OR REPLACE FUNCTION pause_delivery() RETURNS trigger AS $$ BEGIN PERFORM pg_sleep(1); RETURN OLD; END $$ LANGUAGE plpgsql`
+      `CREATE OR REPLACE FUNCTION pause_here() RETURNS trigger AS $$ BEGIN PERFORM pg_sleep(1); RETURN COALESCE(NEW, OLD); END $$ LANGUAGE plpgsql`
     )
     await prisma.$executeRawUnsafe(
-      'CREATE OR REPLACE TRIGGER pause_delivery AFTER DELETE ON "FileRequestUpload" FOR EACH ROW EXECUTE FUNCTION pause_delivery()'
+      `CREATE OR REPLACE TRIGGER pause_here ${when} ON "${table}" FOR EACH ROW EXECUTE FUNCTION pause_here()`
     )
     return async () => {
-      await prisma.$executeRawUnsafe(
-        'DROP TRIGGER pause_delivery ON "FileRequestUpload"'
-      )
-      await prisma.$executeRawUnsafe('DROP FUNCTION pause_delivery()')
+      await prisma.$executeRawUnsafe(`DROP TRIGGER pause_here ON "${table}"`)
+      await prisma.$executeRawUnsafe('DROP FUNCTION pause_here()')
     }
   }
 
-  async function deliveryPaused() {
+  /** A delivery releases the file's reservation just before it commits. */
+  const pauseDeliveries = () => pauseOn('AFTER DELETE', 'FileRequestUpload')
+
+  async function until(check: () => Promise<boolean>) {
     for (let attempt = 0; attempt < 250; attempt++) {
+      if (await check()) return
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    throw new Error('Timed out waiting for the condition.')
+  }
+
+  const deliveryPaused = () =>
+    until(async () => {
       const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
         SELECT count(*) FROM pg_stat_activity
         WHERE datname = current_database() AND wait_event = 'PgSleep'`
-      if (count > BigInt(0)) return
-      await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    throw new Error('No delivery paused.')
-  }
+      return count > BigInt(0)
+    })
 
   it('answers a completion retry that overlaps its delivery', async () => {
     const request = await createRequest()
@@ -1574,6 +1580,50 @@ suite('file requests against disposable PostgreSQL', () => {
     })
     expect(mails).toHaveLength(2)
     expect(await mailText(mails[1].id)).toContain('received 1 file (4 B).')
+  })
+
+  it('keeps files sent while email was off out of an email being written', async () => {
+    await enableEmail()
+    const request = await createRequest({ notify: true })
+    const sender = (await startBatch(request.token)).body.submission
+    await send(request.token, sender, 'one.txt', text('one'))
+    const setNotify = (notify: boolean) =>
+      detail.PATCH(
+        call(`/api/file-requests/${request.id}`, 'PATCH', { notify }),
+        params({ id: request.id })
+      )
+    const counts = () =>
+      prisma.fileRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        select: { fileCount: true, notifiedFiles: true },
+      })
+    // The owner turns email off, a file arrives, and email goes back on,
+    // while an email about the first file is being written.
+    const resume = await pauseOn('BEFORE INSERT', 'MailOutbox')
+    try {
+      const writing = notify.sendScheduledDigest(request.id)
+      await deliveryPaused()
+      const owner = (async () => {
+        expect((await setNotify(false)).status).toBe(200)
+        const arriving = send(request.token, sender, 'two.txt', text('two!'))
+        await until(async () => (await counts()).fileCount === 2)
+        expect((await setNotify(true)).status).toBe(200)
+        await arriving
+      })()
+      await Promise.all([writing, owner])
+    } finally {
+      await resume()
+    }
+    expect(await counts()).toEqual({ fileCount: 2, notifiedFiles: 2 })
+    // The file sent while email was off is never reported.
+    await prisma.fileRequest.update({
+      where: { id: request.id },
+      data: { notifiedAt: new Date(Date.now() - 11 * 60 * 1000) },
+    })
+    await notify.sendScheduledDigest(request.id)
+    const [mail, ...rest] = await prisma.mailOutbox.findMany()
+    expect(rest).toHaveLength(0)
+    expect(await mailText(mail.id)).toContain('received 1 file (3 B).')
   })
 
   it('starts email from now and keeps it within daily caps', async () => {

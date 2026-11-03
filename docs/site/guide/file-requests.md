@@ -95,7 +95,7 @@ With **Email me when files arrive** on, Flare emails you when a sender finishes.
 
 The email names the request and says how many files arrived since the previous one and their total size, including any you've deleted since; **Review files** opens the request. It never includes senders' names, notes, or files, so nobody with your link can put words in an email from your instance. The switch needs [account email](/admin/email) on the instance and a verified email address on your account; otherwise it is unavailable.
 
-Turning email on reports only files that arrive afterward. You get at most 24 file request emails a day across all your requests, and they pause for the rest of the day once the instance has used 80% of its daily email limit, so account email such as password resets always has room. Skipped emails aren't sent later; your Requests page still shows **New files**.
+Turning email on reports only files that arrive afterward, so files sent while it was off are never emailed. You get at most 24 file request emails a day across all your requests, and they pause for the rest of the day once the instance has used 80% of its daily email limit, so account email such as password resets always has room. Skipped emails aren't sent later; your Requests page still shows **New files**.
 
 ## Change, close, or remove a request
 
