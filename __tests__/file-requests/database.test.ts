@@ -15,6 +15,10 @@ const state = vi.hoisted(() => ({
   objects: new Map<string, Buffer>(),
   multipart: new Map<string, { path: string; parts: Map<number, Buffer> }>(),
   aborted: new Set<string>(),
+  onInit: undefined as undefined | (() => Promise<void>),
+  onPart: undefined as undefined | (() => Promise<void>),
+  onComplete: undefined as undefined | (() => Promise<void>),
+  failAbort: 0,
   ocr: vi.fn(),
 }))
 // Sessions resolve permissions from the database, matching the real session callback.
@@ -38,18 +42,24 @@ const storage = {
   kind: 'local' as const,
   target: { provider: 'local' as const },
   async initializeMultipartUpload(path: string) {
+    await state.onInit?.()
     const id = randomUUID()
     state.multipart.set(id, { path, parts: new Map() })
     return id
   },
   async uploadPart(
-    _path: string,
+    path: string,
     uploadId: string,
     partNumber: number,
     data: Buffer
   ) {
-    const upload = state.multipart.get(uploadId)
-    if (!upload) throw new Error('NoSuchUpload')
+    await state.onPart?.()
+    // Like the local provider, writing a part recreates a removed upload.
+    let upload = state.multipart.get(uploadId)
+    if (!upload) {
+      upload = { path, parts: new Map() }
+      state.multipart.set(uploadId, upload)
+    }
     upload.parts.set(partNumber, Buffer.from(data))
     return { ETag: `"etag-${partNumber}"`, PartNumber: partNumber }
   },
@@ -58,6 +68,7 @@ const storage = {
     uploadId: string,
     parts: { ETag: string; PartNumber: number }[]
   ) {
+    await state.onComplete?.()
     const upload = state.multipart.get(uploadId)
     if (!upload || upload.path !== path) throw new Error('NoSuchUpload')
     state.objects.set(
@@ -84,6 +95,10 @@ const storage = {
     state.objects.delete(path)
   },
   async abortMultipartUpload(_path: string, uploadId: string) {
+    if (state.failAbort > 0) {
+      state.failAbort--
+      throw new Error('Storage unavailable')
+    }
     state.multipart.delete(uploadId)
     state.aborted.add(uploadId)
   },
@@ -171,6 +186,10 @@ suite('file requests against disposable PostgreSQL', () => {
     state.objects.clear()
     state.multipart.clear()
     state.aborted.clear()
+    state.onInit = undefined
+    state.onPart = undefined
+    state.onComplete = undefined
+    state.failAbort = 0
     state.ocr.mockReset()
     state.ocr.mockResolvedValue(undefined)
     await prisma.auditEvent.deleteMany()
@@ -275,7 +294,8 @@ suite('file requests against disposable PostgreSQL', () => {
     submission: { id: string; key: string },
     filename: string,
     bytes: Buffer,
-    mimeType: string
+    mimeType: string,
+    extra: Record<string, unknown> = {}
   ) {
     return json(
       await uploads.POST(
@@ -287,6 +307,7 @@ suite('file requests against disposable PostgreSQL', () => {
             filename,
             mimeType,
             size: bytes.length,
+            ...extra,
           },
           { 'X-Flare-Submission-Key': submission.key }
         ),
@@ -973,6 +994,224 @@ suite('file requests against disposable PostgreSQL', () => {
     expect(await prisma.file.findFirst()).toMatchObject({ folderId: null })
   })
 
+  it('stops a file whose link was replaced while it completed', async () => {
+    const request = await createRequest()
+    const sender = (await startBatch(request.token)).body.submission
+    const started = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain'
+    )
+    await putPart(
+      request.token,
+      sender.key,
+      started.body.uploadId,
+      1,
+      text('abc')
+    )
+    state.onComplete = async () => {
+      state.onComplete = undefined
+      await prisma.fileRequest.update({
+        where: { id: request.id },
+        data: { token: 'R'.repeat(24) },
+      })
+    }
+    const result = await complete(
+      request.token,
+      sender.key,
+      started.body.uploadId
+    )
+    expect(result.status).toBe(404)
+    expect(result.body.code).toBe('invalid')
+    expect(await prisma.file.count()).toBe(0)
+    // Its bytes and its hold on the request are released.
+    expect(state.objects.size).toBe(0)
+    expect(await prisma.fileRequestUpload.count()).toBe(0)
+  })
+
+  it('serializes quota holds across all of an owner’s requests', async () => {
+    const one = await createRequest({ title: 'One' })
+    const two = await createRequest({ title: 'Two' })
+    await saveConfig((config) => {
+      config.settings.general.storage.quotas = {
+        enabled: true,
+        default: { value: 10, unit: 'MB' },
+      }
+    })
+    await prisma.role.update({
+      where: { id: builtins.administrator.id },
+      data: { permissions: ['files.upload', 'fileRequests.manage'] },
+    })
+    const a = (await startBatch(one.token)).body.submission
+    const b = (await startBatch(two.token)).body.submission
+    const six = Buffer.alloc(6 * 1024 * 1024)
+    const results = await Promise.all([
+      begin(one.token, a, 'a.bin', six, 'application/octet-stream'),
+      begin(two.token, b, 'b.bin', six, 'application/octet-stream'),
+    ])
+    expect(results.map((result) => result.status).sort()).toEqual([201, 413])
+    expect(results.find((result) => result.status === 413)?.body.code).toBe(
+      'quota'
+    )
+    expect(await prisma.fileRequestUpload.count()).toBe(1)
+  })
+
+  it('discards a part written after its upload was cancelled', async () => {
+    const request = await createRequest()
+    const sender = (await startBatch(request.token)).body.submission
+    const started = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain'
+    )
+    const [storageId] = [...state.multipart.keys()]
+    // The cancel lands while this part is still arriving.
+    state.onPart = async () => {
+      state.onPart = undefined
+      expect(
+        (await cancel(request.token, sender.key, started.body.uploadId)).status
+      ).toBe(200)
+    }
+    const late = await putPart(
+      request.token,
+      sender.key,
+      started.body.uploadId,
+      1,
+      text('abc')
+    )
+    expect(late.status).toBe(404)
+    expect(state.multipart.has(storageId)).toBe(false)
+  })
+
+  it('returns the same upload when a start is retried with its key', async () => {
+    const request = await createRequest({ maxFiles: 1 })
+    const sender = (await startBatch(request.token)).body.submission
+    const retry = { clientKey: 'retry-key-0123456789' }
+    const first = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain',
+      retry
+    )
+    const again = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain',
+      retry
+    )
+    expect(again.status).toBe(201)
+    expect(again.body.uploadId).toBe(first.body.uploadId)
+    expect(await prisma.fileRequestUpload.count()).toBe(1)
+    expect(state.multipart.size).toBe(1)
+    // A different file still respects the request's one slot.
+    const other = await begin(
+      request.token,
+      sender,
+      'b.txt',
+      text('b'),
+      'text/plain',
+      { clientKey: 'another-key-01234567' }
+    )
+    expect(other.body.code).toBe('request_limit')
+    // A key names one file: repeating it for another size is refused.
+    const reused = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abcd'),
+      'text/plain',
+      retry
+    )
+    expect(reused.status).toBe(409)
+    expect(reused.body.code).toBe('client_key_reused')
+  })
+
+  it('asks a start repeated mid-setup to try again', async () => {
+    const request = await createRequest()
+    const sender = (await startBatch(request.token)).body.submission
+    const retry = { clientKey: 'racing-key-012345678' }
+    let early: Awaited<ReturnType<typeof begin>> | undefined
+    // The repeat arrives after the first start reserved its place, before
+    // its upload exists.
+    state.onInit = async () => {
+      state.onInit = undefined
+      early = await begin(
+        request.token,
+        sender,
+        'a.txt',
+        text('abc'),
+        'text/plain',
+        retry
+      )
+    }
+    const first = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain',
+      retry
+    )
+    expect(first.status).toBe(201)
+    expect(early?.status).toBe(503)
+    expect(early?.body.code).toBe('starting')
+    const later = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain',
+      retry
+    )
+    expect(later.body.uploadId).toBe(first.body.uploadId)
+    expect(await prisma.fileRequestUpload.count()).toBe(1)
+  })
+
+  it('keeps a session for the next sweep when discarding its parts fails', async () => {
+    const request = await createRequest()
+    const sender = (await startBatch(request.token)).body.submission
+    const started = await begin(
+      request.token,
+      sender,
+      'a.txt',
+      text('abc'),
+      'text/plain'
+    )
+    const [storageId] = [...state.multipart.keys()]
+    state.failAbort = 1
+    expect(
+      await cancel(request.token, sender.key, started.body.uploadId)
+    ).toEqual({ status: 200, body: { cancelled: true } })
+    expect(state.multipart.has(storageId)).toBe(true)
+    // The cancelled file can't continue, even though its session remains.
+    expect(
+      (
+        await putPart(
+          request.token,
+          sender.key,
+          started.body.uploadId,
+          1,
+          text('abc')
+        )
+      ).body.code
+    ).toBe('upload_not_found')
+    expect(
+      (await complete(request.token, sender.key, started.body.uploadId)).body
+        .code
+    ).toBe('upload_not_found')
+    const { discardUploadSession } = await import('@/lib/uploads/chunks')
+    await discardUploadSession(started.body.uploadId)
+    expect(state.multipart.has(storageId)).toBe(false)
+  })
+
   it('asks for names when required and checks the owner quota', async () => {
     const request = await createRequest({ senderName: 'required' })
     const unnamed = await startBatch(request.token, { senderName: '  ' })
@@ -1185,6 +1424,48 @@ suite('file requests against disposable PostgreSQL', () => {
     expect(await prisma.mailOutbox.count()).toBe(2)
     await notify.sendScheduledDigest(request.id)
     expect(await prisma.mailOutbox.count()).toBe(2)
+  })
+
+  it('keeps arrivals unreported when their email can’t be queued', async () => {
+    await enableEmail()
+    const request = await createRequest({ notify: true })
+    const sender = (await startBatch(request.token)).body.submission
+    await send(request.token, sender, 'one.txt', text('one'))
+    // The outbox insert fails inside the transaction that would mark the
+    // arrivals reported.
+    await prisma.$executeRawUnsafe(
+      `CREATE OR REPLACE FUNCTION fail_mail() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'outbox unavailable'; END $$ LANGUAGE plpgsql`
+    )
+    await prisma.$executeRawUnsafe(
+      'CREATE OR REPLACE TRIGGER fail_mail BEFORE INSERT ON "MailOutbox" FOR EACH ROW EXECUTE FUNCTION fail_mail()'
+    )
+    try {
+      expect((await finish(request.token, sender)).status).toBe(200)
+    } finally {
+      await prisma.$executeRawUnsafe('DROP TRIGGER fail_mail ON "MailOutbox"')
+      await prisma.$executeRawUnsafe('DROP FUNCTION fail_mail()')
+    }
+    expect(await prisma.mailOutbox.count()).toBe(0)
+    expect(
+      (
+        await prisma.fileRequest.findUniqueOrThrow({
+          where: { id: request.id },
+        })
+      ).notifiedAt
+    ).toBeNull()
+    // The digest scheduled by the arrival still waits, and sends it once
+    // queuing works again.
+    expect(
+      await prisma.event.count({
+        where: { type: 'file-request.notify', status: 'SCHEDULED' },
+      })
+    ).toBe(1)
+    await notify.sendScheduledDigest(request.id)
+    const [mail] = await prisma.mailOutbox.findMany()
+    expect(await mailText(mail.id)).toContain('received 1 file')
+    expect(
+      await prisma.event.count({ where: { type: 'file-request.notify' } })
+    ).toBe(0)
   })
 
   it('starts email from now and keeps it within daily caps', async () => {

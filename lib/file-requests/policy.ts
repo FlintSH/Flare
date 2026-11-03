@@ -264,6 +264,14 @@ export const requestUploadInitSchema = z
     filename: z.string().min(1).max(255),
     mimeType: z.string().min(1).max(255),
     size: z.number().int().positive('Empty files can’t be sent.'),
+    /** Repeating a start with the same key returns the same upload. */
+    clientKey: z
+      .string()
+      .regex(
+        /^[A-Za-z0-9_-]{16,64}$/,
+        'Use a key of 16 to 64 URL-safe characters.'
+      )
+      .optional(),
   })
   .strict()
 

@@ -114,16 +114,16 @@ Closing, replacing, or filling a request also stops files that are still uploadi
 
 ## Limits
 
-| Limit                                 | Value                                                                                                                                                            |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Open requests per account             | 100. Closed, expired, and full requests don't count.                                                                                                             |
-| Title, message, sender name, and note | 100, 1,000, 80, and 500 characters                                                                                                                               |
-| Size of one file                      | The instance's maximum file size                                                                                                                                 |
-| Files and size per request            | Optional: 1 to 10,000 files, 1 MB to 10 TB                                                                                                                       |
-| Files on their way                    | 3 per sender's batch and 20 per request at once. They count against the request's limits and your quota until they finish.                                       |
-| Unfinished files                      | A file that sends nothing for 10 minutes gives its room back, and its parts are discarded. The sender sends it again. A file that fails is cancelled right away. |
-| Deadline                              | 1, 7, 30, or 90 days, or none                                                                                                                                    |
-| Sending rate                          | 120 started files, batches, and completions, plus 1,800 parts, per minute from one address. The sender's page retries after a pause.                             |
+| Limit                                 | Value                                                                                                                                                                                                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open requests per account             | 100. Closed, expired, and full requests don't count.                                                                                                                                                                                               |
+| Title, message, sender name, and note | 100, 1,000, 80, and 500 characters                                                                                                                                                                                                                 |
+| Size of one file                      | The instance's maximum file size                                                                                                                                                                                                                   |
+| Files and size per request            | Optional: 1 to 10,000 files, 1 MB to 10 TB                                                                                                                                                                                                         |
+| Files on their way                    | 3 per sender's batch and 20 per request at once. They count against the request's limits and your quota until they finish. If a sender's connection drops as a file starts, the page's retry continues the same file instead of counting it twice. |
+| Unfinished files                      | A file that sends nothing for 10 minutes gives its room back, and its parts are discarded. The sender sends it again. A file that fails is cancelled right away.                                                                                   |
+| Deadline                              | 1, 7, 30, or 90 days, or none                                                                                                                                                                                                                      |
+| Sending rate                          | 120 started files, batches, and completions, plus 1,800 parts, per minute from one address. The sender's page retries after a pause.                                                                                                               |
 
 ## When your access changes
 

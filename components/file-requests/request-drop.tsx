@@ -278,6 +278,9 @@ export function RequestDrop({
           filename: item.file.name,
           mimeType: item.file.type || 'application/octet-stream',
           size: item.file.size,
+          // Retries of this request repeat the key, so a start whose
+          // response was lost returns its upload instead of taking a slot.
+          clientKey: crypto.randomUUID(),
         }),
       }
     )

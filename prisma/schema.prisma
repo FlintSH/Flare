@@ -395,14 +395,16 @@ model FileRequestUpload {
   id           String                @id
   requestId    String
   submissionId String
+  // Chosen by the sender's page, so a retried start returns this upload.
+  clientKey    String?
   bytes        BigInt
   touchedAt    DateTime              @default(now())
   createdAt    DateTime              @default(now())
   request      FileRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
   submission   FileRequestSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
+  @@unique([submissionId, clientKey])
   @@index([requestId, touchedAt])
-  @@index([submissionId])
 }
 
 model ApiToken {

@@ -43,6 +43,7 @@ CREATE TABLE "FileRequestUpload" (
     "id" TEXT NOT NULL,
     "requestId" TEXT NOT NULL,
     "submissionId" TEXT NOT NULL,
+    "clientKey" TEXT,
     "bytes" BIGINT NOT NULL,
     "touchedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,7 +62,8 @@ CREATE UNIQUE INDEX "FileRequestSubmission_keyHash_key" ON "FileRequestSubmissio
 CREATE INDEX "FileRequestSubmission_requestId_createdAt_idx" ON "FileRequestSubmission"("requestId", "createdAt");
 CREATE INDEX "FileRequestSubmission_requestId_completedAt_idx" ON "FileRequestSubmission"("requestId", "completedAt");
 CREATE INDEX "FileRequestUpload_requestId_touchedAt_idx" ON "FileRequestUpload"("requestId", "touchedAt");
-CREATE INDEX "FileRequestUpload_submissionId_idx" ON "FileRequestUpload"("submissionId");
+-- A retried start finds its upload by the key the sender's page chose.
+CREATE UNIQUE INDEX "FileRequestUpload_submissionId_clientKey_key" ON "FileRequestUpload"("submissionId", "clientKey");
 CREATE INDEX "File_fileRequestSubmissionId_idx" ON "File"("fileRequestSubmissionId");
 
 ALTER TABLE "File" ADD CONSTRAINT "File_fileRequestSubmissionId_fkey" FOREIGN KEY ("fileRequestSubmissionId") REFERENCES "FileRequestSubmission"("id") ON DELETE SET NULL ON UPDATE CASCADE;

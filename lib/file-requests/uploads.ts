@@ -115,8 +115,10 @@ async function openSession(
       409,
       'submission_complete'
     )
-  const record = await prisma.fileRequest.findUnique({
-    where: { id: submission.requestId },
+  // Matching the presented link in the same read: it may have been replaced
+  // since the submission was read.
+  const record = await prisma.fileRequest.findFirst({
+    where: { id: submission.requestId, token: token as string },
     include: {
       profile: { select: { id: true, name: true, options: true } },
       folder: { select: { id: true, name: true } },
@@ -216,10 +218,13 @@ async function reserveUpload(
   requestId: string,
   submissionId: string,
   size: number,
-  context: OwnerContext
-) {
-  const lapsed = await prisma.$transaction(async (tx) => {
-    // Starts for one request take turns, after the same row lock deliveries use.
+  context: OwnerContext,
+  clientKey?: string
+): Promise<{ uploadId: string; created: boolean }> {
+  const { reserved, lapsed } = await prisma.$transaction(async (tx) => {
+    // The owner's row first, as deliveries take it: starts across all of an
+    // owner's requests take turns, so their quota holds can't overlap.
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${context.account.id} FOR UPDATE`
     const locked = await tx.$queryRaw<
       { id: string }[]
     >`SELECT "id" FROM "FileRequest" WHERE "id" = ${requestId} FOR UPDATE`
@@ -237,10 +242,34 @@ async function reserveUpload(
           },
         })
       : null
-    if (!request) throw unavailable('invalid')
+    if (!request || request.userId !== context.account.id)
+      throw unavailable('invalid')
     const status = fileRequestStatus(request)
     if (status !== 'open') throw unavailable(status)
     const cutoff = idleCutoff()
+    if (clientKey) {
+      const repeated = await tx.fileRequestUpload.findUnique({
+        where: { submissionId_clientKey: { submissionId, clientKey } },
+        select: { id: true, touchedAt: true, bytes: true },
+      })
+      // A retried start whose first response was lost.
+      if (repeated && repeated.touchedAt > cutoff) {
+        if (Number(repeated.bytes) !== size)
+          throw new FileRequestError(
+            'This retry key belongs to another file. Use a new key for each file.',
+            409,
+            'client_key_reused'
+          )
+        await tx.fileRequestUpload.update({
+          where: { id: repeated.id },
+          data: { touchedAt: new Date() },
+        })
+        return {
+          reserved: { uploadId: repeated.id, created: false },
+          lapsed: [],
+        }
+      }
+    }
     const idle = await tx.fileRequestUpload.findMany({
       where: { requestId, touchedAt: { lte: cutoff } },
       select: { id: true },
@@ -283,29 +312,45 @@ async function reserveUpload(
             409,
             'request_limit'
           )
-    const reserved = Number(forRequest._sum.bytes ?? 0)
+    const onTheWay = Number(forRequest._sum.bytes ?? 0)
     if (
       request.maxBytes !== null &&
-      Number(request.bytesReceived) + reserved + size > Number(request.maxBytes)
+      Number(request.bytesReceived) + onTheWay + size > Number(request.maxBytes)
     )
       throw new FileRequestError(
         'This file is larger than the space left in this request.',
         413,
         'request_limit'
       )
-    if (size > remainingQuotaBytes(context) - Number(forOwner._sum.bytes ?? 0))
+    // Current usage, read under the owner's lock rather than before it.
+    const owner = await tx.user.findUniqueOrThrow({
+      where: { id: request.userId },
+      select: { storageUsed: true },
+    })
+    const quota = remainingQuotaBytes({
+      ...context,
+      account: { ...context.account, storageUsed: owner.storageUsed },
+    })
+    if (size > quota - Number(forOwner._sum.bytes ?? 0))
       throw new FileRequestError(
         'There isn’t enough storage space left to receive this file.',
         413,
         'quota'
       )
     await tx.fileRequestUpload.create({
-      data: { id: uploadId, requestId, submissionId, bytes: BigInt(size) },
+      data: {
+        id: uploadId,
+        requestId,
+        submissionId,
+        clientKey,
+        bytes: BigInt(size),
+      },
     })
-    return idle
+    return { reserved: { uploadId, created: true }, lapsed: idle }
   })
   // A lapsed upload's parts go with its room, so disk use stays bounded.
   for (const { id } of lapsed) await discardUploadSession(id)
+  return reserved
 }
 
 async function releaseUpload(uploadId: string) {
@@ -358,8 +403,28 @@ export async function startRequestUpload(
     )
   const owner = ownerUploader(context)
   const options = await receivedUploadOptions(context, record)
-  const uploadId = randomUUID().replace(/-/g, '')
-  await reserveUpload(uploadId, record.id, submission.id, input.size, context)
+  const reserved = await reserveUpload(
+    randomUUID().replace(/-/g, ''),
+    record.id,
+    submission.id,
+    input.size,
+    context,
+    input.clientKey
+  )
+  if (!reserved.created) {
+    // The first start may still be setting its upload up.
+    if (!(await getUploadMetadata(reserved.uploadId)))
+      throw new FileRequestError(
+        'This file is still starting. Try again in a moment.',
+        503,
+        'starting'
+      )
+    return {
+      uploadId: reserved.uploadId,
+      partSize: requestPartSize(input.size),
+    }
+  }
+  const uploadId = reserved.uploadId
   let storage: StorageProvider | undefined
   let started: { fileKey: string; s3UploadId: string } | undefined
   try {
@@ -515,7 +580,12 @@ export async function uploadRequestPart(
   )
   await withUploadLock(uploadId, async () => {
     const current = await getUploadMetadata(uploadId)
-    if (!current?.fileRequest) throw uploadNotFound()
+    if (!current?.fileRequest) {
+      // Cancelled or discarded while this part was arriving: local storage
+      // recreated the parts directory, so remove the late write as well.
+      await discardUpload(storage, metadata)
+      throw uploadNotFound()
+    }
     current.parts = [
       ...(current.parts ?? []).filter((part) => part.PartNumber !== partNumber),
       { PartNumber: partNumber, ETag: result.ETag, size },
@@ -620,6 +690,13 @@ export async function completeRequestUpload(
     return deliveredResponse(metadata.fileRequest.requestId, committed)
   if (!metadata.options) throw uploadNotFound()
   const startedOptions = metadata.options
+  // A cancelled or lapsed upload has no room left to complete into.
+  const live = await prisma.fileRequestUpload.updateMany({
+    where: { id: uploadId, touchedAt: { gt: idleCutoff() } },
+    data: { touchedAt: new Date() },
+  })
+  if (!live.count) throw uploadNotFound()
+  const presentedToken = token as string
   // Resolve the provider before entering the lock, as dashboard uploads do.
   const storage = await getUploadStorage(metadata)
   try {
@@ -672,9 +749,11 @@ export async function completeRequestUpload(
         size,
         options,
         passwordHash: null,
+        // The link the sender used, not the request's current one: a link
+        // replaced mid-upload must stop this file.
         delivery: requestDelivery(
           record.id,
-          record.token,
+          presentedToken,
           submission.id,
           uploadId,
           size

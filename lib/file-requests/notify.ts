@@ -4,6 +4,7 @@ import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { MailLimitError, enqueueMail } from '@/lib/email/outbox'
 import { hasVerifiedEmail } from '@/lib/email/policy'
+import type { EmailConfig } from '@/lib/email/schema'
 import { renderFileRequestEmail } from '@/lib/email/templates'
 import { events } from '@/lib/events'
 import { loggers } from '@/lib/logger'
@@ -24,40 +25,51 @@ const waiting = (requestId: string) => ({
   payload: { path: ['requestId'], equals: requestId },
 })
 
-/**
- * Locks only the request row. Mail is sent in a separate transaction, because
- * it touches the owner's account row, which deliveries lock before this one.
- */
-async function lockRequest(tx: Prisma.TransactionClient, requestId: string) {
-  const locked = await tx.$queryRaw<
-    { id: string }[]
-  >`SELECT "id" FROM "FileRequest" WHERE "id" = ${requestId} FOR UPDATE`
-  if (!locked.length) return null
-  return tx.fileRequest.findUnique({
-    where: { id: requestId },
-    select: {
-      id: true,
-      userId: true,
-      title: true,
-      notify: true,
-      notifiedAt: true,
-      lastReceivedAt: true,
-    },
-  })
-}
-type LockedRequest = NonNullable<Awaited<ReturnType<typeof lockRequest>>>
-type Digest = {
-  requestId: string
+type NotifyState = {
+  id: string
   userId: string
   title: string
-  since: Date
-  until: Date
+  notify: boolean
+  notifiedAt: Date | null
+  lastReceivedAt: Date | null
 }
 
-const hasNews = (request: LockedRequest) =>
+/**
+ * One notification decision per request at a time. An advisory lock, not the
+ * request row: the email's outbox row references the owner's account, and
+ * deliveries lock the account row before the request row. The request row is
+ * only updated last, after the email is queued.
+ */
+async function withNotifyLock<T>(
+  requestId: string,
+  action: (tx: Prisma.TransactionClient, request: NotifyState) => Promise<T>
+): Promise<T | null> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347220, hashtext(${requestId}))`
+    const request = await tx.fileRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        id: true,
+        userId: true,
+        title: true,
+        notify: true,
+        notifiedAt: true,
+        lastReceivedAt: true,
+      },
+    })
+    return request ? action(tx, request) : null
+  })
+}
+
+const hasNews = (request: NotifyState) =>
   request.notify &&
   request.lastReceivedAt !== null &&
   (!request.notifiedAt || request.lastReceivedAt > request.notifiedAt)
+
+const dueAt = (request: NotifyState, now: Date) =>
+  request.notifiedAt
+    ? new Date(request.notifiedAt.getTime() + NOTIFICATION_INTERVAL_MS)
+    : now
 
 /** One waiting digest per request; an earlier deadline wins. */
 async function scheduleDigest(
@@ -87,36 +99,37 @@ async function scheduleDigest(
   })
 }
 
-/** Marks everything until now as reported, so the same arrivals never loop. */
-async function claimDigest(
+/**
+ * Queues the email for everything that arrived since the last one, then marks
+ * it reported, in the same transaction: a failure leaves the arrivals
+ * unreported, so the next delivery or scheduled digest tries again. When mail
+ * is off, the owner has no verified address, or a cap applies, the arrivals
+ * are marked reported without an email.
+ */
+async function sendDigest(
   tx: Prisma.TransactionClient,
-  request: LockedRequest,
+  request: NotifyState,
+  config: EmailConfig,
   now: Date
-): Promise<Digest> {
+) {
+  await queueDigestEmail(tx, request, config, now)
   await tx.fileRequest.update({
     where: { id: request.id },
     data: { notifiedAt: now },
     select: { id: true },
   })
   await tx.event.deleteMany({ where: waiting(request.id) })
-  return {
-    requestId: request.id,
-    userId: request.userId,
-    title: request.title,
-    since: request.notifiedAt ?? new Date(0),
-    until: now,
-  }
 }
 
-/**
- * Emails a claimed digest. Best effort: when mail is off, the owner has no
- * verified address, or a cap applies, the arrivals stay unreported by email.
- */
-async function sendDigest(digest: Digest) {
-  const config = await getEmailConfig()
+async function queueDigestEmail(
+  tx: Prisma.TransactionClient,
+  request: NotifyState,
+  config: EmailConfig,
+  now: Date
+) {
   if (!config.enabled) return
-  const owner = await prisma.user.findUnique({
-    where: { id: digest.userId },
+  const owner = await tx.user.findUnique({
+    where: { id: request.userId },
     select: {
       name: true,
       email: true,
@@ -126,80 +139,76 @@ async function sendDigest(digest: Digest) {
     },
   })
   if (!owner?.email || !hasVerifiedEmail(owner, config)) return
-  const recipient = owner.email
   // Files the owner already deleted are not news.
-  const totals = await prisma.file.aggregate({
+  const totals = await tx.file.aggregate({
     where: {
-      userId: digest.userId,
-      uploadedAt: { gt: digest.since, lte: digest.until },
-      fileRequestSubmission: { requestId: digest.requestId },
+      userId: request.userId,
+      uploadedAt: { gt: request.notifiedAt ?? new Date(0), lte: now },
+      fileRequestSubmission: { requestId: request.id },
     },
     _count: { _all: true },
     _sum: { size: true },
   })
   if (!totals._count._all) return
   const url = new URL('/dashboard/requests', config.publicUrl)
-  url.searchParams.set('id', digest.requestId)
+  url.searchParams.set('id', request.id)
   // Names and notes senders typed stay in the dashboard, out of email.
   const message = renderFileRequestEmail(config, {
     username: owner.name || undefined,
-    title: digest.title,
+    title: request.title,
     fileCount: totals._count._all,
     totalSize: formatRequestBytes(
       Math.round((totals._sum.size ?? 0) * 1024 * 1024)
     ),
     url: url.toString(),
   })
-  const day = new Date()
+  const day = new Date(now)
   day.setUTCHours(0, 0, 0, 0)
   const date = day.toISOString().slice(0, 10)
-  const ownerKey = `file-request:daily:${date}:${digest.userId}`
-  try {
-    await prisma.$transaction(async (tx) => {
-      // The same admission lock enqueueMail takes, so the counts hold.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347201)`
-      const shared = await tx.emailRateLimit.findUnique({
-        where: { key: `mail:daily:${date}` },
-      })
-      const own = await tx.emailRateLimit.findUnique({
-        where: { key: ownerKey },
-      })
-      if (
-        (shared?.count ?? 0) >=
-          Math.floor(config.limits.dailyLimit * (1 - ACCOUNT_MAIL_SHARE)) ||
-        (own?.count ?? 0) >= MAX_REQUEST_EMAILS_PER_DAY
-      ) {
-        logger.warn('Skipped a file request email: a daily email cap applies', {
-          requestId: digest.requestId,
-        })
-        return
-      }
-      await tx.emailRateLimit.upsert({
-        where: { key: ownerKey },
-        create: {
-          key: ownerKey,
-          count: 1,
-          resetAt: new Date(day.getTime() + 86_400_000),
-        },
-        update: { count: { increment: 1 } },
-      })
-      await enqueueMail(
-        tx,
-        {
-          userId: digest.userId,
-          purpose: 'file_request',
-          recipient,
-          ...message,
-        },
-        config
-      )
+  const ownerKey = `file-request:daily:${date}:${request.userId}`
+  // The same admission lock enqueueMail takes, so the counts hold.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347201)`
+  const shared = await tx.emailRateLimit.findUnique({
+    where: { key: `mail:daily:${date}` },
+  })
+  const own = await tx.emailRateLimit.findUnique({ where: { key: ownerKey } })
+  if (
+    (shared?.count ?? 0) >=
+      Math.floor(config.limits.dailyLimit * (1 - ACCOUNT_MAIL_SHARE)) ||
+    (own?.count ?? 0) >= MAX_REQUEST_EMAILS_PER_DAY
+  ) {
+    logger.warn('Skipped a file request email: a daily email cap applies', {
+      requestId: request.id,
     })
+    return
+  }
+  try {
+    await enqueueMail(
+      tx,
+      {
+        userId: request.userId,
+        purpose: 'file_request',
+        recipient: owner.email,
+        ...message,
+      },
+      config
+    )
   } catch (error) {
     if (!(error instanceof MailLimitError)) throw error
     logger.warn('Skipped a file request email: the daily limit was reached', {
-      requestId: digest.requestId,
+      requestId: request.id,
     })
+    return
   }
+  await tx.emailRateLimit.upsert({
+    where: { key: ownerKey },
+    create: {
+      key: ownerKey,
+      count: 1,
+      resetAt: new Date(day.getTime() + 86_400_000),
+    },
+    update: { count: { increment: 1 } },
+  })
 }
 
 /**
@@ -212,49 +221,40 @@ export async function recordDelivery(
   { batchFinished = false } = {}
 ) {
   try {
-    const digest = await prisma.$transaction(async (tx) => {
-      const request = await lockRequest(tx, requestId)
-      if (!request || !hasNews(request)) return null
+    // Read before the transaction: email settings may need their own.
+    const config = await getEmailConfig()
+    await withNotifyLock(requestId, async (tx, request) => {
+      if (!hasNews(request)) return
       const now = new Date()
-      const dueAt = request.notifiedAt
-        ? new Date(request.notifiedAt.getTime() + NOTIFICATION_INTERVAL_MS)
-        : now
-      if (batchFinished && dueAt <= now) return claimDigest(tx, request, now)
+      const due = dueAt(request, now)
+      if (batchFinished && due <= now)
+        return sendDigest(tx, request, config, now)
       await scheduleDigest(
         tx,
         request.id,
         batchFinished
-          ? dueAt
+          ? due
           : new Date(
-              Math.max(
-                dueAt.getTime(),
-                now.getTime() + NOTIFICATION_INTERVAL_MS
-              )
+              Math.max(due.getTime(), now.getTime() + NOTIFICATION_INTERVAL_MS)
             )
       )
-      return null
     })
-    if (digest) await sendDigest(digest)
   } catch (error) {
+    // The arrivals stay unreported; a later delivery or digest tries again.
     logger.error('Could not record a file request notification', error as Error)
   }
 }
 
+/** Runs for a scheduled digest. Throwing lets the event worker retry it. */
 export async function sendScheduledDigest(requestId: string) {
-  const digest = await prisma.$transaction(async (tx) => {
-    const request = await lockRequest(tx, requestId)
-    if (!request || !hasNews(request)) return null
+  const config = await getEmailConfig()
+  await withNotifyLock(requestId, async (tx, request) => {
+    if (!hasNews(request)) return
     const now = new Date()
-    const dueAt = request.notifiedAt
-      ? new Date(request.notifiedAt.getTime() + NOTIFICATION_INTERVAL_MS)
-      : now
-    if (dueAt > now) {
-      await scheduleDigest(tx, request.id, dueAt)
-      return null
-    }
-    return claimDigest(tx, request, now)
+    const due = dueAt(request, now)
+    if (due > now) await scheduleDigest(tx, request.id, due)
+    else await sendDigest(tx, request, config, now)
   })
-  if (digest) await sendDigest(digest)
 }
 
 export async function registerFileRequestHandlers() {

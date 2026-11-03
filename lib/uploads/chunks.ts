@@ -53,24 +53,31 @@ export const UPLOAD_SESSION_IDLE_MS = 3_600_000
 /**
  * Removes an idle session and what it left behind: its unfinished multipart
  * upload and, for a file request, its hold on the request's limits. Aborting
- * an upload that already completed is harmless on every provider.
+ * an upload that already completed is harmless on every provider. The
+ * session's metadata goes last, so a failed abort is retried on the next sweep.
  */
 async function expireUploadSession(
   id: string,
   path: string,
   metadata: UploadMetadata
 ) {
-  await unlink(path).catch(() => {})
   try {
     if (metadata.fileRequest)
       await prisma.fileRequestUpload.deleteMany({ where: { id } })
     const storage = await getStorageProvider()
     const target = parseStorageTarget(metadata.storageTarget)
+    // Parts on a storage target that is no longer configured can't be reached
+    // from here, so they stay where they are.
     if (target && sameStorageTarget(target, captureStorageTarget(storage)))
       await storage.abortMultipartUpload(metadata.fileKey, metadata.s3UploadId)
   } catch (error) {
-    loggers.files.warn('Could not discard an idle upload session', { error })
+    loggers.files.warn(
+      'Could not discard an idle upload session; retrying later',
+      { error }
+    )
+    return
   }
+  await unlink(path).catch(() => {})
 }
 
 /** Ends a session now, whatever its age: a cancelled or lapsed sender upload. */
