@@ -10,12 +10,9 @@ import {
 } from '@/lib/api/response'
 import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { lockEmailAddress, lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import {
-  lockEmailAddress,
-  lockEmailUser,
-  sendAccountToken,
-} from '@/lib/email/account'
+import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { loggers } from '@/lib/logger'
@@ -25,7 +22,6 @@ import {
   assertAccessibleAdministrator,
   assertCanManageUser,
   getUserAccess,
-  lockRoleChanges,
   requireActorPermission,
   validateRoleAssignment,
 } from '@/lib/permissions/server'
@@ -302,7 +298,6 @@ async function handlePUT(req: Request) {
       await requireActorPermission(tx, actor.id, requiredPermission)
       await assertCanManageUser(tx, actor.id, existingUser.id)
       const latestConfig = await getEmailConfigForUpdate(tx)
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
       const currentUser = await lockEmailUser(tx, existingUser.id)
       if (
         (requestedEmailChange && currentUser.email !== existingUser.email) ||

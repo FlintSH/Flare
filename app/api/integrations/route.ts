@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { lockIntegrationChanges, lockWebhookQueue } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { encryptSecret } from '@/lib/email/crypto'
 import { resolveWebhookTarget } from '@/lib/integrations/security'
@@ -192,7 +193,7 @@ async function handlePOST(request: Request) {
     }
     const result = await prisma.$transaction(async (tx) => {
       // Bound management changes across replicas, including test/retry admission.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347212, hashtext(${userId}))`
+      await lockIntegrationChanges(tx, userId)
       if (input.action === 'create-token') {
         if (
           (await tx.apiToken.count({
@@ -262,7 +263,7 @@ async function handlePOST(request: Request) {
         return { webhook, secret, secretKind: 'webhook' }
       }
       if (input.action === 'retry-delivery') {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347213, hashtext(${userId}))`
+        await lockWebhookQueue(tx, userId)
         const delivery = await tx.webhookDelivery.findFirst({
           where: {
             id: input.id,
@@ -305,7 +306,7 @@ async function handlePOST(request: Request) {
       }
       // Serialize pause/delete with enqueue so paused receivers cannot acquire
       // a new pending event after their existing queue was cancelled.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347213, hashtext(${userId}))`
+      await lockWebhookQueue(tx, userId)
       const webhook = await tx.webhook.findFirst({
         where: { id: input.id, userId },
       })

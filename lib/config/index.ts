@@ -13,6 +13,7 @@ import {
   DEFAULT_CUSTOMIZATION,
   customizationSchema,
 } from '@/lib/customization/schema'
+import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { DEFAULT_EMAIL_CONFIG, emailConfigSchema } from '@/lib/email/schema'
 import { loggers } from '@/lib/logger'
@@ -390,7 +391,7 @@ export async function updateConfig(
   }
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      await lockSettings(tx)
       await authorize?.(tx)
       const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
       const currentConfig = row ? configSchema.parse(row.value) : DEFAULT_CONFIG

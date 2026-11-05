@@ -15,6 +15,7 @@ import {
   vi,
 } from 'vitest'
 
+import { lockRoleChanges } from '@/lib/database/locks'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
 import { ALL_PERMISSIONS, DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import { s3StorageTarget } from '@/lib/storage/targets'
@@ -133,12 +134,10 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     })
   }
   async function locked(
-    callback: (
-      tx: Parameters<typeof service.lockRoleChanges>[0]
-    ) => Promise<unknown>
+    callback: (tx: Prisma.TransactionClient) => Promise<unknown>
   ) {
     return prisma.$transaction(async (tx) => {
-      await service.lockRoleChanges(tx)
+      await lockRoleChanges(tx)
       return callback(tx)
     })
   }

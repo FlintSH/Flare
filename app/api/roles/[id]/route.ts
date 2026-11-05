@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { withAuditRoute } from '@/lib/audit'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { readRoleJson, roleMutationGuard } from '@/lib/permissions/http'
 import { roleUpdateSchema } from '@/lib/permissions/schema'
@@ -9,7 +10,6 @@ import {
   assertAccessibleAdministrator,
   assertCanGrantPermissions,
   assertCanManageRole,
-  lockRoleChanges,
   requireActorPermission,
   requirePermission,
   roleSelect,

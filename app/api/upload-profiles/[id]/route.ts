@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 import { validateOwnedTagIds } from '@/lib/tags/service'
@@ -22,7 +23,7 @@ async function handlePUT(req: Request, { params }: Context) {
     const { id } = await params
     const { revision, ...input } = updateSchema.parse(await req.json())
     const profile = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      await lockUserRow(tx, user.id)
       if (input.options.tagIds)
         input.options.tagIds = await validateOwnedTagIds(
           user.id,
@@ -57,7 +58,7 @@ async function handleDELETE(req: Request, { params }: Context) {
   try {
     const { id } = await params
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      await lockUserRow(tx, user.id)
       await tx.user.updateMany({
         where: { id: user.id, defaultUploadProfileId: id },
         data: { defaultUploadProfileId: null },

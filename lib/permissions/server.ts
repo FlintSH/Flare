@@ -45,12 +45,6 @@ export class PermissionError extends Error {
   }
 }
 
-/** Settings must always be locked before access, matching email-policy writers. */
-export async function lockRoleChanges(tx: Prisma.TransactionClient) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
-}
-
 /** Safe for migrated instances and freshly initialized databases. Never overwrite customizations. */
 export async function ensureBuiltInRoles(tx: Prisma.TransactionClient) {
   const everyone = await tx.role.upsert({

@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { setAuditActor, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
@@ -12,7 +13,7 @@ import {
   checkFileAccess,
   retryAfterMinutes,
 } from '@/lib/files/access'
-import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
+import { getUserAccess } from '@/lib/permissions/server'
 import { rateLimit } from '@/lib/security/rate-limit'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 

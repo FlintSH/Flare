@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 
 import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { lockEmailAddress, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
 import { getEmailConfigForUpdate } from './config'
@@ -19,16 +20,8 @@ import {
   issueEmailToken,
 } from './tokens'
 
-/** Serialize mailbox claims without rewriting or merging legacy addresses. */
-export async function lockEmailAddress(
-  tx: Prisma.TransactionClient,
-  email: string
-) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${email.trim()}), 71041))`
-}
-
 export async function lockEmailUser(tx: Prisma.TransactionClient, id: string) {
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`
+  await lockUserRow(tx, id)
   const user = await tx.user.findUnique({ where: { id } })
   if (!user) throw new Error('Account not found.')
   return user

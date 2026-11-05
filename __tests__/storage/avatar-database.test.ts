@@ -17,6 +17,7 @@ import {
   vi,
 } from 'vitest'
 
+import { lockRoleChanges } from '@/lib/database/locks'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 
 const authentication = vi.hoisted(() => ({
@@ -268,7 +269,7 @@ suite.sequential(
       try {
         written = await paused.started.promise
         await prisma.$transaction(async (tx) => {
-          await permissions.lockRoleChanges(tx)
+          await lockRoleChanges(tx)
           await tx.role.update({
             where: { systemKey: 'everyone' },
             data: { permissions: ['files.read'] },

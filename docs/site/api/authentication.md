@@ -15,7 +15,7 @@ With `tokens.manage`, create one named API token for each script or service in *
 4. If it uploads files, optionally bind it to one of your saved upload profiles.
 5. Create the token and save the displayed `flr_…` secret in your tool's secret store.
 
-The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes.
+The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. Token and webhook changes for one account run one at a time, so concurrent requests cannot exceed it. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes.
 
 ## Send a token
 

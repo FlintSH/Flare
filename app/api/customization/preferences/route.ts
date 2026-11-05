@@ -9,6 +9,7 @@ import {
   personalAppearanceSchema,
   readPersonalAppearance,
 } from '@/lib/customization/schema'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 
@@ -55,7 +56,7 @@ async function handlePATCH(request: Request) {
         { status: 400 }
       )
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${session.user.id} FOR UPDATE`
+      await lockUserRow(tx, session.user.id)
       const user = await tx.user.findUniqueOrThrow({
         where: { id: session.user.id },
         select: { preferences: true },

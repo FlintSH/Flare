@@ -1,6 +1,7 @@
 import { type MailOutbox, Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
+import { lockMailBudget, lockMailClaims } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
 import { getEmailConfig } from './config'
@@ -45,7 +46,7 @@ export async function enqueueMail(
   const settings = config ?? (await getEmailConfig())
   if (!settings.enabled) throw new Error('Email delivery is disabled.')
   // Serialize admission across replicas. This includes messages later rejected by SMTP.
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347201)`
+  await lockMailBudget(tx)
   const midnight = new Date()
   midnight.setUTCHours(0, 0, 0, 0)
   // Keep usage independent of accounts and delivery-history retention. Deleting
@@ -90,7 +91,7 @@ function leaseDuration(config: EmailConfig): number {
 /** SKIP LOCKED and one UPDATE ensure independent workers cannot claim the same row. */
 export async function claimMail(config: EmailConfig): Promise<MailOutbox[]> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
+    await lockMailClaims(tx)
     const now = new Date()
     const active = await tx.mailOutbox.count({
       where: { status: 'processing', leaseUntil: { gt: now } },
@@ -348,7 +349,7 @@ export async function deliverTestEmail(
 ): Promise<void> {
   const mail = await prisma.$transaction(async (tx) => {
     // Same admission lock as background claims: test messages share their slots.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
+    await lockMailClaims(tx)
     const active = await tx.mailOutbox.count({
       where: { status: 'processing', leaseUntil: { gt: new Date() } },
     })

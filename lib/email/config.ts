@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { readFileSync } from 'node:fs'
 
 import { getConfig, readSavedConfigRow } from '@/lib/config'
+import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
 
@@ -124,7 +125,7 @@ function validateEffectiveConfig(saved: EmailConfig): EmailConfig {
 export async function getEmailConfigForUpdate(
   tx: Prisma.TransactionClient
 ): Promise<EmailConfig> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+  await lockSettings(tx)
   const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
   const value = row?.value as ObjectValue | undefined
   const settings = value?.settings as ObjectValue | undefined
@@ -247,7 +248,7 @@ export async function saveEmailConfig(
   // Prepare against the latest saved settings while serializing policy changes
   // with account mutations and all other JSON settings writers.
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+    await lockRoleChanges(tx)
     const { candidate, previous, effective } = await prepareEmailConfig(
       input,
       options.clearPassword,
@@ -268,7 +269,6 @@ export async function saveEmailConfig(
     candidate.verification.graceEndsAt = transition.graceEndsAt
     candidate.verification.appliedMode = transition.appliedMode
     validateEffectiveConfig(candidate)
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
     const finalConfig = resolveEmailConfig(candidate).config
     if (finalConfig.enabled && finalConfig.verification.mode === 'all_users') {
       await assertAccessibleAdministrator(tx, finalConfig)

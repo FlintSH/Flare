@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { randomBytes } from 'node:crypto'
 
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import type {
   FolderInput,
@@ -55,7 +56,7 @@ export async function validateOwnedFolderId(
 
 export async function createFolder(userId: string, input: FolderInput) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     await validateOwnedFolderId(userId, input.parentId, tx)
     const folder = await tx.vaultFolder.create({
       data: { ...input, userId, normalizedName: input.name.toLowerCase() },
@@ -71,7 +72,7 @@ export async function updateFolder(
   input: FolderUpdate
 ) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     const current = await tx.vaultFolder.findFirst({
       where: { id, userId },
       select: { id: true, shareToken: true },
@@ -100,7 +101,7 @@ export async function updateFolder(
 /** Dissolve a folder, moving its direct contents up one level without deleting files. */
 export async function deleteFolder(userId: string, id: string) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     const folder = await tx.vaultFolder.findFirst({
       where: { id, userId },
       select: { id: true, parentId: true },
@@ -150,7 +151,7 @@ export async function moveFilesToFolder(
 ): Promise<number> {
   const fileIds = [...new Set(input.fileIds)]
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     await validateOwnedFolderId(userId, input.folderId, tx)
     const ownedFiles = await tx.file.count({
       where: { id: { in: fileIds }, userId },

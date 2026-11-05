@@ -10,6 +10,7 @@ import {
   getConfig,
   updateConfig,
 } from '@/lib/config'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { redactEmailConfig } from '@/lib/email/config'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -17,7 +18,6 @@ import {
   PermissionError,
   assertAccessibleAdministrator,
   getUserAccess,
-  lockRoleChanges,
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { settingsPatchAllowed } from '@/lib/permissions/settings'

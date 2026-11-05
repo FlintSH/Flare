@@ -1,6 +1,5 @@
+import { lockEmailAddress, lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { lockEmailAddress } from '@/lib/email/account'
-import { lockRoleChanges } from '@/lib/permissions/server'
 import { createUser } from '@/lib/users/create-user'
 
 export interface OidcProfile {

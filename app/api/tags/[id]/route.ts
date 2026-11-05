@@ -1,6 +1,7 @@
 import { apiResponse } from '@/lib/api/response'
 import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
 import { tagInputSchema } from '@/lib/tags/schema'
@@ -35,7 +36,7 @@ async function handleDELETE(request: Request, { params }: Context) {
     if (guarded) return guarded
     const { id } = await params
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      await lockUserRow(tx, user.id)
       const removed = await tx.vaultTag.deleteMany({
         where: { id, userId: user.id },
       })

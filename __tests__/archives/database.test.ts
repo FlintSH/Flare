@@ -2051,7 +2051,7 @@ suite('archive publication against disposable PostgreSQL', () => {
     )
 
     it('answers listing progress while a role change holds its lock', async () => {
-      const { lockRoleChanges } = await import('@/lib/permissions/server')
+      const { lockRoleChanges } = await import('@/lib/database/locks')
       const file = await slowTarGz('busy-plans.tar.gz')
       let unblock!: () => void
       const gate = new Promise<void>((resolve) => {

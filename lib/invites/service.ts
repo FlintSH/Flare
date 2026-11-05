@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
@@ -18,7 +19,6 @@ import {
   ensureBuiltInRoles,
   getUserAccess,
   getUsersAccess,
-  lockRoleChanges,
   requireActorPermission,
   roleSelect,
   validateRoleAssignment,

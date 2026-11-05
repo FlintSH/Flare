@@ -6,6 +6,7 @@ import { basename, extname } from 'node:path'
 import { recordAudit, setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { urlSafeFilename } from '@/lib/files/filename'
 import { validateOwnedFolderId } from '@/lib/folders/service'
@@ -13,7 +14,7 @@ import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
+import { getUserAccess } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
@@ -111,7 +112,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     const config = configRow
       ? configSchema.parse(configRow.value)
       : DEFAULT_CONFIG
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+    await lockUserRow(tx, user.id)
     const fresh = await tx.user.findUnique({ where: { id: user.id } })
     if (!fresh) throw new UploadError('Account no longer exists.', 401)
     const access = await getUserAccess(user.id, tx)

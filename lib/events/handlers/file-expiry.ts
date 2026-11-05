@@ -3,6 +3,7 @@ import { ExpiryAction } from '@/types/events'
 import type { Prisma } from '@prisma/client'
 
 import { recordAudit } from '@/lib/audit'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
@@ -26,7 +27,7 @@ async function expireFile(
     async (tx) => {
       // Retry and multi-process delivery may execute this twice. Serialize with
       // account quota changes and only mutate a still-existing file once.
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${payload.userId} FOR UPDATE`
+      await lockUserRow(tx, payload.userId)
       const currentEvent = await tx.event.findUnique({
         where: { id: event.id },
       })
@@ -139,7 +140,7 @@ export async function scheduleFileExpiration(
   )
     throw new Error('Invalid file expiration.')
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     const file = await tx.file.findFirst({ where: { id: fileId, userId } })
     if (!file) throw new Error('File not found.')
     await clearSchedules(tx, fileId)
@@ -188,7 +189,7 @@ export async function cancelFileExpiration(fileId: string): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     const file = await tx.file.findUnique({ where: { id: fileId } })
     if (!file) return false
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${file.userId} FOR UPDATE`
+    await lockUserRow(tx, file.userId)
     const count = await clearSchedules(tx, fileId)
     const options =
       file.uploadOptions &&

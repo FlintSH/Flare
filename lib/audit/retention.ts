@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { recordAudit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
+import { tryLockAuditRetention } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { createLogger } from '@/lib/logger'
 
@@ -74,10 +75,7 @@ export async function pruneAuditEvents(
     for (let batch = 0; batch < maxBatches; batch++) {
       const removed = await client.$transaction(
         async (tx) => {
-          const [{ locked }] = await tx.$queryRaw<Array<{ locked: boolean }>>`
-          SELECT pg_try_advisory_xact_lock(712347214) AS "locked"
-        `
-          if (!locked) return null
+          if (!(await tryLockAuditRetention(tx))) return null
           // AuditEvent is not an audited model, so these writes add no events.
           const expired = await tx.auditEvent.findMany({
             where: { createdAt: { lt: cutoff } },

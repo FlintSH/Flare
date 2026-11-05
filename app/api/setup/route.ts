@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
@@ -56,7 +57,7 @@ async function handlePOST(req: Request) {
     // Account and settings succeed together. Serializing bootstrap also prevents
     // simultaneous setup requests from creating multiple initial administrators.
     const user = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+      await lockSettings(tx)
       const userCount = await tx.user.count()
       if (userCount > 0) throw new SetupAlreadyCompleteError()
       const admin = await createUser(tx, {

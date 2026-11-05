@@ -1,5 +1,6 @@
 import { withAuditRoute } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { requirePermission } from '@/lib/permissions/server'
@@ -87,7 +88,7 @@ async function handlePOST(req: Request) {
       : uploadProfileInputSchema.parse(json)
     const profile = await prisma.$transaction(async (tx) => {
       // Serialize tag deletion and profile edits so saved selections stay valid.
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      await lockUserRow(tx, user.id)
       if (input.options.tagIds)
         input.options.tagIds = await validateOwnedTagIds(
           user.id,

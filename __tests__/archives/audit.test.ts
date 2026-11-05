@@ -34,7 +34,6 @@ vi.mock('@/lib/database/prisma', () => ({
 }))
 vi.mock('@/lib/permissions/server', () => ({
   getUserAccess: async () => ({ roles: [], permissions: ['files.read'] }),
-  lockRoleChanges: vi.fn(),
   PermissionError: class extends Error {
     status = 403
   },

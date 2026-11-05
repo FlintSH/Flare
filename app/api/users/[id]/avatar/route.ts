@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 
 import { withAuditRoute } from '@/lib/audit'
+import { lockUserRow } from '@/lib/database/locks'
 import { loggers } from '@/lib/logger'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
@@ -29,7 +30,7 @@ async function handleDELETE(
     }
 
     await mutateAccount(session.user.id, id, 'users.update', async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${id} FOR UPDATE`
+      await lockUserRow(tx, id)
       const user = await tx.user.findUnique({ where: { id } })
       if (!user) throw new PermissionError('User not found', 404)
       await queueAvatarStorageDeletion(tx, user)

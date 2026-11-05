@@ -14,6 +14,7 @@ import { z } from 'zod'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
@@ -268,7 +269,7 @@ export async function withUploadLock<T>(
 ): Promise<T> {
   return prisma.$transaction(
     async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`flare-upload:${id}`}, 0))`
+      await lockUploadSession(tx, id)
       return action(tx)
     },
     { timeout: 120000, maxWait: 10000 }

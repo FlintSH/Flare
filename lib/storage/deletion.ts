@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 
 import { recordAudit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
+import { lockStorageDeletionClaims, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
@@ -47,7 +48,7 @@ async function queueAccountStorageDeletion(
 ) {
   // File publication and account mutation share this row lock. Read the paths
   // now, rather than keeping a snapshot from before access was serialized.
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+  await lockUserRow(tx, userId)
   const user = await tx.user.findUnique({
     where: { id: userId },
     select: {
@@ -159,7 +160,7 @@ export async function deleteAccountWithStorageCleanup(
 /** Global slots and atomic leases allow every app process to run the worker. */
 export async function claimStorageDeletions(): Promise<StorageDeletion[]> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347205)`
+    await lockStorageDeletionClaims(tx)
     const now = new Date()
     const active = await tx.storageDeletion.count({
       where: { status: 'processing', leaseUntil: { gt: now } },

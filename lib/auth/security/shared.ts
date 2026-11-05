@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { clientIp } from '@/lib/security/client-ip'
 
@@ -79,7 +80,7 @@ export async function lockSecurityUser(
   tx: Prisma.TransactionClient,
   id: string
 ) {
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`
+  await lockUserRow(tx, id)
   const user = await tx.user.findUnique({ where: { id } })
   if (!user) throw new SecurityError('Sign in again to continue.', 401)
   return user

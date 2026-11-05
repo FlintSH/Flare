@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requirePermission } from '@/lib/permissions/server'
 import { profileMutationGuard } from '@/lib/uploads/profiles'
@@ -17,7 +18,7 @@ async function handlePUT(req: Request) {
       .strict()
       .parse(await req.json())
     const saved = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+      await lockUserRow(tx, user.id)
       if (
         profileId &&
         !(await tx.uploadProfile.findFirst({

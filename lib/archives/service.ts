@@ -7,6 +7,7 @@ import type { z } from 'zod'
 
 import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
@@ -17,7 +18,6 @@ import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import {
   PermissionError,
   getUserAccess,
-  lockRoleChanges,
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
@@ -240,7 +240,7 @@ async function lockPublication(
   options: ResolvedUploadOptions
 ) {
   await lockRoleChanges(tx)
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${actor.user.id} FOR UPDATE`
+  await lockUserRow(tx, actor.user.id)
   const access = await requireActorPermission(tx, actor.user.id, permissions[0])
   if (permissions.some((permission) => !hasPermission(access, permission)))
     throw new ArchiveError(

@@ -29,7 +29,6 @@ vi.mock('@/lib/auth/api-auth', () => ({
 }))
 vi.mock('@/lib/permissions/server', () => ({
   PermissionError: class PermissionError extends Error {},
-  lockRoleChanges: vi.fn(),
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),
@@ -37,13 +36,16 @@ vi.mock('@/lib/permissions/server', () => ({
   getUserAccess: async () => ({ roles: [], permissions: [] }),
 }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks.db }))
+vi.mock('@/lib/database/locks', () => ({
+  lockRoleChanges: vi.fn(),
+  lockEmailAddress: mocks.lockEmailAddress,
+}))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfig: mocks.getEmailConfig,
   getEmailConfigForUpdate: mocks.getEmailConfigForUpdate,
 }))
 vi.mock('@/lib/email/account', () => ({
   lockEmailUser: mocks.lockEmailUser,
-  lockEmailAddress: mocks.lockEmailAddress,
   sendAccountToken: mocks.sendAccountToken,
 }))
 vi.mock('@/lib/email/tokens', () => ({

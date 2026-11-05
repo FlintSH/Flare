@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
 import { requirePermission } from '@/lib/auth/api-auth'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig, resolveEmailConfig } from '@/lib/email/config'
@@ -52,8 +53,7 @@ async function handlePOST(req: Request, { params }: Context) {
     if (!config.enabled) throw new EmailHttpError('Email is disabled.')
     await limitEmailRequest(req, config)
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
+      await lockRoleChanges(tx)
       const row = await tx.config.findUnique({
         where: { key: 'flare_config' },
       })

@@ -2,12 +2,12 @@ import type { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import {
   PermissionError,
-  lockRoleChanges,
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { sanitizeFilename } from '@/lib/security/paths'
@@ -25,7 +25,7 @@ async function authorizeAvatarWrite(
   size: number
 ) {
   await lockRoleChanges(tx)
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+  await lockUserRow(tx, userId)
   const user = await tx.user.findUnique({ where: { id: userId } })
   if (!user) throw new PermissionError('Account not found', 404)
   const access = await requireActorPermission(tx, userId, 'profile.update')

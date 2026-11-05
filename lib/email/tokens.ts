@@ -1,6 +1,8 @@
 import type { Prisma } from '@prisma/client'
 import { createHash, randomBytes } from 'node:crypto'
 
+import { lockUserRow } from '@/lib/database/locks'
+
 export type EmailTokenPurpose =
   'verify' | 'reset' | 'change' | 'change_approval'
 
@@ -47,7 +49,7 @@ export async function consumeEmailToken(
     throw new Error('This email link is invalid or expired.')
   }
   // Account mutations and issuance take the same lock before touching tokens.
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${record.userId} FOR UPDATE`
+  await lockUserRow(tx, record.userId)
   const consumed = await tx.emailToken.updateMany({
     where: { id: record.id, consumedAt: null, expiresAt: { gt: new Date() } },
     data: { consumedAt: new Date() },

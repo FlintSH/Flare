@@ -121,7 +121,7 @@ The same role groups and permission search are available on narrow screens. Open
 
 Saving a role changes only what you edited. An [API update](/api/roles#write-validation) that sends some fields, such as only a new color, keeps the role's other settings and permissions.
 
-The server loads current permissions for authenticated requests. Removing a role or changing its permissions takes effect on the next request without waiting for a browser session to expire. A screen already open may still show old controls until refreshed; the server rejects actions that are no longer allowed.
+The server loads current permissions for authenticated requests. Removing a role or changing its permissions takes effect on the next request without waiting for a browser session to expire. A screen already open may still show old controls until refreshed; the server rejects actions that are no longer allowed. Role, account, and email-policy changes saved at the same moment by different administrators apply one at a time, and each rechecks its author's current permissions when it runs.
 
 [Named API tokens](/api/authentication#scopes-and-account-roles) must satisfy both their selected scope and their owner's current role permissions. An existing upload token stops authorizing uploads when its owner's upload permission is removed. Changing a role does not erase tokens or their stored scope choices; granting the permission again can restore access to an otherwise valid token. Revoke the token too when you intend permanent retirement.
 
