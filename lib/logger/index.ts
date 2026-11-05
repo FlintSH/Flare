@@ -1,5 +1,3 @@
-import { NextRequest } from 'next/server'
-
 import pino, { Logger as PinoLogger } from 'pino'
 
 import { sanitizeLogUrl } from './url'
@@ -9,20 +7,6 @@ export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace'
 interface LoggerOptions {
   name?: string
   level?: LogLevel
-}
-
-interface RequestLogContext {
-  method: string
-  url: string
-  userAgent?: string
-  ip?: string
-  userId?: string
-  sessionId?: string
-}
-
-interface ErrorLogContext {
-  error: Error | unknown
-  context?: Record<string, unknown>
 }
 
 const isDevelopment = process.env.NODE_ENV === 'development'
@@ -149,10 +133,6 @@ export class Logger {
     return message
   }
 
-  fatal(message: string, context?: Record<string, unknown>) {
-    this.logger.fatal(this.formatMessage(message, context))
-  }
-
   error(
     message: string,
     error?: Error | unknown,
@@ -182,65 +162,6 @@ export class Logger {
     this.logger.debug(this.formatMessage(message, context))
   }
 
-  trace(message: string, context?: Record<string, unknown>) {
-    this.logger.trace(this.formatMessage(message, context))
-  }
-
-  logRequest(req: NextRequest, context?: Partial<RequestLogContext>) {
-    const requestContext: RequestLogContext = {
-      method: req.method,
-      url: sanitizeLogUrl(req.url),
-      userAgent: req.headers.get('user-agent') || undefined,
-      ip:
-        req.headers.get('x-forwarded-for') ||
-        req.headers.get('x-real-ip') ||
-        undefined,
-      ...context,
-    }
-
-    this.info(`${requestContext.method} ${requestContext.url}`, {
-      request: requestContext,
-    })
-  }
-
-  logResponse(
-    req: NextRequest,
-    statusCode: number,
-    duration: number,
-    context?: Record<string, unknown>
-  ) {
-    const level =
-      statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info'
-
-    const message = `${req.method} ${sanitizeLogUrl(req.url)} - ${statusCode} (${duration}ms)`
-
-    this[level](message, {
-      response: {
-        statusCode,
-        duration,
-        method: req.method,
-        url: sanitizeLogUrl(req.url),
-      },
-      ...context,
-    })
-  }
-
-  logError(errorContext: ErrorLogContext) {
-    const { error, context } = errorContext
-
-    if (error instanceof Error) {
-      this.error(error.message, error, context)
-    } else {
-      this.error('An unknown error occurred', error, context)
-    }
-  }
-
-  child(bindings: Record<string, unknown>): Logger {
-    return new Logger({
-      name: bindings.name || this.logger.bindings().name,
-    })
-  }
-
   getChildLogger(name: string): Logger {
     return new Logger({ name })
   }
@@ -250,13 +171,10 @@ const createLogger = (name: string): Logger => {
   return new Logger({ name })
 }
 
-const defaultLogger = new Logger({ name: 'flare' })
-
-export { createLogger, defaultLogger as logger }
+export { createLogger }
 
 export const loggers = {
   api: createLogger('api'),
-  auth: createLogger('auth'),
   db: createLogger('db'),
   storage: createLogger('storage'),
   events: createLogger('events'),

@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 import { Info } from 'lucide-react'
 
-import { EmailAuthCard } from '@/components/email/auth-card'
+import { AuthShell } from '@/components/auth/auth-shell'
 import { ForgotPasswordForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ async function recoveryAvailable() {
 export default async function ForgotPasswordPage() {
   if ((await recoveryAvailable()) === false)
     return (
-      <EmailAuthCard
+      <AuthShell
         title="Forgot your password?"
         description="Ask your administrator for help signing in."
       >
@@ -41,15 +41,15 @@ export default async function ForgotPasswordPage() {
         <Button asChild className="mt-6 h-11 w-full">
           <Link href="/auth/login?local=1">Back to sign in</Link>
         </Button>
-      </EmailAuthCard>
+      </AuthShell>
     )
 
   return (
-    <EmailAuthCard
+    <AuthShell
       title="Forgot your password?"
       description="Enter your account email and we will send a reset link if recovery is available for it."
     >
       <ForgotPasswordForm />
-    </EmailAuthCard>
+    </AuthShell>
   )
 }

@@ -82,7 +82,7 @@ Under **Profile → Uploads → Account upload defaults**, you can set:
 - **When files expire:** choose delete or set private as the default expiry action.
 - **Default expiration:** disabled, one hour, one day, one week, or one month.
 
-The vanity path is account-wide and is separate from profiles. Changing or clearing it can stop older vanity links from resolving. Generated account-ID file paths remain a separate way to resolve the files. Use the current **Copy link** action when distributing a new address.
+The vanity path is account-wide and is separate from profiles. Changing or clearing it can stop older vanity links from resolving. Generated account-ID file paths remain a separate way to resolve the files. The links shown after an upload use the vanity path. **Copy link** in the library and on a file's page copies the account-ID path, which keeps working when you change or clear the vanity path.
 
 ## Connect a saved profile to a tool
 

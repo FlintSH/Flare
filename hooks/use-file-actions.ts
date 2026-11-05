@@ -1,5 +1,3 @@
-import { useToast } from './use-toast'
-
 export interface FileActionsOptions {
   urlPath?: string
   name?: string
@@ -8,40 +6,6 @@ export interface FileActionsOptions {
 }
 
 export function useFileActions(options: FileActionsOptions = {}) {
-  const { toast } = useToast()
-
-  const copyUrl = () => {
-    if (!options.urlPath) return
-
-    const baseUrl = window.location.origin
-    const url = `${baseUrl}${options.urlPath}`
-
-    navigator.clipboard.writeText(url).then(() => {
-      toast({
-        title: 'URL copied',
-        description: 'The file URL has been copied to your clipboard',
-      })
-    })
-  }
-
-  const copyRawUrl = () => {
-    if (!options.urlPath) return
-
-    const baseUrl = window.location.origin
-    let url = `${baseUrl}${options.urlPath}/raw`
-
-    if (options.verifiedPassword) {
-      url += `?password=${encodeURIComponent(options.verifiedPassword)}`
-    }
-
-    navigator.clipboard.writeText(url).then(() => {
-      toast({
-        title: 'Raw URL copied',
-        description: 'The raw file URL has been copied to your clipboard',
-      })
-    })
-  }
-
   const download = () => {
     if (!options.name) return
 
@@ -86,8 +50,6 @@ export function useFileActions(options: FileActionsOptions = {}) {
   }
 
   return {
-    copyUrl,
-    copyRawUrl,
     download,
     openRaw,
   }

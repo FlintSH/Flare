@@ -145,8 +145,6 @@ export function detectArchiveFormat(
   return null
 }
 
-export const getArchiveFormat = detectArchiveFormat
-
 export function archiveBasename(name: string): string {
   return name.replace(/\.(tar\.gz|tgz|zip|tar|gz)$/i, '') || 'Archive'
 }

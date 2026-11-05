@@ -13,35 +13,29 @@ afterAll(() => {
   s3.restore()
 })
 
-runStorageProviderContract(
-  's3 (in-memory)',
-  async () => {
-    const provider = new S3StorageProvider({
-      bucket: 'test-bucket',
-      region: 'us-east-1',
-      accessKeyId: 'test',
-      secretAccessKey: 'test',
-      endpoint: 'http://localhost:9000',
-      forcePathStyle: true,
-    })
+runStorageProviderContract('s3 (in-memory)', async () => {
+  const provider = new S3StorageProvider({
+    bucket: 'test-bucket',
+    region: 'us-east-1',
+    accessKeyId: 'test',
+    secretAccessKey: 'test',
+    endpoint: 'http://localhost:9000',
+    forcePathStyle: true,
+  })
 
-    return {
-      provider,
-      prefix: 'uploads/contract',
-      cleanup: async () => {
-        // Data persists across tests (unique paths avoid collisions); nothing
-        // to tear down between cases.
-      },
-    }
-  },
-  // createWriteStream uploads via a presigned URL over real HTTP, which the
-  // in-memory backend cannot serve. It is covered by the real-S3 gated run.
-  { testWriteStream: false }
-)
+  return {
+    provider,
+    prefix: 'uploads/contract',
+    cleanup: async () => {
+      // Data persists across tests (unique paths avoid collisions); nothing
+      // to tear down between cases.
+    },
+  }
+})
 
 // Opt-in run against a real S3-compatible endpoint (AWS, MinIO, etc.). Set the
 // TEST_S3_* env vars to enable; this validates the full path including
-// presigned-URL streaming (createWriteStream / multipart). Example:
+// multipart uploads. Example:
 //   TEST_S3_ENDPOINT=http://localhost:9000 TEST_S3_BUCKET=flare-test \
 //   TEST_S3_REGION=us-east-1 TEST_S3_ACCESS_KEY=... TEST_S3_SECRET_KEY=... \
 //   TEST_S3_FORCE_PATH_STYLE=true pnpm test

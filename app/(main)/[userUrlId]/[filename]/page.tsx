@@ -35,60 +35,6 @@ interface FilePageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-interface PrismaFile {
-  id: string
-  name: string
-  urlPath: string
-  visibility: 'PUBLIC' | 'PRIVATE'
-  password: string | null
-  userId: string
-  mimeType: string
-  size: number
-  uploadedAt: Date
-  path: string
-  user?: {
-    name: string | null
-    image: string | null
-    urlId: string
-  } | null
-}
-
-function prepareFileProps(file: PrismaFile) {
-  const plainFile = JSON.parse(
-    JSON.stringify({
-      id: file.id,
-      name: file.name,
-      urlPath: file.urlPath,
-      visibility: file.visibility,
-      password: file.password,
-      userId: file.userId,
-      mimeType: file.mimeType,
-      size: file.size,
-      uploadedAt: file.uploadedAt,
-      path: file.path,
-      user: {
-        name: file.user?.name || '',
-        image: file.user?.image || undefined,
-        urlId: file.user?.urlId || '',
-      },
-    })
-  )
-
-  return {
-    id: plainFile.id,
-    name: plainFile.name,
-    urlPath: plainFile.urlPath,
-    visibility: plainFile.visibility,
-    password: plainFile.password,
-    userId: plainFile.userId,
-    mimeType: plainFile.mimeType,
-    size: plainFile.size,
-    uploadedAt: plainFile.uploadedAt,
-    path: plainFile.path,
-    user: plainFile.user,
-  }
-}
-
 export async function generateMetadata({
   params,
   searchParams,
@@ -98,11 +44,6 @@ export async function generateMetadata({
   const headersList = await headers()
   const session = await getAccessSession()
   const providedPassword = (await searchParams).password as string | undefined
-
-  const path = headersList.get('x-invoke-path') || ''
-  if (path.endsWith('/raw')) {
-    return {}
-  }
 
   const urlPath = await resolveFileUrlPath(userUrlId, filename)
 
@@ -247,9 +188,6 @@ export default async function FilePage({
     data: { views: { increment: 1 } },
   })
 
-  const serializedFile = prepareFileProps(file)
-
-  // Check the database record itself; the serialized copy is for rendering.
   const requestHeaders = await headers()
   const access = await checkFileAccess(file, session, providedPassword, {
     requester: requestIp(requestHeaders),
@@ -288,9 +226,9 @@ export default async function FilePage({
     )
   }
 
-  const isImage = serializedFile.mimeType.startsWith('image/')
-  const isVideo = serializedFile.mimeType.startsWith('video/')
-  const isPdf = serializedFile.mimeType === 'application/pdf'
+  const isImage = file.mimeType.startsWith('image/')
+  const isVideo = file.mimeType.startsWith('video/')
+  const isPdf = file.mimeType === 'application/pdf'
   const isMediaFile = isImage || isVideo || isPdf
 
   // Send only viewer fields to the client. In particular, never serialize the

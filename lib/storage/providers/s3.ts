@@ -1,19 +1,16 @@
 import {
-  AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
-  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { Transform, addAbortSignal } from 'node:stream'
-import type { Writable as NodeWritable, Readable } from 'node:stream'
+import type { Readable } from 'node:stream'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import { loggers } from '@/lib/logger'
@@ -214,7 +211,9 @@ export class S3StorageProvider implements StorageProvider {
     throw lastError || new Error('Failed to get file stream after retries')
   }
 
-  async getFileUrl(path: string, expiresIn: number = 3600): Promise<string> {
+  // S3 objects are reachable directly via a presigned/public URL, so callers
+  // can redirect to it instead of streaming bytes through the app.
+  async getPublicUrl(path: string): Promise<string | null> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     if (key.startsWith('avatars/')) {
@@ -229,17 +228,7 @@ export class S3StorageProvider implements StorageProvider {
       Key: key,
     })
 
-    const downloadExpiresIn = expiresIn > 3600 ? expiresIn : 21600
-
-    return await getSignedUrl(this.client, command, {
-      expiresIn: downloadExpiresIn,
-    })
-  }
-
-  // S3 objects are reachable directly via a presigned/public URL, so callers
-  // can redirect to it instead of streaming bytes through the app.
-  async getPublicUrl(path: string): Promise<string | null> {
-    return this.getFileUrl(path)
+    return await getSignedUrl(this.client, command, { expiresIn: 21600 })
   }
 
   async getDownloadUrl(path: string, filename?: string): Promise<string> {
@@ -266,334 +255,6 @@ export class S3StorageProvider implements StorageProvider {
 
     const response = await this.client.send(command)
     return response.ContentLength || 0
-  }
-
-  async uploadChunkedFile(
-    chunksDir: string,
-    targetPath: string,
-    mimeType: string
-  ): Promise<void> {
-    const key = targetPath.replace(/^\/+/, '').replace(/^uploads\//, '')
-    const createResponse = await this.client.send(
-      new CreateMultipartUploadCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ContentType: mimeType,
-      })
-    )
-
-    const uploadId = createResponse.UploadId
-    if (!uploadId) {
-      throw new Error('Failed to create multipart upload')
-    }
-
-    try {
-      const { readdir, readFile } = await import('fs/promises')
-      const { join } = await import('path')
-
-      const chunkFiles = await readdir(chunksDir)
-      const sortedChunks = chunkFiles
-        .filter((file) => file.startsWith('chunk-'))
-        .sort((a, b) => {
-          const numA = parseInt(a.split('-')[1])
-          const numB = parseInt(b.split('-')[1])
-          return numA - numB
-        })
-
-      const uploadPromises = sortedChunks.map(async (chunkFile, index) => {
-        const chunkPath = join(chunksDir, chunkFile)
-        const chunkData = await readFile(chunkPath)
-        const response = await this.client.send(
-          new UploadPartCommand({
-            Bucket: this.bucket,
-            Key: key,
-            PartNumber: index + 1,
-            UploadId: uploadId,
-            Body: chunkData,
-          })
-        )
-
-        if (!response.ETag) {
-          throw new Error('Missing ETag in upload part response')
-        }
-
-        return {
-          ETag: response.ETag,
-          PartNumber: index + 1,
-        }
-      })
-
-      const parts = await Promise.all(uploadPromises)
-
-      await this.client.send(
-        new CompleteMultipartUploadCommand({
-          Bucket: this.bucket,
-          Key: key,
-          UploadId: uploadId,
-          MultipartUpload: { Parts: parts },
-        })
-      )
-    } catch (error) {
-      await this.client.send(
-        new AbortMultipartUploadCommand({
-          Bucket: this.bucket,
-          Key: key,
-          UploadId: uploadId,
-        })
-      )
-      throw error
-    }
-  }
-
-  async createWriteStream(
-    path: string,
-    mimeType: string
-  ): Promise<NodeWritable> {
-    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
-    const { PassThrough } = await import('stream')
-    const passThrough = new PassThrough()
-
-    const createResponse = await this.client.send(
-      new CreateMultipartUploadCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ContentType: mimeType,
-      })
-    )
-
-    const uploadId = createResponse.UploadId
-    if (!uploadId) {
-      throw new Error('Failed to create multipart upload')
-    }
-
-    let currentPartBuffer = Buffer.alloc(0)
-    let currentPartNumber = 1
-    let totalBytesUploaded = 0
-    let isUploading = false
-    let hasEnded = false
-    let uploadError: Error | null = null
-    const parts: { ETag: string; PartNumber: number }[] = []
-    const maxPartSize = 5 * 1024 * 1024
-    const maxConcurrentUploads = 3
-    let activeUploads = 0
-
-    const getPresignedUrl = async (partNumber: number): Promise<string> => {
-      const command = new UploadPartCommand({
-        Bucket: this.bucket,
-        Key: key,
-        UploadId: uploadId,
-        PartNumber: partNumber,
-      })
-      return getSignedUrl(this.client, command, { expiresIn: 3600 })
-    }
-
-    const uploadPart = async (data: Buffer, partNum: number): Promise<void> => {
-      try {
-        activeUploads++
-
-        const presignedUrl = await getPresignedUrl(partNum)
-
-        const response = await fetch(presignedUrl, {
-          method: 'PUT',
-          body: data as BodyInit,
-        })
-
-        if (!response.ok) {
-          throw new Error(
-            `Failed to upload part ${partNum}: ${response.statusText}`
-          )
-        }
-
-        const etag = response.headers.get('ETag')
-        if (!etag) {
-          throw new Error('Missing ETag in upload part response')
-        }
-
-        parts.push({
-          ETag: etag.replace(/['"]/g, ''),
-          PartNumber: partNum,
-        })
-
-        totalBytesUploaded += data.length
-
-        passThrough.emit('s3Progress', {
-          part: partNum,
-          uploaded: totalBytesUploaded,
-          etag,
-        })
-      } catch (error) {
-        uploadError = error as Error
-        throw error
-      } finally {
-        activeUploads--
-        if (hasEnded && activeUploads === 0) {
-          completeUpload().catch((error) => {
-            passThrough.destroy(error as Error)
-          })
-        }
-      }
-    }
-
-    passThrough.on('data', async (chunk: Buffer) => {
-      if (uploadError) {
-        passThrough.destroy(uploadError)
-        return
-      }
-
-      currentPartBuffer = Buffer.concat([currentPartBuffer, chunk])
-
-      while (
-        currentPartBuffer.length >= maxPartSize &&
-        activeUploads < maxConcurrentUploads &&
-        !isUploading
-      ) {
-        isUploading = true
-        const partData = currentPartBuffer.subarray(0, maxPartSize)
-        currentPartBuffer = currentPartBuffer.subarray(maxPartSize)
-
-        try {
-          await uploadPart(partData, currentPartNumber++)
-        } finally {
-          isUploading = false
-        }
-      }
-    })
-
-    passThrough.on('end', () => {
-      hasEnded = true
-      if (activeUploads === 0) {
-        completeUpload().catch((error) => {
-          passThrough.destroy(error as Error)
-        })
-      }
-    })
-
-    const completeUpload = async () => {
-      try {
-        if (currentPartBuffer.length > 0) {
-          await uploadPart(currentPartBuffer, currentPartNumber)
-          currentPartBuffer = Buffer.alloc(0)
-        }
-
-        while (activeUploads > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-
-        const sortedParts = parts.sort((a, b) => a.PartNumber - b.PartNumber)
-
-        await this.client.send(
-          new CompleteMultipartUploadCommand({
-            Bucket: this.bucket,
-            Key: key,
-            UploadId: uploadId,
-            MultipartUpload: {
-              Parts: sortedParts,
-            },
-          })
-        )
-
-        await this.client.send(
-          new HeadObjectCommand({
-            Bucket: this.bucket,
-            Key: key,
-          })
-        )
-        passThrough.emit('s3Complete')
-      } catch (error) {
-        try {
-          await this.client.send(
-            new AbortMultipartUploadCommand({
-              Bucket: this.bucket,
-              Key: key,
-              UploadId: uploadId,
-            })
-          )
-        } catch (abortError) {
-          logger.error('Error aborting multipart upload', abortError as Error, {
-            key,
-            uploadId,
-          })
-        }
-        uploadError = error as Error
-        passThrough.destroy(error as Error)
-      }
-    }
-
-    passThrough.on('error', async (error) => {
-      logger.error('Stream error during multipart upload', error as Error, {
-        key,
-      })
-      try {
-        await this.client.send(
-          new AbortMultipartUploadCommand({
-            Bucket: this.bucket,
-            Key: key,
-            UploadId: uploadId,
-          })
-        )
-      } catch (abortError) {
-        logger.error(
-          'Error aborting multipart upload after stream error',
-          abortError as Error,
-          {
-            key,
-            uploadId,
-          }
-        )
-      }
-    })
-
-    return passThrough
-  }
-
-  async renameFolder(oldPath: string, newPath: string): Promise<void> {
-    const oldPrefix =
-      oldPath
-        .replace(/^\/+/, '')
-        .replace(/^uploads\//, '')
-        .replace(/\/$/, '') + '/'
-    const newPrefix =
-      newPath
-        .replace(/^\/+/, '')
-        .replace(/^uploads\//, '')
-        .replace(/\/$/, '') + '/'
-
-    let continuationToken: string | undefined
-
-    do {
-      const listCommand = new ListObjectsV2Command({
-        Bucket: this.bucket,
-        Prefix: oldPrefix,
-        ContinuationToken: continuationToken,
-      })
-
-      const response = await this.client.send(listCommand)
-      const objects = response.Contents || []
-
-      await Promise.all(
-        objects.map(async (object) => {
-          if (!object.Key) return
-
-          const newKey = object.Key.replace(oldPrefix, newPrefix)
-          await this.client.send(
-            new CopyObjectCommand({
-              Bucket: this.bucket,
-              CopySource: `${this.bucket}/${object.Key}`,
-              Key: newKey,
-            })
-          )
-
-          await this.client.send(
-            new DeleteObjectCommand({
-              Bucket: this.bucket,
-              Key: object.Key,
-            })
-          )
-        })
-      )
-
-      continuationToken = response.NextContinuationToken
-    } while (continuationToken)
   }
 
   async initializeMultipartUpload(

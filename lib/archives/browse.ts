@@ -19,7 +19,7 @@ import {
 import {
   ARCHIVE_BROWSE_LIMITS,
   type ArchiveListingProgress,
-  getArchiveFormat,
+  detectArchiveFormat,
 } from './shared'
 import { ARCHIVE_IDLE_MS, rejectOnAbort, storageStalled } from './stream-slice'
 
@@ -49,10 +49,10 @@ export async function sourceStorage(file: Pick<BrowseSource, 'storageTarget'>) {
 export async function archiveSourceRef(
   file: BrowseSource
 ): Promise<ArchiveSourceRef> {
-  const format = getArchiveFormat(file.name, file.mimeType)
+  const format = detectArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
-  const name = getArchiveFormat(file.name)
+  const name = detectArchiveFormat(file.name)
     ? file.name
     : `${file.name}.${format === 'gzip' ? 'gz' : format}`
   return {

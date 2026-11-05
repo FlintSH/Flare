@@ -9,8 +9,6 @@ export const CreateUrlSchema = z.object({
     }),
 })
 
-export type CreateUrlRequest = z.infer<typeof CreateUrlSchema>
-
 export interface UrlResponse {
   id: string
   shortCode: string

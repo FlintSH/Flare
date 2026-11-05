@@ -26,10 +26,6 @@ export async function proxy(request: NextRequest) {
   )
   const next = () =>
     NextResponse.next({ request: { headers: forwardedHeaders } })
-  // API handlers own their explicit session/bearer boundary and return JSON 401/403.
-  // Redirecting here would replace permission errors with login HTML and reject
-  // valid scoped tokens before their route-specific checks can run.
-  if (request.nextUrl.pathname.startsWith('/api/')) return next()
   if (
     (request.nextUrl.pathname.endsWith('/raw') ||
       request.nextUrl.pathname.endsWith('/direct')) &&
@@ -57,10 +53,7 @@ export async function proxy(request: NextRequest) {
       : botResponse
   }
 
-  if (
-    request.nextUrl.pathname.startsWith('/setup') ||
-    request.nextUrl.pathname.startsWith('/api/setup')
-  ) {
+  if (request.nextUrl.pathname.startsWith('/setup')) {
     return next()
   }
 
@@ -71,8 +64,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Never run for /api: those handlers own their session and bearer checks
-  // (see above). When the proxy runs, Next.js also clones the request body
-  // and cuts it off at 10 MB, which broke larger uploads and chunk parts.
+  // Never run for /api: those handlers own their session and bearer checks and
+  // return JSON 401/403; a login redirect here would replace them and reject
+  // valid scoped tokens. When the proxy runs, Next.js also clones the request
+  // body and cuts it off at 10 MB, which broke larger uploads and chunk parts.
   matcher: ['/((?!api/|_next/static|_next/image|favicon.ico).*)'],
 }

@@ -1,19 +1,9 @@
 import { createReadStream, createWriteStream } from 'fs'
-import {
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  unlink,
-  writeFile,
-} from 'fs/promises'
+import { mkdir, open, rm, stat, unlink, writeFile } from 'fs/promises'
 import { Transform } from 'node:stream'
-import type { Writable as NodeWritable, Readable } from 'node:stream'
+import type { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { dirname, join } from 'path'
+import { join } from 'path'
 
 import { validateStoragePath } from '@/lib/security/paths'
 
@@ -29,14 +19,6 @@ function workingPath(path: string): string {
 export class LocalStorageProvider implements StorageProvider {
   readonly kind = 'local' as const
   readonly target = Object.freeze({ provider: 'local' as const })
-
-  private activeWriteStreams = new Map<
-    string,
-    {
-      stream: ReturnType<typeof createWriteStream>
-      processedChunks: Set<number>
-    }
-  >()
 
   private getMultipartPartsDir(uploadId: string): string {
     if (!/^local-[A-Za-z0-9-]+$/.test(uploadId)) {
@@ -215,19 +197,6 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async getFileUrl(path: string): Promise<string> {
-    const baseUrl = (
-      process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    ).replace(/\/+$/, '')
-    const cleanPath = path.replace(/^\/+/, '').replace(/^uploads\//, '')
-
-    if (cleanPath.match(/\.(mp4|webm|mov|avi|mkv)$/i)) {
-      return `${baseUrl}/api/files/${cleanPath}`
-    }
-
-    return `${baseUrl}/${cleanPath}/raw`
-  }
-
   // The local backend has no direct, client-reachable object URL: callers must
   // stream the bytes through the app. Returning null signals exactly that.
   async getPublicUrl(_path: string): Promise<string | null> {
@@ -246,92 +215,5 @@ export class LocalStorageProvider implements StorageProvider {
     const fullPath = workingPath(validPath)
     const stats = await stat(fullPath)
     return stats.size
-  }
-
-  async uploadChunkedFile(
-    chunksDir: string,
-    targetPath: string,
-    _mimeType: string
-  ): Promise<void> {
-    const fullPath = targetPath.startsWith('public/')
-      ? targetPath
-      : workingPath(targetPath)
-    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
-    await mkdir(dir, { recursive: true })
-
-    const chunkFiles = await readdir(chunksDir)
-    const sortedChunks = chunkFiles
-      .filter((file) => file.startsWith('chunk-'))
-      .sort((a, b) => {
-        const numA = parseInt(a.split('-')[1])
-        const numB = parseInt(b.split('-')[1])
-        return numA - numB
-      })
-
-    if (!this.activeWriteStreams.has(fullPath)) {
-      this.activeWriteStreams.set(fullPath, {
-        stream: createWriteStream(fullPath),
-        processedChunks: new Set(),
-      })
-    }
-
-    const { stream, processedChunks } = this.activeWriteStreams.get(fullPath)!
-
-    for (const chunkFile of sortedChunks) {
-      const chunkNumber = parseInt(chunkFile.split('-')[1])
-
-      if (processedChunks.has(chunkNumber)) continue
-
-      const chunkPath = join(chunksDir, chunkFile)
-      const chunkData = await readFile(chunkPath)
-
-      await new Promise<void>((resolve, reject) => {
-        stream.write(chunkData, (err: Error | null | undefined) => {
-          if (err) reject(err)
-          else {
-            processedChunks.add(chunkNumber)
-            resolve()
-          }
-        })
-      })
-    }
-
-    if (processedChunks.size === sortedChunks.length) {
-      await new Promise<void>((resolve, reject) => {
-        const callback = (err: Error | null | undefined) => {
-          if (err) reject(err)
-          else {
-            this.activeWriteStreams.delete(fullPath)
-            resolve()
-          }
-        }
-        stream.end(callback)
-      })
-    }
-  }
-
-  async createWriteStream(
-    path: string,
-    _mimeType: string
-  ): Promise<NodeWritable> {
-    const validPath = validateStoragePath(path)
-    const fullPath = workingPath(validPath)
-    const dir = fullPath.substring(0, fullPath.lastIndexOf('/'))
-    await mkdir(dir, { recursive: true })
-    return createWriteStream(fullPath)
-  }
-
-  async renameFolder(oldPath: string, newPath: string): Promise<void> {
-    const validOldPath = validateStoragePath(oldPath)
-    const validNewPath = validateStoragePath(newPath)
-    const fullOldPath = workingPath(validOldPath)
-    const fullNewPath = workingPath(validNewPath)
-
-    // Ensure the destination's parent exists, then move the directory into
-    // place. Pre-creating the destination itself and renaming onto it is
-    // fragile (it only works while the target is empty), so we avoid it.
-    await mkdir(dirname(fullNewPath), { recursive: true })
-
-    await rename(fullOldPath, fullNewPath)
   }
 }

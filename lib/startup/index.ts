@@ -41,7 +41,3 @@ export async function runStartupTasks() {
     logger.error('Startup tasks failed', error as Error)
   }
 }
-
-export function isStartupComplete(): boolean {
-  return startupComplete
-}

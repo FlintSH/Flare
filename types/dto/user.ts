@@ -4,12 +4,6 @@ import { RESERVED_URL_IDS } from '@/lib/middleware/constants'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 
 /**
- * Reserved route paths that cannot be used as vanity IDs. The middleware uses
- * the same list, so a vanity link can never shadow one of Flare's routes.
- */
-export const RESERVED_VANITY_IDS = RESERVED_URL_IDS
-
-/**
  * Vanity ID validation schema.
  * 3-32 characters, alphanumeric + hyphens, no leading/trailing hyphens.
  */
@@ -23,8 +17,8 @@ export const VanityIdSchema = z
   )
   .refine(
     (val) =>
-      !RESERVED_VANITY_IDS.includes(
-        val.toLowerCase() as (typeof RESERVED_VANITY_IDS)[number]
+      !RESERVED_URL_IDS.includes(
+        val.toLowerCase() as (typeof RESERVED_URL_IDS)[number]
       ),
     'This URL path is reserved and cannot be used'
   )
@@ -47,9 +41,6 @@ export const UserSchema = z
   })
   .strict()
 
-export type CreateUserRequest = Omit<z.infer<typeof UserSchema>, 'id'>
-export type UpdateUserRequest = z.infer<typeof UserSchema>
-
 export interface UserResponse {
   id: string
   name: string | null
@@ -64,15 +55,5 @@ export interface UserResponse {
   _count: {
     files: number
     shortenedUrls: number
-  }
-}
-
-export interface UserListResponse {
-  users: UserResponse[]
-  pagination: {
-    total: number
-    pages: number
-    page: number
-    limit: number
   }
 }

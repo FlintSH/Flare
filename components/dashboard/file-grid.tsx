@@ -1,5 +1,0 @@
-export { FileGrid } from './file-grid/index'
-export { FileFilters } from './file-grid/file-filters'
-export { SearchInput } from './file-grid/search-input'
-export { FileCardSkeleton } from './file-grid/file-card-skeleton'
-export { FileGridPagination, PaginationSkeleton } from './file-grid/pagination'

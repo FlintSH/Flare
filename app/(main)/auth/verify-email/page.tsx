@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { LogIn } from 'lucide-react'
 import { getServerSession } from 'next-auth/next'
 
-import { EmailAuthCard } from '@/components/email/auth-card'
+import { AuthShell } from '@/components/auth/auth-shell'
 import { VerifyEmailForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -27,7 +27,7 @@ export default async function VerifyEmailPage({
   // account's status, which needs a session, so ask the visitor to sign in.
   if (!emailToken && !(await getServerSession(authOptions))?.user)
     return (
-      <EmailAuthCard
+      <AuthShell
         title="Confirm your email"
         description="Keep your account reachable and enable secure email recovery."
       >
@@ -41,15 +41,15 @@ export default async function VerifyEmailPage({
         <Button asChild className="mt-6 h-11 w-full">
           <Link href="/auth/login?local=1">Sign in</Link>
         </Button>
-      </EmailAuthCard>
+      </AuthShell>
     )
 
   return (
-    <EmailAuthCard
+    <AuthShell
       title="Confirm your email"
       description="Keep your account reachable and enable secure email recovery."
     >
       <VerifyEmailForm token={emailToken} />
-    </EmailAuthCard>
+    </AuthShell>
   )
 }

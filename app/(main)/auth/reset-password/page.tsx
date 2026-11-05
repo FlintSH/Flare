@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { AlertCircle } from 'lucide-react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
-import { EmailAuthCard } from '@/components/email/auth-card'
+import { AuthShell } from '@/components/auth/auth-shell'
 import { ResetPasswordForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ export default async function ResetPasswordPage({
   const { token } = await searchParams
   if (typeof token !== 'string' || !token)
     return (
-      <EmailAuthCard
+      <AuthShell
         title="Choose a new password"
         description="Reset links can be used once and expire after a short time."
       >
@@ -41,15 +41,15 @@ export default async function ResetPasswordPage({
             Back to sign in
           </Link>
         </AuthFooter>
-      </EmailAuthCard>
+      </AuthShell>
     )
 
   return (
-    <EmailAuthCard
+    <AuthShell
       title="Choose a new password"
       description="Your reset link can be used once. After resetting, sign in again with your new password."
     >
       <ResetPasswordForm token={token} />
-    </EmailAuthCard>
+    </AuthShell>
   )
 }

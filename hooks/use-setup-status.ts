@@ -34,21 +34,9 @@ export function useSetupStatus(enabled = true) {
 export function useSetupStatusMutations() {
   const queryClient = useQueryClient()
 
-  const invalidateSetupStatus = () => {
-    queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY })
-  }
-
   const updateSetupStatus = (completed: boolean) => {
     queryClient.setQueryData(SETUP_STATUS_QUERY_KEY, { completed })
   }
 
-  const refetchSetupStatus = () => {
-    return queryClient.refetchQueries({ queryKey: SETUP_STATUS_QUERY_KEY })
-  }
-
-  return {
-    invalidateSetupStatus,
-    updateSetupStatus,
-    refetchSetupStatus,
-  }
+  return { updateSetupStatus }
 }

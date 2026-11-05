@@ -16,8 +16,6 @@ export const UpdateProfileSchema = z.object({
   vanityId: VanityIdSchema.nullable().optional(),
 })
 
-export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
-
 export interface ProfileResponse {
   id: string
   name: string | null

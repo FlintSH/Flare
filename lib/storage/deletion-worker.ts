@@ -45,9 +45,3 @@ export function startStorageDeletionWorker(): void {
   timer.unref()
   state.flareStorageDeletionWorker = { timer, busy: false }
 }
-
-export function stopStorageDeletionWorker(): void {
-  if (!state.flareStorageDeletionWorker) return
-  clearInterval(state.flareStorageDeletionWorker.timer)
-  delete state.flareStorageDeletionWorker
-}

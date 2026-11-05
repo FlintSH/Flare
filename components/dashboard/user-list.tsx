@@ -601,16 +601,6 @@ export function UserList() {
     }
   }, [urlSearch, viewingUser, fetchUserUrls])
 
-  const notifyUserOfChanges = async (userId: string) => {
-    try {
-      await fetch(`/api/users/${userId}/login`, {
-        method: 'POST',
-      })
-    } catch (error) {
-      console.error('Failed to notify user of changes:', error)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
@@ -623,8 +613,7 @@ export function UserList() {
         if (editingUser.id === actor?.id) {
           await refreshSession()
           router.refresh()
-        } else if (can('users.sessions'))
-          await notifyUserOfChanges(editingUser.id)
+        }
       } else {
         const { roleIds, ...identity } = formData
         await createUser({

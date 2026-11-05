@@ -31,27 +31,15 @@ export function SetupChecker({ children }: SetupCheckerProps) {
       updateSetupStatus(event.detail.completed)
     }
 
-    const handleSetupIncomplete = (event: CustomEvent) => {
-      updateSetupStatus(event.detail.completed)
-    }
-
     window.addEventListener(
       'setup-completed',
       handleSetupCompleted as EventListener
-    )
-    window.addEventListener(
-      'setup-incomplete',
-      handleSetupIncomplete as EventListener
     )
 
     return () => {
       window.removeEventListener(
         'setup-completed',
         handleSetupCompleted as EventListener
-      )
-      window.removeEventListener(
-        'setup-incomplete',
-        handleSetupIncomplete as EventListener
       )
     }
   }, [updateSetupStatus])

@@ -47,9 +47,6 @@ next-env.d.ts
 # avatars
 /public/avatars/
 
-# xbackbone migration script (not ready)
-/scripts/migrate-xbackbone.ts
-
 # tmp
 /tmp/
 

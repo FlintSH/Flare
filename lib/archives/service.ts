@@ -59,7 +59,7 @@ import type { ArchiveOperation } from './operation'
 import {
   ARCHIVE_LIMITS,
   type ArchiveManifest,
-  getArchiveFormat,
+  detectArchiveFormat,
 } from './shared'
 import {
   type SharedArchiveAccess,
@@ -141,7 +141,7 @@ async function inspectSource(
   operation: ArchiveOperation,
   extract: boolean
 ) {
-  const format = getArchiveFormat(file.name, file.mimeType)
+  const format = detectArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
   const source = await stageArchiveSource(
@@ -149,7 +149,7 @@ async function inspectSource(
     operation,
     ARCHIVE_LIMITS.archiveBytes
   )
-  const codecName = getArchiveFormat(file.name)
+  const codecName = detectArchiveFormat(file.name)
     ? file.name
     : `${file.name}.${format === 'gzip' ? 'gz' : format}`
   return readArchive(source.diskPath, codecName, {

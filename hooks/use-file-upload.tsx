@@ -203,12 +203,6 @@ export function useFileUpload(options: FileUploadOptions = {}) {
 
         const promises = batch.map(async (chunk, batchIndex) => {
           const partNumber = batchStart + batchIndex + 1
-          const formData = new FormData()
-          formData.append('partNumber', partNumber.toString())
-          formData.append('uploadId', uploadId)
-          formData.append('key', fileKey)
-          formData.append('chunk', chunk)
-
           const xhr = new XMLHttpRequest()
           await new Promise<{ ETag: string; PartNumber: number }>(
             (resolve, reject) => {
