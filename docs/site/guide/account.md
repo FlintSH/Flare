@@ -7,7 +7,7 @@ description: Manage your identity and sign-in details, verify or change email, c
 
 Your [roles](/admin/roles) determine which profile actions are available. Editing identity/avatar or upload defaults uses `profile.update`, downloading account data requires `profile.export`, `files.read`, and `links.read` together, managing tokens uses `tokens.manage`, and managing webhooks uses `webhooks.manage`. Personal appearance uses `appearance.personal`. Missing controls can reflect your permissions; contact the person managing roles for your instance.
 
-Open **Profile** from the account menu to manage settings that belong to you. **Settings** is the administrator's separate area for instance-wide behavior.
+Select your avatar at the right of the dashboard bar and choose **Profile** to manage settings that belong to you. **Settings**, in the **Admin** menu, is the administrators' separate area for instance-wide behavior.
 
 <Screenshot src="/screenshots/roles/profile-roles.webp" alt="Profile Account section showing the demonstration account’s Moderator, Creator, and Everyone roles above its identity fields" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
 
@@ -31,6 +31,8 @@ Open **Profile → Account** and scroll to **Active sessions** and **Login histo
 2. Choose **Revoke session** and confirm **Revoke session**. A different browser loses access on its next authenticated request. For **This browser**, confirm **Revoke and sign out**; this ends your current session.
 3. To end every browser sign-in, choose **Revoke all sessions**, review the confirmation, and choose **Revoke all and sign out**. This includes the current session; sign in again with an allowed method to continue.
 4. Use **Refresh** to reload the list after activity in another browser. If a revocation fails, read the error and retry after resolving it; an error does not confirm the session ended.
+
+To end only this browser's session, select your avatar and choose **Sign out**. The same action is under **Account** in the navigation sheet on a phone and at the top of **Profile**. Each returns you to the sign-in page; other browsers stay signed in.
 
 <Screenshot src="/screenshots/audit/revoke-session.webp" alt="Revoke this session confirmation explains that the other browser loses access on its next request" caption="Ending another session preserves the browser you are using." />
 

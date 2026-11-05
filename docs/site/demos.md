@@ -61,7 +61,7 @@ The recording uses real browser sign-ins and server revocations against a dispos
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Investigate instance activity: silent Flare audit-log recording" :src="withBase('/demos/audit-investigation.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. Open **Audit log** on the isolated demonstration instance with an administrator session.
+1. Open **Admin → Audit log** on the isolated demonstration instance with an administrator session.
 2. Review recorded activity produced by a real demonstration upload, visibility changes, download, denied access, actual OCR of a generated receipt image, a rejected OCR request on a text file, deletion, role assignment, and settings change.
 3. Enter **quarterly-report.txt** in **Search activity**, choose **Apply filters**, and expand a **File delete** event. The deleted filename and acting account remain recorded.
 4. Review **Recorded details** and request context. Choose **Clear filters**, set **Outcome** to **Denied**, and apply to inspect refused requests.
@@ -136,7 +136,7 @@ This recording uses an anonymous visitor and a real unprotected public archive. 
 <video class="demo-video" controls playsinline preload="none" aria-label="Invite someone with a role: silent Flare recording with the invite token blurred" :poster="withBase('/screenshots/invites/create-invite.webp')" :src="withBase('/demos/admin-invite.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
 1. As the demonstration administrator **Alex Morgan**, open **Settings → Access → Invites**. Turn on **Let everyone create invites**, then choose **Save settings**. **Settings updated** confirms the change.
-2. Open **Users** and choose the **Invites** tab. It shows **No invites yet**.
+2. Open **Admin → Users** and choose the **Invites** tab. It shows **No invites yet**.
 3. Choose **Create invite** and enter the note **For Sam Rivera**. Keep **Uses** at **1 person** and choose **7 days** under **Expires after**.
 4. Select the **Admin** role. A warning explains that anyone using the link becomes a full administrator. Clear **Admin** and select **Moderator** instead.
 5. Choose **Create invite link**. **Your invite link is ready** shows the link, blurred in this recording. Choose **Copy link**; the button changes to **Copied**. The summary reads **Single use**, the expiry date, and **Grants Moderator**.
@@ -151,7 +151,7 @@ This recording performs real settings and invite operations on an isolated insta
 1. In a separate signed-out browser, open the invite link from the previous recording.
 2. **You’re invited** explains that **Alex Morgan invited you to join Flare** and lists the **Moderator** role.
 3. Enter the username **Sam Rivera**, the demonstration address `sam@invite-demo.example`, and a password twice. The password is masked.
-4. Choose **Create account**. Flare creates the account, signs in, and opens **Your files**. The navigation includes **Users** because the invite granted Moderator.
+4. Choose **Create account**. Flare creates the account, signs in, and opens **Your files**. The bar shows **Users** because the invite granted Moderator, whose only administration page it is.
 
 Afterward the single-use link is spent: opening it again shows **Invite unavailable** with **This invite link has already been used.** In **Users**, Sam’s account shows **Invited by Alex Morgan**. [Read what invited people see](./guide/invites#what-the-invited-person-sees).
 
@@ -214,21 +214,21 @@ This is a real local account workflow; Chromium's virtual authenticator replaces
 
 ### Create and assign a role
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 17-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 19-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. Open **Roles** and choose **Create role**.
+1. Open **Admin → Roles** and choose **Create role**.
 2. Name the role **Content reviewer**, choose an amber color, and describe its purpose: “Review uploads and help keep the workspace tidy.” Set **Position** to `30`.
 3. Search for **View users** and turn it on.
 4. Search for **moderation**. Turn on **View all content** and **Edit all content**; leave **Delete all content** off.
 5. Choose **Save role**. The role exists without any members yet.
-6. Open **Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save changes**.
+6. Open **Admin → Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save changes**.
 7. Return to **Roles**, select **Content reviewer**, and confirm it shows **1 member** and the selected moderation permissions.
 
 This recording makes real role and account changes in an isolated instance. Everyone remains the shared baseline; the new role adds review/edit capabilities without granting deletion of other users' content or settings administration. [Read the role guide](./admin/roles) for hierarchy and permission details. The separate [roles lab](#roles-and-permissions-lab) below is a local simulation.
 
 ### Organize and upload
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 17-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 18-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 1. In **Files**, choose **New folder** and create a folder named Project launch. The new folder opens.
 2. Go back to **Folders**, open **Unfiled**, select two files, and move them into Project launch.
@@ -240,7 +240,7 @@ Moving a file preserves its individual share link. [Read the folders guide](./gu
 
 ### Share a collection, then revoke access
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 13-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 14-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 1. Open a folder, choose **Share**, and choose **Create share link**.
 2. Open the shared folder link. It shows what any recipient sees: the public files, and a password-protected file as a generic locked tile.

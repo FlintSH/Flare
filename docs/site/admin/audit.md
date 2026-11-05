@@ -5,7 +5,7 @@ description: Investigate file activity, processing failures, account actions, ro
 
 # Investigate activity in the audit log
 
-Open **Audit log** in the dashboard navigation, or visit `/dashboard/audit`. You need `audit.read`; Administrator includes it. The log brings recorded application activity into one view, with the time, actor, action, outcome, target, and available request or change details. It is useful for answering “who deleted this file?”, “why did processing fail?”, or “which account changed that role?”.
+Choose **Admin → Audit log** in the dashboard bar, or visit `/dashboard/audit`. You need `audit.read`; Administrator includes it. If `audit.read` is your only administration permission, **Audit log** sits in the bar by itself instead of in the **Admin** menu. The log brings recorded application activity into one view, with the time, actor, action, outcome, target, and available request or change details. It is useful for answering “who deleted this file?”, “why did processing fail?”, or “which account changed that role?”.
 
 <Screenshot src="/screenshots/audit/audit-desktop.webp" alt="Flare Audit log on desktop showing searchable instance events with time, actor, action, target filename, and outcome" caption="Start with recent instance activity, then narrow the investigation using the filters." />
 
@@ -13,7 +13,7 @@ The viewer resets its filters and displayed events when you switch accounts or s
 
 ## Find an event
 
-1. Open **Audit log**. The newest events appear first.
+1. Open **Admin → Audit log**. The newest events appear first.
 2. Search for an actor name, action, filename, target ID, or request ID.
 3. Choose **Category**, **Action**, and **Outcome** as needed. **Time range** defaults to **All time**, with **Last 24 hours**, **Last 7 days**, **Last 30 days**, and **Custom range** options. Custom **From** and **To** use your browser’s local time; event details also show **Timestamp (UTC)**.
 4. Expand **Filter by actor, target, or request ID** when you know an exact identifier. Choose **Apply filters**, then **Previous** / **Next** for older matches. Each page shows up to 50 events. **Refresh** reloads the currently applied filters.
@@ -94,7 +94,7 @@ These records are ordinary application database data. Operators with database ac
 
 ## Investigate from a phone
 
-Open the navigation menu, select **Audit log**, and use the same filters and event details. Narrowing the result first helps when reviewing a busy instance on a small screen.
+Open the navigation menu, select **Audit log** under **Admin**, and use the same filters and event details. Narrowing the result first helps when reviewing a busy instance on a small screen.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/audit/audit-mobile.webp" alt="Mobile Audit log header with search, category, and outcome filters in a single-column layout" caption="Event filtering and details remain available on narrow screens." />
@@ -106,7 +106,7 @@ Open the navigation menu, select **Audit log**, and use the same filters and eve
 
 | Symptom                                           | Check                                                                                                                                                                                |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Audit log is missing from navigation              | Confirm your effective roles include `audit.read`; `users.read` alone is insufficient.                                                                                               |
+| Audit log is missing from the Admin menu          | Confirm your effective roles include `audit.read`; `users.read` alone is insufficient.                                                                                               |
 | A filename search returns no rows                 | Clear other filters, widen the time range, search the target ID, and check whether the activity predates installation. Some bulk events retain IDs/counts instead of names.          |
 | An actor or target no longer exists               | Recorded metadata survives deletion; use its ID and neighboring events rather than assuming the current account/file is still present.                                               |
 | A file was created but processing failed          | Inspect later OCR/background events and application diagnostics; upload acceptance and later processing have separate outcomes.                                                      |

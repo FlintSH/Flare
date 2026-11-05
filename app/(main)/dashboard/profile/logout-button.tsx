@@ -1,27 +1,13 @@
 'use client'
 
 import { LogOut } from 'lucide-react'
-import { signOut } from 'next-auth/react'
 
 import { Button } from '@/components/ui/button'
 
-import { useToast } from '@/hooks/use-toast'
+import { useSignOut } from '@/hooks/use-sign-out'
 
 export function LogoutButton() {
-  const { toast } = useToast()
-
-  const handleLogout = async () => {
-    try {
-      await signOut({ callbackUrl: '/' })
-    } catch (error) {
-      console.error('Logout error:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to logout',
-        variant: 'destructive',
-      })
-    }
-  }
+  const handleLogout = useSignOut()
 
   return (
     <Button

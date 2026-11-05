@@ -151,7 +151,7 @@ Before upgrading, preserve the existing `NEXTAUTH_SECRET` and any separate email
 - **History has an operational cost.** Audit and login history start with this feature; earlier activity is not backfilled. Login history has a 90-day window, while audit history is kept until you set [`FLARE_AUDIT_RETENTION_DAYS`](/admin/audit#retention-and-operational-limits). Include the new records and cleanup queue in backups and database capacity planning.
 - **Archive limits apply independently of upload settings.** New extracted files and generated archives default to private without an upload profile. Review [supported formats, sizes, and profile choices](../guide/archives#supported-sizes-and-formats) before depending on this workflow.
 
-After migration, sign in as an existing administrator, inspect **Roles**, and check an ordinary account's upload, share, and integration workflows. Check library date navigation, a disposable archive, and **Profile → Account → Active sessions**. Use the corresponding guides to test authenticator/passkey recovery and invites with isolated accounts before enabling them for others.
+After migration, sign in as an existing administrator, inspect **Admin → Roles**, and check an ordinary account's upload, share, and integration workflows. Check library date navigation, a disposable archive, and **Profile → Account → Active sessions**. Use the corresponding guides to test authenticator/passkey recovery and invites with isolated accounts before enabling them for others.
 
 Rollback requires the recorded old image plus its matching pre-upgrade database and file backup. An older image cannot use the removed role enum's replacement schema; changing the image alone is insufficient. [Follow the restore and rollback instructions](#rollback).
 
@@ -179,7 +179,7 @@ Migrations `20261006000200_instance_audit` and `20261006010000_browser_sessions`
 
 **Everyone must sign in again after this upgrade.** Older cookies do not identify a server-side session record and are rejected rather than silently trusted. Existing accounts, passwords, passkeys, authenticator/recovery methods, role assignments, files, and integration credentials remain in place. Named API tokens and the legacy upload credential do not become browser sessions and are not revoked by this migration. Update any custom dashboard client to handle a new sign-in prompt and the [session API](../api/activity).
 
-Audit/login history begins when the feature runs; previous activity is not backfilled. Administrator can open **Audit log**; grant `audit.read` only to trusted reviewers who should see activity across all accounts, including private filenames. Verify a fresh sign-in appears in **Profile → Account → Active sessions**, create and revoke a second disposable browser session, and confirm that the revoked browser is refused on its next protected request. Then create, edit, and remove a disposable file and inspect the resulting [audit events](../admin/audit).
+Audit/login history begins when the feature runs; previous activity is not backfilled. Administrator can open **Admin → Audit log**; grant `audit.read` only to trusted reviewers who should see activity across all accounts, including private filenames. Verify a fresh sign-in appears in **Profile → Account → Active sessions**, create and revoke a second disposable browser session, and confirm that the revoked browser is refused on its next protected request. Then create, edit, and remove a disposable file and inspect the resulting [audit events](../admin/audit).
 
 Personal login history covers 90 days. The security worker removes older attempts and session rows whose fixed expiry is more than 90 days old in bounded batches. Revoking a session removes its access immediately on the next request; waiting for physical row cleanup is unnecessary. This cleanup does not purge audit events; audit retention is the separate setting below.
 
@@ -225,7 +225,7 @@ The role migration replaces the `User.role` enum with roles and account assignme
 
 1. Back up the database and files before applying the migration; role assignments and Everyone permissions are database state and must be included in future backups.
 2. Let the normal image startup run migrations. Do not manually replace `ADMIN`/`USER` values or use `prisma db push` as a migration substitute.
-3. Sign in with an existing administrator and open **Roles**. Confirm Everyone and Admin exist and trusted administrators hold the Admin role.
+3. Sign in with an existing administrator and open **Admin → Roles**. Confirm Everyone and Admin exist and trusted administrators hold the Admin role.
 4. Test a former non-administrator account: uploading, library access, links, and integrations should retain their previous personal capabilities.
 5. Review Everyone before tightening access. Removing a grant affects existing accounts, future registrations, SSO provisioned accounts, and credentials owned by those accounts unless another role restores it.
 6. Check custom dashboard clients for the removed scalar `role` field/filter. Use `roleIds` for account writes, `roles` for responses, and `roleId` for filtering. The named-token scope names and supported paths are unchanged; tokens additionally obey their owner's current permissions.

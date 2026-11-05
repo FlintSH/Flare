@@ -43,6 +43,8 @@ Flare uses provider discovery, ID tokens, PKCE, and state checks. The callback o
 
 These settings are stored in the database. There are no `FLARE_OIDC_*` server environment overrides in the current implementation.
 
+With auto-login on, **Sign out** in the account menu, the phone navigation sheet, and Profile opens `/auth/login?local=1`, so Flare doesn't send the person straight back to the provider. Signing out of Flare doesn't end the provider's own session; choosing the sign-in button can still continue without a password prompt. Earlier builds sent the Profile button to the auto-login page, which could sign someone with an active provider session straight back in.
+
 ## Account creation and identity
 
 Flare identifies an OIDC account by **issuer and subject**, not by its email alone. New provisioned accounts inherit **Everyone**, just like local registrations. Assign additional roles through **Users** when needed. Provider groups or role claims are not mapped to Flare roles; changing identity-provider membership does not edit Flare role assignments. Existing OIDC accounts keep their assigned Flare roles on sign-in.

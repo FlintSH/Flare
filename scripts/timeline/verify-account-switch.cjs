@@ -193,9 +193,7 @@ async function observeIsolation(page) {
     window.__timelineLeaks = []
     window.__timelineSawJamie = false
     const inspect = () => {
-      const avatar = document.querySelector(
-        'a[aria-label="Open your profile and preferences"]'
-      )
+      const avatar = document.querySelector('button[aria-label="Account menu"]')
       if (avatar?.textContent?.trim() === 'JR') window.__timelineSawJamie = true
       if (!window.__timelineSawJamie) return
       const text = document.body.textContent || ''
@@ -230,9 +228,9 @@ async function noAlex(page, sentinel) {
 }
 
 async function jamieReady(page, state) {
-  await expect(
-    page.locator('a[aria-label="Open your profile and preferences"]')
-  ).toHaveText('JR')
+  await expect(page.locator('button[aria-label="Account menu"]')).toHaveText(
+    'JR'
+  )
   await noAlex(page, state.sentinel)
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await ready(page)
@@ -480,7 +478,10 @@ async function primary(browser) {
     )
     await replacement.tab.bringToFront()
     await replacement.tab
-      .getByRole('link', { name: 'Profile', exact: true })
+      .getByRole('button', { name: 'Account menu', exact: true })
+      .click()
+    await replacement.tab
+      .getByRole('menuitem', { name: 'Profile', exact: true })
       .click()
     await replacement.tab
       .getByRole('button', { name: 'Sign out', exact: true })
