@@ -145,3 +145,8 @@ export function validateEnabledEmail(config: EmailConfig): void {
     )
   }
 }
+
+/** Never serialize the saved SMTP password into a dashboard response. */
+export function redactEmailConfig(config: EmailConfig): EmailConfig {
+  return { ...config, smtp: { ...config.smtp, password: '' } }
+}

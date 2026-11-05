@@ -4,11 +4,10 @@ import { InstanceSettings } from '@/components/settings/instance-settings'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
+import { redactSettings } from '@/lib/config/views'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
-import { redactEmailConfig } from '@/lib/email/config'
 import { everyoneCanInvite } from '@/lib/invites/service'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { redactSettings } from '@/lib/permissions/settings'
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
@@ -33,13 +32,7 @@ export default async function SettingsPage({
   ])
   return (
     <InstanceSettings
-      initialConfig={redactSettings({
-        ...config,
-        settings: {
-          ...config.settings,
-          email: redactEmailConfig(config.settings.email),
-        },
-      })}
+      initialConfig={redactSettings(config)}
       initialSection={readPreferenceSection(
         params.section,
         SETTINGS_SECTIONS,

@@ -2,8 +2,8 @@ import { AuthShell } from '@/components/auth/auth-shell'
 import { LoginForm } from '@/components/auth/login-form'
 import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
 
-import { isOidcProviderConfigured } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
+import { isOidcProviderConfigured } from '@/lib/config/oidc'
 
 export const dynamic = 'force-dynamic'
 

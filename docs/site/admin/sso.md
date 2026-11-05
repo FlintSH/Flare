@@ -10,7 +10,7 @@ The 2.1 dependency refresh preserves existing provider settings and issuer/subje
 
 ## Connect a provider
 
-The administrator recovery safeguard checks that an SSO-only administrator’s saved issuer matches the configured, enabled provider. Disabling or changing the only working administrator provider is refused; create and test a local-password administrator before making that change.
+The administrator recovery safeguard checks that an SSO-only administrator’s saved issuer matches the configured, enabled provider. A trailing slash on the issuer URL doesn't affect the match. Disabling or changing the only working administrator provider is refused; create and test a local-password administrator before making that change.
 
 1. Keep a working local administrator account and test `/auth/login?local=1` before changing the normal sign-in flow.
 2. Create a confidential OIDC application in your identity provider.

@@ -1,11 +1,11 @@
 import type { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
+import { storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
-import { hasPermission } from '@/lib/permissions/catalog'
 import {
   PermissionError,
   requireActorPermission,
@@ -29,15 +29,9 @@ async function authorizeAvatarWrite(
   const user = await tx.user.findUnique({ where: { id: userId } })
   if (!user) throw new PermissionError('Account not found', 404)
   const access = await requireActorPermission(tx, userId, 'profile.update')
-  const config = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const { quotas } = configSchema.parse(config?.value ?? DEFAULT_CONFIG)
-    .settings.general.storage
-  if (quotas.enabled && !hasPermission(access, 'quotas.bypass')) {
-    const quotaMB =
-      quotas.default.value * (quotas.default.unit === 'GB' ? 1024 : 1)
-    if (user.storageUsed + bytesToMB(size) > quotaMB)
-      throw new PermissionError('Storage quota exceeded', 413)
-  }
+  const quota = storageQuotaBytes(await readConfig(tx), access)
+  if (quota !== null && user.storageUsed + bytesToMB(size) > quota / 1024 ** 2)
+    throw new PermissionError('Storage quota exceeded', 413)
   return user
 }
 

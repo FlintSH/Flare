@@ -4,6 +4,7 @@ import { ProfileClient } from '@/components/profile'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
+import { sizeLimitBytes } from '@/lib/config/limits'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -60,9 +61,8 @@ export default async function ProfilePage({
   const quotasEnabled =
     config.settings.general.storage.quotas.enabled &&
     !hasPermission(session.user, 'quotas.bypass')
-  const defaultQuota = config.settings.general.storage.quotas.default
   const quotaMB =
-    defaultQuota.unit === 'GB' ? defaultQuota.value * 1024 : defaultQuota.value
+    sizeLimitBytes(config.settings.general.storage.quotas.default) / 1024 ** 2
   const formattedQuota = formatFileSize(quotaMB)
   const formattedUsed = formatFileSize(user.storageUsed)
   const usagePercentage =

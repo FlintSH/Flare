@@ -5,7 +5,8 @@ import { basename, extname } from 'node:path'
 
 import { recordAudit, setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
+import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { urlSafeFilename } from '@/lib/files/filename'
@@ -106,12 +107,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
   const persist = async (tx: Prisma.TransactionClient) => {
     // Same order as settings/account policy updates: policy lock, then user lock.
     await lockRoleChanges(tx)
-    const configRow = await tx.config.findUnique({
-      where: { key: 'flare_config' },
-    })
-    const config = configRow
-      ? configSchema.parse(configRow.value)
-      : DEFAULT_CONFIG
+    const config = await readConfig(tx)
     await lockUserRow(tx, user.id)
     const fresh = await tx.user.findUnique({ where: { id: user.id } })
     if (!fresh) throw new UploadError('Account no longer exists.', 401)
@@ -175,24 +171,14 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       )
         throw new UploadError('The token upload profile was removed.', 403)
     }
-    const storageConfig = config.settings.general.storage
-    const maxBytes =
-      storageConfig.maxUploadSize.value *
-      (storageConfig.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-    if (size > maxBytes)
+    if (size > maxUploadBytes(config))
       throw new UploadError(
         'The file exceeds the current upload size limit.',
         413
       )
     const sizeMB = size / 1024 ** 2
-    const quota =
-      storageConfig.quotas.default.value *
-      (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
-    if (
-      storageConfig.quotas.enabled &&
-      !hasPermission(access, 'quotas.bypass') &&
-      fresh.storageUsed + sizeMB > quota
-    )
+    const quota = storageQuotaBytes(config, access)
+    if (quota !== null && fresh.storageUsed + sizeMB > quota / 1024 ** 2)
       throw new UploadError('The file would exceed your storage quota.', 413)
     if (options.expiresAt && new Date(options.expiresAt) <= new Date())
       throw new UploadError(

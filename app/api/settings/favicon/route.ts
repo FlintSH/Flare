@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { join } from 'path'
 
 import { withAuditRoute } from '@/lib/audit'
-import { getConfig, updateConfigSection } from '@/lib/config'
+import { getConfig, updateConfig } from '@/lib/config'
 import { loggers } from '@/lib/logger'
 import { requirePermission } from '@/lib/permissions/server'
 import { getStorageProvider } from '@/lib/storage'
@@ -51,7 +51,7 @@ async function handlePOST(req: Request) {
       publicPath = publicUrl
     }
 
-    await updateConfigSection('appearance', { favicon: publicPath })
+    await updateConfig({ settings: { appearance: { favicon: publicPath } } })
 
     return new NextResponse('Favicon updated successfully', { status: 200 })
   } catch (error) {

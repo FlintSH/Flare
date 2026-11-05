@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
@@ -100,11 +100,7 @@ function endedInviteWhere(now: Date): Prisma.InviteWhereInput {
 }
 
 async function readInviteLimits(client: Client): Promise<InviteLimits> {
-  const row = await client.config.findUnique({
-    where: { key: 'flare_config' },
-  })
-  const config = row ? configSchema.parse(row.value) : DEFAULT_CONFIG
-  return config.settings.general.registrations.inviteLimits
+  return (await readConfig(client)).settings.general.registrations.inviteLimits
 }
 
 /** People who can create accounts directly gain nothing from invite limits. */

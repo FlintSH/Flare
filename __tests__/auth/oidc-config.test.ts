@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { isOidcProviderConfigured } from '@/lib/auth'
 import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { isOidcProviderConfigured } from '@/lib/config/oidc'
 
 const complete = {
   enabled: true,

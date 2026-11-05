@@ -6,7 +6,8 @@ import { basename, extname } from 'node:path'
 import type { z } from 'zod'
 
 import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
+import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
@@ -268,8 +269,7 @@ async function lockPublication(
         'The selected upload profile changed or was removed. Refresh and try again.',
         409
       )
-    const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-    const config = configSchema.parse(row?.value ?? DEFAULT_CONFIG)
+    const config = await readConfig(tx)
     const revision = effectiveUploadRevision(
       actor.user.id,
       options.profileId,
@@ -381,30 +381,23 @@ async function confirmRead(
 
 /** Early resource check; locked finalization still enforces current limits atomically. */
 async function preflightCapacity(actor: ArchiveActor, sizes: number[]) {
-  const [row, user] = await Promise.all([
-    prisma.config.findUnique({ where: { key: 'flare_config' } }),
+  const [config, user] = await Promise.all([
+    readConfig(prisma),
     prisma.user.findUnique({
       where: { id: actor.user.id },
       select: { storageUsed: true },
     }),
   ])
   if (!user) throw new ArchiveError('Account no longer exists.', 401)
-  const storage = configSchema.parse(row?.value ?? DEFAULT_CONFIG).settings
-    .general.storage
-  const max =
-    storage.maxUploadSize.value *
-    (storage.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
+  const max = maxUploadBytes(config)
   if (sizes.some((size) => size > max))
     throw new ArchiveError(
       'An output file exceeds the current upload size limit.',
       413
     )
-  const quota =
-    storage.quotas.default.value *
-    (storage.quotas.default.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
+  const quota = storageQuotaBytes(config, actor.user)
   if (
-    storage.quotas.enabled &&
-    !hasPermission(actor.user, 'quotas.bypass') &&
+    quota !== null &&
     user.storageUsed * 1024 ** 2 + sizes.reduce((sum, size) => sum + size, 0) >
       quota
   )

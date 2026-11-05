@@ -3,19 +3,17 @@ import type { InputJsonValue } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 
 import {
+  CLASSIC_PALETTE,
   LEGACY_COLOR_MESSAGE,
   MAX_LEGACY_COLORS,
   legacyAppearanceUpdateSchema,
   legacyColors,
   legacyTheme,
 } from '@/lib/customization/legacy-appearance'
-import {
-  DEFAULT_CUSTOMIZATION,
-  customizationSchema,
-} from '@/lib/customization/schema'
+import { customizationSchema } from '@/lib/customization/schema'
 import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { DEFAULT_EMAIL_CONFIG, emailConfigSchema } from '@/lib/email/schema'
+import { emailConfigSchema } from '@/lib/email/schema'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.config
@@ -115,106 +113,111 @@ export const configSchema = z.object({
 
 export type FlareConfig = z.infer<typeof configSchema>
 
-export const DEFAULT_CONFIG: FlareConfig = {
+/** A new instance's settings: the schema's defaults plus the values it can't default. */
+export const DEFAULT_CONFIG: FlareConfig = configSchema.parse({
   version: '1.0.0',
   settings: {
-    customization: DEFAULT_CUSTOMIZATION,
-    email: DEFAULT_EMAIL_CONFIG,
     general: {
-      setup: {
-        completed: false,
-        completedAt: null,
-      },
-      registrations: {
-        enabled: true,
-        disabledMessage: '',
-        inviteLimits: {
-          activeInvites: 5,
-          usesPerInvite: 1,
-          lifetimeDays: 30,
-        },
-      },
+      setup: {},
+      registrations: { enabled: true, disabledMessage: '' },
       storage: {
-        provider: 'local',
-        s3: {
-          bucket: '',
-          region: '',
-          accessKeyId: '',
-          secretAccessKey: '',
-          endpoint: '',
-          forcePathStyle: false,
-        },
-        quotas: {
-          enabled: false,
-          default: {
-            value: 10,
-            unit: 'GB',
-          },
-        },
-        maxUploadSize: {
-          value: 100,
-          unit: 'MB',
-        },
+        s3: { endpoint: '' },
+        quotas: { enabled: false, default: { value: 10, unit: 'GB' } },
+        maxUploadSize: { value: 100, unit: 'MB' },
       },
-      credits: {
-        showFooter: true,
-      },
-      ocr: {
-        enabled: true,
-      },
-      oidc: {
-        enabled: false,
-        issuer: '',
-        clientId: '',
-        clientSecret: '',
-        buttonText: 'Sign in with SSO',
-        autoProvision: true,
-        requireEmailVerified: true,
-        enforceSso: false,
-      },
+      credits: { showFooter: true },
+      ocr: {},
     },
-    appearance: {
-      theme: 'dark',
-      favicon: null,
-      customColors: {
-        background: '222.2 84% 4.9%',
-        foreground: '210 40% 98%',
-        card: '222.2 84% 4.9%',
-        cardForeground: '210 40% 98%',
-        popover: '222.2 84% 4.9%',
-        popoverForeground: '210 40% 98%',
-        primary: '210 40% 98%',
-        primaryForeground: '222.2 47.4% 11.2%',
-        secondary: '217.2 32.6% 17.5%',
-        secondaryForeground: '210 40% 98%',
-        muted: '217.2 32.6% 17.5%',
-        mutedForeground: '215 20.2% 65.1%',
-        accent: '217.2 32.6% 17.5%',
-        accentForeground: '210 40% 98%',
-        destructive: '0 62.8% 30.6%',
-        destructiveForeground: '210 40% 98%',
-        border: '217.2 32.6% 17.5%',
-        input: '217.2 32.6% 17.5%',
-        ring: '212.7 26.8% 83.9%',
-      },
-    },
-    advanced: {
-      customCSS: '',
-      customHead: '',
-    },
+    appearance: { favicon: null, customColors: CLASSIC_PALETTE },
+    advanced: { customCSS: '', customHead: '' },
   },
+})
+
+const CONFIG_KEY = 'flare_config'
+
+type ConfigClient = Pick<Prisma.TransactionClient, 'config'>
+
+/**
+ * The settings document exactly as stored, or null before anything is saved.
+ * Read it in a transaction to see what that transaction will write over.
+ */
+export async function readSavedConfigValue(
+  client: ConfigClient
+): Promise<unknown> {
+  const row = await client.config.findUnique({ where: { key: CONFIG_KEY } })
+  return row ? row.value : null
 }
 
-export async function initConfig(): Promise<FlareConfig> {
+/** The saved settings, or the defaults before anything is saved. Invalid saved settings throw. */
+export async function readConfig(client: ConfigClient): Promise<FlareConfig> {
+  const value = await readSavedConfigValue(client)
+  return value === null ? DEFAULT_CONFIG : configSchema.parse(value)
+}
+
+/** Save `config` as the whole settings document, replacing whatever is saved. */
+export async function replaceConfig(
+  tx: Prisma.TransactionClient,
+  config: FlareConfig
+): Promise<FlareConfig> {
+  await lockSettings(tx)
+  const next = configSchema.parse(config)
+  await tx.config.upsert({
+    where: { key: CONFIG_KEY },
+    create: { key: CONFIG_KEY, value: next as InputJsonValue },
+    update: { value: next as InputJsonValue },
+  })
+  return next
+}
+
+/**
+ * Change the saved settings: takes the settings lock, reads them in `tx`,
+ * applies `change` and saves the validated result.
+ */
+export async function changeConfig(
+  tx: Prisma.TransactionClient,
+  change: (current: FlareConfig) => FlareConfig
+): Promise<FlareConfig> {
+  await lockSettings(tx)
+  return replaceConfig(tx, change(await readConfig(tx)))
+}
+
+/**
+ * Replace one section as stored and leave the rest untouched, for a feature
+ * that validates its own section and must not depend on the others being valid.
+ * Returns false, saving nothing, before any settings are saved.
+ */
+export async function replaceSavedConfigSection(
+  tx: Prisma.TransactionClient,
+  section: 'email',
+  value: unknown
+): Promise<boolean> {
+  await lockSettings(tx)
+  const saved = (await readSavedConfigValue(tx)) as {
+    settings?: Record<string, unknown>
+  } | null
+  if (!saved) return false
+  await tx.config.update({
+    where: { key: CONFIG_KEY },
+    data: {
+      value: {
+        ...saved,
+        settings: { ...saved.settings, [section]: value },
+      } as Prisma.InputJsonValue,
+    },
+  })
+  return true
+}
+
+async function initConfig(): Promise<FlareConfig> {
   try {
     const config = await prisma.config.findFirst({
-      where: { key: 'flare_config' },
+      where: { key: CONFIG_KEY },
     })
 
     if (!config) {
       await prisma.config.create({
         data: {
-          key: 'flare_config',
+          key: CONFIG_KEY,
           value: DEFAULT_CONFIG as InputJsonValue,
         },
       })
@@ -229,8 +232,6 @@ export async function initConfig(): Promise<FlareConfig> {
     return DEFAULT_CONFIG
   }
 }
-
-const CONFIG_KEY = 'flare_config'
 
 type ConfigRevision = { id: string; xmin: string }
 type CachedConfigRow = ConfigRevision & {
@@ -376,12 +377,33 @@ type ConfigUpdate = {
 /** A submitted setting was rejected; the message is safe to show to the person saving. */
 export class ConfigValidationError extends Error {}
 
-export async function updateConfig(
-  newConfig: ConfigUpdate,
-  authorize?: (tx: Prisma.TransactionClient) => Promise<void>,
-  validateSaved?: (tx: Prisma.TransactionClient) => Promise<void>
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    !(value instanceof Date)
+  )
+}
+
+/** Objects merge key by key at every depth; any other submitted value replaces the saved one. */
+function mergeSettings<T>(saved: T, update: unknown): T {
+  if (!isPlainObject(saved) || !isPlainObject(update)) return update as T
+  const merged: Record<string, unknown> = { ...saved }
+  for (const [key, value] of Object.entries(update))
+    merged[key] = key in saved ? mergeSettings(saved[key], value) : value
+  return merged as T
+}
+
+/**
+ * Merge a partial update into the saved settings inside `tx`, which may hold
+ * other locks first. Submitted classic colors merge into the saved palette.
+ */
+export async function applyConfigUpdate(
+  tx: Prisma.TransactionClient,
+  update: ConfigUpdate
 ): Promise<FlareConfig> {
-  const appearance = newConfig.settings?.appearance
+  const appearance = update.settings?.appearance
   if (appearance) {
     const submitted = legacyAppearanceUpdateSchema.safeParse(appearance)
     if (!submitted.success)
@@ -389,131 +411,23 @@ export async function updateConfig(
         submitted.error.issues[0]?.message ?? LEGACY_COLOR_MESSAGE
       )
   }
-  try {
-    return await prisma.$transaction(async (tx) => {
-      await lockSettings(tx)
-      await authorize?.(tx)
-      const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-      const currentConfig = row ? configSchema.parse(row.value) : DEFAULT_CONFIG
-      const mergedConfig = {
-        ...currentConfig,
-        ...newConfig,
-        settings: {
-          ...currentConfig.settings,
-          ...(newConfig.settings || {}),
-          customization: {
-            ...currentConfig.settings.customization,
-            ...(newConfig.settings?.customization || {}),
-          },
-          general: {
-            ...currentConfig.settings.general,
-            ...(newConfig.settings?.general || {}),
-            setup: {
-              ...currentConfig.settings.general.setup,
-              ...(newConfig.settings?.general?.setup || {}),
-            },
-            registrations: {
-              ...currentConfig.settings.general.registrations,
-              ...(newConfig.settings?.general?.registrations || {}),
-              inviteLimits: {
-                ...currentConfig.settings.general.registrations.inviteLimits,
-                ...(newConfig.settings?.general?.registrations?.inviteLimits ||
-                  {}),
-              },
-            },
-            storage: {
-              ...currentConfig.settings.general.storage,
-              ...(newConfig.settings?.general?.storage || {}),
-              s3: {
-                ...currentConfig.settings.general.storage.s3,
-                ...(newConfig.settings?.general?.storage?.s3 || {}),
-              },
-              quotas: {
-                ...currentConfig.settings.general.storage.quotas,
-                ...(newConfig.settings?.general?.storage?.quotas || {}),
-                default: {
-                  ...currentConfig.settings.general.storage.quotas.default,
-                  ...(newConfig.settings?.general?.storage?.quotas?.default ||
-                    {}),
-                },
-              },
-              maxUploadSize: {
-                ...currentConfig.settings.general.storage.maxUploadSize,
-                ...(newConfig.settings?.general?.storage?.maxUploadSize || {}),
-              },
-            },
-            credits: {
-              ...currentConfig.settings.general.credits,
-              ...(newConfig.settings?.general?.credits || {}),
-            },
-            ocr: {
-              ...currentConfig.settings.general.ocr,
-              ...(newConfig.settings?.general?.ocr || {}),
-            },
-            oidc: {
-              ...currentConfig.settings.general.oidc,
-              ...(newConfig.settings?.general?.oidc || {}),
-            },
-          },
-          appearance: {
-            ...currentConfig.settings.appearance,
-            ...(newConfig.settings?.appearance || {}),
-            customColors: {
-              ...currentConfig.settings.appearance.customColors,
-              ...(newConfig.settings?.appearance?.customColors || {}),
-            },
-          },
-          advanced: {
-            ...currentConfig.settings.advanced,
-            ...(newConfig.settings?.advanced || {}),
-          },
-        },
-      }
-
-      // Submitted colors merge into the saved palette. Reject a merge past the
-      // cap, which reads would otherwise trim without telling anyone.
-      if (
-        newConfig.settings?.appearance?.customColors &&
-        Object.keys(mergedConfig.settings.appearance.customColors).length >
-          MAX_LEGACY_COLORS
+  const saved = await changeConfig(tx, (current) => {
+    const merged = mergeSettings(current, update)
+    // Reject a merge past the cap, which reads would otherwise trim without telling anyone.
+    if (
+      appearance?.customColors &&
+      Object.keys(merged.settings.appearance.customColors).length >
+        MAX_LEGACY_COLORS
+    )
+      throw new ConfigValidationError(
+        `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
       )
-        throw new ConfigValidationError(
-          `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
-        )
-
-      const validatedConfig = configSchema.parse(mergedConfig)
-
-      await tx.config.upsert({
-        where: { key: 'flare_config' },
-        create: {
-          key: 'flare_config',
-          value: validatedConfig as InputJsonValue,
-        },
-        update: {
-          value: validatedConfig as InputJsonValue,
-        },
-      })
-
-      await validateSaved?.(tx)
-      logger.info('Configuration updated successfully')
-      return validatedConfig
-    })
-  } catch (error) {
-    logger.warn('Could not save config to database', { error })
-    throw error
-  }
+    return merged
+  })
+  logger.info('Configuration updated successfully')
+  return saved
 }
 
-export async function updateConfigSection<
-  T extends keyof FlareConfig['settings'],
->(section: T, data: Partial<FlareConfig['settings'][T]>): Promise<void> {
-  try {
-    // Pass only the edited section. Reading a whole snapshot here would let a
-    // concurrent email save be overwritten after updateConfig acquires its lock.
-    await updateConfig({ settings: { [section]: data } })
-    logger.debug('Config section updated', { section })
-  } catch (error) {
-    logger.warn('Could not update config section', { section, error })
-    throw error
-  }
+export async function updateConfig(update: ConfigUpdate): Promise<FlareConfig> {
+  return prisma.$transaction((tx) => applyConfigUpdate(tx, update))
 }

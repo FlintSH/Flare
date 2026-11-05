@@ -9,7 +9,12 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import type { OAuthConfig } from 'next-auth/providers/oauth'
 
 import { setAuditActor } from '@/lib/audit'
-import { getConfig } from '@/lib/config'
+import { type FlareConfig, getConfig } from '@/lib/config'
+import {
+  isOidcProviderConfigured,
+  oidcIssuer,
+  scopeOidcSubject,
+} from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
@@ -493,22 +498,6 @@ export async function getAccessSession() {
   return session?.user?.emailAccessRequired ? null : session
 }
 
-function trimTrailingSlashes(value: string) {
-  let end = value.length
-  while (end > 0 && value[end - 1] === '/') {
-    end -= 1
-  }
-  return value.slice(0, end)
-}
-
-/**
- * OIDC `sub` is only unique within its issuer, not globally, so it must be
- * scoped before being used as a global lookup key (see oidcSubject on User).
- */
-function scopeOidcSubject(issuer: string, sub: string): string {
-  return `${trimTrailingSlashes(issuer)}|${sub}`
-}
-
 interface OidcRawProfile extends Record<string, unknown> {
   sub: string
   email?: string
@@ -517,26 +506,14 @@ interface OidcRawProfile extends Record<string, unknown> {
   picture?: string
 }
 
-interface OidcSettings {
-  enabled: boolean
-  issuer: string
-  clientId: string
-  clientSecret: string
-  buttonText: string
-}
-
-export function isOidcProviderConfigured(oidc: OidcSettings) {
-  return Boolean(
-    oidc.enabled && oidc.issuer && oidc.clientId && oidc.clientSecret
-  )
-}
-
-function buildOidcProvider(oidc: OidcSettings): OAuthConfig<OidcRawProfile> {
+function buildOidcProvider(
+  oidc: FlareConfig['settings']['general']['oidc']
+): OAuthConfig<OidcRawProfile> {
   return {
     id: 'oidc',
     name: oidc.buttonText || 'SSO',
     type: 'oauth',
-    wellKnown: `${trimTrailingSlashes(oidc.issuer)}/.well-known/openid-configuration`,
+    wellKnown: `${oidcIssuer(oidc)}/.well-known/openid-configuration`,
     clientId: oidc.clientId,
     clientSecret: oidc.clientSecret,
     authorization: { params: { scope: 'openid email profile' } },

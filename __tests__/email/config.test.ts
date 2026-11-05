@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import {
   emailEnvironmentName,
-  redactEmailConfig,
   resolveEmailConfig,
   transitionEmailPolicy,
 } from '@/lib/email/config'
@@ -11,6 +10,7 @@ import { encryptSecret } from '@/lib/email/crypto'
 import {
   DEFAULT_EMAIL_CONFIG,
   emailConfigSchema,
+  redactEmailConfig,
   validateEnabledEmail,
 } from '@/lib/email/schema'
 import { sanitizeLogUrl } from '@/lib/logger/url'

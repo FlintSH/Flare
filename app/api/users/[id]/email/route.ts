@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/api-auth'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
-import { getEmailConfig, resolveEmailConfig } from '@/lib/email/config'
+import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import {
   EmailHttpError,
   emailRoute,
@@ -54,13 +54,7 @@ async function handlePOST(req: Request, { params }: Context) {
     await limitEmailRequest(req, config)
     await prisma.$transaction(async (tx) => {
       await lockRoleChanges(tx)
-      const row = await tx.config.findUnique({
-        where: { key: 'flare_config' },
-      })
-      if (row) {
-        const saved = row.value as { settings?: { email?: unknown } }
-        config = resolveEmailConfig(saved.settings?.email).config
-      }
+      config = await getEmailConfigForUpdate(tx)
       if (!config.enabled) throw new EmailHttpError('Email is disabled.')
       await requireActorPermission(tx, actor.id, 'users.email')
       await assertCanManageUser(tx, actor.id, id)

@@ -1,5 +1,3 @@
-import { redactEmailConfig } from '@/lib/email/config'
-
 import { type Permission, hasPermission } from './catalog'
 
 const sectionPermissions: Record<string, Permission> = {
@@ -37,27 +35,4 @@ export function settingsPatchAllowed(
       )
     })
   )
-}
-
-/** Never serialize saved infrastructure credentials into a dashboard response. */
-export function redactSettings(config: import('@/lib/config').FlareConfig) {
-  return {
-    ...config,
-    settings: {
-      ...config.settings,
-      email: redactEmailConfig(config.settings.email),
-      general: {
-        ...config.settings.general,
-        oidc: { ...config.settings.general.oidc, clientSecret: '' },
-        storage: {
-          ...config.settings.general.storage,
-          s3: {
-            ...config.settings.general.storage.s3,
-            secretAccessKey: '',
-            accessKeyId: '',
-          },
-        },
-      },
-    },
-  }
 }

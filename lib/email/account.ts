@@ -4,7 +4,8 @@ import type { Session } from 'next-auth'
 import { randomUUID } from 'node:crypto'
 
 import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
-import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { getConfig, readConfig } from '@/lib/config'
+import { localSignInAllowed } from '@/lib/config/oidc'
 import { lockEmailAddress, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
@@ -172,14 +173,8 @@ export async function isPasswordRecoveryAvailable(
 ) {
   if (!config.enabled || !config.recovery.enabled) return false
   // When changing account state, read SSO policy under the same settings lock.
-  const fullConfig = tx
-    ? configSchema.parse(
-        (await tx.config.findUnique({ where: { key: 'flare_config' } }))
-          ?.value ?? DEFAULT_CONFIG
-      )
-    : await getConfig()
-  const oidc = fullConfig.settings.general.oidc
-  return !(oidc?.enabled && oidc.enforceSso)
+  const fullConfig = tx ? await readConfig(tx) : await getConfig()
+  return localSignInAllowed(fullConfig.settings.general.oidc)
 }
 
 export async function confirmEmailToken(token: string, config: EmailConfig) {

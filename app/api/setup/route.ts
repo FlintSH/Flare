@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 
-import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
 import { withAuditRoute } from '@/lib/audit'
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { DEFAULT_CONFIG, configSchema, replaceConfig } from '@/lib/config'
 import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -51,9 +50,6 @@ async function handlePOST(req: Request) {
         },
       },
     })
-    const configValue = JSON.parse(
-      JSON.stringify(initialConfig)
-    ) as Prisma.InputJsonValue
     // Account and settings succeed together. Serializing bootstrap also prevents
     // simultaneous setup requests from creating multiple initial administrators.
     const user = await prisma.$transaction(async (tx) => {
@@ -66,11 +62,7 @@ async function handlePOST(req: Request) {
         password: hashedPassword,
         emailExempt: true,
       })
-      await tx.config.upsert({
-        where: { key: 'flare_config' },
-        create: { key: 'flare_config', value: configValue },
-        update: { value: configValue },
-      })
+      await replaceConfig(tx, initialConfig)
       return admin
     })
 

@@ -139,7 +139,7 @@ These behaviors depend on the administrator's [email settings](../admin/email). 
 
 ## Check storage and usage
 
-Open **Profile → Your data** to see space used, your available quota when enabled, total files, and shortened-link count. The usage bar highlights accounts approaching their quota.
+Open **Profile → Your data** to see space used, your available quota when enabled, total files, and shortened-link count. Sizes use binary units, so 1 GB is 1,024 MB. The usage bar highlights accounts approaching their quota.
 
 **Uncapped storage** means the instance is not enforcing the displayed account quota. Physical disk or object-storage capacity and the maximum size of an individual upload still matter.
 

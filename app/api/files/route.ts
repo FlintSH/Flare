@@ -9,6 +9,7 @@ import {
 import { withAuditRoute } from '@/lib/audit'
 import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
+import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
 import { getFilesExpirationInfo } from '@/lib/events/handlers/file-expiry'
 import {
@@ -56,17 +57,12 @@ async function handlePOST(req: Request) {
     const selection = requestUploadOptions(req)
     const initialOptions = await resolveUploadOptions(user, selection)
     const config = await getConfig()
-    const limits = config.settings.general.storage
-    const maxBytes =
-      limits.maxUploadSize.value *
-      (limits.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-    const quotaMB =
-      limits.quotas.default.value *
-      (limits.quotas.default.unit === 'GB' ? 1024 : 1)
+    const maxBytes = maxUploadBytes(config)
+    const quota = storageQuotaBytes(config, user)
     const quotaLimitBytes =
-      limits.quotas.enabled && !hasPermission(user, 'quotas.bypass')
-        ? Math.max(0, quotaMB - user.storageUsed) * 1024 ** 2
-        : Infinity
+      quota === null
+        ? Infinity
+        : Math.max(0, quota / 1024 ** 2 - user.storageUsed) * 1024 ** 2
     if (quotaLimitBytes <= 0)
       throw new UploadError('You have reached your storage quota.', 413)
     storage = await getStorageProvider()

@@ -233,7 +233,7 @@ suite('email configuration against disposable PostgreSQL', () => {
   it('serializes independent email and appearance writes without losing either change', async () => {
     await Promise.all([
       configModule.saveEmailConfig(workingConfig()),
-      appConfig.updateConfigSection('appearance', { theme: 'light' }),
+      appConfig.updateConfig({ settings: { appearance: { theme: 'light' } } }),
     ])
     const actual = await appConfig.getConfig()
     expect(actual.settings.appearance.theme).toBe('light')

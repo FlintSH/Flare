@@ -28,9 +28,6 @@ vi.mock('@/lib/config', () => ({ getConfig: mocks.config }))
 vi.mock('@/lib/customization/recovery', () => ({
   isAppearanceRecovery: mocks.recovery,
 }))
-vi.mock('@/lib/email/config', () => ({
-  redactEmailConfig: () => ({ redacted: true }),
-}))
 vi.mock('@/components/settings/instance-settings', () => ({
   InstanceSettings: () => null,
 }))
@@ -94,7 +91,7 @@ describe('settings permission and legacy navigation', () => {
     async (section, expected) => {
       mocks.config.mockResolvedValue({
         settings: {
-          email: { password: 'private-mail-password' },
+          email: { smtp: { password: 'private-mail-password' } },
           general: {
             oidc: { clientSecret: 'private-oidc-secret' },
             storage: {
@@ -111,9 +108,7 @@ describe('settings permission and legacy navigation', () => {
         searchParams: Promise.resolve({ section }),
       })
       expect(page.props.initialSection).toBe(expected)
-      expect(page.props.initialConfig.settings.email).toEqual({
-        redacted: true,
-      })
+      expect(page.props.initialConfig.settings.email.smtp.password).toBe('')
       expect(JSON.stringify(page.props)).not.toContain('private-mail-password')
       expect(JSON.stringify(page.props)).not.toContain('private-oidc-secret')
       expect(JSON.stringify(page.props)).not.toContain('private-s3-secret')

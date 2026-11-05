@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 
 import { getAccessSession } from '@/lib/auth'
+import { readConfig } from '@/lib/config'
+import { oidcSubjectPrefix } from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
 import {
@@ -270,25 +272,9 @@ export async function assertAccessibleAdministrator(
   emailConfig?: EmailConfig
 ) {
   const email = emailConfig ?? (await getEmailConfigForUpdate(tx))
-  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const oidc = (
-    row?.value as {
-      settings?: {
-        general?: {
-          oidc?: {
-            enabled?: boolean
-            issuer?: string
-            clientId?: string
-            clientSecret?: string
-          }
-        }
-      }
-    } | null
-  )?.settings?.general?.oidc
-  const oidcPrefix =
-    oidc?.enabled && oidc.issuer && oidc.clientId && oidc.clientSecret
-      ? `${oidc.issuer.replace(/\/+$/, '')}|`
-      : null
+  const oidcPrefix = oidcSubjectPrefix(
+    (await readConfig(tx)).settings.general.oidc
+  )
   const everyone = await tx.role.findUnique({
     where: { systemKey: 'everyone' },
     select: { permissions: true },

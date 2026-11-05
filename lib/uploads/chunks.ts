@@ -13,10 +13,10 @@ import { join } from 'node:path'
 import { z } from 'zod'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { getConfig, readConfig } from '@/lib/config'
+import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { hasPermission } from '@/lib/permissions/catalog'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import {
@@ -96,14 +96,7 @@ export async function getUploadStorage(metadata: UploadMetadata) {
 }
 
 async function fingerprint(tx?: Prisma.TransactionClient) {
-  const row = tx
-    ? await tx.config.findUnique({ where: { key: 'flare_config' } })
-    : null
-  const config = tx
-    ? row
-      ? configSchema.parse(row.value)
-      : DEFAULT_CONFIG
-    : await getConfig()
+  const config = tx ? await readConfig(tx) : await getConfig()
   const { provider, s3 } = config.settings.general.storage
   return createHash('sha256')
     .update(JSON.stringify({ provider, s3 }))
@@ -201,20 +194,10 @@ export async function initializeChunkUpload(
     ...selection,
   })
   const config = await getConfig()
-  const storageConfig = config.settings.general.storage
-  const maxBytes =
-    storageConfig.maxUploadSize.value *
-    (storageConfig.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-  if (size > maxBytes)
+  if (size > maxUploadBytes(config))
     throw new UploadError('The file exceeds the upload size limit.', 413)
-  const quotaMB =
-    storageConfig.quotas.default.value *
-    (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
-  if (
-    storageConfig.quotas.enabled &&
-    !hasPermission(user, 'quotas.bypass') &&
-    user.storageUsed + size / 1024 ** 2 > quotaMB
-  )
+  const quota = storageQuotaBytes(config, user)
+  if (quota !== null && user.storageUsed + size / 1024 ** 2 > quota / 1024 ** 2)
     throw new UploadError('The file would exceed your storage quota.', 413)
   const destination = await prepareUploadDestination(user, filename, options)
   const storage = await getStorageProvider()

@@ -180,12 +180,16 @@ suite('customization contracts against disposable PostgreSQL', () => {
   })
 
   it('keeps profile defaults owned by the user and resolves instance share defaults', async () => {
-    await config.updateConfigSection('customization', {
-      published: {
-        ...config.DEFAULT_CONFIG.settings.customization.published,
-        sharing: {
-          ...config.DEFAULT_CONFIG.settings.customization.published.sharing,
-          defaultStyle: 'minimal',
+    await config.updateConfig({
+      settings: {
+        customization: {
+          published: {
+            ...config.DEFAULT_CONFIG.settings.customization.published,
+            sharing: {
+              ...config.DEFAULT_CONFIG.settings.customization.published.sharing,
+              defaultStyle: 'minimal',
+            },
+          },
         },
       },
     })
@@ -322,7 +326,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       enabled: true,
       default: { value: 1, unit: 'MB' },
     }
-    await config.updateConfigSection('general', general)
+    await config.updateConfig({ settings: { general } })
     const first = await prepared('a'.repeat(700_000))
     const second = await prepared('b'.repeat(700_000))
     const attempts = await Promise.allSettled([
@@ -872,7 +876,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       enabled: true,
       default: { value: 1, unit: 'MB' },
     }
-    await config.updateConfigSection('general', general)
+    await config.updateConfig({ settings: { general } })
     const routes = await import('@/app/api/files/route')
     const upload = (character: string) => {
       const form = new FormData()

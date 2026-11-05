@@ -167,7 +167,7 @@ The response does not promise that object bytes have already been erased. An app
 
 ## Delegated settings writes
 
-`GET /api/settings` returns private settings only for an interactive session with `settings.read`; named tokens receive the public projection. Storage and OIDC secrets are masked in that response.
+`GET /api/settings` returns private settings only for an interactive session with `settings.read`; named tokens receive the public projection. Storage and OIDC secrets are masked in that response as empty strings. When you write settings back, an empty `general.oidc.clientSecret`, `general.storage.s3.accessKeyId`, or `general.storage.s3.secretAccessKey` keeps the saved value, in `PATCH` and in the legacy `POST` alike, so a client can return what it read without erasing credentials.
 
 For `PATCH /api/settings`, send a partial `{ "settings": { ... } }` body. Every supplied section is checked before any changes are accepted:
 

@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 
 import { LocalStorageProvider } from './providers/local'
@@ -14,9 +14,7 @@ export async function getStorageProviderForTarget(
   target: StorageTarget
 ): Promise<StorageProvider> {
   if (target.provider === 'local') return new LocalStorageProvider()
-  const row = await prisma.config.findUnique({ where: { key: 'flare_config' } })
-  const s3 = configSchema.parse(row?.value ?? DEFAULT_CONFIG).settings.general
-    .storage.s3
+  const { s3 } = (await readConfig(prisma)).settings.general.storage
   if (!sameStorageTarget(s3StorageTarget(s3), target))
     throw new StorageTargetChangedError()
   return new S3StorageProvider({ ...s3, endpoint: s3.endpoint || undefined })

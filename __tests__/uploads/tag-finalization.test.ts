@@ -32,7 +32,7 @@ vi.mock('@/lib/tags/service', () => ({
   TagError: class extends Error {},
 }))
 vi.mock('@/lib/config', () => ({
-  DEFAULT_CONFIG: {
+  readConfig: async () => ({
     settings: {
       general: {
         storage: {
@@ -41,8 +41,7 @@ vi.mock('@/lib/config', () => ({
         },
       },
     },
-  },
-  configSchema: { parse: (value: unknown) => value },
+  }),
 }))
 vi.mock('@/lib/security/file-validation', () => ({
   validateFileType: async () => ({ valid: true }),

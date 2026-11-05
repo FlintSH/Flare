@@ -1,7 +1,13 @@
 import { Prisma } from '@prisma/client'
 import { readFileSync } from 'node:fs'
 
-import { getConfig, readSavedConfigRow } from '@/lib/config'
+import {
+  getConfig,
+  readSavedConfigRow,
+  readSavedConfigValue,
+  replaceSavedConfigSection,
+} from '@/lib/config'
+import { localSignInAllowed } from '@/lib/config/oidc'
 import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
@@ -12,7 +18,12 @@ import {
   encryptSecret,
   isEncryptedSecret,
 } from './crypto'
-import { EmailConfig, emailConfigSchema, validateEnabledEmail } from './schema'
+import {
+  EmailConfig,
+  emailConfigSchema,
+  redactEmailConfig,
+  validateEnabledEmail,
+} from './schema'
 
 type Environment = Record<string, string | undefined>
 type ObjectValue = Record<string, unknown>
@@ -104,11 +115,11 @@ export async function getSavedEmailConfig(
 ): Promise<EmailConfig> {
   // Outside a transaction, reuse the shared read of the saved row; it is
   // re-read whenever the row changes.
-  const row =
+  const value =
     client === prisma
-      ? await readSavedConfigRow()
-      : await client.config.findUnique({ where: { key: 'flare_config' } })
-  const settings = (row?.value as { settings?: { email?: unknown } } | null)
+      ? (await readSavedConfigRow())?.value
+      : await readSavedConfigValue(client)
+  const settings = (value as { settings?: { email?: unknown } } | null)
     ?.settings
   // Database errors deliberately propagate instead of relaxing a saved policy.
   return emailConfigSchema.parse(settings?.email ?? {})
@@ -126,31 +137,19 @@ export async function getEmailConfigForUpdate(
   tx: Prisma.TransactionClient
 ): Promise<EmailConfig> {
   await lockSettings(tx)
-  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const value = row?.value as ObjectValue | undefined
-  const settings = value?.settings as ObjectValue | undefined
-  const saved = emailConfigSchema.parse(settings?.email ?? {})
+  const saved = await getSavedEmailConfig(tx)
   const config = validateEffectiveConfig(saved)
   if (
-    row &&
     config.verification.appliedMode !==
-      (config.enabled ? config.verification.mode : 'off')
+    (config.enabled ? config.verification.mode : 'off')
   ) {
     const transition = transitionEmailPolicy(saved, config)
     // Persist only server-owned transition state, never environment overrides.
     saved.verification.requiredSince = transition.requiredSince
     saved.verification.graceEndsAt = transition.graceEndsAt
     saved.verification.appliedMode = transition.appliedMode
-    await tx.config.update({
-      where: { key: 'flare_config' },
-      data: {
-        value: {
-          ...value,
-          settings: { ...settings, email: saved },
-        } as Prisma.InputJsonValue,
-      },
-    })
-    return validateEffectiveConfig(saved)
+    if (await replaceSavedConfigSection(tx, 'email', saved))
+      return validateEffectiveConfig(saved)
   }
   return config
 }
@@ -190,10 +189,6 @@ export function transitionEmailPolicy(
       now.getTime() + next.verification.graceDays * 86400000
     ).toISOString()
   return verification
-}
-
-export function redactEmailConfig(config: EmailConfig): EmailConfig {
-  return { ...config, smtp: { ...config.smtp, password: '' } }
 }
 
 export async function getEmailSettingsView() {
@@ -273,20 +268,8 @@ export async function saveEmailConfig(
     if (finalConfig.enabled && finalConfig.verification.mode === 'all_users') {
       await assertAccessibleAdministrator(tx, finalConfig)
     }
-    const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-    if (!row)
+    if (!(await replaceSavedConfigSection(tx, 'email', candidate)))
       throw new Error('Complete instance setup before configuring email')
-    const value = row.value as ObjectValue
-    const settings = value.settings as ObjectValue
-    await tx.config.update({
-      where: { key: 'flare_config' },
-      data: {
-        value: {
-          ...value,
-          settings: { ...settings, email: candidate },
-        } as Prisma.InputJsonValue,
-      },
-    })
     if (!finalConfig.enabled) {
       await tx.mailOutbox.updateMany({
         where: { status: { in: ['pending', 'processing'] } },
@@ -309,9 +292,7 @@ export async function getEmailCapabilities() {
   return {
     enabled: config.enabled,
     recoveryEnabled:
-      config.enabled &&
-      config.recovery.enabled &&
-      !(oidc.enabled && oidc.enforceSso),
+      config.enabled && config.recovery.enabled && localSignInAllowed(oidc),
     verificationMode: config.enabled ? config.verification.mode : 'off',
     changesEnabled: config.enabled && config.changes.enabled,
   }
