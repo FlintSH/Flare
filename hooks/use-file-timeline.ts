@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { FileFilterOptions, FileType } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 
-import { fileQuery } from '@/lib/files/gallery'
 import {
   type FileTimeline,
+  type LibraryFilters,
+  listQuery,
+  timelineWindow,
+} from '@/lib/library/contract'
+import {
   TIMELINE_CACHE_PAGES,
   TIMELINE_PAGE_SIZE,
   bucketAt,
   timelinePage,
-} from '@/lib/files/timeline-layout'
+} from '@/lib/library/timeline-layout'
 
 export function useFileTimeline(
-  filters: FileFilterOptions,
+  filters: LibraryFilters,
   refreshKey: number,
   scope: string | null
 ) {
@@ -28,15 +32,17 @@ export function useFileTimeline(
   const pending = useRef(new Map<string, AbortController>())
   const generation = useRef(0)
   const requiredKeys = useRef(new Set<string>())
-  const query = fileQuery(filters, 1).toString()
+  const query = listQuery(filters).toString()
   const grouping = filters.groupBy
   // Legacy page links still restore their position when browser history changes
-  // only page. A fresh result remounts the virtual viewport at that anchor.
+  // only page or limit. A fresh result remounts the virtual viewport at that
+  // anchor.
   const resultKey = JSON.stringify([
     scope,
     query,
     grouping,
     filters.page,
+    filters.limit,
     refreshKey,
   ])
   const currentKey = useRef<string | null>(resultKey)
@@ -148,31 +154,14 @@ export function useFileTimeline(
         const controller = new AbortController()
         const started = generation.current
         pending.current.set(key, controller)
-        const params = new URLSearchParams(query)
-        params.set('page', String(page))
-        params.set('limit', String(TIMELINE_PAGE_SIZE))
-        params.set('snapshot', timeline.snapshot)
-        if (bucket.from && bucket.to) {
-          params.set(
-            'dateFrom',
-            new Date(
-              Math.max(
-                Date.parse(bucket.from),
-                filters.dateFrom ? Date.parse(filters.dateFrom) : -Infinity
-              )
-            ).toISOString()
-          )
-          params.set(
-            'dateTo',
-            new Date(
-              Math.min(
-                Date.parse(bucket.to) - 1,
-                filters.dateTo ? Date.parse(filters.dateTo) : Infinity
-              )
-            ).toISOString()
-          )
-        }
-        void fetch(`/api/files?${params}`, {
+        const pageRequest = timelineWindow(
+          filters,
+          timeline,
+          bucket,
+          page,
+          TIMELINE_PAGE_SIZE
+        )
+        void fetch(`/api/files?${pageRequest.query}`, {
           signal: controller.signal,
           cache: 'no-store',
         })
@@ -186,11 +175,10 @@ export function useFileTimeline(
               currentKey.current !== resultKey
             )
               return
-            const expected = Math.min(
-              TIMELINE_PAGE_SIZE,
-              bucket.count - (page - 1) * TIMELINE_PAGE_SIZE
+            if (
+              !Array.isArray(result.data) ||
+              result.data.length !== pageRequest.length
             )
-            if (!Array.isArray(result.data) || result.data.length !== expected)
               throw new Error('The library changed. Refresh to continue.')
             pages.current.set(key, result.data)
             while (pages.current.size > TIMELINE_CACHE_PAGES) {
@@ -221,14 +209,7 @@ export function useFileTimeline(
           })
       })
     },
-    [
-      timeline,
-      query,
-      filters.dateFrom,
-      filters.dateTo,
-      resultKey,
-      result?.generation,
-    ]
+    [timeline, filters, resultKey, result?.generation]
   )
 
   const getFile = useCallback(

@@ -27,6 +27,8 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { folderPath } from '@/lib/folders/navigation'
+import { libraryHref } from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
 import { formatBytes } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -57,7 +59,7 @@ export function ArchiveExtractForm({
   onClose: () => void
   onBusyChange: (busy: boolean) => void
 }) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const lifetime = useRequestLifetime()
   const {
     folders,
@@ -89,8 +91,7 @@ export function ArchiveExtractForm({
     (loading ||
       foldersError ||
       !folders.some((folder) => folder.id === folderId))
-  const allowed =
-    can('files.read') && can('files.upload') && can('folders.manage')
+  const allowed = allows(user, 'extractArchive')
 
   async function extract(event: React.FormEvent) {
     event.preventDefault()
@@ -170,7 +171,7 @@ export function ArchiveExtractForm({
           </Button>
           <Button asChild>
             <Link
-              href={`/dashboard?folder=${encodeURIComponent(result.folderId)}`}
+              href={libraryHref({ folder: result.folderId })}
               onClick={onClose}
             >
               <FolderOpen className="mr-2 h-4 w-4" aria-hidden="true" />

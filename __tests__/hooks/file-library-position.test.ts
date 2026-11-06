@@ -1,13 +1,12 @@
-import type { FileFilterOptions } from '@/types/components/file'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { type LibraryFilters, readLibraryFilters } from '@/lib/library/contract'
 import {
   libraryPositionKey,
   readLibraryPosition,
   withLibraryPosition,
-} from '@/lib/files/library-position'
+} from '@/lib/library/position'
 
-import { readFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 
 const harness = vi.hoisted(() => ({
@@ -60,7 +59,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: vi.fn(),
 }))
 
-const filters = readFileFilters(new URLSearchParams(), 24)
+const filters = readLibraryFilters(new URLSearchParams())
 const key = libraryPositionKey(filters)
 const nextState = {
   __NA: true,
@@ -84,7 +83,7 @@ function dispatch(type: string, event?: unknown) {
   listeners.get(type)?.forEach((listener) => listener(event))
 }
 function render(
-  selected: FileFilterOptions = filters,
+  selected: LibraryFilters = filters,
   query = '',
   scope?: string
 ) {
@@ -165,17 +164,15 @@ describe('file library history positions', () => {
   )
 
   it('canonicalizes parsed filters and rejects unrelated or malformed history positions', () => {
-    const first = readFileFilters(
+    const first = readLibraryFilters(
       new URLSearchParams(
         'types=image/png,image/jpeg&visibility=private,public&page=1&limit=24'
-      ),
-      24
+      )
     )
-    const equivalent = readFileFilters(
+    const equivalent = readLibraryFilters(
       new URLSearchParams(
         'visibility=public,private&types=image/jpeg,image/png'
-      ),
-      24
+      )
     )
     expect(libraryPositionKey(first)).toBe(libraryPositionKey(equivalent))
     expect(
@@ -189,6 +186,20 @@ describe('file library history positions', () => {
       withLibraryPosition(nextState, key, 1.5),
     ])
       expect(readLibraryPosition(state, key, 48)).toBe(48)
+  })
+
+  it('keeps the history key earlier builds saved, so their entries still restore', () => {
+    const view = readLibraryFilters(
+      new URLSearchParams(
+        'folder=f1&tag=t1&search=cat&types=image/png,image/gif&visibility=public,hasPassword&dateFrom=2026-01-01T00:00:00.000Z&sortBy=oldest&groupBy=month&page=3&limit=50'
+      )
+    )
+    expect(libraryPositionKey(view, 'scope')).toBe(
+      '{"scope":"scope","folder":"f1","tag":"t1","search":"cat","types":["image/gif","image/png"],"visibility":["hasPassword","public"],"dateFrom":"2026-01-01T00:00:00.000Z","dateTo":null,"sortBy":"oldest","groupBy":"month","page":3,"limit":50}'
+    )
+    expect(key).toBe(
+      '{"folder":null,"tag":null,"search":"","types":[],"visibility":[],"dateFrom":null,"dateTo":null,"sortBy":"newest","groupBy":"none","page":1,"limit":24}'
+    )
   })
 
   it('restores the current entry immediately on mount and preserves legacy page fallback', () => {

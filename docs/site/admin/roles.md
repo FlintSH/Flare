@@ -80,6 +80,25 @@ Your own verification, enrollment, recovery, and confirmed email-change flows re
 
 [Archive tools](/guide/archives) reuse existing permissions. Owner-library browsing needs `files.read`; creation also needs `files.upload`, with `folders.manage` for a folder destination; extraction needs all three. Those library routes require source ownership, so `content.read` and Administrator do not grant extraction or creation from somebody else's files. Separate share-page browsing and entry downloads follow ordinary file access: eligible owners and `content.read` sessions retain privileged access, while other viewers follow public visibility and file-password checks. Share pages never offer extraction.
 
+The file library shows each action only to roles with the permissions below; when an action changes something, the server checks the same permissions.
+
+| Action in the library                                                    | Needs                                                                                           |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| **Copy link**, **Change visibility**, **Add password / Manage password** | `files.share`                                                                                   |
+| **Manage expiration**                                                    | `files.update`; scheduling also needs `files.delete` to delete or `files.share` to make private |
+| **Delete file**                                                          | `files.delete`                                                                                  |
+| **Browse archive**                                                       | `files.read`                                                                                    |
+| **Edit tags**                                                            | `files.update` and `tags.manage`                                                                |
+| **Apply rule to existing files…** in **Manage tags**                     | `tags.manage` and `files.update`                                                                |
+| **Move to folder**, **Move**                                             | `files.update` and `folders.manage`                                                             |
+| **Create archive**                                                       | `files.read` and `files.upload`; `folders.manage` to save into a folder                         |
+| **Extract all**                                                          | `files.read`, `files.upload`, and `folders.manage`                                              |
+| **Upload here**                                                          | `files.upload` and `folders.manage`                                                             |
+| **New folder**, **Rename folder**, **New subfolder**, **Remove folder**  | `folders.manage`                                                                                |
+| **Share folder**                                                         | `folders.share` and `folders.manage`                                                            |
+
+**Select** appears when a role allows **Create archive**, **Move**, or **Edit tags**. Earlier versions showed **Upload here** to roles with `files.upload` but not `folders.manage`, and **Share folder** to roles with `folders.share` but not `folders.manage`; the upload, or creating or disabling the link, then failed. Both now appear only when the action can succeed.
+
 Permissions do not transfer file ownership, create per-folder membership lists, encrypt content from operators, or create separate storage pools. A role does not have its own numeric quota. Public URLs retain their sharing behavior: removing dashboard access does not revoke a previously shared public file, folder link, or short URL.
 
 ## Delegate without handing over the instance

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 export const folderNameSchema = z
   .string()
   .refine((name) => !/[\p{Cc}\p{Cf}]/u.test(name), 'Use a plain-text name.')
@@ -37,7 +39,7 @@ export const folderUpdateSchema = z
 
 export const fileFoldersInputSchema = z
   .object({
-    fileIds: z.array(folderIdSchema).min(1).max(100),
+    fileIds: z.array(folderIdSchema).min(1).max(BATCH_LIMIT),
     folderId: folderIdSchema.nullable(),
   })
   .strict()

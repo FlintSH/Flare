@@ -1,11 +1,8 @@
-import type {
-  FileFilterOptions,
-  FileType,
-  PaginationInfo,
-} from '@/types/components/file'
+import type { FileType, PaginationInfo } from '@/types/components/file'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { GalleryPage } from '@/lib/files/gallery'
+import type { LibraryFilters } from '@/lib/library/contract'
+import type { GalleryPage } from '@/lib/library/gallery'
 
 import { useImageGallery } from '@/hooks/use-image-gallery'
 
@@ -72,12 +69,14 @@ vi.mock('react', () => ({
   },
 }))
 
-vi.mock('@/lib/files/gallery', () => ({
+vi.mock('@/lib/library/gallery', () => ({
   adjacentImagePage: harness.adjacentImagePage,
 }))
 vi.mock('@/hooks/use-toast', () => ({ toast: harness.toast }))
 
-const filters: FileFilterOptions = {
+const filters: LibraryFilters = {
+  folder: null,
+  tag: null,
   search: '',
   types: [],
   visibility: [],
@@ -107,7 +106,7 @@ function file(id: string): FileType {
 const files = [file('first'), file('second')]
 const pagination: PaginationInfo = { page: 1, pageCount: 3, total: 6, limit: 2 }
 type HookProps = {
-  filters: FileFilterOptions
+  filters: LibraryFilters
   files: FileType[]
   pagination: PaginationInfo
   refreshKey: number

@@ -39,7 +39,7 @@ This works well after a one-off upload batch. For a recurring source, let an upl
 
 ## Find files by tag
 
-Choose **Tags** beside the library filters, or click a tag on a file. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
+Choose **Tags** beside the library filters, or click a tag on a file. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest when your role can edit tags. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.

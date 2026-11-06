@@ -3,11 +3,8 @@ import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import {
-  applyFileExpiration,
-  expiryPermission,
-  processDueExpirations,
-} from '@/lib/files/expiry'
+import { applyFileExpiration, processDueExpirations } from '@/lib/files/expiry'
+import { EXPIRY_EFFECTS, actionPermissions } from '@/lib/permissions/actions'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import type { StorageProvider } from '@/lib/storage'
 import { finalizeUpload } from '@/lib/uploads/finalize'
@@ -387,9 +384,13 @@ describe('upload-time expiration', () => {
   it.each(['DELETE', 'SET_PRIVATE'] as const)(
     'rejects a %s expiration when the role lacks its permission',
     async (action) => {
-      const needed = expiryPermission(action as ExpiryAction)
+      const needed = actionPermissions(EXPIRY_EFFECTS[action as ExpiryAction])
       mocks.tx.role.findUnique.mockResolvedValue(
-        role(DEFAULT_PERMISSIONS.filter((permission) => permission !== needed))
+        role(
+          DEFAULT_PERMISSIONS.filter(
+            (permission) => !needed.includes(permission)
+          )
+        )
       )
       await expect(finalizeUpload(upload(action))).rejects.toMatchObject({
         status: 403,

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 export const tagNameSchema = z
   .string()
   .transform((name) => name.normalize('NFKC').trim().replace(/\s+/g, ' '))
@@ -30,7 +32,7 @@ export const tagInputSchema = z
 
 export const fileTagsInputSchema = z
   .object({
-    fileIds: z.array(z.string().min(1).max(128)).min(1).max(100),
+    fileIds: z.array(z.string().min(1).max(128)).min(1).max(BATCH_LIMIT),
     tagId: z.string().min(1).max(128),
     action: z.enum(['add', 'remove']),
   })

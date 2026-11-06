@@ -90,7 +90,7 @@ suite('file timeline against disposable PostgreSQL', () => {
     const response = await timeline.GET(request('/timeline', params))
     expect(response.status).toBe(200)
     return (await response.json())
-      .data as import('@/lib/files/timeline').FileTimeline
+      .data as import('@/lib/library/contract').FileTimeline
   }
   async function getFiles(params: Record<string, string>) {
     const response = await files.GET(request('', params))

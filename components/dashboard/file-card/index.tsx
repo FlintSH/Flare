@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,27 +9,27 @@ import { FileType } from '@/types/components/file'
 import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
-  Archive,
-  ArrowUpRight,
   Clock,
   Download,
   Eye,
   Folder,
-  FolderInput,
   Globe,
   KeyRound,
-  Link as LinkIcon,
   Loader2,
   Lock,
   MoreHorizontal,
-  ScanText,
   Tag,
   Timer,
-  Trash2,
 } from 'lucide-react'
 
+import {
+  CARD_BUTTONS,
+  CARD_MENU,
+  FILE_ACTIONS,
+  type FileActionId,
+  fileActionAllowed,
+} from '@/components/dashboard/file-card/actions'
 import { getFileIcon } from '@/components/dashboard/file-card/utils'
-import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import {
   OcrDialog,
@@ -105,7 +105,7 @@ export function FileCard({
   selected,
   onSelect,
 }: FileCardProps) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const { toast } = useToast()
   const lifetime = useRequestLifetime()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
@@ -347,6 +347,38 @@ export function FileCard({
   const urls = fileUrls(file)
   const tags = initialFile.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
+  const permitted = (id: FileActionId) => fileActionAllowed(user, id)
+  const browseArchive = permitted('browseArchive') ? onBrowseArchive : undefined
+  // What each action does on this card; one without an entry isn't offered.
+  const handlers: Partial<
+    Record<
+      FileActionId,
+      { run?: () => void; href?: string; download?: string; disabled?: boolean }
+    >
+  > = {
+    ...(browseArchive && { browseArchive: { run: browseArchive } }),
+    open: { href: urls.page },
+    copyLink: { run: () => void handleCopyLink() },
+    download: { href: urls.download, download: file.name },
+    ...(onEditTags && { editTags: { run: onEditTags } }),
+    ...(onMove && { move: { run: onMove } }),
+    visibility: {
+      run: () => {
+        setVisibility(file.visibility)
+        setIsVisibilityDialogOpen(true)
+      },
+    },
+    password: { run: () => handlePasswordDialogOpenChange(true) },
+    expiration: { run: () => setIsExpiryModalOpen(true) },
+    ...(isImage && {
+      ocr: { run: () => void handleFetchOcr(), disabled: isLoadingOcr },
+    }),
+    delete: { run: () => setIsDeleteDialogOpen(true) },
+  }
+  const offered = (id: FileActionId) =>
+    permitted(id) ? handlers[id] : undefined
+  // The tag count opens the editor only where the menu offers it.
+  const editTags = offered('editTags')
 
   return (
     <Card
@@ -367,18 +399,18 @@ export function FileCard({
           href={urls.page}
           aria-label={`Open ${file.name}`}
           aria-haspopup={
-            onBrowseArchive || (isImage && onPreview) ? 'dialog' : undefined
+            browseArchive || (isImage && onPreview) ? 'dialog' : undefined
           }
           onClick={(event) => {
             if (
-              (onBrowseArchive || (isImage && onPreview)) &&
+              (browseArchive || (isImage && onPreview)) &&
               !event.metaKey &&
               !event.ctrlKey &&
               !event.shiftKey &&
               !event.altKey
             ) {
               event.preventDefault()
-              if (onBrowseArchive) onBrowseArchive()
+              if (browseArchive) browseArchive()
               else onPreview?.(file)
             }
           }}
@@ -407,12 +439,12 @@ export function FileCard({
             colour, in both themes, with solid buttons on top. Only keyboard
             focus counts, so a tap on a phone doesn't leave the card veiled. */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/50 opacity-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
-          {onBrowseArchive ? (
+          {browseArchive ? (
             <Button
               variant="outline"
               size="sm"
               className="bg-background"
-              onClick={onBrowseArchive}
+              onClick={browseArchive}
             >
               Browse archive
             </Button>
@@ -438,97 +470,46 @@ export function FileCard({
             </Button>
           )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={handleCopyLink}
-                aria-label={`Copy link to ${file.name}`}
-                title="Copy link"
-              >
-                <LinkIcon className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 bg-background"
-              asChild
-            >
-              <a
-                href={urls.download}
-                download={file.name}
-                aria-label={`Download ${file.name}`}
-                title="Download"
-              >
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => {
-                  setVisibility(file.visibility)
-                  setIsVisibilityDialogOpen(true)
-                }}
-                aria-label={`Change visibility of ${file.name}`}
-                title="Change visibility"
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => handlePasswordDialogOpenChange(true)}
-                aria-label={`Password protection for ${file.name}`}
-                title="Password protection"
-              >
-                <KeyRound className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            {isImage && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                disabled={isLoadingOcr}
-                onClick={() => void handleFetchOcr()}
-                aria-label={`Extract text from ${file.name}`}
-                title="Extract text (OCR)"
-              >
-                <ScanText className="h-4 w-4" />
-              </Button>
-            )}
-            <PermissionGate permission="files.update">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => setIsExpiryModalOpen(true)}
-                aria-label={`Manage expiration of ${file.name}`}
-                title="Manage expiration"
-              >
-                <Timer className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="files.delete">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive"
-                onClick={() => setIsDeleteDialogOpen(true)}
-                aria-label={`Delete ${file.name}`}
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
+            {CARD_BUTTONS.map((id) => {
+              const handler = offered(id)
+              if (!handler) return null
+              const { icon: Icon, button } = FILE_ACTIONS[id]
+              const className =
+                id === 'delete'
+                  ? 'h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive'
+                  : 'h-8 w-8 bg-background'
+              return handler.href ? (
+                <Button
+                  key={id}
+                  variant="outline"
+                  size="icon"
+                  className={className}
+                  asChild
+                >
+                  <a
+                    href={handler.href}
+                    download={handler.download}
+                    aria-label={button.label(file.name)}
+                    title={button.title}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  key={id}
+                  variant="outline"
+                  size="icon"
+                  className={className}
+                  disabled={handler.disabled}
+                  onClick={handler.run}
+                  aria-label={button.label(file.name)}
+                  title={button.title}
+                >
+                  <Icon className="h-4 w-4" />
+                </Button>
+              )
+            })}
           </div>
         </div>
         {onSelect && (
@@ -558,87 +539,52 @@ export function FileCard({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {onBrowseArchive && (
-                <DropdownMenuItem onSelect={onBrowseArchive}>
-                  <Archive />
-                  Browse archive
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem asChild>
-                <Link prefetch={false} href={urls.page}>
-                  <ArrowUpRight />
-                  Open file
-                </Link>
-              </DropdownMenuItem>
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem onSelect={() => void handleCopyLink()}>
-                  <LinkIcon />
-                  Copy link
-                </DropdownMenuItem>
-              </PermissionGate>
-              <DropdownMenuItem asChild>
-                <a href={urls.download} download={file.name}>
-                  <Download />
-                  Download file
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {onEditTags && can('tags.manage') && can('files.update') && (
-                <DropdownMenuItem onSelect={onEditTags}>
-                  <Tag />
-                  Edit tags
-                </DropdownMenuItem>
-              )}
-              {onMove && can('folders.manage') && can('files.update') && (
-                <DropdownMenuItem onSelect={onMove}>
-                  <FolderInput />
-                  Move to folder
-                </DropdownMenuItem>
-              )}
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setVisibility(file.visibility)
-                    setIsVisibilityDialogOpen(true)
-                  }}
-                >
-                  <Eye />
-                  Change visibility
-                </DropdownMenuItem>
-              </PermissionGate>
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem
-                  onSelect={() => handlePasswordDialogOpenChange(true)}
-                >
-                  <KeyRound />
-                  {file.hasPassword ? 'Manage password' : 'Add password'}
-                </DropdownMenuItem>
-              </PermissionGate>
-              <PermissionGate permission="files.update">
-                <DropdownMenuItem onSelect={() => setIsExpiryModalOpen(true)}>
-                  <Timer />
-                  Manage expiration
-                </DropdownMenuItem>
-              </PermissionGate>
-              {isImage && (
-                <DropdownMenuItem
-                  disabled={isLoadingOcr}
-                  onSelect={() => void handleFetchOcr()}
-                >
-                  <ScanText />
-                  {isLoadingOcr ? 'Extracting text…' : 'Extract text (OCR)'}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <PermissionGate permission="files.delete">
-                <DropdownMenuItem
-                  className="text-destructive focus:bg-danger/10 focus:text-destructive"
-                  onSelect={() => setIsDeleteDialogOpen(true)}
-                >
-                  <Trash2 />
-                  Delete file
-                </DropdownMenuItem>
-              </PermissionGate>
+              {CARD_MENU.map((group, index) => (
+                <Fragment key={index}>
+                  {index > 0 && <DropdownMenuSeparator />}
+                  {group.map((id) => {
+                    const handler = offered(id)
+                    if (!handler) return null
+                    const { icon: Icon, menu } = FILE_ACTIONS[id]
+                    const content = (
+                      <>
+                        <Icon />
+                        {typeof menu === 'function'
+                          ? menu({
+                              hasPassword: file.hasPassword,
+                              busy: isLoadingOcr,
+                            })
+                          : menu}
+                      </>
+                    )
+                    return (
+                      <DropdownMenuItem
+                        key={id}
+                        asChild={!!handler.href}
+                        disabled={handler.disabled}
+                        onSelect={handler.run}
+                        className={
+                          id === 'delete'
+                            ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
+                            : undefined
+                        }
+                      >
+                        {!handler.href ? (
+                          content
+                        ) : handler.download ? (
+                          <a href={handler.href} download={handler.download}>
+                            {content}
+                          </a>
+                        ) : (
+                          <Link prefetch={false} href={handler.href}>
+                            {content}
+                          </Link>
+                        )}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </Fragment>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -659,7 +605,7 @@ export function FileCard({
             {getRelativeTime(new Date(file.uploadedAt))}
           </span>
         </div>
-        {file.expiresAt && !onSelect && can('files.update') && (
+        {file.expiresAt && !onSelect && permitted('expiration') && (
           <button
             type="button"
             onClick={() => setIsExpiryModalOpen(true)}
@@ -727,16 +673,24 @@ export function FileCard({
                 <span className="max-w-20 truncate">{tag.name}</span>
               </button>
             ))}
-            {tags.length > visibleTags.length && (
-              <button
-                type="button"
-                onClick={onEditTags}
-                aria-label={`View all ${tags.length} tags`}
-                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                +{tags.length - visibleTags.length}
-              </button>
-            )}
+            {tags.length > visibleTags.length &&
+              (editTags ? (
+                <button
+                  type="button"
+                  onClick={editTags.run}
+                  aria-label={`View all ${tags.length} tags`}
+                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  +{tags.length - visibleTags.length}
+                </button>
+              ) : (
+                <span
+                  title={`${tags.length} tags`}
+                  className="shrink-0 px-1 text-[11px] text-muted-foreground"
+                >
+                  +{tags.length - visibleTags.length}
+                </span>
+              ))}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3">
             <span

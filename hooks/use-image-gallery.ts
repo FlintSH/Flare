@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type {
-  FileFilterOptions,
-  FileType,
-  PaginationInfo,
-} from '@/types/components/file'
+import type { FileType, PaginationInfo } from '@/types/components/file'
 
-import { adjacentImagePage } from '@/lib/files/gallery'
+import type { LibraryFilters } from '@/lib/library/contract'
+import { adjacentImagePage } from '@/lib/library/gallery'
 
 import { toast } from '@/hooks/use-toast'
 
@@ -21,7 +18,7 @@ interface GalleryState {
 }
 
 export function useImageGallery(
-  filters: FileFilterOptions,
+  filters: LibraryFilters,
   files: FileType[],
   pagination: PaginationInfo,
   refreshKey: number,

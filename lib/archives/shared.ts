@@ -1,4 +1,6 @@
 /** Browser-safe archive capabilities. The server always validates the bytes. */
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 // Extraction and creation stage whole archives; ARCHIVE_LIMITS bounds that work.
 export type ArchiveFormat = 'zip' | 'tar' | 'tar.gz' | 'gzip'
 export type ArchiveOutputFormat = 'zip' | 'tar.gz'
@@ -8,7 +10,7 @@ export const ARCHIVE_LIMITS = {
   expandedBytes: 512 * 1024 ** 2,
   fileBytes: 256 * 1024 ** 2,
   entries: 1000,
-  selectedFiles: 100,
+  selectedFiles: BATCH_LIMIT,
   pathDepth: 20,
   pathLength: 1024,
   timeoutMs: 120_000,

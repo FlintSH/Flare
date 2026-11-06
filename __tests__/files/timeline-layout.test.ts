@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
+import type { FileTimeline } from '@/lib/library/contract'
 import {
-  type FileTimeline,
   TIMELINE_WINDOW_ROWS,
   bucketAt,
   bucketLabel,
   timelineLayout,
   timelinePage,
   timelineWindowStart,
-} from '@/lib/files/timeline-layout'
+} from '@/lib/library/timeline-layout'
 
 const timeline: FileTimeline = {
   total: 109,

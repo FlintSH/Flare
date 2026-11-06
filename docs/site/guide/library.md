@@ -17,7 +17,7 @@ Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upg
 
 Every card has the same layout and height, whether or not a file has tags or a folder. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
 
-A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; choose it to see every tag in **Edit tags**. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
+A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
 ## Scroll through your library
 
@@ -136,6 +136,8 @@ The selection bar counts your selection against that limit, for example **2 sele
 Before **Edit tags**, **Move**, or **Create archive** opens, Flare fetches current details for every selected file, including cards outside the visible window. If that check fails, retry the action. If a selected file is no longer available, choose **Done** and select the remaining files again.
 
 Changing the search, filters, folder, sort, or grouping clears the selection. **Done** leaves selection mode and clears it too.
+
+**Select** is available when your role allows at least one bulk action, and the selection bar shows only those: **Create archive** needs `files.read` and `files.upload`, **Move** needs `files.update` and `folders.manage`, and **Edit tags** needs `files.update` and `tags.manage`.
 
 **Edit tags** reloads current tag assignments for the whole selection before enabling edits, including selected files outside the visible window. See [bulk tagging](./tags#tag-several-files-together) for checkbox meanings and loading recovery.
 

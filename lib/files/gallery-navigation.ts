@@ -1,6 +1,11 @@
 import type { File, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import {
+  type FileSort,
+  type SortField,
+  librarySort,
+} from '@/lib/library/contract'
 
 export const fileListSelect = {
   id: true,
@@ -22,32 +27,31 @@ export const fileListSelect = {
   },
 } satisfies Prisma.FileSelect
 
-type SortField = 'uploadedAt' | 'size' | 'views' | 'downloads' | 'name'
-type FileSort = { field: SortField; direction: 'asc' | 'desc' }
+/** A list row as the API sends it: tag names flat, the password reduced to a flag. */
+export function fileListItem(
+  {
+    password,
+    tags,
+    ...file
+  }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
+  expiresAt: Date | null
+) {
+  return {
+    ...file,
+    tags: tags.map(({ tag }) => tag),
+    hasPassword: Boolean(password),
+    expiresAt,
+  }
+}
+
 type GalleryDirection = 'next' | 'previous'
 type GalleryAnchor = Pick<File, 'id' | SortField>
 
-function fileSort(sortBy: string): FileSort {
-  switch (sortBy) {
-    case 'oldest':
-      return { field: 'uploadedAt', direction: 'asc' }
-    case 'largest':
-      return { field: 'size', direction: 'desc' }
-    case 'smallest':
-      return { field: 'size', direction: 'asc' }
-    case 'most-viewed':
-      return { field: 'views', direction: 'desc' }
-    case 'least-viewed':
-      return { field: 'views', direction: 'asc' }
-    case 'most-downloaded':
-      return { field: 'downloads', direction: 'desc' }
-    case 'least-downloaded':
-      return { field: 'downloads', direction: 'asc' }
-    case 'name':
-      return { field: 'name', direction: 'asc' }
-    default:
-      return { field: 'uploadedAt', direction: 'desc' }
-  }
+/** What a `sortBy` value orders by. The API also sorts by name, which the library doesn't offer. */
+export function fileSort(sortBy: string): FileSort {
+  return sortBy === 'name'
+    ? { field: 'name', direction: 'asc' }
+    : librarySort(sortBy)
 }
 
 export function fileOrderBy(

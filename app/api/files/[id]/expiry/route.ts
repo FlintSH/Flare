@@ -3,7 +3,6 @@ import { ExpiryAction } from '@/types/events'
 import { prisma } from '@/lib/database/prisma'
 import {
   cancelFileExpiration,
-  expiryPermission,
   getFilesExpirationInfo,
   isExpiryAction,
   scheduleFileExpiration,
@@ -14,7 +13,7 @@ import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { hasPermission } from '@/lib/permissions/catalog'
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -76,7 +75,7 @@ export const POST = api(
     if (!isExpiryAction(action))
       throw new HttpError(400, 'Invalid expiration action')
 
-    if (!hasPermission(user, expiryPermission(action)))
+    if (!allows(user, EXPIRY_EFFECTS[action]))
       throw new HttpError(
         403,
         'You do not have permission for this expiration action.'

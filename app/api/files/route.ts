@@ -1,11 +1,10 @@
-import { FileMetadata } from '@/types/dto/file'
-
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
 import { getFilesExpirationInfo } from '@/lib/files/expiry'
 import {
   anchoredGalleryPage,
+  fileListItem,
   fileListSelect,
   fileOrderBy,
 } from '@/lib/files/gallery-navigation'
@@ -15,6 +14,7 @@ import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/lib/library/contract'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
@@ -122,7 +122,9 @@ export const GET = api(
 
     const { searchParams } = new URL(request.url)
     const page = Number(searchParams.get('page') || '1')
-    const requestedLimit = Number(searchParams.get('limit') || '24')
+    const requestedLimit = Number(
+      searchParams.get('limit') || DEFAULT_PAGE_SIZE
+    )
     if (
       !Number.isSafeInteger(page) ||
       page < 1 ||
@@ -130,7 +132,7 @@ export const GET = api(
       requestedLimit < 1
     )
       throw new HttpError(400, 'Page and limit must be positive integers')
-    const limit = Math.min(requestedLimit, 100)
+    const limit = Math.min(requestedLimit, MAX_PAGE_SIZE)
     const galleryAnchor = searchParams.get('galleryAnchor')
     const galleryDirection = searchParams.get('galleryDirection')
     if (
@@ -182,18 +184,10 @@ export const GET = api(
     const expirations = await getFilesExpirationInfo(
       resultPage.files.map((file) => file.id)
     )
-    const filesList = resultPage.files.map((file) => {
-      const { password, tags, ...publicFile } = file
-      return {
-        ...publicFile,
-        tags: tags.map(({ tag }) => tag),
-        hasPassword: Boolean(password),
-        expiresAt: expirations.get(file.id) ?? null,
-      }
-    }) as (FileMetadata & { expiresAt: Date | null })[]
-
-    const result = paginatedResponse<FileMetadata[]>(
-      filesList,
+    const result = paginatedResponse(
+      resultPage.files.map((file) =>
+        fileListItem(file, expirations.get(file.id) ?? null)
+      ),
       resultPage.pagination
     )
     result.headers.set('Cache-Control', 'private, no-store')

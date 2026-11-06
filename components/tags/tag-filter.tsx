@@ -13,6 +13,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
+import { UNTAGGED } from '@/lib/library/contract'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -54,7 +55,7 @@ export function TagFilter({
         >
           <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="hidden max-w-28 truncate sm:inline">
-            {value === 'untagged' ? 'Untagged' : selected?.name || 'Tags'}
+            {value === UNTAGGED ? 'Untagged' : selected?.name || 'Tags'}
           </span>
         </Button>
       </PopoverTrigger>
@@ -76,7 +77,7 @@ export function TagFilter({
         >
           {[
             { id: null, name: 'All files' },
-            { id: 'untagged', name: 'Untagged' },
+            { id: UNTAGGED, name: 'Untagged' },
             ...tags.filter((tag) =>
               tag.name.toLowerCase().includes(search.toLowerCase())
             ),

@@ -1,20 +1,4 @@
-import type { FileGrouping } from '@/types/components/file'
-
-export interface TimelineBucket {
-  key: string
-  from: string | null
-  to: string | null
-  count: number
-  offset: number
-}
-
-export interface FileTimeline {
-  total: number
-  snapshot: string
-  groupBy: FileGrouping
-  timezone: string
-  buckets: TimelineBucket[]
-}
+import type { FileGrouping, FileTimeline, FileTimelineBucket } from './contract'
 
 export const TIMELINE_PAGE_SIZE = 48
 export const TIMELINE_CACHE_PAGES = 12
@@ -31,7 +15,7 @@ export function timelineWindowStart(row: number, totalRows: number) {
 }
 
 /** Binary search keeps the layout proportional to date groups, not file count. */
-export function bucketAt(buckets: TimelineBucket[], index: number) {
+export function bucketAt(buckets: FileTimelineBucket[], index: number) {
   let low = 0
   let high = buckets.length - 1
   while (low < high) {
@@ -42,7 +26,7 @@ export function bucketAt(buckets: TimelineBucket[], index: number) {
   return buckets[low]
 }
 
-export function timelinePage(bucket: TimelineBucket, index: number) {
+export function timelinePage(bucket: FileTimelineBucket, index: number) {
   const page = Math.floor((index - bucket.offset) / TIMELINE_PAGE_SIZE) + 1
   return { key: `${bucket.key}:${page}`, bucket, page }
 }
@@ -99,7 +83,7 @@ export function timelineLayout(
 }
 
 export function bucketLabel(
-  bucket: TimelineBucket,
+  bucket: FileTimelineBucket,
   grouping: FileGrouping,
   timezone: string
 ) {

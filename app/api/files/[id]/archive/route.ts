@@ -6,6 +6,7 @@ import {
 import { listArchive } from '@/lib/archives/service'
 import { setAuditTarget } from '@/lib/audit'
 import { routes } from '@/lib/http/route'
+import { actionPermissions } from '@/lib/permissions/actions'
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -15,7 +16,7 @@ export const GET = api(
   async (request, { params }: Context) => {
     const { id } = await params
     setAuditTarget({ type: 'file', id })
-    const actor = await archiveActor(request, ['files.read'])
+    const actor = await archiveActor(request, actionPermissions('viewFiles'))
     const query = new URL(request.url).searchParams
     return listArchive(actor, id, {
       ...parseListingQuery({

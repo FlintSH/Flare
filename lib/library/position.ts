@@ -1,10 +1,13 @@
-import type { FileFilterOptions } from '@/types/components/file'
+import type { LibraryFilters } from './contract'
 
 const HISTORY_POSITION = 'flareFileLibrary'
 
-/** Canonical filters, including legacy page links, identify this history entry. */
+/**
+ * Canonical filters, including legacy page links, identify this history entry.
+ * Browser history keeps these keys, so their JSON must not change.
+ */
 export function libraryPositionKey(
-  filters: FileFilterOptions,
+  filters: LibraryFilters,
   scope?: string
 ): string {
   return JSON.stringify({

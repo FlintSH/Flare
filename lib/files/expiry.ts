@@ -5,7 +5,6 @@ import { recordAudit } from '@/lib/audit'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { createLogger } from '@/lib/logger'
-import type { Permission } from '@/lib/permissions/catalog'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 
@@ -31,11 +30,6 @@ export type FileExpiry = { expiresAt: Date; action: ExpiryAction }
 
 export function isExpiryAction(value: unknown): value is ExpiryAction {
   return Object.values<unknown>(ExpiryAction).includes(value)
-}
-
-/** Deleting needs `files.delete`; making a file private needs `files.share`. */
-export function expiryPermission(action: ExpiryAction): Permission {
-  return action === ExpiryAction.DELETE ? 'files.delete' : 'files.share'
 }
 
 /** The expiry a request asks for, or null without a time. */

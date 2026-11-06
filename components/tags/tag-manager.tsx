@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { allows } from '@/lib/permissions/actions'
+
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
@@ -39,7 +41,7 @@ export function TagManager({
   onDeleted: (id: string) => void
 }) {
   const lifetime = useRequestLifetime()
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const { tags, loading, error: loadError, reload, changed } = useTags()
   const { toast } = useToast()
   const [editing, setEditing] = useState<TagView | 'new' | null>(null)
@@ -262,50 +264,47 @@ export function TagManager({
                 </div>
               )}
             </div>
-            {existing &&
-              ruleUnchanged &&
-              can('tags.manage') &&
-              can('files.update') && (
-                <div className="space-y-2">
-                  {confirmApply ? (
-                    <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                      <p>
-                        Also check existing files for this rule? Files keep
-                        their other tags, and tags you removed stay removed.
-                      </p>
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void apply()}
-                          disabled={busy}
-                        >
-                          Apply to existing files
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConfirmApply(false)}
-                          disabled={busy}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
+            {existing && ruleUnchanged && allows(user, 'applyTagRule') && (
+              <div className="space-y-2">
+                {confirmApply ? (
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                    <p>
+                      Also check existing files for this rule? Files keep their
+                      other tags, and tags you removed stay removed.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void apply()}
+                        disabled={busy}
+                      >
+                        Apply to existing files
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setConfirmApply(false)}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </Button>
                     </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="h-auto p-0 text-sm"
-                      disabled={busy}
-                      onClick={() => setConfirmApply(true)}
-                    >
-                      Apply rule to existing files…
-                    </Button>
-                  )}
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-sm"
+                    disabled={busy}
+                    onClick={() => setConfirmApply(true)}
+                  >
+                    Apply rule to existing files…
+                  </Button>
+                )}
+              </div>
+            )}
             {existing && automatic && !ruleUnchanged && (
               <p className="text-xs text-muted-foreground">
                 Save your rule first to apply it to existing files.

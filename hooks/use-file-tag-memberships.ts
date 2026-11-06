@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 type Tag = { id: string; name: string }
 export type FileTagMembership = { id: string; tags: Tag[] }
 type MembershipState = {
@@ -17,7 +19,7 @@ const loadFailed =
 
 /** A dialog-scoped snapshot; retained grid cards are not tag membership caches. */
 export function useFileTagMemberships(fileIds: string[]) {
-  const valid = fileIds.length > 0 && fileIds.length <= 100
+  const valid = fileIds.length > 0 && fileIds.length <= BATCH_LIMIT
   // Primitive identity prevents grid refreshes and onChanged from refetching.
   const key = valid ? JSON.stringify([...new Set(fileIds)].sort()) : ''
   const [attempt, setAttempt] = useState(0)
@@ -80,7 +82,7 @@ export function useFileTagMemberships(fileIds: string[]) {
 
   const files = state.key === key ? state.files : null
   const error = !valid
-    ? 'Choose between 1 and 100 files, then reopen tags.'
+    ? `Choose between 1 and ${BATCH_LIMIT} files, then reopen tags.`
     : state.key === key
       ? state.error
       : ''

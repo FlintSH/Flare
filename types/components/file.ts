@@ -24,37 +24,3 @@ export interface PaginationInfo {
   /** Exact image offset for a gallery window anchored to the current file. */
   offset?: number
 }
-
-export type SortOption =
-  | 'newest'
-  | 'oldest'
-  | 'largest'
-  | 'smallest'
-  | 'most-viewed'
-  | 'least-viewed'
-  | 'most-downloaded'
-  | 'least-downloaded'
-
-export type FileGrouping = 'none' | 'week' | 'month' | 'year'
-
-export interface FileFilterOptions {
-  folder?: string | null
-  tag?: string | null
-  groupBy: FileGrouping
-  page: number
-  limit: number
-  search: string
-  sortBy: SortOption
-  types: string[]
-  visibility: string[]
-  dateFrom: string | null
-  dateTo: string | null
-}
-
-export interface FileFilter {
-  search: string
-  types: string[]
-  visibility: string[]
-  dateFrom: string | null
-  dateTo: string | null
-}

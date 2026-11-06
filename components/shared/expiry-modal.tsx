@@ -24,6 +24,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -59,7 +60,9 @@ export function ExpiryModal({
   title = 'Configure expiration',
   description = 'Set when this file should expire.',
 }: ExpiryModalProps) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
+  const permitted = (expiry: ExpiryAction) =>
+    allows(user, EXPIRY_EFFECTS[expiry])
   const [expiresAt, setDate] = useState<Date | null>(initialDate || null)
   // The quick option that produced the current date, if any. Any other edit
   // clears it, so a highlighted option always matches the date shown.
@@ -148,7 +151,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 aria-pressed={action === ExpiryAction.DELETE}
-                disabled={!can('files.delete')}
+                disabled={!permitted(ExpiryAction.DELETE)}
                 onClick={() => setAction(ExpiryAction.DELETE)}
                 className={cn(action === ExpiryAction.DELETE && selectedOption)}
               >
@@ -158,7 +161,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 aria-pressed={action === ExpiryAction.SET_PRIVATE}
-                disabled={!can('files.share')}
+                disabled={!permitted(ExpiryAction.SET_PRIVATE)}
                 onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
                   action === ExpiryAction.SET_PRIVATE && selectedOption
@@ -169,7 +172,8 @@ export function ExpiryModal({
             </div>
           </div>
 
-          {(!can('files.delete') || !can('files.share')) && (
+          {(!permitted(ExpiryAction.DELETE) ||
+            !permitted(ExpiryAction.SET_PRIVATE)) && (
             <p className="text-xs text-muted-foreground">
               Scheduling deletion requires Delete files. Making a file private
               requires Share files. You can remove expiration if an inherited
@@ -464,15 +468,7 @@ export function ExpiryModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={
-              isLoading ||
-              (Boolean(expiresAt) &&
-                !can(
-                  action === ExpiryAction.DELETE
-                    ? 'files.delete'
-                    : 'files.share'
-                ))
-            }
+            disabled={isLoading || (Boolean(expiresAt) && !permitted(action))}
           >
             {isLoading ? (
               <>

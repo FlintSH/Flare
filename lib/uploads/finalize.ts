@@ -10,7 +10,6 @@ import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import {
-  expiryPermission,
   fileExpiry,
   queueFileExpiration,
   storedExpiry,
@@ -20,6 +19,7 @@ import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
@@ -124,14 +124,14 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       (input.isPaste && !hasPermission(access, 'pastes.create'))
     )
       throw new UploadError('Your role no longer allows this upload.', 403)
-    if (options.folderId && !hasPermission(access, 'folders.manage'))
+    if (options.folderId && !allows(access, 'fileIntoFolder'))
       throw new UploadError(
         'Your role cannot organize uploads into folders.',
         403
       )
     if (options.tagIds?.length && !hasPermission(access, 'tags.manage'))
       throw new UploadError('Your role cannot apply tags.', 403)
-    if (expiry && !hasPermission(access, expiryPermission(expiry.action)))
+    if (expiry && !allows(access, EXPIRY_EFFECTS[expiry.action]))
       throw new UploadError(
         'Your role does not allow the selected expiration action. Disable expiration or ask for the required permission.',
         403

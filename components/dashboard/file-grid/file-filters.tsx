@@ -1,6 +1,5 @@
 import { Fragment, type ReactNode, memo } from 'react'
 
-import { FileGrouping, SortOption } from '@/types/components/file'
 import { format } from 'date-fns'
 import {
   Calendar as CalendarIcon,
@@ -35,6 +34,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import {
+  type FileGrouping,
+  GROUP_OPTIONS,
+  SORT_OPTIONS,
+  type SortOption,
+  VISIBILITY_FILTERS,
+  type VisibilityFilter,
+} from '@/lib/library/contract'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -49,20 +56,9 @@ interface FileFiltersProps {
   onDateChange: (range: DateRange | undefined) => void
   groupBy: FileGrouping
   onGroupChange: (groupBy: FileGrouping) => void
-  visibility: string[]
-  onVisibilityChange: (visibility: string[]) => void
+  visibility: VisibilityFilter[]
+  onVisibilityChange: (visibility: VisibilityFilter[]) => void
 }
-
-const sortOptions: { value: SortOption; label: string }[] = [
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
-  { value: 'largest', label: 'Largest first' },
-  { value: 'smallest', label: 'Smallest first' },
-  { value: 'most-viewed', label: 'Most viewed' },
-  { value: 'least-viewed', label: 'Least viewed' },
-  { value: 'most-downloaded', label: 'Most downloaded' },
-  { value: 'least-downloaded', label: 'Least downloaded' },
-]
 
 // The toolbar's lists share one pattern: the check sits in a column on the
 // left, as in the Visibility, File type and Tags lists. SelectItem draws its
@@ -70,11 +66,11 @@ const sortOptions: { value: SortOption; label: string }[] = [
 const sortItemClassName =
   'pl-8 pr-2 [&>span:first-child]:left-2 [&>span:first-child]:right-auto'
 
-const visibilityOptions = [
-  { value: 'public', label: 'Public', icon: Globe },
-  { value: 'private', label: 'Private', icon: Lock },
-  { value: 'hasPassword', label: 'Password protected', icon: KeyRound },
-]
+const visibilityIcons = {
+  public: Globe,
+  private: Lock,
+  hasPassword: KeyRound,
+} satisfies Record<VisibilityFilter, unknown>
 
 function getFileTypeCategory(type: string) {
   if (type.startsWith('image/')) return 'Images'
@@ -153,7 +149,7 @@ export const FileFilters = memo(function FileFilters({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {sortOptions.map((option) => (
+          {SORT_OPTIONS.map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}
@@ -187,23 +183,26 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>Who can access</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {visibilityOptions.map(({ value, label, icon: Icon }) => (
-            <DropdownMenuCheckboxItem
-              key={value}
-              checked={visibility.includes(value)}
-              onSelect={(event) => event.preventDefault()}
-              onCheckedChange={(checked) =>
-                onVisibilityChange(
-                  checked
-                    ? [...visibility, value]
-                    : visibility.filter((item) => item !== value)
-                )
-              }
-            >
-              <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
-              {label}
-            </DropdownMenuCheckboxItem>
-          ))}
+          {VISIBILITY_FILTERS.map(({ value, label }) => {
+            const Icon = visibilityIcons[value]
+            return (
+              <DropdownMenuCheckboxItem
+                key={value}
+                checked={visibility.includes(value)}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={(checked) =>
+                  onVisibilityChange(
+                    checked
+                      ? [...visibility, value]
+                      : visibility.filter((item) => item !== value)
+                  )
+                }
+              >
+                <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                {label}
+              </DropdownMenuCheckboxItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
@@ -316,10 +315,11 @@ export const FileFilters = memo(function FileFilters({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No grouping</SelectItem>
-                <SelectItem value="week">By week</SelectItem>
-                <SelectItem value="month">By month</SelectItem>
-                <SelectItem value="year">By year</SelectItem>
+                {GROUP_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

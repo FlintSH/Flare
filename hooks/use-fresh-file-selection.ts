@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { FileType } from '@/types/components/file'
 
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 /** Resolve retained IDs again before bulk dialogs interpret mutable metadata. */
 export function useFreshFileSelection(files: FileType[], scope: unknown) {
   const [loading, setLoading] = useState(false)
@@ -30,7 +32,7 @@ export function useFreshFileSelection(files: FileType[], scope: unknown) {
     try {
       const params = new URLSearchParams({
         ids: files.map((file) => file.id).join(','),
-        limit: '100',
+        limit: String(BATCH_LIMIT),
       })
       const response = await fetch(`/api/files?${params}`, {
         cache: 'no-store',

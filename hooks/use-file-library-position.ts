@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import type { FileFilterOptions } from '@/types/components/file'
-
+import { type LibraryFilters, readLibraryFilters } from '@/lib/library/contract'
 import {
   libraryPositionKey,
   readLibraryPosition,
   withLibraryPosition,
-} from '@/lib/files/library-position'
-
-import { readFileFilters } from '@/hooks/use-file-filters'
+} from '@/lib/library/position'
 
 type PendingPosition = {
   key: string
@@ -20,7 +17,7 @@ type PendingPosition = {
 
 /** Store only a filter identity and file rank in this browser history entry. */
 export function useFileLibraryPosition(
-  filters: FileFilterOptions,
+  filters: LibraryFilters,
   pathname: string,
   urlQuery: string,
   onRestore: () => void,
@@ -50,7 +47,7 @@ export function useFileLibraryPosition(
     // link can commit its destination before this component's cleanup runs.
     if (
       actual.toString() !== next.query ||
-      libraryPositionKey(readFileFilters(actual, 24), next.scope) !== next.key
+      libraryPositionKey(readLibraryFilters(actual), next.scope) !== next.key
     )
       return
     if (readLibraryPosition(window.history.state, next.key, -1) === next.index)
@@ -84,7 +81,7 @@ export function useFileLibraryPosition(
     const actual = new URLSearchParams(window.location.search)
     const matches =
       window.location.pathname === pathname &&
-      libraryPositionKey(readFileFilters(actual, 24), scope) === key
+      libraryPositionKey(readLibraryFilters(actual), scope) === key
     const restored = matches
       ? readLibraryPosition(window.history.state, key, fallback)
       : fallback
@@ -110,7 +107,7 @@ export function useFileLibraryPosition(
       const actual = new URLSearchParams(window.location.search)
       if (
         window.location.pathname !== pathname ||
-        libraryPositionKey(readFileFilters(actual, 24), scope) !== key
+        libraryPositionKey(readLibraryFilters(actual), scope) !== key
       )
         return
       if (timer.current !== null) clearTimeout(timer.current)

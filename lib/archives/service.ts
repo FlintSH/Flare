@@ -15,6 +15,7 @@ import { requiresEmailVerification } from '@/lib/email/policy'
 import { folderNameSchema } from '@/lib/folders/schema'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
+import { actionPermissions, allows } from '@/lib/permissions/actions'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import {
   PermissionError,
@@ -334,7 +335,13 @@ async function recheckRead(
   signal.throwIfAborted()
   await prisma.$transaction(
     async (tx) => {
-      await lockPublication(tx, actor, [file], ['files.read'], privateOptions())
+      await lockPublication(
+        tx,
+        actor,
+        [file],
+        actionPermissions('viewFiles'),
+        privateOptions()
+      )
       signal.throwIfAborted()
     },
     { timeout: 10_000, maxWait: 10_000 }
@@ -363,7 +370,7 @@ async function confirmRead(
   ])
   if (!user || requiresEmailVerification(user, email))
     throw new PermissionError('Your account no longer has access')
-  if (!hasPermission(access, 'files.read'))
+  if (!allows(access, 'viewFiles'))
     throw new PermissionError('You no longer have permission for this action')
   if (user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
@@ -657,7 +664,7 @@ export async function extractArchive(
           tx,
           actor,
           [source],
-          ['files.read', 'files.upload', 'folders.manage'],
+          actionPermissions('extractArchive'),
           options
         )
         await validateOwnedFolderId(actor.user.id, input.folderId, tx)
@@ -756,7 +763,7 @@ export async function createAccountArchive(
     ? input.name
     : input.name + suffix
   setAuditTarget({ type: 'file', name })
-  if (input.folderId && !hasPermission(actor.user, 'folders.manage'))
+  if (input.folderId && !allows(actor.user, 'fileIntoFolder'))
     throw new ArchiveError('Your role cannot save archives into folders.', 403)
   await validateOwnedFolderId(actor.user.id, input.folderId)
   const options = await archiveOptions(actor, input)
@@ -805,11 +812,11 @@ export async function createAccountArchive(
           tx,
           actor,
           sources,
-          [
-            'files.read',
-            'files.upload',
-            ...(input.folderId ? ['folders.manage' as const] : []),
-          ],
+          actionPermissions(
+            input.folderId
+              ? ['createArchive', 'fileIntoFolder']
+              : 'createArchive'
+          ),
           options
         )
         operation.signal.throwIfAborted()
