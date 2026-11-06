@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
-import { prisma } from '@/lib/database/prisma'
-import {
-  checkFileAccess,
-  fileAccessDeniedHeaders,
-  retryAfterMinutes,
-} from '@/lib/files/access'
+import { authorizeFile } from '@/lib/files/delivery'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
@@ -88,36 +80,16 @@ const api = routes('/api/files/[id]/ocr', {
 
 export const GET = api(async (request, { params }: Context) => {
   const { id } = await params
-  const url = new URL(request.url)
-  const providedPassword = url.searchParams.get('password')
-
-  const file = await prisma.file.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      name: true,
-      userId: true,
-      mimeType: true,
-      isOcrProcessed: true,
-      ocrText: true,
-      path: true,
-      ocrConfidence: true,
-      ocrTagsPendingAt: true,
-      visibility: true,
-      password: true,
-    },
+  const grant = await authorizeFile(request, { id }, 'api', {
+    isOcrProcessed: true,
+    ocrText: true,
+    ocrConfidence: true,
+    ocrTagsPendingAt: true,
   })
+  if (grant instanceof Response) return grant
+  const { file, session } = grant
 
-  if (!file) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'File not found',
-      },
-      { status: 404 }
-    )
-  }
-
+  // Checked after access, so a file the requester can't read stays hidden.
   if (!file.mimeType.startsWith('image/')) {
     return NextResponse.json(
       {
@@ -125,28 +97,6 @@ export const GET = api(async (request, { params }: Context) => {
         error: 'File is not an image',
       },
       { status: 400 }
-    )
-  }
-
-  const session = await getAccessSession()
-
-  setAuditTarget({ type: 'file', id: file.id, name: file.name })
-  const access = await checkFileAccess(file, session, providedPassword, {
-    requester: requestIp(request.headers),
-  })
-  if (!access.allowed) {
-    setAuditOutcome('denied')
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          access.reason === 'private'
-            ? 'Unauthorized'
-            : access.reason === 'password_rate_limited'
-              ? `Too many incorrect passwords for this file. Try again in ${retryAfterMinutes(access)} min.`
-              : 'Password required',
-      },
-      { status: access.status, headers: fileAccessDeniedHeaders(access) }
     )
   }
 

@@ -12,7 +12,6 @@ import { configureAuditWriter } from '@/lib/audit'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  resolve: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
   size: vi.fn(),
@@ -24,7 +23,6 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
 }))
-vi.mock('@/lib/files/resolve', () => ({ resolveFileUrlPath: mocks.resolve }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({
     getFileSize: mocks.size,
@@ -112,7 +110,6 @@ beforeEach(() => {
     mimeType: 'video/mp4',
   })
   mocks.session.mockResolvedValue(null)
-  mocks.resolve.mockResolvedValue(file.urlPath)
   mocks.findUnique.mockImplementation(async () => ({ ...file }))
   mocks.update.mockResolvedValue(file)
   mocks.size.mockResolvedValue(content.length)

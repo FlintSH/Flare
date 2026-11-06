@@ -13,6 +13,7 @@ import { Transform, addAbortSignal } from 'node:stream'
 import type { Readable } from 'node:stream'
 import { setTimeout as delay } from 'node:timers/promises'
 
+import { contentDisposition } from '@/lib/files/content-disposition'
 import { loggers } from '@/lib/logger'
 
 import { s3StorageTarget } from '../targets'
@@ -238,7 +239,7 @@ export class S3StorageProvider implements StorageProvider {
       Bucket: this.bucket,
       Key: key,
       ResponseContentDisposition: filename
-        ? `attachment; filename="${filename}"`
+        ? contentDisposition(filename, 'attachment')
         : undefined,
     })
 

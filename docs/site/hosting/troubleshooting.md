@@ -56,9 +56,9 @@ If accounts and settings also disappeared, inspect the PostgreSQL volume and dat
 
 ## Raw links return 500
 
-`GET /{userUrlId}/{filename}/raw` checks access, opens the stored content, and saves one view before serving the response. A local file can disappear between the size check and opening it; this returns `500` without counting a view. A failed database counter write also returns `500` without serving the content. Both full and range responses close acquired streams on these failures so repeated requests do not retain file descriptors.
+`GET /{userUrlId}/{filename}/raw` checks access, opens the stored content, and saves one view before serving the response. A stored object that is gone, including a local file removed between the size check and opening it, returns `404` without counting a view and logs **File serve error**. A failed database counter write returns `500` without serving the content and logs `GET /[userUrlId]/[filename]/raw failed`. Both full and range responses close acquired streams on these failures so repeated requests do not retain file descriptors.
 
-Inspect the application's **File serve error** logs, confirm that the original storage object exists and is readable, and check PostgreSQL availability and write permissions. Restore the missing object from your backup or resolve the storage/database problem, then retry the raw request and refresh the library. A failed counter write does not add a view. No re-upload or database migration is required for files whose bytes and metadata are intact.
+Inspect those log entries, confirm that the original storage object exists and is readable, and check PostgreSQL availability and write permissions. Restore the missing object from your backup or resolve the storage/database problem, then retry the raw request and refresh the library. A failed counter write does not add a view. No re-upload or database migration is required for files whose bytes and metadata are intact.
 
 An unknown file URL or a private file requested by an unauthorized visitor returns `404`; a public file with a missing or incorrect password returns `401`. Check [sharing and privacy](/guide/sharing#view-counts) before treating an access denial as a storage failure.
 

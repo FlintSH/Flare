@@ -37,12 +37,12 @@ See [files](./files), [short links](./short-links), and [authentication](./authe
 
 These routes check the file's visibility, password, and an optional **browser session**. They do not use named bearer tokens to grant file access. Public unprotected files can be fetched anonymously. Private files require an owner session with `files.read`, or a session with `content.read` and return `404` to ineligible viewers. A password-protected public file requires its password unless the browser session belongs to its owner with `files.read`, or a person with `content.read`.
 
-| Path                        | Methods   | Purpose                                                                                                                            |
-| --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.               |
-| `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value; POST accepts password JSON. S3 storage can redirect after access validation. |
-| `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image.                                                        |
-| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)).                |
+| Path                        | Methods   | Purpose                                                                                                                                                                                                                                           |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.                                                                                                                              |
+| `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value and one `Range`; POST accepts password JSON and ignores `Range`. S3 storage can redirect after access validation to a signed URL, which makes S3 send the `Content-Disposition` Flare would. |
+| `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image. Access is checked before the type, so only someone who may read the file gets `400` for a non-image.                                                                  |
+| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)). A non-image answers `400` only after access validation.                                                                       |
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs. After 10 different incorrect passwords for a file from one client address, or 100 from all addresses, within 15 minutes, these routes, downloads, and shared-archive reads answer `429` with `Retry-After` in seconds until the window ends, even for the correct password, unless that address unlocked the file in the last 10 minutes. Repeating an identical wrong password does not count again. See [incorrect password attempts](/guide/sharing#incorrect-password-attempts).
 
@@ -60,7 +60,7 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 
 Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
 
-A local file-open failure or failed view-counter write returns `500` and closes the acquired storage stream. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
+When the stored object itself is gone (`ENOENT` on local storage, `NoSuchKey` or a `404` HEAD on S3), the raw, content, download, and thumbnail routes answer `404` with an empty body; earlier builds answered `500` from raw, download, and thumbnail requests. On S3, a download redirects to its signed URL without reading the object, so S3 answers a missing key itself. Another storage failure or a failed view-counter write returns `500` and closes the acquired storage stream; `/api/files/{path}` answers `404` for every failure. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
 
 ### OCR request limits
 

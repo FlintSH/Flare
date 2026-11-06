@@ -1,6 +1,7 @@
 import { fileTypeFromBuffer } from 'file-type'
 import { Readable } from 'node:stream'
 
+import { contentDisposition } from '@/lib/files/content-disposition'
 import { parseByteRange as parseSingleByteRange } from '@/lib/http/byte-range'
 
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
@@ -122,15 +123,6 @@ export function reserveEntryStream(requester: string) {
   }
 }
 
-function disposition(type: 'inline' | 'attachment', path: string) {
-  const name = path.split('/').filter(Boolean).at(-1) || 'download'
-  const encoded = encodeURIComponent(name).replace(
-    /['()*]/g,
-    (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase()
-  )
-  return `${type}; filename*=UTF-8''${encoded}`
-}
-
 /**
  * Stream an entry with single-range support. The response owns `source` and
  * the stream reservation and releases both when the body finishes or aborts.
@@ -187,9 +179,9 @@ export async function entryResponse(options: {
       ...common,
       'Content-Type': mediaType ?? 'application/octet-stream',
       'Content-Length': String(end - start),
-      'Content-Disposition': disposition(
-        mediaType ? 'inline' : 'attachment',
-        entry.path
+      'Content-Disposition': contentDisposition(
+        entry.path,
+        mediaType ? 'inline' : 'attachment'
       ),
       ...(range
         ? { 'Content-Range': `bytes ${start}-${end - 1}/${entry.size}` }

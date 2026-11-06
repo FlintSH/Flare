@@ -9,6 +9,7 @@ import { mutateAccount } from '@/lib/permissions/account-mutations'
 import { PermissionError } from '@/lib/permissions/server'
 import { sanitizeFilename, validateStoragePath } from '@/lib/security/paths'
 
+import { isMissingObject } from './missing'
 import {
   StorageTargetChangedError,
   getStorageProviderForTarget,
@@ -221,14 +222,6 @@ async function renewLease(job: StorageDeletion): Promise<boolean> {
   return renewed.count === 1
 }
 
-function missingObject(error: unknown): boolean {
-  const code =
-    (error as { code?: string; name?: string } | null)?.code ||
-    (error as Error | null)?.name
-  // NoSuchBucket and an arbitrary HTTP 404 are intentionally not success.
-  return ['ENOENT', 'NoSuchKey', 'NotFound'].includes(code ?? '')
-}
-
 /** Storage I/O runs outside transactions; only the current lease may acknowledge. */
 export async function processStorageDeletion(
   job: StorageDeletion
@@ -252,7 +245,7 @@ export async function processStorageDeletion(
     try {
       await storage.deleteFile(job.path)
     } catch (error) {
-      if (!missingObject(error)) throw error
+      if (!isMissingObject(error)) throw error
     }
     const completed = await prisma.storageDeletion.deleteMany({
       where: leaseWhere(job),

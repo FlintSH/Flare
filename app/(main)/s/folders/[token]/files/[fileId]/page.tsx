@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
 import {
@@ -11,11 +10,8 @@ import {
 import { PublicState } from '@/components/auth/public-state'
 import { Footer } from '@/components/layout/footer'
 
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { checkPageAccess, findFile } from '@/lib/files/delivery'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,31 +40,22 @@ export default async function SharedFolderFilePage({
     notFound()
   }
 
-  // Recheck the current share and direct membership on every request, including
-  // password submissions. An old tile must not grant access after a move or revoke.
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      visibility: 'PUBLIC',
-      folder: { shareToken: token },
-    },
-    select: {
+  // Looked up again on every request, including password submissions, so an
+  // old tile can't grant access after a move or revoke.
+  const file = await findFile(
+    { id: fileId, sharedFolder: token },
+    {
       id: true,
       userId: true,
       visibility: true,
       password: true,
       urlPath: true,
       folder: { select: { name: true } },
-    },
-  })
+    }
+  )
   if (!file) notFound()
 
-  const access = await checkFileAccess(
-    file,
-    await getAccessSession(),
-    providedPassword,
-    { requester: requestIp(await headers()) }
-  )
+  const { access } = await checkPageAccess(file, providedPassword)
   if (access.allowed) {
     // Only reveal the canonical filename after access succeeds. The existing
     // viewer independently applies file access checks again at the destination.

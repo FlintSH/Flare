@@ -34,9 +34,6 @@ vi.mock('next/navigation', () => ({
   },
 }))
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
-vi.mock('@/lib/files/resolve', () => ({
-  resolveFileUrlPath: async () => file.urlPath,
-}))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: async () => file, update: async () => file } },
 }))

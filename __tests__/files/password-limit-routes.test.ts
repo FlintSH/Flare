@@ -23,9 +23,6 @@ vi.mock('@/lib/database/prisma', () => ({
     },
   },
 }))
-vi.mock('@/lib/files/resolve', () => ({
-  resolveFileUrlPath: async () => mocks.file?.urlPath ?? null,
-}))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({
     getFileSize: async () => 4,

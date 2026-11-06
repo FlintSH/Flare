@@ -18,7 +18,7 @@ Every file has a share-page URL. Its visibility and password decide who can open
 
 The Owner column assumes the signed-in owner has `files.read`. The moderation column includes Administrator and delegated content readers, even when their role has no settings access. Removing `files.read` removes the owner’s privileged access to private/password-protected files; public visitor rules still apply.
 
-Private files deliberately return a not-found response to people without access. Another person signing in to the same instance does not make your private file accessible to them. Giving them its password does not override private visibility.
+Private files deliberately return a not-found response to people without access, including from their raw, download, thumbnail, and text-recognition URLs. Earlier builds answered a thumbnail or text-recognition request for a private file that isn't an image with "not an image", which told someone holding the file's ID that it exists. Another person signing in to the same instance does not make your private file accessible to them. Giving them its password does not override private visibility.
 
 The signed-in library is account-specific. When an open tab detects a different account or replacement browser session, it discards the previous files, selection, and dialogs before loading the current account's library. [Saved URL filters still apply](./library#change-accounts-or-sign-in-again); they do not grant access to the previous account's files.
 
@@ -97,6 +97,8 @@ Appending `/raw` requests the file content without the surrounding page. For vid
 
 On S3 storage, an authorized response can provide a temporary signed storage URL. Anyone who obtains that already-issued URL can use it until it expires, even if you subsequently change the Flare file's access settings. Changing visibility or a password affects new Flare access checks; it does not immediately revoke existing storage URLs.
 
+A download sent from a signed S3 URL is saved under the file's name, encoded the same way as a download Flare sends itself. Earlier builds passed the name to S3 unencoded, so a name containing a double quote arrived cut short, and names with characters outside ASCII weren't encoded for the browser.
+
 Dashboard copy buttons and generated screenshot tools copy the normal share-page URL. For automation that needs a different response URL, see the [API guide](../api/index).
 
 ### Browser and CDN caching
@@ -107,13 +109,13 @@ That cache is not recalled when access changes. If you make a cached public file
 
 ### View counts
 
-The view total on a [library file card](./library#understand-activity-and-refresh) includes share-page visits and successful `GET` requests to `/{userUrlId}/{filename}/raw`. Each raw request adds one view, including a `206` byte-range response used for media playback. Raw requests denied by visibility or password checks, missing files, storage failures before a stream is opened, and `HEAD` probes do not add views.
+The view total on a [library file card](./library#understand-activity-and-refresh) includes share-page visits that show the file and successful `GET` requests to `/{userUrlId}/{filename}/raw`. A share-page visit counts only once the visitor may see the file: the password prompt, a wrong password, and a private file shown as not found add no view. Each raw request adds one view, including a `206` byte-range response used for media playback. Raw requests denied by visibility or password checks, missing files, storage failures before a stream is opened, and `HEAD` probes do not add views.
 
 This is a request count, not a count of unique people or completed transfers. Bots, link previews, repeat requests, and each media range request can add views. Opening a share page that loads its content through `/raw` can add both a page view and raw-content views. Browser or external-cache hits that do not reach Flare add no raw views; `/direct` lookups and reads from an issued S3 URL do not add raw views either.
 
-After upgrading, existing totals are retained and new raw requests contribute immediately. Earlier raw requests are not backfilled; no configuration change or database migration is needed. Refresh the library after opening a raw link to see its updated total.
+After upgrading, existing totals are retained and new raw requests contribute immediately. Earlier raw requests are not backfilled; no configuration change or database migration is needed. Refresh the library after opening a raw link to see its updated total. Earlier builds also counted every share-page load, including password prompts, wrong passwords, and private files shown as not found; those views stay in existing totals.
 
-If a raw request returns `500`, Flare may have failed to open the stored file or save its view count. The request stops and its storage stream is closed. Ask the operator to [check storage and database availability](../hosting/troubleshooting#raw-links-return-500), then retry; a failed counter write does not add a view.
+If the stored file itself is gone from the server's disk or the S3 bucket, raw links, downloads, and thumbnails answer `404`, like a link to a deleted file, and the raw request adds no view. Earlier builds answered `500` from raw links and thumbnails, and from downloads on local storage. If a raw request returns `500`, Flare couldn't read the stored file or save its view count. The request stops and its storage stream is closed. Ask the operator to [check storage and database availability](../hosting/troubleshooting#raw-links-return-500), then retry; a failed counter write does not add a view.
 
 <Screenshot src="/screenshots/sharing/raw-view-count.webp" alt="Real Flare library showing nine views for raw-view-fixture.txt after one full raw request and one range request" caption="This disposable local file started with seven views. A full raw request and a range request raised its displayed total to nine; a HEAD probe left it unchanged." />
 

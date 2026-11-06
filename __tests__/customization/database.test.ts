@@ -388,13 +388,13 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(saved.path).toBe(input.filePath)
     expect(saved.urlPath).toBe(first.urlPath.replace('/owner-one/', '/SPECC/'))
     expect((await principal()).urlId).toBe('SPECC')
-    const { resolveFileUrlPath } = await import('@/lib/files/resolve')
-    expect(
-      await resolveFileUrlPath('SPECC', saved.urlPath.split('/').pop()!)
-    ).toBe(saved.urlPath)
-    expect(
-      await resolveFileUrlPath('owner-alias', saved.urlPath.split('/').pop()!)
-    ).toBe(saved.urlPath)
+    const { findFile } = await import('@/lib/files/delivery')
+    const name = saved.urlPath.split('/').pop()!
+    for (const userUrlId of ['SPECC', 'owner-alias'])
+      expect(
+        (await findFile({ userUrlId, filename: name }, { urlPath: true }))
+          ?.urlPath
+      ).toBe(saved.urlPath)
     const stream = await storage.getFileStream(saved.path)
     const chunks: Buffer[] = []
     for await (const chunk of stream) chunks.push(Buffer.from(chunk))

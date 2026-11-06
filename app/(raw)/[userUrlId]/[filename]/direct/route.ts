@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
-import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
-import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { authorizeFile } from '@/lib/files/delivery'
 import { routes } from '@/lib/http/route'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -17,40 +12,13 @@ const api = routes('/[userUrlId]/[filename]/direct', {
 
 export const GET = api(
   async (request, { params }: Context) => {
-    const session = await getAccessSession()
-    const { userUrlId, filename } = await params
-    const url = new URL(request.url)
-    const providedPassword = url.searchParams.get('password')
-
-    const urlPath = await resolveFileUrlPath(userUrlId, filename)
-
-    if (!urlPath) {
-      return new Response(null, { status: 404 })
-    }
-
-    const file = await prisma.file.findUnique({
-      where: { urlPath },
+    const grant = await authorizeFile(request, await params, 'lookup', {
+      urlPath: true,
     })
+    if (grant instanceof Response) return grant
+    const { file, password } = grant
 
-    if (!file) {
-      return new Response(null, { status: 404 })
-    }
-
-    setAuditTarget({ type: 'file', id: file.id, name: file.name })
-
-    const access = await checkFileAccess(file, session, providedPassword, {
-      requester: requestIp(request.headers),
-    })
-    if (!access.allowed) {
-      setAuditOutcome('denied')
-      return new Response(null, {
-        status: access.status,
-        headers: fileAccessDeniedHeaders(access),
-      })
-    }
-
-    const isVideo = file.mimeType.startsWith('video/')
-    if (!isVideo) {
+    if (!file.mimeType.startsWith('video/')) {
       return new Response(null, {
         status: 400,
         statusText: 'Not a video file',
@@ -64,7 +32,7 @@ export const GET = api(
       return NextResponse.json({ url: directUrl })
     }
 
-    const rawUrl = `${file.urlPath}/raw${providedPassword ? `?${new URLSearchParams({ password: providedPassword })}` : ''}`
+    const rawUrl = `${file.urlPath}/raw${password ? `?${new URLSearchParams({ password })}` : ''}`
     return NextResponse.json({ url: rawUrl })
   },
   { audit: { action: 'file.read', category: 'files' } }

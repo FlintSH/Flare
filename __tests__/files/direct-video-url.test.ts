@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  resolve: vi.fn(),
   findUnique: vi.fn(),
   access: vi.fn(),
   publicUrl: vi.fn(),
@@ -17,7 +16,6 @@ vi.mock('@/lib/files/access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/files/access')>()),
   checkFileAccess: mocks.access,
 }))
-vi.mock('@/lib/files/resolve', () => ({ resolveFileUrlPath: mocks.resolve }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({ getPublicUrl: mocks.publicUrl }),
 }))
@@ -25,7 +23,6 @@ vi.mock('@/lib/storage', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.session.mockResolvedValue(null)
-  mocks.resolve.mockResolvedValue('/owner/preview.webm')
   mocks.findUnique.mockResolvedValue({
     urlPath: '/owner/preview.webm',
     path: 'preview.webm',

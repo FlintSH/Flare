@@ -15,8 +15,8 @@ type LocalReadStream = ReadStream & { fd: number | null }
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  resolve: vi.fn(),
   findUnique: vi.fn(),
+  findOwner: vi.fn(),
   update: vi.fn(),
   size: vi.fn(),
   stream: vi.fn(),
@@ -24,9 +24,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
+  prisma: {
+    file: { findUnique: mocks.findUnique, update: mocks.update },
+    user: { findUnique: mocks.findOwner },
+  },
 }))
-vi.mock('@/lib/files/resolve', () => ({ resolveFileUrlPath: mocks.resolve }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({
     getFileSize: mocks.size,
@@ -70,8 +72,8 @@ beforeEach(() => {
   file.password = null
   file.views = 7
   mocks.session.mockResolvedValue(null)
-  mocks.resolve.mockResolvedValue(file.urlPath)
   mocks.findUnique.mockResolvedValue(file)
+  mocks.findOwner.mockResolvedValue(null)
   mocks.update.mockImplementation(async ({ data }) => {
     file.views += data.views.increment
     return file
@@ -176,11 +178,11 @@ describe('raw file views', () => {
     expect(file.views).toBe(8)
   })
 
-  it.each(['path', 'metadata'])(
-    'does not count a missing %s',
-    async (missing) => {
-      if (missing === 'path') mocks.resolve.mockResolvedValue(null)
-      else mocks.findUnique.mockResolvedValue(null)
+  it.each([null, { urlId: 'owner' }])(
+    'does not count a missing file (vanity owner: %o)',
+    async (owner) => {
+      mocks.findUnique.mockResolvedValue(null)
+      mocks.findOwner.mockResolvedValue(owner)
       const response = await request()
       expect(response.status).toBe(404)
       expect(file.views).toBe(7)
@@ -189,15 +191,30 @@ describe('raw file views', () => {
     }
   )
 
+  // The AWS SDK names a missing key in `name`, never in the message.
+  const s3Error = (name: string, message: string) =>
+    Object.assign(new Error(message), { name })
+
   it.each([
-    ['size', undefined, 'Storage unavailable', 500],
-    ['stream', undefined, 'NoSuchKey', 404],
-    ['stream', 'bytes=0-2', 'NoSuchKey', 404],
-    ['stream', 'bytes=0-2', 'Storage unavailable', 500],
+    ['size', undefined, new Error('Storage unavailable'), 500],
+    ['size', undefined, s3Error('NotFound', 'UnknownError'), 404],
+    [
+      'stream',
+      undefined,
+      s3Error('NoSuchKey', 'The specified key does not exist.'),
+      404,
+    ],
+    [
+      'stream',
+      'bytes=0-2',
+      s3Error('NoSuchKey', 'The specified key does not exist.'),
+      404,
+    ],
+    ['stream', 'bytes=0-2', new Error('Storage unavailable'), 500],
   ] as const)(
     'does not count a %s failure (range: %s, error: %s)',
-    async (operation, range, message, status) => {
-      mocks[operation].mockRejectedValueOnce(new Error(message))
+    async (operation, range, error, status) => {
+      mocks[operation].mockRejectedValueOnce(error)
       const response = await request({ range })
       expect(response.status).toBe(status)
       expect(file.views).toBe(7)
@@ -259,7 +276,7 @@ describe.each([undefined, 'bytes=0-2'])(
       })
     })
 
-    it('handles a file removed after the size check without counting a view', async () => {
+    it('answers 404 for a file removed after the size check, without counting a view', async () => {
       await withLocalFile(async (path, provider) => {
         let stream: LocalReadStream | undefined
         let closed: Promise<void> | undefined
@@ -280,7 +297,7 @@ describe.each([undefined, 'bytes=0-2'])(
         })
         try {
           const response = await request({ range })
-          expect(response.status).toBe(500)
+          expect(response.status).toBe(404)
           expect(mocks.update).not.toHaveBeenCalled()
           expect(file.views).toBe(7)
           expect(stream?.destroyed).toBe(true)

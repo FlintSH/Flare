@@ -6,6 +6,7 @@ import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { sanitizeFilename } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
+import { isMissingObject } from '@/lib/storage/missing'
 import {
   StorageTargetChangedError,
   getStorageProviderForTarget,
@@ -65,8 +66,7 @@ export async function GET(
   } catch (error) {
     if (error instanceof StorageTargetChangedError)
       return new Response(null, { status: 503 })
-    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
-      return new Response(null, { status: 404 })
+    if (isMissingObject(error)) return new Response(null, { status: 404 })
     logger.error('Avatar serve error', error as Error, {
       filename: (await params).filename,
     })

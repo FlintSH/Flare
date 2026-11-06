@@ -120,15 +120,6 @@ export async function checkFileAccess(
   return { allowed: true, isOwner, canModerate }
 }
 
-/** Headers for a denied file response; tells clients when to retry a 429. */
-export function fileAccessDeniedHeaders(
-  access: FileAccessDenied
-): Record<string, string> {
-  return access.retryAfterSeconds
-    ? { 'Retry-After': String(access.retryAfterSeconds) }
-    : {}
-}
-
 /** Whole minutes until a paused file accepts passwords again, for messages. */
 export function retryAfterMinutes(access: FileAccessDenied) {
   return Math.max(1, Math.ceil((access.retryAfterSeconds ?? 60) / 60))
