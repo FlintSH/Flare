@@ -77,19 +77,12 @@ export async function recordAuditMany(
     for (const event of events) context.pending.push(event)
     return
   }
-  try {
-    if (!globalAudit.flareAuditWriter) {
-      // Auth/workers can be the first module to ask for an audit writer.
-      await import('@/lib/database/prisma')
-    }
-    if (!globalAudit.flareAuditWriter)
-      throw new Error('Audit writer unavailable')
-  } catch (error) {
-    reportAuditFailure(error)
-    return
-  }
   const write = globalAudit.flareAuditWriter
   const writeMany = globalAudit.flareAuditBatchWriter
+  if (!write) {
+    reportAuditFailure(new Error('Audit writer unavailable'))
+    return
+  }
   for (let offset = 0; offset < events.length; offset += AUDIT_BATCH_SIZE) {
     try {
       const data = events

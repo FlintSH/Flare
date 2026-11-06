@@ -1,30 +1,16 @@
 import { PrismaClient } from '@prisma/client'
 
-import { configureAuditWriter } from '../audit'
-import { withPrismaAudit } from '../audit/prisma'
-import { meticulousState } from '../meticulous'
+import { withPrismaAudit } from '@/lib/audit/prisma'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+import { withQueryRecorder } from './query-recorder'
+
+// Instrumentation, route handlers and pages are bundled with separate copies
+// of this module. Each process keeps one client and one connection pool.
+const clientKey = Symbol.for('flare.database.client')
+const processState = globalThis as typeof globalThis & {
+  [clientKey]?: PrismaClient
 }
 
-function createPrismaClient(): PrismaClient {
-  const client = new PrismaClient()
-  const extension =
-    meticulousState.meticulousRecorder?.meticulousPrismaExtension
-  // Apply first so bundled Prisma operations are captured and can be replayed.
-  const recorded = extension
-    ? (client.$extends(extension) as unknown as PrismaClient)
-    : client
-  return withPrismaAudit(recorded)
-}
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
-// Rebind after development hot reloads even when the connection pool is reused.
-// AuditEvent is excluded from the model extension, so this cannot recurse.
-configureAuditWriter(
-  (data) => prisma.auditEvent.create({ data }),
-  (data) => prisma.auditEvent.createMany({ data })
-)
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+export const prisma = (processState[clientKey] ??= withPrismaAudit(
+  withQueryRecorder(new PrismaClient())
+))

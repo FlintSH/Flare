@@ -7,7 +7,8 @@ export async function register() {
         process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
       Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
 
-    // Initialize before importing application modules, including Prisma.
+    // Initialize before importing application modules: the recorder has to
+    // wrap the database client before anything builds it.
     if (recording || replay) {
       const { initBackendRecorder } =
         await import('@alwaysmeticulous/backend-recorder-launcher')
@@ -17,8 +18,12 @@ export async function register() {
         meticulousProjectName: 'fl1nt.dev/Flare',
         recordingToken: process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN,
       })
-      const { meticulousState } = await import('./lib/meticulous')
-      meticulousState.meticulousRecorder = recorder
+      const extension = recorder?.meticulousPrismaExtension
+      if (extension) {
+        const { recordDatabaseQueries } =
+          await import('./lib/database/query-recorder')
+        recordDatabaseQueries(extension)
+      }
       // Flush outstanding backend spans during normal Next.js shutdown.
       const flush = () => {
         void recorder?.stopRecording().catch((error: unknown) => {
