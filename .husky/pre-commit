@@ -1,30 +1,13 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-# Format staged files
+# Format the staged files; lint-staged stages its own changes and nothing else,
+# so unstaged and untracked files stay out of the commit.
 echo "🔍 Formatting staged files..."
 pnpm lint-staged
 
-# Stage the formatted files
-git add .
-
-# Run a lint check
 echo "🧹 Running lint check..."
 pnpm lint || (
     echo "❌ Lint check failed. Please fix the issues and commit again."
-    exit 1
-)
-
-# Run formatter and auto-fix any issues
-echo "✨ Running formatter and auto-fixing..."
-pnpm format
-
-# Stage any newly formatted files
-git add .
-
-# Run a final format check to ensure everything is properly formatted
-echo "🔍 Verifying format..."
-pnpm format:check || (
-    echo "❌ Formatting verification failed. Please commit again."
     exit 1
 )
