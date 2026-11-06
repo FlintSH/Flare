@@ -64,6 +64,9 @@ export function ExpiryModal({
   const permitted = (expiry: ExpiryAction) =>
     allows(user, EXPIRY_EFFECTS[expiry])
   const [expiresAt, setDate] = useState<Date | null>(initialDate || null)
+  // When the date last changed or the dialog opened. Rendering compares the
+  // date with this instead of reading the clock.
+  const [checkedAt, setCheckedAt] = useState(() => Date.now())
   // The quick option that produced the current date, if any. Any other edit
   // clears it, so a highlighted option always matches the date shown.
   const [preset, setPreset] = useState<Preset | null>(null)
@@ -72,11 +75,13 @@ export function ExpiryModal({
   const setExpiresAt = (date: Date | null) => {
     setPreset(null)
     setDate(date)
+    setCheckedAt(Date.now())
   }
 
   useEffect(() => {
     if (isOpen) {
       setDate(initialDate || null)
+      setCheckedAt(Date.now())
       setPreset(null)
       setAction(initialAction)
       setIsLoading(false)
@@ -102,6 +107,7 @@ export function ExpiryModal({
 
   const setPresetExpiry = (value: Preset) => {
     const date = new Date()
+    setCheckedAt(date.getTime())
 
     switch (value) {
       case 'hour':
@@ -128,6 +134,8 @@ export function ExpiryModal({
   const clearExpiry = () => {
     setExpiresAt(null)
   }
+
+  const today = new Date(checkedAt).toDateString()
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -399,10 +407,8 @@ export function ExpiryModal({
                           }}
                           className="text-center font-mono"
                           min={
-                            expiresAt &&
-                            expiresAt.toDateString() ===
-                              new Date().toDateString()
-                              ? new Date(Date.now() + 5 * 60 * 1000)
+                            expiresAt && expiresAt.toDateString() === today
+                              ? new Date(checkedAt + 5 * 60 * 1000)
                                   .toTimeString()
                                   .slice(0, 5)
                               : undefined
@@ -411,9 +417,8 @@ export function ExpiryModal({
                       </div>
 
                       {expiresAt &&
-                        expiresAt.toDateString() ===
-                          new Date().toDateString() &&
-                        expiresAt <= new Date() && (
+                        expiresAt.toDateString() === today &&
+                        expiresAt.getTime() <= checkedAt && (
                           <p
                             role="alert"
                             className="rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-foreground"

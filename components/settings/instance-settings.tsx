@@ -113,6 +113,14 @@ const isSafeUrl = (url: string | null): url is string => {
   return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
 }
 
+function ChangeIndicator() {
+  return (
+    <div className="flex items-center">
+      <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
+    </div>
+  )
+}
+
 export function InstanceSettings({
   initialConfig,
   initialSection,
@@ -385,12 +393,6 @@ export function InstanceSettings({
     const isChanged = isFieldChanged(section, fieldPath)
     return isChanged ? 'border-primary ring-1 ring-primary bg-primary/5' : ''
   }
-
-  const ChangeIndicator = () => (
-    <div className="flex items-center">
-      <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
-    </div>
-  )
 
   const sections = [
     {
