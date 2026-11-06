@@ -1,66 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 
 import { Sheet } from 'lucide-react'
 import Papa from 'papaparse'
 
-import { MAX_CSV_SIZE } from '../../protected/mime-types'
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
 import { PreviewPlaceholder } from '../components/preview-placeholder'
-import { useFileViewer } from '../context'
+import { usePreviewText } from '../preview-text'
 
-export function CsvViewer() {
-  const { state } = useFileViewer()
-  const [csvData, setCsvData] = useState<string[][]>([])
-  const [error, setError] = useState<string>()
-  const [isLoading, setIsLoading] = useState(true)
-  const fileUrl = state.urls?.fileUrl
+const failedSpreadsheet = () => 'This spreadsheet couldn’t be loaded.'
 
-  useEffect(() => {
-    if (!fileUrl) return
-    const controller = new AbortController()
-    setIsLoading(true)
-    setError(undefined)
+export function CsvViewer({ url }: { url: string }) {
+  const preview = usePreviewText(url, failedSpreadsheet)
+  const csvData = useMemo(
+    () =>
+      preview.status === 'ready'
+        ? Papa.parse<string[]>(preview.text, {
+            header: false,
+            skipEmptyLines: true,
+          }).data
+        : [],
+    [preview]
+  )
 
-    const fetchAndParseCsv = async () => {
-      try {
-        const response = await fetch(fileUrl, { signal: controller.signal })
-        if (!response.ok)
-          throw new Error('This spreadsheet couldn’t be loaded.')
-        const contentLength = Number(response.headers.get('content-length'))
-        if (contentLength > MAX_CSV_SIZE)
-          throw new Error(
-            'This file is too large to preview. Download it to view all its data.'
-          )
-        const blob = await response.blob()
-        if (blob.size > MAX_CSV_SIZE)
-          throw new Error(
-            'This file is too large to preview. Download it to view all its data.'
-          )
-        const text = await blob.text()
-        const results = Papa.parse<string[]>(text, {
-          header: false,
-          skipEmptyLines: true,
-        })
-        if (!controller.signal.aborted) setCsvData(results.data)
-      } catch (error) {
-        if (!controller.signal.aborted)
-          setError(
-            error instanceof Error
-              ? error.message
-              : 'This spreadsheet couldn’t be loaded.'
-          )
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false)
-      }
-    }
-
-    void fetchAndParseCsv()
-    return () => controller.abort()
-  }, [fileUrl])
-
-  if (isLoading) return <LoadingState message="Loading spreadsheet…" />
-  if (error) return <ErrorState error={error} />
+  if (preview.status === 'loading')
+    return <LoadingState message="Loading spreadsheet…" />
+  if (preview.status === 'failed') return <ErrorState error={preview.message} />
   if (csvData.length === 0)
     return (
       <div className="w-full px-6">

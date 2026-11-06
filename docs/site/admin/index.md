@@ -69,6 +69,6 @@ Environment-managed email controls are read-only in the dashboard. Adjust the de
 
 ## What administration means for privacy
 
-Accounts with `content.read`, including Administrator, can inspect private and password-protected files. Content changes and deletion have separate permissions. File privacy is an application access rule, not encryption that hides bytes from the server operator. Grant administrator roles only to people who should control the whole instance.
+Accounts with `content.read`, including Administrator, can inspect private and password-protected files. Content changes and deletion have separate permissions. File privacy is an application access rule, not encryption that hides bytes from the server operator. When a visitor submits a file password on a share page, it travels in the page's address (`?password=…`), and once accepted, in the addresses of the page's preview and download requests too, so reverse-proxy access logs can record it. Signed-in accounts with `content.read` open protected files without the password form. Grant administrator roles only to people who should control the whole instance.
 
 Every account inherits Everyone and can hold multiple additional roles. Assign narrowly scoped roles for moderation, account support, or appearance design. The [roles guide](/admin/roles) explains additive grants, hierarchy, immediate revocation, and recovery protection. There are no per-user numeric quota overrides or built-in account suspension states.

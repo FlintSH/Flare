@@ -2,14 +2,18 @@ import { useState } from 'react'
 
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
-import { useFileViewer } from '../context'
 
-export function AudioViewer() {
-  const { file, state } = useFileViewer()
+export function AudioViewer({
+  file,
+  src,
+}: {
+  file: { name: string; mimeType: string }
+  src?: string
+}) {
   const [failedUrl, setFailedUrl] = useState<string>()
 
-  if (!state.urls) return <LoadingState message="Loading audio…" />
-  if (failedUrl === state.urls.fileUrl) {
+  if (!src) return <LoadingState message="Loading audio…" />
+  if (failedUrl === src) {
     return <ErrorState error="This audio couldn’t be played in your browser." />
   }
 
@@ -18,15 +22,15 @@ export function AudioViewer() {
     // width gives the scrubber room on a card sized to its content.
     <div className="w-[36rem] min-w-0 max-w-full px-6">
       <audio
-        src={state.urls.fileUrl}
+        src={src}
         controls
         aria-label={`${file.name} audio player`}
         className="block w-full rounded-full focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
-        onError={() => setFailedUrl(state.urls?.fileUrl)}
+        onError={() => setFailedUrl(src)}
       >
-        <source src={state.urls.fileUrl} type={file.mimeType} />
+        <source src={src} type={file.mimeType} />
         Your browser does not support audio playback. Download the file to
         listen.
       </audio>

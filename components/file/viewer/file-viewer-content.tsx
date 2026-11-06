@@ -1,9 +1,10 @@
 'use client'
 
-import { ErrorState } from './components/error-state'
+import { fileUrls } from '@/lib/files/urls'
+
 import { TextContent } from './components/text-content'
 import { UnsupportedState } from './components/unsupported-state'
-import { useFileViewer } from './context'
+import type { FileViewerFile } from './types'
 import { ArchiveViewer } from './viewers/archive-viewer'
 import { AudioViewer } from './viewers/audio-viewer'
 import { CsvViewer } from './viewers/csv-viewer'
@@ -11,31 +12,49 @@ import { ImageViewer } from './viewers/image-viewer'
 import { PdfViewer } from './viewers/pdf-viewer'
 import { VideoViewer } from './viewers/video-viewer'
 
-export function FileViewerContent() {
-  const { file, state } = useFileViewer()
-
-  if (state.error) {
-    return <ErrorState error={state.error} />
-  }
+/** The viewer for the file's kind. */
+export function FileViewerContent({
+  file,
+  password,
+  hydrated,
+}: {
+  file: FileViewerFile
+  password?: string
+  hydrated: boolean
+}) {
+  const urls = fileUrls(file, { password })
+  const src = hydrated ? urls.content : undefined
 
   switch (file.kind) {
     case 'archive':
-      return <ArchiveViewer format={file.archiveFormat} />
+      return (
+        <ArchiveViewer
+          file={file}
+          format={file.archiveFormat}
+          password={password}
+        />
+      )
     case 'unsupported-archive':
-      return <ArchiveViewer format={null} />
+      return <ArchiveViewer file={file} format={null} password={password} />
     case 'image':
-      return <ImageViewer />
+      return <ImageViewer file={file} src={src} />
     case 'pdf':
-      return <PdfViewer />
+      return <PdfViewer name={file.name} src={src} />
     case 'video':
-      return <VideoViewer />
+      return <VideoViewer file={file} lookupUrl={urls.direct} />
     case 'audio':
-      return <AudioViewer />
+      return <AudioViewer file={file} src={src} />
     case 'csv':
-      return <CsvViewer />
+      return <CsvViewer url={urls.content} />
     case 'code':
     case 'text':
-      return <TextContent language={file.language} />
+      return (
+        <TextContent
+          name={file.name}
+          url={urls.content}
+          language={file.language}
+        />
+      )
     default:
       return <UnsupportedState mimeType={file.mimeType} />
   }

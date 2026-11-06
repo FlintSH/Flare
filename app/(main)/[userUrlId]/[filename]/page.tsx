@@ -230,11 +230,6 @@ export default async function FilePage({
     name: appearance.sharing.showFilename ? file.name : 'Shared file',
     urlPath: file.urlPath,
     visibility: file.visibility,
-    password:
-      file.password && !access.isOwner && !access.canModerate
-        ? 'protected'
-        : null,
-    userId: access.isOwner ? file.userId : '',
     mimeType: file.mimeType,
     ...type,
   }

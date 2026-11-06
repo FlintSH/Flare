@@ -31,7 +31,6 @@ interface FileActionsProps {
   verifiedPassword?: string
   showOcr?: boolean
   isTextBased?: boolean
-  content?: string
 }
 
 export function FileActions({
@@ -39,7 +38,6 @@ export function FileActions({
   verifiedPassword,
   showOcr = false,
   isTextBased = false,
-  content,
 }: FileActionsProps) {
   const { toast } = useToast()
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
@@ -103,13 +101,9 @@ export function FileActions({
     if (!urls) return
     setIsCopyingText(true)
     try {
-      let text = content
-      if (text === undefined) {
-        const response = await fetch(urls.content)
-        if (!response.ok) throw new Error('Could not load file content')
-        text = await response.text()
-      }
-      await navigator.clipboard.writeText(text)
+      const response = await fetch(urls.content)
+      if (!response.ok) throw new Error('Could not load file content')
+      await navigator.clipboard.writeText(await response.text())
       toast({
         title: 'Text copied',
         description: 'File content is ready to paste.',

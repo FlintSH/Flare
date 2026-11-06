@@ -81,6 +81,8 @@ Flare picks the viewer from the file's stored type, and for CSV files and archiv
 
 Earlier builds also showed **Preview not available** for video, audio, and text types outside a fixed list, such as FLAC audio or C# source, and opened an image, video, audio, or PDF file named like an archive, such as `photo.zip`, in the archive browser. Binary formats that were shown as unreadable text, such as WebAssembly modules, compiled Python, and binary Protocol Buffers, now show **Preview not available**.
 
+Text, code, and CSV previews load at most 1 MiB of a file. A larger file shows **Preview unavailable** with a note that it's too large to preview; **Download** and **Copy text** still give you the whole file. Earlier builds capped only CSV files and loaded text and code of any size into the page.
+
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
 <Screenshot src="/screenshots/workspace/share-video.png" alt="Video share page with playback controls" caption="Recordings can play directly in the browser when their codec is supported." />

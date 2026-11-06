@@ -6,12 +6,18 @@ import { ArchiveBrowserContent } from '@/components/archives/archive-browser-con
 
 import type { ArchiveFormat } from '@/lib/archives/shared'
 
-import { useFileViewer } from '../context'
+import type { FileViewerFile } from '../types'
 
 /** `format` is null for an archive Flare can't open. */
-export function ArchiveViewer({ format }: { format: ArchiveFormat | null }) {
-  const { file, verifiedPassword } = useFileViewer()
-
+export function ArchiveViewer({
+  file,
+  format,
+  password,
+}: {
+  file: FileViewerFile
+  format: ArchiveFormat | null
+  password?: string
+}) {
   return (
     <section
       aria-labelledby="archive-contents-title"
@@ -30,7 +36,7 @@ export function ArchiveViewer({ format }: { format: ArchiveFormat | null }) {
         key={file.id}
         file={file}
         format={format}
-        source={{ kind: 'share', password: verifiedPassword }}
+        source={{ kind: 'share', password }}
       />
     </section>
   )

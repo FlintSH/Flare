@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 
 import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { FileText } from 'lucide-react'
@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 
 import type { Language } from '@/lib/files/file-kind'
 
-import { useFileViewer } from '../context'
+import { usePreviewText } from '../preview-text'
 import { codeGrammar } from './code-grammar'
 import { codeViewerTheme } from './code-theme'
 import { ErrorState } from './error-state'
@@ -17,8 +17,19 @@ import { PreviewPlaceholder } from './preview-placeholder'
  * lines and scroll sideways, so columns stay aligned. */
 const WRAPPED_LANGUAGES = new Set<Language>(['markdown'])
 
-export function TextContent({ language }: { language: Language }) {
-  const { file, state, fetchContent } = useFileViewer()
+const failedContent = (status?: number) =>
+  status ? `Failed to fetch content: ${status}` : 'Failed to fetch content'
+
+export function TextContent({
+  name,
+  url,
+  language,
+}: {
+  name: string
+  url: string
+  language: Language
+}) {
+  const preview = usePreviewText(url, failedContent)
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme !== 'light'
   const extensions = useMemo(
@@ -30,16 +41,12 @@ export function TextContent({ language }: { language: Language }) {
     [language, dark]
   )
 
-  useEffect(() => {
-    void fetchContent()
-  }, [fetchContent])
-
-  if (state.error) return <ErrorState error={state.error} />
-  if (state.isLoading || state.content === undefined) {
+  if (preview.status === 'failed') return <ErrorState error={preview.message} />
+  if (preview.status === 'loading') {
     return <LoadingState message="Loading file content…" />
   }
 
-  if (!state.content)
+  if (!preview.text)
     return (
       <div className="w-full px-6">
         <PreviewPlaceholder icon={FileText} title="This file is empty" />
@@ -51,10 +58,10 @@ export function TextContent({ language }: { language: Language }) {
   return (
     <section
       className="w-full min-w-0 border-y border-border/60 font-mono text-[13px] sm:text-sm"
-      aria-label={`${file.name} preview`}
+      aria-label={`${name} preview`}
     >
       <CodeMirror
-        value={state.content}
+        value={preview.text}
         extensions={extensions}
         editable={false}
         readOnly
