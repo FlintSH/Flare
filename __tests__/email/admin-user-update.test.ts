@@ -250,15 +250,16 @@ describe('administrator account update serialization', () => {
     expect(
       mocks.getEmailConfigForUpdate.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.lockEmailUser.mock.invocationCallOrder[0])
+    // One update, so the change records one audit event.
+    expect(mocks.tx.user.update).toHaveBeenCalledOnce()
     expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
+      name: 'Edited name',
       email: 'requested@example.com',
       emailVerified: null,
       emailVerifiedFor: null,
       emailVerificationSource: null,
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
-    })
-    expect(mocks.tx.user.update.mock.calls[1][0].data).toEqual({
       sessionVersion: { increment: 1 },
     })
     expect(mocks.tx.authChallenge.deleteMany).toHaveBeenCalledWith({
@@ -342,17 +343,16 @@ describe('administrator account update serialization', () => {
     )
     const response = await PUT(request({ password: 'a-new-password' }))
     expect(response.status).toBe(200)
-    const [credentials, signOut] = mocks.tx.user.update.mock.calls.map(
-      ([update]) => update.data
-    )
-    expect(credentials).toMatchObject({
+    expect(mocks.tx.user.update).toHaveBeenCalledOnce()
+    const saved = mocks.tx.user.update.mock.calls[0][0].data
+    expect(saved).toMatchObject({
       password: expect.any(String),
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
+      sessionVersion: { increment: 1 },
     })
-    expect(credentials).not.toHaveProperty('email')
-    expect(credentials).not.toHaveProperty('passkeyRequired')
-    expect(signOut).toEqual({ sessionVersion: { increment: 1 } })
+    expect(saved).not.toHaveProperty('email')
+    expect(saved).not.toHaveProperty('passkeyRequired')
     expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(
       mocks.tx,
       initial.id

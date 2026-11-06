@@ -126,9 +126,12 @@ export async function resetPassword(
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
       throw new EmailHttpError('This email link is invalid or expired.')
-    await changeCredentials(tx, user.id, {
-      password: passwordHash,
-      rotateUploadToken: config.recovery.rotateUploadToken,
+    await tx.user.update({
+      where: { id: user.id },
+      data: await changeCredentials(tx, user.id, {
+        password: passwordHash,
+        rotateUploadToken: config.recovery.rotateUploadToken,
+      }),
     })
     const message = renderAccountEmail(config, {
       kind: 'password_changed',
@@ -229,8 +232,11 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
     )
       throw new EmailHttpError('This email address is unavailable.')
     const oldEmail = user.email
-    await changeCredentials(tx, user.id, {
-      email: { address: record.email, verified: true },
+    await tx.user.update({
+      where: { id: user.id },
+      data: await changeCredentials(tx, user.id, {
+        email: { address: record.email, verified: true },
+      }),
     })
     if (oldEmail && hasVerifiedEmail(user, config)) {
       const message = renderAccountEmail(config, {

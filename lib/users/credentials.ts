@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 
-import { revokeSecuritySessions } from '@/lib/auth/security/service'
+import { sessionRevocation } from '@/lib/auth/security/service'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 
 /**
@@ -28,31 +28,30 @@ interface CredentialChange {
 }
 
 /**
- * Gives an account a new password or sign-in address. Like revoking its
- * sessions, this signs the account out everywhere; a credential change also
- * cancels a pending email change and voids the email links already sent.
- * Call with the account row locked.
+ * What gives an account a new password or sign-in address. The email links
+ * already sent are voided and pending security challenges deleted here. The
+ * returned changes to its row also cancel a pending email change and sign
+ * the account out everywhere, as revoking its sessions does; save them in
+ * the caller's one update of the row, so the change is one write and one
+ * audit event. Call with the row locked.
  */
 export async function changeCredentials(
   tx: Prisma.TransactionClient,
   userId: string,
   { password, email, rotateUploadToken }: CredentialChange
-) {
-  await tx.user.update({
-    where: { id: userId },
-    data: {
-      ...(password !== undefined && { password }),
-      ...(email && {
-        email: email.address,
-        emailVerified: email.verified ? new Date() : null,
-        emailVerifiedFor: email.verified ? email.address : null,
-        emailVerificationSource: email.verified ? 'email' : null,
-      }),
-      pendingEmail: null,
-      pendingEmailOldConfirmed: false,
-      ...(rotateUploadToken && { uploadToken: newUploadToken() }),
-    },
-  })
+): Promise<Prisma.UserUpdateInput> {
   await invalidateEmailTokens(tx, userId)
-  await revokeSecuritySessions(tx, userId)
+  return {
+    ...(password !== undefined && { password }),
+    ...(email && {
+      email: email.address,
+      emailVerified: email.verified ? new Date() : null,
+      emailVerifiedFor: email.verified ? email.address : null,
+      emailVerificationSource: email.verified ? 'email' : null,
+    }),
+    pendingEmail: null,
+    pendingEmailOldConfirmed: false,
+    ...(rotateUploadToken && { uploadToken: newUploadToken() }),
+    ...(await sessionRevocation(tx, userId)),
+  }
 }

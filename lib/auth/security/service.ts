@@ -183,18 +183,30 @@ export async function consumeChallenge(
 }
 
 /**
- * Signs an account out everywhere: moving its session version on ends every
- * browser session, and its pending security challenges are deleted. Revoking
- * sessions does only this; `changeCredentials` in `lib/users` builds on it.
+ * Signing an account out everywhere, for the caller's update of its row:
+ * deletes its pending security challenges and returns the change that moves
+ * its session version on, which ends every browser session once saved.
+ */
+export async function sessionRevocation(
+  tx: Prisma.TransactionClient,
+  userId: string
+): Promise<Prisma.UserUpdateInput> {
+  await tx.authChallenge.deleteMany({ where: { userId } })
+  return { sessionVersion: { increment: 1 } }
+}
+
+/**
+ * Signs an account out everywhere, in an update of its own. Revoking sessions
+ * does only this; `changeCredentials` in `lib/users` saves the same change
+ * with new credentials.
  */
 export async function revokeSecuritySessions(
   tx: Prisma.TransactionClient,
   userId: string
 ) {
-  await tx.authChallenge.deleteMany({ where: { userId } })
   await tx.user.update({
     where: { id: userId },
-    data: { sessionVersion: { increment: 1 } },
+    data: await sessionRevocation(tx, userId),
   })
 }
 

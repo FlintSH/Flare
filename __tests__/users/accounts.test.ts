@@ -166,22 +166,19 @@ describe('createAccount', () => {
 
 describe('changeCredentials', () => {
   it('signs out everywhere and cancels pending email work for a new password', async () => {
-    await changeCredentials(tx, 'account', {
+    const change = await changeCredentials(tx, 'account', {
       password: 'new-hash',
       rotateUploadToken: true,
     })
-    const [credentials, signOut] = mocks.tx.user.update.mock.calls.map(
-      ([update]) => update
-    )
-    expect(credentials.where).toEqual({ id: 'account' })
-    expect(credentials.data).toMatchObject({
+    expect(change).toEqual({
       password: 'new-hash',
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
       uploadToken: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      sessionVersion: { increment: 1 },
     })
-    expect(credentials.data).not.toHaveProperty('email')
-    expect(signOut.data).toEqual({ sessionVersion: { increment: 1 } })
+    // The caller saves the change in its one update of the row.
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
     expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(tx, 'account')
     expect(mocks.tx.authChallenge.deleteMany).toHaveBeenCalledWith({
       where: { userId: 'account' },
@@ -189,15 +186,12 @@ describe('changeCredentials', () => {
   })
 
   it('records whether a link proved a new address', async () => {
-    await changeCredentials(tx, 'account', {
+    const proven = await changeCredentials(tx, 'account', {
       email: { address: 'proven@example.test', verified: true },
     })
-    await changeCredentials(tx, 'account', {
+    const typed = await changeCredentials(tx, 'account', {
       email: { address: 'typed@example.test', verified: false },
     })
-    const [proven, , typed] = mocks.tx.user.update.mock.calls.map(
-      ([update]) => update.data
-    )
     expect(proven).toMatchObject({
       email: 'proven@example.test',
       emailVerified: expect.any(Date),

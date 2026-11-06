@@ -51,7 +51,8 @@ export interface AccountEditor {
  * account as the request read it. For every editor:
  *
  * - A change to the address, password or URL ID is refused when another
- *   request changed that field, or signed the account out, since `seen`.
+ *   request changed that field since `seen`, and a new password also when
+ *   another request signed the account out since then.
  * - A new URL ID or vanity ID must not name another account as either kind
  *   of ID, and a new address must be free.
  * - A new address or password signs the account out everywhere.
@@ -102,13 +103,15 @@ export async function updateAccount<Select extends Prisma.UserSelect>(
     }))
   )
     throw new HttpError(400, refuse.emailTaken)
-  if (emailChanged || edit.password !== undefined)
-    await changeCredentials(tx, account.id, {
-      password: edit.password,
-      ...(emailChanged && {
-        email: { address: edit.email!, verified: false },
-      }),
-    })
+  const credentials =
+    emailChanged || edit.password !== undefined
+      ? await changeCredentials(tx, account.id, {
+          password: edit.password,
+          ...(emailChanged && {
+            email: { address: edit.email!, verified: false },
+          }),
+        })
+      : {}
   if (urlIdChanged) {
     // Storage paths stay: moving objects could strand files if a storage or
     // database write failed.
@@ -125,6 +128,7 @@ export async function updateAccount<Select extends Prisma.UserSelect>(
   return tx.user.update({
     where: { id: account.id },
     data: {
+      ...credentials,
       ...(edit.name !== undefined && { name: edit.name }),
       ...edit.settings,
       ...(urlIdChanged && { urlId }),

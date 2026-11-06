@@ -32,6 +32,7 @@ import {
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
 import { issueEmailToken } from '@/lib/email/tokens'
 import { decryptSecret } from '@/lib/security/secret-box'
+import { updateAccount } from '@/lib/users/update-account'
 
 /** A different documentation-range address per request keeps per-IP email limits apart. */
 function uniqueAddress() {
@@ -49,12 +50,16 @@ vi.mock('next-auth', async (original) => ({
 }))
 vi.mock('@/lib/database/prisma', async () => {
   const { PrismaClient } = await import('@prisma/client')
+  const { withPrismaAudit } = await import('@/lib/audit/prisma')
+  // Audited as in production, so a test can count the events a change records.
   return {
-    prisma: new PrismaClient({
-      datasourceUrl:
-        process.env.FLARE_EMAIL_AUTH_DATABASE_URL ||
-        'postgresql://unused@127.0.0.1/unused',
-    }),
+    prisma: withPrismaAudit(
+      new PrismaClient({
+        datasourceUrl:
+          process.env.FLARE_EMAIL_AUTH_DATABASE_URL ||
+          'postgresql://unused@127.0.0.1/unused',
+      })
+    ),
   }
 })
 vi.mock('@/lib/email/config', async (original) => ({
@@ -317,6 +322,57 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           where: { userId: account.id, consumedAt: null },
         })
       ).toBe(0)
+    })
+
+    it('saves each credential change in one account update, recording one audit event', async () => {
+      const account = await user()
+      const updates = async (change: () => Promise<unknown>) => {
+        const count = () =>
+          prisma.auditEvent.count({
+            where: { action: 'user.update', targetId: account.id },
+          })
+        const before = await count()
+        await change()
+        return (await count()) - before
+      }
+      // Profile and Users edits.
+      const edited = await hash('edited-password', 4)
+      expect(
+        await updates(() =>
+          prisma.$transaction(async (tx) =>
+            updateAccount(
+              tx,
+              await tx.user.findUniqueOrThrow({ where: { id: account.id } }),
+              { name: 'Renamed', password: edited },
+              { kind: 'self', emailEnabled: true },
+              { id: true }
+            )
+          )
+        )
+      ).toBe(1)
+      const reset = await token(account)
+      expect(
+        await updates(() => resetPassword(reset.token, 'new-password', config))
+      ).toBe(1)
+      const newEmail = `${randomUUID()}@new.example`
+      await prisma.user.update({
+        where: { id: account.id },
+        data: { pendingEmail: newEmail },
+      })
+      const change = await token(account, 'change', newEmail)
+      expect(await updates(() => confirmEmailToken(change.token, config))).toBe(
+        1
+      )
+      const updated = await prisma.user.findUniqueOrThrow({
+        where: { id: account.id },
+      })
+      expect(updated).toMatchObject({
+        name: 'Renamed',
+        email: newEmail,
+        pendingEmail: null,
+        sessionVersion: account.sessionVersion + 3,
+      })
+      expect(await compare('new-password', updated.password!)).toBe(true)
     })
 
     it('rejects expired, wrong-purpose and changed-address tokens without consuming them', async () => {
