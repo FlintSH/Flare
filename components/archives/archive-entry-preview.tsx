@@ -13,6 +13,7 @@ import { ExpandImageButton } from '@/components/file/viewer/components/expand-im
 import { Button } from '@/components/ui/button'
 
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
+import { readPreviewBytes } from '@/lib/client/preview-bytes'
 import { refusal, retryable } from '@/lib/client/request'
 import { formatBytes } from '@/lib/utils'
 
@@ -26,7 +27,6 @@ import {
   archiveEntryName,
   archiveErrorMessage,
   archivePreviewKind,
-  readPreviewBytes,
 } from './archive-utils'
 
 function Waiting({ label }: { label: string }) {

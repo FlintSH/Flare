@@ -24,8 +24,8 @@ import {
   colorSwatchClassName,
   destructiveActionClassName,
   numberFieldClassName,
-} from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+} from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,

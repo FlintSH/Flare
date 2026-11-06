@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Laptop, RefreshCw } from 'lucide-react'
 
-import { MetaLine } from '@/components/profile/meta-line'
+import { MetaLine } from '@/components/shared/meta-line'
 import {
   AlertDialog,
   AlertDialogAction,

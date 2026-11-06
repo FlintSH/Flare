@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { readPreviewBytes } from '@/components/archives/archive-utils'
+import { readPreviewBytes } from '@/lib/client/preview-bytes'
 
 /** The most text, code or CSV a share page loads to preview a file. */
 export const PREVIEW_TEXT_BYTES = 1024 * 1024

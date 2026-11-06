@@ -14,14 +14,14 @@ import {
 import {
   colorSwatchClassName,
   numberFieldClassName,
-} from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+} from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import {
   SetupActions,
   setupPrimaryActionClassName,
   setupSecondaryActionClassName,
-} from '@/components/setup/setup-actions'
-import { SetupOption } from '@/components/setup/setup-option'
+} from '@/components/shared/setup-actions'
+import { SetupOption } from '@/components/shared/setup-option'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {

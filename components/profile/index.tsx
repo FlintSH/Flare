@@ -4,7 +4,6 @@ import { useCallback } from 'react'
 
 import { useRouter } from 'next/navigation'
 
-import { LogoutButton } from '@/app/(main)/dashboard/profile/logout-button'
 import { ProfileClientProps } from '@/types/components/profile'
 import { Database, Plug, Upload, UserPlus, UserRound } from 'lucide-react'
 
@@ -37,6 +36,7 @@ import { usePreferenceSection } from '@/hooks/use-preference-section'
 
 import { ProfileAccount } from './account'
 import { ProfileExport } from './export'
+import { LogoutButton } from './logout-button'
 import { ProfileDeleteAccount } from './profile-delete-account'
 import { ProfileUploadDefaults } from './profile-upload-defaults'
 import { ProfileSecurity } from './security'

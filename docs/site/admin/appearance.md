@@ -94,7 +94,7 @@ Hidden details are omitted from generated social text as well. These are present
 
 ## Appearance packs
 
-Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, export the design currently being previewed. The file includes identity, embedded logos, paired palettes, surfaces, typography, and sharing choices.
+Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, choose **Export appearance** to download the design currently being previewed. The file is named after the instance name in lowercase, with characters other than letters, digits, and hyphens replaced by hyphens, such as `flare-appearance.json`. It includes identity, embedded logos, paired palettes, surfaces, typography, and sharing choices.
 
 Import a supported `flare.appearance` version 1 pack of at most **1 MB**. Importing creates a saved draft. Review it in both modes and publish explicitly; importing alone does not replace the live design.
 

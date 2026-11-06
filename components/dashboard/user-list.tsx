@@ -39,7 +39,7 @@ import {
   formDialogBodyClassName,
   formDialogClassName,
   formDialogFooterClassName,
-} from '@/components/settings/form-styles'
+} from '@/components/shared/form-styles'
 import {
   AlertDialog,
   AlertDialogAction,

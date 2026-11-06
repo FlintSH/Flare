@@ -29,7 +29,7 @@ export const TEXT_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.textPreviewBytes
 export const IMAGE_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.imagePreviewBytes
 
 // The archive forms scroll between their title and actions, like the other
-// long form dialogs (components/settings/form-styles.ts).
+// long form dialogs (components/shared/form-styles.ts).
 export const ARCHIVE_FORM_DIALOG_CLASS =
   'flex max-h-[calc(100dvh-2rem)] flex-col [&>div:first-child]:flex [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
 
@@ -241,38 +241,6 @@ export function archivePreviewKind(
   )
     return { type: 'text' }
   return null
-}
-
-/** Bound memory even when a response omits or misreports Content-Length. */
-export async function readPreviewBytes(response: Response, limit: number) {
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('This entry has no content to preview.')
-  const chunks: Uint8Array[] = []
-  let length = 0
-  let truncated = false
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const remaining = limit - length
-      chunks.push(value.slice(0, Math.max(0, remaining)))
-      length += Math.min(value.length, remaining)
-      if (value.length > remaining) {
-        truncated = true
-        await reader.cancel()
-        break
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const bytes = new Uint8Array(length)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.length
-  }
-  return { bytes, truncated }
 }
 
 export function archiveErrorMessage(error: unknown) {

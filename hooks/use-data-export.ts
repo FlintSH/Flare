@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { refusal, sendRequest } from '@/lib/client/request'
+import { responseFilename, saveBlobAsFile } from '@/lib/client/save-file'
 import { exportUrls, newExportId } from '@/lib/users/export-id'
 
 import { useToast } from './use-toast'
@@ -31,20 +32,7 @@ export function useDataExport() {
         throw new Error('No data received from server')
       }
 
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download =
-        response.headers
-          .get('content-disposition')
-          ?.match(/filename="?([^"]*)"?/)?.[1] || 'flare-data-export.zip'
-      document.body.appendChild(a)
-      a.click()
-
-      setTimeout(() => {
-        URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      }, 100)
+      saveBlobAsFile(blob, responseFilename(response, 'flare-data-export.zip'))
 
       toast({
         title: 'Success',

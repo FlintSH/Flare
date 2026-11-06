@@ -36,6 +36,12 @@ import { signIn } from 'next-auth/react'
 import { EmailSettings } from '@/components/email/email-settings'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from '@/components/shared/setup-actions'
+import { SetupOption, SetupOptionIcon } from '@/components/shared/setup-option'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,13 +75,7 @@ import { cn } from '@/lib/utils'
 
 import { useMarkSetupComplete } from '@/hooks/use-setup-status'
 
-import {
-  SetupActions,
-  setupPrimaryActionClassName,
-  setupSecondaryActionClassName,
-} from './setup-actions'
 import { SetupAppearance } from './setup-appearance'
-import { SetupOption, SetupOptionIcon } from './setup-option'
 
 type StepDetails = {
   label: string

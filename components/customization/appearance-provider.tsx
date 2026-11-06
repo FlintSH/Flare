@@ -1,15 +1,16 @@
 'use client'
 
-import { createContext, useContext, useEffect } from 'react'
+import { useEffect } from 'react'
 
 import { usePathname } from 'next/navigation'
 
 import { useSession } from 'next-auth/react'
 import { useTheme } from 'next-themes'
 
+import { AppearanceContext } from '@/components/providers/appearance-context'
+
 import {
   type AppearanceDocument,
-  DEFAULT_APPEARANCE,
   personalAppearanceSchema,
 } from '@/lib/customization/schema'
 
@@ -17,9 +18,6 @@ import { useAccountQuery } from '@/hooks/use-account-query'
 
 /** The account query that holds the signed-in person's own appearance choice. */
 export const PERSONAL_APPEARANCE = 'appearance-preference'
-
-const AppearanceContext = createContext<AppearanceDocument>(DEFAULT_APPEARANCE)
-export const useAppearance = () => useContext(AppearanceContext)
 
 export function AppearanceProvider({
   appearance,

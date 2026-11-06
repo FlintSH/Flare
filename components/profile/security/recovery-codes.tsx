@@ -6,6 +6,8 @@ import { Check, Copy, Download, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
+import { saveBlobAsFile } from '@/lib/client/save-file'
+
 export function RecoveryCodes({
   codes,
   onDone,
@@ -42,16 +44,10 @@ export function RecoveryCodes({
       '',
       ...codes,
     ].join('\n')
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = passkey
-      ? 'flare-passkey-recovery-codes.txt'
-      : 'flare-recovery-codes.txt'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    saveBlobAsFile(
+      new Blob([text], { type: 'text/plain' }),
+      passkey ? 'flare-passkey-recovery-codes.txt' : 'flare-recovery-codes.txt'
+    )
   }
 
   return (

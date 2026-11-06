@@ -37,10 +37,10 @@ import {
   PreferencesPanel,
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
-import { numberFieldClassName } from '@/components/settings/form-styles'
 import { InstanceVersion } from '@/components/settings/instance-version'
-import { SaveBar } from '@/components/settings/save-bar'
+import { numberFieldClassName } from '@/components/shared/form-styles'
 import { Icons } from '@/components/shared/icons'
+import { SaveBar } from '@/components/shared/save-bar'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'

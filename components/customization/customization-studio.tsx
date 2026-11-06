@@ -20,8 +20,8 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { colorSwatchClassName } from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+import { colorSwatchClassName } from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,6 +43,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { apiRequest } from '@/lib/client/request'
+import { saveBlobAsFile } from '@/lib/client/save-file'
 import { LOGO_ACCEPT, logoProblem } from '@/lib/customization/logo'
 import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
 import {
@@ -337,16 +338,12 @@ export function CustomizationStudio({
       setError('Fix the appearance fields before exporting.')
       return
     }
-    const blob = new Blob(
-      [JSON.stringify(exportAppearancePack(parsed.data), null, 2)],
-      { type: 'application/json' }
+    saveBlobAsFile(
+      new Blob([JSON.stringify(exportAppearancePack(parsed.data), null, 2)], {
+        type: 'application/json',
+      }),
+      `${document.brand.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'flare'}-appearance.json`
     )
-    const url = URL.createObjectURL(blob),
-      anchor = window.document.createElement('a')
-    anchor.href = url
-    anchor.download = `${document.brand.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'flare'}-appearance.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   return (

@@ -2,13 +2,13 @@ import { useState } from 'react'
 
 import { flushSync } from 'react-dom'
 
-import { useAppearance } from '@/components/customization/appearance-provider'
 import {
   type CheckerTone,
   checkerClassName,
   checkerToneFor,
 } from '@/components/file/checker-tone'
 import { ImageLightbox } from '@/components/file/image-lightbox'
+import { useAppearance } from '@/components/providers/appearance-context'
 
 import { cn } from '@/lib/utils'
 

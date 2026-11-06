@@ -11,7 +11,7 @@ import {
   hasRecentSecurityProof,
   passkeyError,
 } from '@/components/auth/security-api'
-import { MetaLine } from '@/components/profile/meta-line'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {

@@ -12,8 +12,8 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { MetaLine } from '@/components/profile/meta-line'
 import { ProfileToolDownloads } from '@/components/profile/tools/profile-tools'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'

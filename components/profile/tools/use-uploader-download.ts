@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 import { RefusedRequest, refusal } from '@/lib/client/request'
+import { saveResponseAsFile } from '@/lib/client/save-file'
 import {
   type UploaderClientId,
   type UploaderOptions,
@@ -11,8 +12,6 @@ import {
 } from '@/lib/uploads/uploader-clients'
 
 import { useToast } from '@/hooks/use-toast'
-
-import { saveResponseAsFile } from './save-response-as-file'
 
 interface Notice {
   title: string

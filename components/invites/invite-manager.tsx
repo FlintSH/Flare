@@ -15,15 +15,15 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 
-import { useAppearance } from '@/components/customization/appearance-provider'
-import { MetaLine } from '@/components/profile/meta-line'
+import { useAppearance } from '@/components/providers/appearance-context'
 import { RoleBadges, RoleChecklist } from '@/components/roles/role-badges'
 import {
   destructiveActionClassName,
   formDialogBodyClassName,
   formDialogClassName,
   formDialogFooterClassName,
-} from '@/components/settings/form-styles'
+} from '@/components/shared/form-styles'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,

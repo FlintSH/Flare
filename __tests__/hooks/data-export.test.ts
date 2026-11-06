@@ -46,7 +46,9 @@ class FakeEventSource {
   }
 }
 
-const link = { href: '', download: '', click: vi.fn() }
+const link = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
+// The download helper revokes its object URL a second after the click.
+const revoked = { timeout: 2000 }
 
 function render() {
   harness.cursor = 0
@@ -119,7 +121,10 @@ describe('account data export in the browser', () => {
     body.enqueue(new Uint8Array([80, 75, 5, 6]))
     body.close()
     await running
-    await vi.waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalled())
+    await vi.waitFor(
+      () => expect(URL.revokeObjectURL).toHaveBeenCalled(),
+      revoked
+    )
   })
 
   it('shows the server percentage as the only progress while the ZIP arrives', async () => {
@@ -152,8 +157,10 @@ describe('account data export in the browser', () => {
     })
     expect(events.closed).toBe(true)
     expect(render()).toMatchObject({ isExporting: false, progress: 0 })
-    await vi.waitFor(() =>
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:flare-export')
+    await vi.waitFor(
+      () =>
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:flare-export'),
+      revoked
     )
   })
 
@@ -178,7 +185,10 @@ describe('account data export in the browser', () => {
     expect(harness.toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Success' })
     )
-    await vi.waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalled())
+    await vi.waitFor(
+      () => expect(URL.revokeObjectURL).toHaveBeenCalled(),
+      revoked
+    )
   })
 
   it('reports a download that brings no data', async () => {

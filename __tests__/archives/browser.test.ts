@@ -12,10 +12,10 @@ import {
   buildArchiveTree,
   isArchiveCandidate,
   loadArchiveListing,
-  readPreviewBytes,
 } from '@/components/archives/archive-utils'
 
 import type { ArchiveEntry } from '@/lib/archives/shared'
+import { readPreviewBytes } from '@/lib/client/preview-bytes'
 import { sendRequest } from '@/lib/client/request'
 
 const entries: ArchiveEntry[] = [

@@ -7,8 +7,8 @@ import {
   ProfileToolDownloads,
   ProfileTools,
 } from '@/components/profile/tools/profile-tools'
-import { saveResponseAsFile } from '@/components/profile/tools/save-response-as-file'
 
+import { saveResponseAsFile } from '@/lib/client/save-file'
 import {
   UPLOADER_CLIENT_IDS,
   uploaderClients,

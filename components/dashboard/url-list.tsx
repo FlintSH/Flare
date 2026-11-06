@@ -11,8 +11,8 @@ import {
   Trash2,
 } from 'lucide-react'
 
-import { MetaLine } from '@/components/profile/meta-line'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,

@@ -155,7 +155,7 @@ To free space, download anything you need and delete unwanted files. Switching f
 
 ## Export your data
 
-Choose **Export all data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
+Choose **Export all data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage. The browser saves it as `flare-data-export-` followed by the time the export started, in milliseconds, for example `flare-data-export-1767225600000.zip`. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
 
 While the export runs, the button shows **Preparing…** with the percentage of your files already added to the ZIP, and the bar below it fills to match. The percentage holds while Flare reads a large file, so a slow export can stay on one number for a while. Each export reports only its own progress: a new export starts from 0%, and exports running in two tabs at once each show their own. Progress comes from the Flare process building your ZIP. On an instance running [several application replicas](/hosting/#multiple-replicas-and-serverless-hosts) that don't keep your requests on one replica, it can stay at 0% while the download still completes.
 
