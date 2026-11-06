@@ -5,8 +5,13 @@ import {
   type ArchiveListing,
   type ArchiveListingProgress,
   type ArchiveOutputFormat,
-  detectArchiveFormat,
 } from '@/lib/archives/shared'
+import { readAnswer, refusal, sendRequest } from '@/lib/client/request'
+import { fileKind } from '@/lib/files/file-kind'
+
+/** What an archive request that gives no reason fails with. */
+export const ARCHIVE_REQUEST_FAILED =
+  'The archive request could not be completed. Please try again.'
 
 /** File-library metadata uses MiB; archive contracts use bytes. */
 export function archiveSelectionSize(files: { size: number }[]) {
@@ -24,7 +29,7 @@ export const TEXT_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.textPreviewBytes
 export const IMAGE_PREVIEW_BYTES = ARCHIVE_BROWSE_LIMITS.imagePreviewBytes
 
 // The archive forms scroll between their title and actions, like the other
-// long form dialogs (components/settings/form-styles.ts).
+// long form dialogs (components/shared/form-styles.ts).
 export const ARCHIVE_FORM_DIALOG_CLASS =
   'flex max-h-[calc(100dvh-2rem)] flex-col [&>div:first-child]:flex [&>div:first-child]:min-h-0 [&>div:first-child]:flex-col [&>div:first-child]:gap-5 [&>div:first-child]:space-y-0'
 
@@ -66,21 +71,10 @@ export function archiveFolderCount(entries: ArchiveEntry[]) {
   return folders.size
 }
 
-export class ArchiveRequestError extends Error {
-  constructor(
-    message: string,
-    public status: number
-  ) {
-    super(message)
-  }
-}
-
+/** Whether the library offers Browse archive, including for RAR and 7z. */
 export function isArchiveCandidate(name: string, mimeType: string) {
-  return (
-    !!detectArchiveFormat(name, mimeType) ||
-    /\.(rar|7z)$/i.test(name) ||
-    /(?:rar|7z-compressed)/i.test(mimeType)
-  )
+  const { kind } = fileKind({ name, mimeType })
+  return kind === 'archive' || kind === 'unsupported-archive'
 }
 
 export interface ArchiveFileRef {
@@ -249,76 +243,8 @@ export function archivePreviewKind(
   return null
 }
 
-/** Bound memory even when a response omits or misreports Content-Length. */
-export async function readPreviewBytes(response: Response, limit: number) {
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('This entry has no content to preview.')
-  const chunks: Uint8Array[] = []
-  let length = 0
-  let truncated = false
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const remaining = limit - length
-      chunks.push(value.slice(0, Math.max(0, remaining)))
-      length += Math.min(value.length, remaining)
-      if (value.length > remaining) {
-        truncated = true
-        await reader.cancel()
-        break
-      }
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const bytes = new Uint8Array(length)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.length
-  }
-  return { bytes, truncated }
-}
-
-export async function archiveRequest<T>(
-  url: string,
-  body?: unknown,
-  signal?: AbortSignal
-): Promise<T> {
-  const response = await archiveFetch(url, body, signal)
-  const result = await response.json().catch(() => ({}))
-  if (!response.ok)
-    throw new ArchiveRequestError(
-      result.error ||
-        'The archive request could not be completed. Please try again.',
-      response.status
-    )
-  return result.data as T
-}
-
-export function archiveFetch(
-  url: string,
-  body?: unknown,
-  signal?: AbortSignal
-) {
-  return fetch(url, {
-    method: body === undefined ? 'GET' : 'POST',
-    cache: 'no-store',
-    signal,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }),
-  })
-}
-
 export function archiveErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : 'The archive request could not be completed. Please try again.'
+  return error instanceof Error ? error.message : ARCHIVE_REQUEST_FAILED
 }
 
 function sleep(ms: number, signal?: AbortSignal) {
@@ -362,33 +288,30 @@ export async function loadArchiveListing(
       progress: true,
       after: entries.length,
     })
-    const response = await archiveFetch(
-      request.url,
-      request.body,
-      options.signal
-    )
-    const result = await response.json().catch(() => ({}))
-    if (response.status === 202) {
-      const progress = result.data as ArchiveListingProgress
-      entries = entries.concat(progress.entries)
-      options.onUpdate({ status: 'indexing', entries, progress })
-      await sleep(1000, options.signal)
-      continue
-    }
-    if (response.status === 429 && busyRetries < 6) {
+    const response = await sendRequest(request.url, {
+      body: request.body,
+      signal: options.signal,
+    })
+    if (!response.ok) {
+      const refused = await refusal(response, ARCHIVE_REQUEST_FAILED)
+      if (refused.status !== 429 || busyRetries >= 6) throw refused
       busyRetries++
       options.onUpdate({ status: 'busy' })
-      const seconds = Number(response.headers.get('Retry-After')) || 5
-      await sleep(Math.min(seconds, 60) * 1000, options.signal)
+      await sleep(Math.min(refused.retryAfter || 5, 60) * 1000, options.signal)
       continue
     }
-    if (!response.ok)
-      throw new ArchiveRequestError(
-        result.error ||
-          'The archive request could not be completed. Please try again.',
-        response.status
-      )
-    const listing = result.data as ArchiveListing
-    return { ...listing, entries: entries.concat(listing.entries) }
+    const answer = await readAnswer<ArchiveListing | ArchiveListingProgress>(
+      response,
+      { signal: options.signal, fallback: ARCHIVE_REQUEST_FAILED }
+    )
+    entries = entries.concat(answer.entries)
+    if (response.status !== 202)
+      return { ...(answer as ArchiveListing), entries }
+    options.onUpdate({
+      status: 'indexing',
+      entries,
+      progress: answer as ArchiveListingProgress,
+    })
+    await sleep(1000, options.signal)
   }
 }

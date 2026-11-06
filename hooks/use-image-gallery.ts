@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type {
-  FileFilterOptions,
-  FileType,
-  PaginationInfo,
-} from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 
-import { adjacentImagePage } from '@/lib/files/gallery'
+import type { LibraryFilters } from '@/lib/library/contract'
+import { type GalleryPage, adjacentImagePage } from '@/lib/library/gallery'
 
 import { toast } from '@/hooks/use-toast'
 
 interface GalleryState {
   files: FileType[]
-  pagination: PaginationInfo
+  /** Where `files` sit among the filtered images; null until a window loads. */
+  pagination: GalleryPage['pagination'] | null
   index: number
   atStart: boolean
   atEnd: boolean
@@ -20,12 +18,14 @@ interface GalleryState {
   libraryFiles: FileType[]
 }
 
+/**
+ * The full-screen viewer. It opens on one image and loads its neighbors by ID,
+ * so it pages through every image the filters match, not only loaded cards.
+ */
 export function useImageGallery(
-  filters: FileFilterOptions,
+  filters: LibraryFilters,
   files: FileType[],
-  pagination: PaginationInfo,
-  refreshKey: number,
-  anchoredOnly = false
+  refreshKey: number
 ) {
   const [gallery, setGallery] = useState<GalleryState | null>(null)
   const [navigationPending, setNavigationPending] = useState(false)
@@ -48,27 +48,22 @@ export function useImageGallery(
 
   const open = useCallback(
     (file: FileType) => {
-      const images = anchoredOnly
-        ? [file]
-        : files.filter((entry) => entry.mimeType.startsWith('image/'))
-      const index = images.findIndex((entry) => entry.id === file.id)
-      if (index < 0) return
       request.current?.abort()
       request.current = null
       setNavigationPending(false)
-      // Keep this session's page stable when background uploads refresh the
-      // grid, which may show a different page from the one being viewed.
+      // The viewer keeps its own images, so a background refresh of the grid
+      // doesn't move it.
       setGallery({
-        files: images,
-        index,
-        pagination,
-        atStart: !anchoredOnly && pagination.page <= 1,
-        atEnd: !anchoredOnly && pagination.page >= pagination.pageCount,
+        files: [file],
+        index: 0,
+        pagination: null,
+        atStart: false,
+        atEnd: false,
         refreshKey,
         libraryFiles: files,
       })
     },
-    [files, pagination, refreshKey, anchoredOnly]
+    [files, refreshKey]
   )
 
   const move = useCallback(

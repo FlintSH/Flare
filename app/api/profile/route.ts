@@ -1,239 +1,134 @@
 import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
-import { Prisma } from '@prisma/client'
-import { compare, hash } from 'bcryptjs'
+import { compare } from 'bcryptjs'
 
-import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { securitySession } from '@/lib/auth/security/http'
-import { assertSecurityProof } from '@/lib/auth/security/service'
-import { SecurityError } from '@/lib/auth/security/shared'
+import { assertFreshIdentity } from '@/lib/auth/security/service'
 import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
-import { invalidateEmailTokens } from '@/lib/email/tokens'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { PermissionError } from '@/lib/permissions/server'
-import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
+import { hashAccountPassword } from '@/lib/users/credentials'
+import { deleteAccount } from '@/lib/users/delete-account'
+import { updateAccount } from '@/lib/users/update-account'
 
-const logger = loggers.users
+const api = routes('/api/profile', {
+  envelope: 'api',
+  failure: { message: 'Internal server error' },
+  logger: loggers.users,
+})
 
-class ProfileUpdateError extends Error {}
+export const PUT = api(async (request) => {
+  const user = await requireAccount(request)
 
-async function handlePUT(req: Request) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
-
-    const json = await req.json()
-
-    const result = UpdateProfileSchema.safeParse(json)
-    if (!result.success) {
-      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
-    }
-
-    const body = result.data
-    const account = await prisma.user.findUnique({ where: { id: user.id } })
-    if (!account) return apiError('User not found', HTTP_STATUS.NOT_FOUND)
-    const emailConfig = await getEmailConfig()
-    if (
-      emailConfig.enabled &&
-      body.newPassword &&
-      Buffer.byteLength(body.newPassword, 'utf8') > 72
+  const body = await readJson(request, UpdateProfileSchema)
+  const account = await prisma.user.findUnique({ where: { id: user.id } })
+  if (!account) throw new HttpError(404, 'User not found')
+  const emailConfig = await getEmailConfig()
+  const emailChanged = Boolean(body.email && body.email !== account.email)
+  const security =
+    emailChanged || body.newPassword ? await securitySession(request) : null
+  if (emailConfig.enabled && emailChanged) {
+    throw new HttpError(
+      400,
+      'Use the verified email change form to change your email address.'
     )
-      return apiError(
-        'Password must use at most 72 bytes.',
-        HTTP_STATUS.BAD_REQUEST
-      )
-    const emailChanged = Boolean(body.email && body.email !== account.email)
-    const security =
-      emailChanged || body.newPassword ? await securitySession(req) : null
-    if (emailConfig.enabled && emailChanged) {
-      return apiError(
-        'Use the verified email change form to change your email address.',
-        HTTP_STATUS.BAD_REQUEST
-      )
+  }
+
+  if (body.newPassword) {
+    if (!body.currentPassword) {
+      throw new HttpError(400, 'Current password is required')
     }
 
-    if (body.email) {
-      const existingUser = await prisma.user.findUnique({
-        where: {
-          email: body.email,
-          NOT: {
-            id: user.id,
-          },
-        },
-      })
-
-      if (existingUser) {
-        return apiError('Email already taken', HTTP_STATUS.BAD_REQUEST)
-      }
-    }
-
-    if (body.newPassword) {
-      if (!body.currentPassword) {
-        return apiError('Current password is required', HTTP_STATUS.BAD_REQUEST)
-      }
-
-      const userData = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { password: true },
-      })
-
-      if (!userData?.password) {
-        return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
-      }
-
-      const isPasswordValid = await compare(
-        body.currentPassword,
-        userData.password
-      )
-
-      if (!isPasswordValid) {
-        return apiError('Invalid credentials', HTTP_STATUS.BAD_REQUEST)
-      }
-    }
-
-    const updateData: Prisma.UserUpdateInput = {}
-    if (body.name) updateData.name = body.name
-    if (emailChanged) updateData.email = body.email
-    if (body.newPassword) updateData.password = await hash(body.newPassword, 10)
-    if (emailChanged) {
-      updateData.emailVerified = null
-      updateData.emailVerifiedFor = null
-      updateData.emailVerificationSource = null
-      updateData.pendingEmail = null
-      updateData.pendingEmailOldConfirmed = false
-    }
-    if (body.image) updateData.image = body.image
-    if (typeof body.randomizeFileUrls === 'boolean')
-      updateData.randomizeFileUrls = body.randomizeFileUrls
-    if (body.defaultFileExpiration)
-      updateData.defaultFileExpiration = body.defaultFileExpiration
-    if (body.defaultFileExpirationAction)
-      updateData.defaultFileExpirationAction = body.defaultFileExpirationAction
-
-    if (body.vanityId !== undefined) {
-      if (body.vanityId === null) {
-        // Clear vanity ID
-        updateData.vanityId = null
-      } else {
-        // Check vanityId doesn't collide with another user's vanityId
-        const existingVanity = await prisma.user.findUnique({
-          where: { vanityId: body.vanityId },
-        })
-        if (existingVanity && existingVanity.id !== user.id) {
-          return apiError(
-            'This vanity URL is already taken',
-            HTTP_STATUS.BAD_REQUEST
-          )
-        }
-
-        // Check vanityId doesn't collide with any user's urlId
-        const existingUrlId = await prisma.user.findUnique({
-          where: { urlId: body.vanityId },
-        })
-        if (existingUrlId) {
-          return apiError(
-            'This vanity URL conflicts with an existing URL ID',
-            HTTP_STATUS.BAD_REQUEST
-          )
-        }
-
-        updateData.vanityId = body.vanityId
-      }
-    }
-
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      if (emailChanged || body.newPassword) {
-        // Serialize the effective policy with this account mutation. An admin
-        // enabling email must commit either before this check or after our save.
-        const currentEmailConfig = await getEmailConfigForUpdate(tx)
-        if (currentEmailConfig.enabled && emailChanged)
-          throw new ProfileUpdateError(
-            'Use the verified email change form to change your email address.'
-          )
-        if (body.newPassword || emailChanged) {
-          if (
-            body.newPassword &&
-            Buffer.byteLength(body.newPassword, 'utf8') > 72
-          )
-            throw new ProfileUpdateError('Password must use at most 72 bytes.')
-          updateData.sessionVersion = { increment: 1 }
-          updateData.pendingEmail = null
-          updateData.pendingEmailOldConfirmed = false
-        }
-        const fresh = await lockEmailUser(tx, user.id)
-        if (security)
-          await assertSecurityProof(
-            tx,
-            fresh,
-            { password: body.currentPassword, code: body.securityCode },
-            security.session
-          )
-        if (
-          fresh.password !== account.password ||
-          fresh.email !== account.email
-        )
-          throw new ProfileUpdateError(
-            'Account changed during update. Please try again.'
-          )
-        await invalidateEmailTokens(tx, user.id)
-      }
-      return tx.user.update({
-        where: { id: user.id },
-        data: updateData,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-          randomizeFileUrls: true,
-          vanityId: true,
-        },
-      })
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { password: true },
     })
 
-    return apiResponse<ProfileResponse>(updatedUser)
-  } catch (error) {
-    if (error instanceof SecurityError)
-      return apiError(error.message, error.status)
-    if (error instanceof ProfileUpdateError)
-      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
-    logger.error('Profile update error:', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
-  }
-}
+    if (!userData?.password) {
+      throw new HttpError(400, 'Invalid credentials')
+    }
 
-async function handleDELETE(req: Request) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
-
-    await deleteAccountWithStorageCleanup(
-      user.id,
-      user.id,
-      'profile.update',
-      true
+    const isPasswordValid = await compare(
+      body.currentPassword,
+      userData.password
     )
 
-    return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return Response.json({ error: error.message }, { status: error.status })
-    logger.error('Account deletion error:', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
+    if (!isPasswordValid) {
+      throw new HttpError(400, 'Invalid credentials')
+    }
   }
-}
 
-export async function PUT(req: Request) {
-  return withAuditRoute(async () => handlePUT(req), { route: '/api/profile' })(
-    req
-  )
-}
+  const passwordHash = body.newPassword
+    ? await hashAccountPassword(body.newPassword)
+    : undefined
 
-export async function DELETE(req: Request) {
-  return withAuditRoute(async () => handleDELETE(req), {
-    route: '/api/profile',
-  })(req)
-}
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    let emailEnabled = emailConfig.enabled
+    if (emailChanged || passwordHash) {
+      // Serialize the effective policy with this account mutation. An admin
+      // enabling email must commit either before this check or after our save.
+      emailEnabled = (await getEmailConfigForUpdate(tx)).enabled
+      if (emailEnabled && emailChanged)
+        throw new HttpError(
+          400,
+          'Use the verified email change form to change your email address.'
+        )
+    }
+    return updateAccount(
+      tx,
+      account,
+      {
+        name: body.name,
+        email: emailChanged ? body.email : undefined,
+        password: passwordHash,
+        vanityId: body.vanityId,
+        settings: {
+          ...(typeof body.randomizeFileUrls === 'boolean' && {
+            randomizeFileUrls: body.randomizeFileUrls,
+          }),
+          ...(body.defaultFileExpiration && {
+            defaultFileExpiration: body.defaultFileExpiration,
+          }),
+          ...(body.defaultFileExpirationAction && {
+            defaultFileExpirationAction: body.defaultFileExpirationAction,
+          }),
+        },
+      },
+      {
+        kind: 'self',
+        emailEnabled,
+        prove: security
+          ? (fresh) =>
+              assertFreshIdentity(
+                fresh,
+                { password: body.currentPassword, code: body.securityCode },
+                security.session,
+                { secondFactor: true, tx }
+              )
+          : undefined,
+      },
+      {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        randomizeFileUrls: true,
+        vanityId: true,
+      }
+    )
+  })
+
+  return apiResponse<ProfileResponse>(updatedUser)
+})
+
+export const DELETE = api(async (request) => {
+  const user = await requireAccount(request)
+
+  await deleteAccount(user.id, user.id, 'profile.update', true)
+
+  return new Response(null, { status: 204 })
+})

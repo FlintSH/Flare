@@ -1,6 +1,7 @@
 import { fileTypeFromBuffer } from 'file-type'
 import { Readable } from 'node:stream'
 
+import { contentDisposition } from '@/lib/files/content-disposition'
 import { parseByteRange as parseSingleByteRange } from '@/lib/http/byte-range'
 
 import type { ArchiveIndex, IndexedEntry } from './archive-index'
@@ -88,7 +89,6 @@ const streams = (processState[streamsKey] ??= {
   requesters: new Map<string, number>(),
 }) as { total: number; requesters: Map<string, number> }
 
-/** Responses up to this size are read and verified before headers are sent. */
 const BUFFERED_RESPONSE_BYTES = 512 * 1024
 /**
  * Release a streamed response whose body nobody reads. Media players that
@@ -120,15 +120,6 @@ export function reserveEntryStream(requester: string) {
     if (remaining) streams.requesters.set(requester, remaining)
     else streams.requesters.delete(requester)
   }
-}
-
-function disposition(type: 'inline' | 'attachment', path: string) {
-  const name = path.split('/').filter(Boolean).at(-1) || 'download'
-  const encoded = encodeURIComponent(name).replace(
-    /['()*]/g,
-    (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase()
-  )
-  return `${type}; filename*=UTF-8''${encoded}`
 }
 
 /**
@@ -187,9 +178,9 @@ export async function entryResponse(options: {
       ...common,
       'Content-Type': mediaType ?? 'application/octet-stream',
       'Content-Length': String(end - start),
-      'Content-Disposition': disposition(
-        mediaType ? 'inline' : 'attachment',
-        entry.path
+      'Content-Disposition': contentDisposition(
+        entry.path,
+        mediaType ? 'inline' : 'attachment'
       ),
       ...(range
         ? { 'Content-Range': `bytes ${start}-${end - 1}/${entry.size}` }

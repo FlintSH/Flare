@@ -29,7 +29,7 @@ The screenshots below show real operations with disposable demonstration files. 
 1. Upload a supported archive, or find one already in **Files**.
 2. Open its menu and choose **Browse archive**. The same action is available among the card's preview actions.
 3. Open folders and use the breadcrumbs to return toward **Archive root**. **Search archive** finds files and folders anywhere in the archive by their paths. In the entry list, the up and down arrow keys, **Home**, and **End** move between entries.
-4. Select a file to preview it. Use **Download entry** to save that member to your device.
+4. Select a file to preview it. Use **Download entry** to save that member to your device under its own name, dots included: `notes..txt` stays `notes..txt`. Earlier versions dropped the `..`.
 
 <Screenshot src="/screenshots/archives/browse.webp" alt="Archive browser showing Field kit.zip with four files, four folders, path search, and Extract all" caption="Browse the archive hierarchy before deciding whether to add its contents to your library." />
 
@@ -115,7 +115,7 @@ These actions do not add files to an account or expose other files in the owner'
 
 Each shared archive request checks the current file access rules. Making the archive private, changing its password, or deleting it affects subsequent requests; content already previewed or downloaded cannot be recalled. Expiration follows the normal [scheduled expiry processing](./sharing#give-a-file-a-lifetime).
 
-On a protected archive, the password you enter is checked when the archive contents load. Previews and **Download entry** then use a cookie that only this file's archive requests receive. It lasts **one hour** and the open page renews it in the background; changing or removing the file's password ends it immediately. The password itself is never added to an entry's address. If previews stop loading after the owner changes the password, reload the share page and enter the new one.
+On a protected archive, the password you enter is checked when the archive contents load. Previews and **Download entry** then use a cookie that only this file's archive requests receive. It lasts **one hour**, and the open page renews it every 45 minutes in the background; changing or removing the file's password ends it immediately. The password itself is never added to an entry's address. If previews stop loading after the owner changes the password, reload the share page and enter the new one.
 
 ::: details See the password gate and unlocked archive
 <Screenshot src="/screenshots/archives/share-password.webp" alt="Password-protected file page with an empty File password field and Access file button; archive contents are hidden" caption="A protected public archive requires its file password before a visitor can browse." />

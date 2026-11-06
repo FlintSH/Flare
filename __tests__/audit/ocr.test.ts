@@ -1,10 +1,10 @@
 import { Readable } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { configureAuditWriter } from '@/lib/audit'
 import { processImageOCRTask } from '@/lib/ocr/processor'
 
 const mocks = vi.hoisted(() => ({
-  recordAudit: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
   getStorageProvider: vi.fn(),
@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   terminate: vi.fn(),
   applyPendingOcrTags: vi.fn(),
 }))
-vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
 }))
@@ -29,8 +28,14 @@ vi.mock('@/lib/logger', () => ({
   loggers: { ocr: { info: vi.fn(), error: vi.fn() } },
 }))
 
+const recorded: Record<string, unknown>[] = []
+
 beforeEach(() => {
   vi.resetAllMocks()
+  recorded.length = 0
+  configureAuditWriter(async (event) => {
+    recorded.push(event)
+  })
   mocks.findUnique.mockResolvedValue({ name: 'receipt.png', userId: 'owner-1' })
   mocks.getStorageProvider.mockResolvedValue({
     getFileStream: mocks.getFileStream,
@@ -59,27 +64,25 @@ describe('OCR audit lifecycle', () => {
       confidence: 92.5,
       text: 'private OCR receipt contents',
     })
-    expect(mocks.recordAudit.mock.calls.map(([event]) => event)).toEqual([
-      {
+    expect(recorded).toEqual([
+      expect.objectContaining({
         action: 'ocr.started',
         category: 'ocr',
         targetType: 'file',
         targetId: 'file-1',
         targetName: 'receipt.png',
         details: { ownerId: 'owner-1' },
-      },
-      {
+      }),
+      expect.objectContaining({
         action: 'ocr.completed',
         category: 'ocr',
         targetType: 'file',
         targetId: 'file-1',
         targetName: 'receipt.png',
         details: { confidence: 92.5, textLength: 28 },
-      },
+      }),
     ])
-    expect(JSON.stringify(mocks.recordAudit.mock.calls)).not.toMatch(
-      /private OCR|private\/storage/
-    )
+    expect(JSON.stringify(recorded)).not.toMatch(/private OCR|private\/storage/)
     expect(mocks.terminate).toHaveBeenCalledOnce()
     expect(mocks.applyPendingOcrTags).toHaveBeenCalledWith('file-1')
   })
@@ -108,18 +111,17 @@ describe('OCR audit lifecycle', () => {
           filePath: 'private/storage/receipt.png',
         })
       ).toMatchObject({ success: false })
-      const events = mocks.recordAudit.mock.calls.map(([event]) => event)
-      expect(events.map((event) => event.action)).toEqual([
+      expect(recorded.map((event) => event.action)).toEqual([
         'ocr.started',
         'ocr.failed',
       ])
-      expect(events[1]).toMatchObject({
+      expect(recorded[1]).toMatchObject({
         outcome: 'failure',
         targetId: 'file-1',
         targetName: 'receipt.png',
         details: { reason: 'Image recognition or storage access failed' },
       })
-      expect(JSON.stringify(events)).not.toMatch(
+      expect(JSON.stringify(recorded)).not.toMatch(
         /private provider|private\/storage|recognized text/
       )
       expect(mocks.update).toHaveBeenLastCalledWith({
@@ -127,6 +129,10 @@ describe('OCR audit lifecycle', () => {
         data: { isOcrProcessed: true, ocrText: null, ocrConfidence: null },
       })
       expect(mocks.applyPendingOcrTags).not.toHaveBeenCalled()
+      // A worker that was started is stopped, whether or not reading worked.
+      expect(mocks.terminate).toHaveBeenCalledTimes(
+        stage === 'recognition' ? 1 : 0
+      )
     }
   )
 })

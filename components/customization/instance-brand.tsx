@@ -1,10 +1,9 @@
 'use client'
 
+import { useAppearance } from '@/components/providers/appearance-context'
 import { Icons } from '@/components/shared/icons'
 
 import { cn } from '@/lib/utils'
-
-import { useAppearance } from './appearance-provider'
 
 export function InstanceBrand({
   className,

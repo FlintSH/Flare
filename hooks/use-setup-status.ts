@@ -1,26 +1,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { apiRequest } from '@/lib/client/request'
+
 interface SetupStatus {
   completed: boolean
 }
 
 const SETUP_STATUS_QUERY_KEY = ['setup-status']
 
-async function fetchSetupStatus(): Promise<SetupStatus> {
-  const response = await fetch('/api/setup/check')
-
-  if (!response.ok) {
-    throw new Error(`Setup check failed: ${response.status}`)
-  }
-
-  return response.json()
-}
-
-export function useSetupStatus(enabled = true) {
+/**
+ * Whether this instance has its first account. Pass the answer the server
+ * rendered the page with, so the browser asks `/api/setup/check` only when
+ * there is none or once it is stale.
+ */
+export function useSetupStatus(completed?: boolean) {
   return useQuery({
     queryKey: SETUP_STATUS_QUERY_KEY,
-    queryFn: fetchSetupStatus,
-    enabled,
+    queryFn: ({ signal }) =>
+      apiRequest<SetupStatus>('/api/setup/check', { signal }),
+    initialData: completed === undefined ? undefined : { completed },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 3,
@@ -31,24 +29,14 @@ export function useSetupStatus(enabled = true) {
   })
 }
 
-export function useSetupStatusMutations() {
+/**
+ * Records that this browser just completed setup, so pages stop being sent
+ * to setup without waiting for the stored status to expire.
+ */
+export function useMarkSetupComplete() {
   const queryClient = useQueryClient()
-
-  const invalidateSetupStatus = () => {
-    queryClient.invalidateQueries({ queryKey: SETUP_STATUS_QUERY_KEY })
-  }
-
-  const updateSetupStatus = (completed: boolean) => {
-    queryClient.setQueryData(SETUP_STATUS_QUERY_KEY, { completed })
-  }
-
-  const refetchSetupStatus = () => {
-    return queryClient.refetchQueries({ queryKey: SETUP_STATUS_QUERY_KEY })
-  }
-
-  return {
-    invalidateSetupStatus,
-    updateSetupStatus,
-    refetchSetupStatus,
-  }
+  return () =>
+    queryClient.setQueryData<SetupStatus>(SETUP_STATUS_QUERY_KEY, {
+      completed: true,
+    })
 }

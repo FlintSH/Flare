@@ -1,6 +1,16 @@
 #!/bin/sh
 
-# Function to wait for database
+# Connect without migrating, so a failing migration stops the start with its
+# own error instead of being retried as an unreachable database. A missing
+# database counts as reachable: migrate deploy creates it.
+database_reachable() {
+    output=$(echo 'SELECT 1' | pnpm prisma db execute --stdin --schema prisma/schema.prisma 2>&1) && return 0
+    case $output in
+        *P1003*) return 0 ;;
+    esac
+    return 1
+}
+
 wait_for_db() {
     echo "Waiting for database to be ready..."
     max_retries=30
@@ -8,7 +18,7 @@ wait_for_db() {
     
     while [ $counter -lt $max_retries ]
     do
-        if pnpm prisma migrate deploy 2>/dev/null; then
+        if database_reachable; then
             echo "Database is ready!"
             return 0
         fi
@@ -18,46 +28,35 @@ wait_for_db() {
         counter=$((counter + 1))
     done
     
-    echo "Could not connect to database after $max_retries attempts"
+    printf '%s\n' "$output" >&2
+    echo "Could not connect to database after $max_retries attempts" >&2
     return 1
 }
 
 echo "Starting initialization..."
 
-# Wait for database and run migrations
 if ! wait_for_db; then
-    echo "Failed to initialize database"
+    echo "Failed to initialize database" >&2
     exit 1
 fi
 
-# Run migrations
 echo "Running database migrations..."
 if ! pnpm prisma migrate deploy; then
-    echo "Failed to run migrations"
+    echo "Failed to run migrations" >&2
     exit 1
 fi
 
-# Generate Prisma Client if needed
-echo "Ensuring Prisma Client is generated..."
-if ! pnpm prisma generate; then
-    echo "Failed to generate Prisma Client"
-    exit 1
-fi
-
-# Run config migrations
 echo "Running config migrations..."
 if ! node /app/scripts/migrate-config.js; then
-    echo "Failed to run config migrations"
+    echo "Failed to run config migrations" >&2
     exit 1
 fi
 
-# Run password migrations
 echo "Running password migrations..."
 if ! node /app/scripts/hash-file-passwords.js; then
-    echo "Failed to run password migrations"
+    echo "Failed to run password migrations" >&2
     exit 1
 fi
 
-# Start the application
 echo "Starting the application..."
 exec pnpm start

@@ -19,7 +19,7 @@ Tags, automatic matching rules, and tag names belong to your account. They are n
 2. Search for an existing tag, or type a name to create one.
 3. Wait for the current assignments to load, then select the tags you want. Changes save as you make them.
 
-Tag names can be up to 40 characters. Use short names that will make sense when you see them on a file card, such as **Invoices**, **Design**, or **Reference**.
+Tag names can be up to 40 characters. Use short names that will make sense when you see them on a file card, such as **Invoices**, **Design**, or **Reference**. Flare trims the ends of a name and saves each run of spaces, tabs, or line breaks as one space. Names that differ only in letter case are the same tag: with **Work** saved, creating **work** reports that you already have a tag with that name. The search in **Edit tags** compares names the same way, spaces included: `Work ` with a trailing space, or `work  notes` with two spaces, lists the existing tag. Earlier versions showed nothing for the first and offered to create the second again.
 
 <Screenshot src="/screenshots/timeline/library-tags.webp" alt="Edit tags showing Favorites unchecked after another client removed it from a selected file and the library was refreshed" caption="The editor reads current assignments before showing checked, unchecked, or mixed tags." />
 
@@ -39,7 +39,7 @@ This works well after a one-off upload batch. For a recurring source, let an upl
 
 ## Find files by tag
 
-Choose **Tags** beside the library filters, or click a tag on a file. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
+Choose **Tags** beside the library filters, or click a tag on a file. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest when your role can edit tags. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.
@@ -88,7 +88,7 @@ Removing an automatically assigned tag from a file is remembered. Background wor
 
 Changing or turning off a rule does not remove tags already assigned. If you want to reorganize old files, adjust their labels explicitly.
 
-If automatic tagging temporarily fails after OCR, Flare keeps the extracted text and retries the pending tag work in the background, including after a restart. Opening the saved extracted text also retries pending tags without repeating OCR.
+If automatic tagging temporarily fails after OCR, Flare keeps the extracted text and retries the pending tag work in the background about a minute later, including after a restart. Opening the saved extracted text also retries pending tags without repeating OCR.
 
 ## Apply tags with an upload profile
 

@@ -1,39 +1,27 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
-import { securityRoute } from '@/lib/auth/security/http'
+import { securityRoutes } from '@/lib/auth/security/http'
 import {
   authenticationOptions,
-  passkeyCookieName,
+  passkeyChallengeCookie,
 } from '@/lib/auth/security/passkeys'
-import {
-  relyingParty,
-  requestIp,
-  securityLimit,
-  validateSecurityOrigin,
-} from '@/lib/auth/security/shared'
+import { securityLimit } from '@/lib/auth/security/shared'
+import { refuseApiCredentials } from '@/lib/http/access'
+import { assertSameOrigin } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { clientIp } from '@/lib/security/client-ip'
 
-async function handlePOST(req: Request) {
-  return securityRoute(async () => {
-    validateSecurityOrigin(req)
-    await securityLimit(`passkey-options:${requestIp(req.headers)}`, 100)
-    const { binding, ...result } = await authenticationOptions()
-    const response = NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
-    })
-    response.cookies.set(passkeyCookieName(), binding, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: relyingParty().origin.startsWith('https:'),
-      path: '/',
-      maxAge: 300,
-    })
-    return response
-  })
-}
+const api = routes('/api/auth/passkeys/options', securityRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/passkeys/options',
-  })(req)
-}
+export const POST = api(async (request) => {
+  refuseApiCredentials(request)
+  assertSameOrigin(request)
+  await securityLimit(
+    `passkey-options:${clientIp(request.headers) ?? 'unknown'}`,
+    100
+  )
+  const { binding, ...result } = await authenticationOptions()
+  const response = NextResponse.json(result)
+  response.cookies.set(passkeyChallengeCookie(binding))
+  return response
+})

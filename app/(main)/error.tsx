@@ -10,10 +10,10 @@ import { Button } from '@/components/ui/button'
 // No footer: this boundary renders when loading the page failed, so it does
 // not depend on instance settings that may be what failed.
 export default function Error({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }) {
   return (
     <PublicState
@@ -22,7 +22,7 @@ export default function Error({
       description="We couldn’t load this page. Try again or return to your files."
     >
       <div className="flex flex-col gap-3">
-        <Button className="h-11 w-full" onClick={() => reset()}>
+        <Button className="h-11 w-full" onClick={() => retry()}>
           <RefreshCcw aria-hidden="true" />
           Try again
         </Button>

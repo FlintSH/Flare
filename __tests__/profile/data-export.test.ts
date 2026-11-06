@@ -1,3 +1,4 @@
+import { GET as PROGRESS } from '@/app/api/profile/export/progress/route'
 import { GET } from '@/app/api/profile/export/route'
 import { randomBytes } from 'node:crypto'
 import { once } from 'node:events'
@@ -22,7 +23,7 @@ import yauzl from 'yauzl'
 
 import { configureAuditWriter } from '@/lib/audit'
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
-import { getProgress } from '@/lib/utils'
+import { newExportId } from '@/lib/users/export-id'
 
 type ExportFile = {
   name: string
@@ -40,6 +41,7 @@ const state = vi.hoisted(() => ({
   files: [] as ExportFile[],
   provider: undefined as unknown,
   localStreams: [] as import('node:fs').ReadStream[],
+  sessionUser: 'export-owner',
 }))
 
 // Record local read streams, so a test can check they are closed.
@@ -57,8 +59,12 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({ user: { id: 'export-owner' }, response: null }),
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({ id: 'export-owner' }),
+  requireSession: async () => ({
+    session: { user: { id: state.sessionUser } },
+    user: { id: state.sessionUser },
+  }),
 }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
@@ -153,9 +159,31 @@ async function unzip(archive: Buffer) {
   return entries
 }
 
-function exportRequest() {
-  return GET(new Request('https://flare.test/api/profile/export'))
+function exportRequest(id?: string) {
+  return GET(
+    new Request(`https://flare.test/api/profile/export${id ? `?id=${id}` : ''}`)
+  )
 }
+
+function progressRequest(id: string, signal?: AbortSignal) {
+  return PROGRESS(
+    new Request(`https://flare.test/api/profile/export/progress?id=${id}`, {
+      signal,
+    })
+  )
+}
+
+/** The percentages a progress stream reported, once it has ended. */
+async function reported(progress: Response) {
+  expect(progress.status).toBe(200)
+  return (await progress.text())
+    .split('\n\n')
+    .filter(Boolean)
+    .map((event) => JSON.parse(event.replace(/^data: /, '')).progress as number)
+}
+
+const ascending = (values: number[]) =>
+  values.every((value, index) => index === 0 || values[index - 1] <= value)
 
 const originalCwd = process.cwd()
 let root: string
@@ -169,6 +197,7 @@ beforeEach(async () => {
   configureAuditWriter(async () => {})
   state.files = []
   state.localStreams = []
+  state.sessionUser = 'export-owner'
 })
 
 afterEach(async () => {
@@ -211,7 +240,9 @@ describe('profile data export from S3 storage', () => {
       exportFile('third.bin', 'uploads/o/3/third.bin'),
     ]
 
-    const response = await exportRequest()
+    const id = newExportId()
+    const response = await exportRequest(id)
+    const progress = await progressRequest(id)
     const entries = await unzip(Buffer.from(await response.arrayBuffer()))
 
     expect(entries.get('files/2026-10-01/first.bin')).toEqual(
@@ -223,18 +254,30 @@ describe('profile data export from S3 storage', () => {
     expect(entries.get('files/2026-10-01/third.bin')).toEqual(
       objects['uploads/o/3/third.bin']
     )
-    expect(JSON.parse(entries.get('user-data.json')!.toString())).toMatchObject(
-      {
-        id: 'export-owner',
-        files: [
-          { name: 'first.bin' },
-          { name: 'second.bin' },
-          { name: 'third.bin' },
-        ],
-      }
-    )
-    await delay(10)
-    expect(getProgress('export-owner')).toBe(100)
+    const userData = JSON.parse(entries.get('user-data.json')!.toString())
+    expect(userData).toMatchObject({
+      id: 'export-owner',
+      files: [
+        { name: 'first.bin' },
+        { name: 'second.bin' },
+        { name: 'third.bin' },
+      ],
+    })
+    // The layout the account guide documents.
+    expect(Object.keys(userData)).toEqual([
+      'id',
+      'name',
+      'email',
+      'createdAt',
+      'updatedAt',
+      'files',
+      'shortenedUrls',
+    ])
+    const percentages = await reported(progress)
+    expect(percentages.at(-1)).toBe(100)
+    expect(ascending(percentages)).toBe(true)
+    // A finished export is forgotten, so nothing is left to report.
+    expect(await reported(await progressRequest(id))).toEqual([])
   })
 
   it('gives files that share a name and day separate archive entries', async () => {
@@ -304,10 +347,12 @@ describe('profile data export from S3 storage', () => {
     state.provider = provider
     state.files = [exportFile('broken.bin', 'uploads/o/1/broken.bin')]
 
-    const response = await exportRequest()
+    const id = newExportId()
+    const response = await exportRequest(id)
+    const progress = await progressRequest(id)
     await expect(response.arrayBuffer()).rejects.toThrow()
-    await delay(20)
-    expect(getProgress('export-owner')).toBe(0)
+    expect(await reported(progress)).not.toContain(100)
+    expect(await reported(await progressRequest(id))).toEqual([])
   })
 
   it('stops reading storage when the download is cancelled', async () => {
@@ -328,7 +373,9 @@ describe('profile data export from S3 storage', () => {
       exportFile('later.bin', 'uploads/o/2/later.bin'),
     ]
 
-    const response = await exportRequest()
+    const id = newExportId()
+    const response = await exportRequest(id)
+    const progress = await progressRequest(id)
     const reader = response.body!.getReader()
     for (let received = 0; received < 256 * 1024;) {
       const { value } = await reader.read()
@@ -339,7 +386,8 @@ describe('profile data export from S3 storage', () => {
 
     expect(source?.destroyed).toBe(true)
     expect(opened).toEqual(['uploads/o/1/large.bin'])
-    expect(getProgress('export-owner')).toBe(0)
+    expect(await reported(progress)).not.toContain(100)
+    expect(await reported(await progressRequest(id))).toEqual([])
   })
 
   it('stops when the client leaves before reading any of the response', async () => {
@@ -361,20 +409,23 @@ describe('profile data export from S3 storage', () => {
 
     // Leaving before the response starts, as a reload can, means nothing
     // ever reads or cancels the body. Only the request signal reports it.
+    const id = newExportId()
     const client = new AbortController()
     const response = await GET(
-      new Request('https://flare.test/api/profile/export', {
+      new Request(`https://flare.test/api/profile/export?id=${id}`, {
         signal: client.signal,
       })
     )
     expect(response.status).toBe(200)
+    const progress = await progressRequest(id)
     await delay(20)
     client.abort()
     await delay(50)
 
     expect(source?.destroyed).toBe(true)
     expect(opened).toEqual(['uploads/o/1/large.bin'])
-    expect(getProgress('export-owner')).toBe(0)
+    expect(await reported(progress)).not.toContain(100)
+    expect(await reported(await progressRequest(id))).toEqual([])
   })
 
   it('reads one storage object at a time, at the pace of the download', async () => {
@@ -482,7 +533,9 @@ describe('profile data export from local storage', () => {
       exportFile('later.bin', 'uploads/o/1/later.bin'),
     ]
 
-    const response = await exportRequest()
+    const id = newExportId()
+    const response = await exportRequest(id)
+    const progress = await progressRequest(id)
     const reader = response.body!.getReader()
     for (let received = 0; received < 256 * 1024;) {
       const { value } = await reader.read()
@@ -493,7 +546,130 @@ describe('profile data export from local storage', () => {
 
     expect(state.localStreams).toHaveLength(1)
     expect(state.localStreams[0].closed).toBe(true)
-    expect(getProgress('export-owner')).toBe(0)
+    expect(await reported(progress)).not.toContain(100)
+    expect(await reported(await progressRequest(id))).toEqual([])
+  })
+})
+
+describe('following export progress', () => {
+  /** An export of `count` small objects, each a few bytes. */
+  function smallExport(count: number) {
+    const objects: Record<string, Buffer> = {}
+    state.files = []
+    for (let index = 1; index <= count; index++) {
+      objects[`uploads/o/${index}/file-${index}.txt`] = Buffer.from(`${index}`)
+      state.files.push(
+        exportFile(`file-${index}.txt`, `uploads/o/${index}/file-${index}.txt`)
+      )
+    }
+    state.provider = s3Provider(objects).provider
+  }
+
+  it('keeps two exports by one account apart', async () => {
+    // Incompressible and far larger than the response buffers, so the second
+    // export can't finish while nobody reads it.
+    state.files = [exportFile('large.bin', 'uploads/o/1/large.bin')]
+    state.provider = s3Provider({
+      'uploads/o/1/large.bin': randomBytes(4 * 1024 * 1024),
+    }).provider
+    const first = newExportId()
+    const second = newExportId()
+    const firstResponse = await exportRequest(first)
+    const secondResponse = await exportRequest(second)
+    const firstProgress = await progressRequest(first)
+    const secondProgress = await progressRequest(second)
+
+    await firstResponse.arrayBuffer()
+    await secondResponse.body!.cancel()
+
+    expect((await reported(firstProgress)).at(-1)).toBe(100)
+    // The first export finishing never reaches the second one's progress.
+    expect(await reported(secondProgress)).not.toContain(100)
+  })
+
+  it('starts the next export from its own progress, not a leftover 100', async () => {
+    smallExport(2)
+    // Nobody follows this export, so nothing reads its final 100.
+    const first = newExportId()
+    await (await exportRequest(first)).arrayBuffer()
+    expect(await reported(await progressRequest(first))).toEqual([])
+
+    const next = newExportId()
+    expect(await reported(await progressRequest(next))).toEqual([])
+    const nextResponse = await exportRequest(next)
+    const nextProgress = await progressRequest(next)
+    await nextResponse.arrayBuffer()
+    const percentages = await reported(nextProgress)
+
+    expect(percentages[0]).toBeLessThan(100)
+    expect(percentages.at(-1)).toBe(100)
+  })
+
+  it('reports an export only to the account that started it', async () => {
+    smallExport(1)
+    const id = newExportId()
+    const response = await exportRequest(id)
+
+    state.sessionUser = 'someone-else'
+    expect(await reported(await progressRequest(id))).toEqual([])
+
+    state.sessionUser = 'export-owner'
+    const progress = await progressRequest(id)
+    await response.arrayBuffer()
+    expect((await reported(progress)).at(-1)).toBe(100)
+  })
+
+  it('ends the progress stream when its client disconnects', async () => {
+    let source: Readable | undefined
+    state.provider = s3Provider({}, () => {
+      source = new Readable({
+        read() {
+          setTimeout(() => this.push(randomBytes(64 * 1024)), 2)
+        },
+      })
+      return source
+    }).provider
+    state.files = [exportFile('large.bin', 'uploads/o/1/large.bin')]
+    const id = newExportId()
+    const response = await exportRequest(id)
+    const client = new AbortController()
+    const progress = await progressRequest(id, client.signal)
+    await delay(20)
+
+    client.abort()
+    // The stream ends although the export is still running.
+    expect(await reported(progress)).not.toContain(100)
+
+    await response.body!.cancel()
+    await delay(20)
+    expect(source?.destroyed).toBe(true)
+  })
+
+  it('requires the id of the export to follow', async () => {
+    const response = await PROGRESS(
+      new Request('https://flare.test/api/profile/export/progress')
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Missing export id.' })
+  })
+
+  it('refuses a malformed export id before reading anything', async () => {
+    const { provider, opened } = s3Provider({
+      'uploads/o/1/kept.txt': Buffer.from('kept'),
+    })
+    state.provider = provider
+    state.files = [exportFile('kept.txt', 'uploads/o/1/kept.txt')]
+
+    for (const id of ['too-short', 'not/a/valid/export/id', 'x'.repeat(65)]) {
+      const download = await exportRequest(encodeURIComponent(id))
+      expect(download.status).toBe(400)
+      expect(await download.json()).toEqual({ error: 'Invalid export id.' })
+      const progress = await progressRequest(encodeURIComponent(id))
+      expect(progress.status).toBe(400)
+      expect(await progress.json()).toEqual({ error: 'Invalid export id.' })
+    }
+    expect(opened).toEqual([])
   })
 })
 

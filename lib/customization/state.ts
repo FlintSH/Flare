@@ -1,3 +1,5 @@
+import { HttpError } from '@/lib/http/errors'
+
 import {
   type AppearanceCommand,
   type AppearanceDocument,
@@ -7,12 +9,10 @@ import {
   customizationSchema,
 } from './schema'
 
-export class CustomizationError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class CustomizationError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
+    this.name = 'CustomizationError'
   }
 }
 

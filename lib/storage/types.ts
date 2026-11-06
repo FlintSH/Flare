@@ -1,4 +1,4 @@
-import type { Writable as NodeWritable, Readable } from 'node:stream'
+import type { Readable } from 'node:stream'
 
 import type { StorageTarget } from './targets'
 
@@ -26,12 +26,6 @@ export interface StorageProvider {
     mimeType: string,
     signal?: AbortSignal
   ): Promise<{ size: number }>
-  uploadChunkedFile(
-    chunksDir: string,
-    targetPath: string,
-    mimeType: string
-  ): Promise<void>
-  createWriteStream(path: string, mimeType: string): Promise<NodeWritable>
   deleteFile(path: string): Promise<void>
   getFileStream(
     path: string,
@@ -43,9 +37,7 @@ export interface StorageProvider {
    * through ranged {@link getFileStream} requests instead.
    */
   openRandomAccess?(path: string): Promise<RandomAccessFile>
-  getFileUrl(path: string): Promise<string>
   getFileSize(path: string): Promise<number>
-  renameFolder(oldPath: string, newPath: string): Promise<void>
   initializeMultipartUpload(path: string, mimeType: string): Promise<string>
   getPresignedPartUploadUrl(
     path: string,

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { newFilePasswordSchema } from '@/lib/files/password-policy'
+import { HttpError } from '@/lib/http/errors'
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
 export const expirationSchema = z.enum([
@@ -11,38 +12,49 @@ export const expirationSchema = z.enum([
   'MONTH',
 ])
 
-/** Ignore the retired option in saved profiles, recipes and older clients. */
-export function discardLegacyCopyFormat(value: unknown) {
-  if (typeof value !== 'object' || value === null || Array.isArray(value))
-    return value
-  const { copyFormat: _copyFormat, ...options } = value as Record<
-    string,
-    unknown
-  >
-  return options
-}
+export const PROFILE_NAME_MAX_LENGTH = 80
+/** The most tags a profile, or one upload, can select. */
+export const PROFILE_TAG_LIMIT = 20
 
-export const uploadProfileOptionsSchema = z.preprocess(
-  discardLegacyCopyFormat,
-  z
-    .object({
-      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-      expiration: expirationSchema.optional(),
-      expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
-      randomizeFileUrls: z.boolean().optional(),
-      shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
-      tagIds: z.array(z.string().min(1).max(100)).max(20).optional(),
-    })
-    .strict()
-)
+/**
+ * Fields this version doesn't know, such as the retired copy format, are left
+ * out; a known field with a bad value is not.
+ */
+export const uploadProfileOptionsSchema = z.object({
+  visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+  expiration: expirationSchema.optional(),
+  expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
+  randomizeFileUrls: z.boolean().optional(),
+  shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
+  tagIds: z.array(z.string().min(1).max(100)).max(PROFILE_TAG_LIMIT).optional(),
+})
 
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
-export const uploadProfileInputSchema = z
-  .object({
-    name: z.string().trim().min(1).max(80),
-    options: uploadProfileOptionsSchema,
-  })
-  .strict()
+
+/**
+ * Any other field is refused, except the retired copy format: older clients
+ * and recipes still send it, and requests ignore it.
+ */
+export function requestFields<Shape extends z.ZodRawShape>(shape: Shape) {
+  const fields = z.strictObject(shape)
+  return fields
+    .extend({ copyFormat: z.unknown().optional() })
+    .transform((value) => {
+      const { copyFormat: _retired, ...sent } = value as {
+        copyFormat?: unknown
+      }
+      return sent as z.output<typeof fields>
+    })
+}
+
+export const uploadProfileInputSchema = z.strictObject({
+  name: z.string().trim().min(1).max(PROFILE_NAME_MAX_LENGTH),
+  options: requestFields(uploadProfileOptionsSchema.shape),
+})
+export type UploadProfileInput = z.infer<typeof uploadProfileInputSchema>
+
+/** The largest recipe file the importer reads, and the largest create request. */
+export const RECIPE_MAX_BYTES = 64 * 1024
 
 export const uploadRecipeSchema = z
   .object({
@@ -51,6 +63,26 @@ export const uploadRecipeSchema = z
     profile: uploadProfileInputSchema,
   })
   .strict()
+export type UploadRecipe = z.infer<typeof uploadRecipeSchema>
+
+export function uploadRecipe({
+  name,
+  options,
+}: UploadProfileInput): UploadRecipe {
+  return {
+    format: 'flare-upload-profile',
+    version: 1,
+    profile: { name, options },
+  }
+}
+
+export function newProfileSchema(body: unknown): z.ZodType<UploadProfileInput> {
+  const recipe =
+    typeof body === 'object' && body !== null && 'format' in body && body.format
+  return recipe
+    ? uploadRecipeSchema.transform((recipe) => recipe.profile)
+    : uploadProfileInputSchema
+}
 
 export type UploadProfileView = {
   id: string
@@ -59,16 +91,16 @@ export type UploadProfileView = {
   updatedAt: string
 }
 
-export const uploadRequestOptionsSchema = z.preprocess(
-  discardLegacyCopyFormat,
-  uploadProfileOptionsSchema.out
-    .extend({
-      profileId: z.string().min(1).max(100).nullable().optional(),
-      folderId: z.string().min(1).max(128).nullable().optional(),
-      password: newFilePasswordSchema.nullable().optional(),
-      expiresAt: isoDateTimeWithOffset.nullable().optional(),
-    })
-    .strict()
+export const uploadRequestOptionFields = {
+  ...uploadProfileOptionsSchema.shape,
+  profileId: z.string().min(1).max(100).nullable().optional(),
+  folderId: z.string().min(1).max(128).nullable().optional(),
+  password: newFilePasswordSchema.nullable().optional(),
+  expiresAt: isoDateTimeWithOffset.nullable().optional(),
+}
+
+export const uploadRequestOptionsSchema = requestFields(
+  uploadRequestOptionFields
 )
 
 export type UploadRequestOptions = z.infer<typeof uploadRequestOptionsSchema>
@@ -92,7 +124,6 @@ export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
   tagIds: [],
 }
 
-/** Omission inherits; DISABLED explicitly turns expiration off. Durations use UTC. */
 export function expirationDate(
   expiration: Required<UploadProfileOptions>['expiration'],
   now: Date
@@ -107,7 +138,6 @@ export function expirationDate(
   return date.toISOString()
 }
 
-/** Pure precedence contract shared by transport adapters and contract tests. */
 export function mergeUploadOptions(
   account: UploadProfileOptions,
   profile: UploadProfileOptions,
@@ -127,7 +157,7 @@ export function mergeUploadOptions(
       ? request.expiresAt
       : expirationDate(merged.expiration, now)
   if (expiresAt && new Date(expiresAt) <= now)
-    throw new Error('Expiration must be in the future.')
+    throw new HttpError(400, 'Expiration must be in the future.')
   return {
     ...merged,
     profileId: request.profileId ?? null,

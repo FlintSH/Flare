@@ -112,7 +112,8 @@ describe('protected shared-folder links', () => {
     const data = await getSharedFolder(token)
     expect(data!.files[0]).toMatchObject({
       name: 'Password-protected file',
-      urlPath: opaquePath,
+      href: opaquePath,
+      rawUrl: null,
       mimeType: null,
       size: null,
       hasPassword: true,
@@ -225,8 +226,41 @@ describe('protected shared-folder links', () => {
     const data = await getSharedFolder(token)
     expect(data!.files[0]).toMatchObject({
       name: file.name,
-      urlPath: '/recipient-slug/Quarterly%20Budget%20FY26.pdf',
+      href: '/recipient-slug/Quarterly%20Budget%20FY26.pdf',
+      rawUrl: '/recipient-slug/Quarterly%20Budget%20FY26.pdf/raw',
       hasPassword: false,
     })
+  })
+
+  it('links files from earlier builds the way the library spells them', async () => {
+    // Earlier builds could keep the original name in a file's URL.
+    const urlPath = '/recipient-slug/Q&A notes #2.png'
+    const page = '/recipient-slug/Q&A%20notes%20%232.png'
+    mocks.folder.mockResolvedValueOnce({
+      name: 'Marketing assets',
+      files: [{ ...file, urlPath, mimeType: 'image/png', password: null }],
+      _count: { files: 1 },
+    })
+    const html = renderToStaticMarkup(
+      await SharedFolderPage({
+        params: Promise.resolve({ token }),
+        searchParams: Promise.resolve({}),
+      })
+    )
+    // The rendered attributes, where React writes & as &amp;.
+    expect(html).toContain('href="/recipient-slug/Q&amp;A%20notes%20%232.png"')
+    expect(html).toContain(
+      'src="/recipient-slug/Q&amp;A%20notes%20%232.png/raw"'
+    )
+
+    mocks.file.mockResolvedValueOnce({ ...file, urlPath })
+    await expect(openFile(password)).rejects.toThrow('REDIRECT:')
+    const destination = new URL(
+      mocks.redirect.mock.calls[0][0],
+      'https://flare.test'
+    )
+    expect(destination.pathname).toBe(page)
+    expect(decodeURIComponent(destination.pathname)).toBe(urlPath)
+    expect(destination.searchParams.get('password')).toBe(password)
   })
 })

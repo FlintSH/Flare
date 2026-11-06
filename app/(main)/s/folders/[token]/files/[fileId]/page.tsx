@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 
 import {
@@ -11,11 +10,15 @@ import {
 import { PublicState } from '@/components/auth/public-state'
 import { Footer } from '@/components/layout/footer'
 
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
+import { showsShareFooter } from '@/lib/customization/sharing'
+import { checkPageAccess, findFile } from '@/lib/files/delivery'
+import {
+  fileUrls,
+  sharedFolderFileUrl,
+  sharedFolderUrl,
+  withPassword,
+} from '@/lib/files/urls'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,50 +47,34 @@ export default async function SharedFolderFilePage({
     notFound()
   }
 
-  // Recheck the current share and direct membership on every request, including
-  // password submissions. An old tile must not grant access after a move or revoke.
-  const file = await prisma.file.findFirst({
-    where: {
-      id: fileId,
-      visibility: 'PUBLIC',
-      folder: { shareToken: token },
-    },
-    select: {
+  // Looked up again on every request, including password submissions, so an
+  // old tile can't grant access after a move or revoke.
+  const file = await findFile(
+    { id: fileId, sharedFolder: token },
+    {
       id: true,
       userId: true,
       visibility: true,
       password: true,
       urlPath: true,
       folder: { select: { name: true } },
-    },
-  })
+    }
+  )
   if (!file) notFound()
 
-  const access = await checkFileAccess(
-    file,
-    await getAccessSession(),
-    providedPassword,
-    { requester: requestIp(await headers()) }
-  )
+  const { access } = await checkPageAccess(file, providedPassword)
   if (access.allowed) {
     // Only reveal the canonical filename after access succeeds. The existing
     // viewer independently applies file access checks again at the destination.
-    const urlPath = file.urlPath
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/')
-    const query = providedPassword
-      ? `?${new URLSearchParams({ password: providedPassword })}`
-      : ''
-    redirect(`${urlPath}${query}`)
+    redirect(withPassword(fileUrls(file).page, providedPassword))
   }
   if (access.reason === 'private') notFound()
 
   const config = await getConfig()
-  const showFooter =
-    config.settings.customization.published.sharing.showFooter ??
+  const showFooter = showsShareFooter(
+    config.settings.customization.published,
     config.settings.general.credits.showFooter
-  const opaquePath = `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}`
+  )
 
   return (
     <PublicState
@@ -96,13 +83,13 @@ export default async function SharedFolderFilePage({
       footer={showFooter ? <Footer /> : undefined}
       backLink={
         file.folder && {
-          href: `/s/folders/${encodeURIComponent(token)}`,
+          href: sharedFolderUrl(token),
           label: file.folder.name,
         }
       }
     >
       <FilePasswordForm
-        action={opaquePath}
+        action={sharedFolderFileUrl(token, fileId)}
         problem={filePasswordProblem(access)}
       />
     </PublicState>

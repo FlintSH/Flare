@@ -96,7 +96,9 @@ describe('appearance permission boundary', () => {
     mocks.session.mockResolvedValue({
       user: { id: 'user', permissions: ['files.read', 'appearance.personal'] },
     })
-    const visible = await (await GET()).json()
+    const visible = await (
+      await GET(new Request('http://localhost/api/customization'))
+    ).json()
     expect(visible.data).toEqual({ published: DEFAULT_APPEARANCE })
     const response = await POST(
       new Request('http://flare.test/api/customization', {

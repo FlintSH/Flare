@@ -37,10 +37,10 @@ import {
   PreferencesPanel,
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
-import { numberFieldClassName } from '@/components/settings/form-styles'
 import { InstanceVersion } from '@/components/settings/instance-version'
-import { SaveBar } from '@/components/settings/save-bar'
+import { numberFieldClassName } from '@/components/shared/form-styles'
 import { Icons } from '@/components/shared/icons'
+import { SaveBar } from '@/components/shared/save-bar'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -62,9 +62,17 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { apiRequest } from '@/lib/client/request'
 import type { FlareConfig } from '@/lib/config'
+import {
+  FAVICON_TYPE,
+  faviconProblem,
+  faviconUrl,
+} from '@/lib/customization/favicon'
 import type { CustomizationState } from '@/lib/customization/schema'
 import { getDocumentationUrl } from '@/lib/documentation'
+import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
@@ -104,6 +112,14 @@ type SettingValue<T extends keyof FlareConfig['settings']> = Partial<
 const isSafeUrl = (url: string | null): url is string => {
   if (!url) return false
   return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
+}
+
+function ChangeIndicator() {
+  return (
+    <div className="flex items-center">
+      <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
+    </div>
+  )
 }
 
 export function InstanceSettings({
@@ -182,41 +198,38 @@ export function InstanceSettings({
 
   const saveChanges = async () => {
     const snapshot = structuredClone(workingConfig)
+    let saved = savedConfig
     try {
       setIsSaving(true)
       if (pendingFaviconFile) {
         const formData = new FormData()
         formData.append('file', pendingFaviconFile)
-        const upload = await fetch('/api/settings/favicon', {
-          method: 'POST',
-          body: formData,
-        })
-        if (!upload.ok) throw new Error('Failed to upload favicon')
-        snapshot.settings.appearance.favicon = '/api/favicon'
-        setWorkingConfig((previous) => ({
-          ...previous,
+        // The upload saved the icon's new address; record it, never send it.
+        const { url: favicon } = await apiRequest<{ url: string }>(
+          '/api/settings/favicon',
+          { body: formData, fallback: 'Failed to upload favicon', whole: true }
+        )
+        const withFavicon = (config: FlareConfig): FlareConfig => ({
+          ...config,
           settings: {
-            ...previous.settings,
-            appearance: {
-              ...previous.settings.appearance,
-              favicon: '/api/favicon',
-            },
+            ...config.settings,
+            appearance: { ...config.settings.appearance, favicon },
           },
-        }))
+        })
+        snapshot.settings.appearance.favicon = favicon
+        saved = withFavicon(saved)
+        setSavedConfig(withFavicon)
+        setWorkingConfig(withFavicon)
         setPendingFaviconFile(null)
         setFaviconPreviewUrl(null)
       }
-      const settings = changedFields(savedConfig.settings, snapshot.settings)
+      const settings = changedFields(saved.settings, snapshot.settings)
       if (settings !== undefined) {
-        const response = await fetch('/api/settings', {
+        await apiRequest('/api/settings', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ settings }),
+          body: { settings },
+          fallback: 'Settings could not be saved.',
         })
-        if (!response.ok) {
-          const body = await response.json().catch(() => null)
-          throw new Error(body?.error || 'Settings could not be saved.')
-        }
         // Appearance publication and email own their own saves. Preserve any
         // changes they completed while the general settings request was running.
         setSavedConfig((previous) => ({
@@ -230,17 +243,11 @@ export function InstanceSettings({
       }
       if (inviteAccessChanged) {
         const requested = everyoneCanInvite
-        const response = await fetch('/api/settings/invites', {
+        await apiRequest('/api/settings/invites', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ everyoneCanInvite: requested }),
+          body: { everyoneCanInvite: requested },
+          fallback: 'Who can create invites could not be saved.',
         })
-        if (!response.ok) {
-          const body = await response.json().catch(() => null)
-          throw new Error(
-            body?.error || 'Who can create invites could not be saved.'
-          )
-        }
         setSavedEveryoneCanInvite(requested)
       }
       router.refresh()
@@ -378,6 +385,7 @@ export function InstanceSettings({
   const hasFaviconChanged = useCallback(() => {
     return pendingFaviconFile !== null
   }, [pendingFaviconFile])
+  const savedFavicon = faviconUrl(workingConfig.settings.appearance.favicon)
 
   const getFieldClasses = (
     section: keyof FlareConfig['settings'],
@@ -386,12 +394,6 @@ export function InstanceSettings({
     const isChanged = isFieldChanged(section, fieldPath)
     return isChanged ? 'border-primary ring-1 ring-primary bg-primary/5' : ''
   }
-
-  const ChangeIndicator = () => (
-    <div className="flex items-center">
-      <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
-    </div>
-  )
 
   const sections = [
     {
@@ -1103,7 +1105,7 @@ export function InstanceSettings({
                         <Label>OIDC auto-login</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Skip the login form and redirect straight to the
-                          provider. Visit <code>/auth/login?local=1</code> to
+                          provider. Visit <code>{LOCAL_SIGN_IN_PATH}</code> to
                           reach the password login if you get locked out.
                         </p>
                       </div>
@@ -1632,6 +1634,7 @@ export function InstanceSettings({
             <div className="space-y-6">
               <CustomizationStudio
                 initialState={initialConfig.settings.customization}
+                creditsFooter={savedConfig.settings.general.credits.showFooter}
                 recovery={recovery}
                 onStateChange={handleStudioStateChange}
                 onDirtyChange={setStudioDirty}
@@ -1650,15 +1653,14 @@ export function InstanceSettings({
                   <div>
                     <div className="flex items-center justify-center w-full">
                       <label className="relative flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 transition-colors hover:border-primary hover:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background">
-                        {(workingConfig?.settings.appearance.favicon ||
-                          faviconPreviewUrl) && (
+                        {(savedFavicon || faviconPreviewUrl) && (
                           <div className="absolute top-4 left-4">
                             <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                               <img
                                 src={
                                   isSafeUrl(faviconPreviewUrl)
                                     ? DOMPurify.sanitize(faviconPreviewUrl)
-                                    : '/api/favicon'
+                                    : (savedFavicon ?? undefined)
                                 }
                                 alt="Favicon"
                                 className="w-6 h-6"
@@ -1685,25 +1687,16 @@ export function InstanceSettings({
                           disabled={isSaving}
                           className="sr-only"
                           aria-label="Upload favicon"
-                          accept="image/png"
+                          accept={FAVICON_TYPE}
                           onChange={async (e) => {
                             const file = e.target.files?.[0]
                             if (!file) return
 
-                            if (file.size > 1024 * 1024) {
+                            const problem = faviconProblem(file)
+                            if (problem) {
                               toast({
-                                title: 'File too large',
-                                description:
-                                  'Please upload a file smaller than 1 MB.',
-                                variant: 'destructive',
-                              })
-                              return
-                            }
-
-                            if (file.type !== 'image/png') {
-                              toast({
-                                title: 'Invalid file type',
-                                description: 'Please upload a PNG image file.',
+                                title: problem.title,
+                                description: problem.message,
                                 variant: 'destructive',
                               })
                               return
@@ -1770,7 +1763,7 @@ export function InstanceSettings({
                   and packs are published separately above.
                 </p>
               </details>
-              {can('administrator') && (
+              {can(CUSTOM_STYLES_PERMISSION) && (
                 <details
                   id="advanced-styles"
                   className="scroll-mt-28 rounded-xl border bg-card p-5"
@@ -1933,8 +1926,6 @@ export function InstanceSettings({
 
       {hasChanges &&
         createPortal(
-          // The save bar every editor uses, floating while any section has
-          // unsaved instance settings.
           <SaveBar
             role="status"
             tone="unsaved"

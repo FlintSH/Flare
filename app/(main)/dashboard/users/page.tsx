@@ -1,25 +1,17 @@
-import { redirect } from 'next/navigation'
-
+import { canSeeInvites } from '@/components/dashboard/navigation'
 import { UsersWorkspace } from '@/components/invites/users-workspace'
 import { PageHeader } from '@/components/layout/page-header'
 
-import { getPageSession } from '@/lib/auth/page-session'
-import { hasPermission } from '@/lib/permissions/catalog'
+import { requireDashboardPage } from '../page-access'
 
 export default async function UsersPage({
   searchParams,
 }: {
   searchParams: Promise<{ tab?: string | string[] }>
 }) {
-  const session = await getPageSession()
-
-  if (!session?.user || !hasPermission(session.user, 'users.read')) {
-    redirect('/dashboard')
-  }
+  const session = await requireDashboardPage('/dashboard/users')
   const { tab } = await searchParams
-  const showInvites =
-    hasPermission(session.user, 'invites.create') ||
-    hasPermission(session.user, 'invites.manage')
+  const showInvites = canSeeInvites(session.user)
 
   return (
     <div className="container space-y-7">

@@ -1,99 +1,10 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { prisma } from '@/lib/database/prisma'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
-import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
-import { generatorProfile } from '@/lib/uploads/profiles'
+import { uploaderClientResponse } from '@/lib/uploads/uploader-clients/server'
 
-const logger = loggers.users
+const api = routes('/api/profile/sharex', {
+  failure: { message: 'Internal server error' },
+  logger: loggers.users,
+})
 
-async function handleGET(req: Request) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('tokens.manage')
-    if (permissionDenied) return permissionDenied
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { uploadToken: true, name: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const profileId = await generatorProfile(
-      session.user.id,
-      new URL(req.url).searchParams.get('profileId')
-    )
-
-    const baseUrl =
-      process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3000'
-        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
-
-    if (!baseUrl) {
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      )
-    }
-
-    const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
-
-    try {
-      new URL(normalizedBaseUrl)
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid server URL configuration' },
-        { status: 500 }
-      )
-    }
-
-    const config = {
-      Version: '15.0.0',
-      Name: 'Flare',
-      DestinationType: 'ImageUploader, TextUploader, FileUploader',
-      RequestMethod: 'POST',
-      RequestURL: `${normalizedBaseUrl}/api/files${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`,
-      Headers: {
-        Authorization: `Bearer ${user.uploadToken}`,
-      },
-      Body: 'MultipartFormData',
-      FileFormName: 'file',
-      URL: '{json:data.url}',
-      ThumbnailURL: '{json:data.url}',
-      DeletionURL: '',
-      ErrorMessage: '{json:error}',
-    }
-
-    const sanitizedName = (user.name || 'user')
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-
-    return new NextResponse(JSON.stringify(config, null, 2), {
-      headers: {
-        'Content-Disposition': `attachment; filename="${sanitizedName}-sharex.sxcu"`,
-        'Content-Type': 'application/json',
-      },
-    })
-  } catch (error) {
-    if (error instanceof UploadError) return uploadErrorResponse(error)
-    logger.error('ShareX config generation error:', error as Error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET(req: Request) {
-  return withAuditRoute(async () => handleGET(req), {
-    route: '/api/profile/sharex',
-  })(req)
-}
+export const GET = api((request) => uploaderClientResponse('sharex', request))

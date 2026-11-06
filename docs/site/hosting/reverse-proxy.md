@@ -98,7 +98,7 @@ Behind a proxy, every connection reaches Flare from the proxy itself, so Flare r
 1. `X-Real-IP`, when it holds an IPv4 or IPv6 address.
 2. Otherwise the first entry of `X-Forwarded-For`.
 
-Values that are not addresses are skipped. Brackets and ports are removed, so `[2001:db8::1]:443` counts as `2001:db8::1` and `203.0.113.9:51234` as `203.0.113.9`, and an IPv4-mapped address counts as its IPv4 address however it is written, so `::ffff:203.0.113.9`, `::ffff:cb00:7109`, and `0:0:0:0:0:ffff:203.0.113.9` all count as `203.0.113.9`. Other IPv6 addresses are compared in their standard shortest form, so `2001:0db8:0:0:0:0:0:1` and `2001:db8::1` are the same client. Requests that carry no usable address share a single limit with each other, and their sessions and login history show no address.
+Values that are not addresses are skipped. Brackets and ports are removed, so `[2001:db8::1]:443` counts as `2001:db8::1` and `203.0.113.9:51234` as `203.0.113.9`, and an IPv4-mapped address counts as its IPv4 address however it is written, so `::ffff:203.0.113.9`, `::ffff:cb00:7109`, and `0:0:0:0:0:ffff:203.0.113.9` all count as `203.0.113.9`. Other IPv6 addresses are compared in their standard shortest form, so `2001:0db8:0:0:0:0:0:1` and `2001:db8::1` are the same client. Requests that carry no usable address count as one client in each limit, except file password checks, which count them only toward the file's own limit, as [incorrect password attempts](/guide/sharing#incorrect-password-attempts) explains. The in-memory limits described below count them as `127.0.0.1`, together with any request from that address. Their sessions and login history show no address.
 
 Both headers contain whatever your proxy forwards, so configure the edge to **set or overwrite** them, as the Caddy and nginx examples above do. A widely copied nginx line, `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`, appends the real address to any `X-Forwarded-For` value the client sent, which leaves the client's own value first. Flare reads `X-Real-IP` before `X-Forwarded-For` for that reason: set `X-Real-IP` to `$remote_addr` and never pass a client-supplied one through. Clients that can reach the application port directly can send either header themselves.
 
@@ -114,6 +114,14 @@ Earlier versions read the first `X-Forwarded-For` entry before `X-Real-IP` for u
 ## Client addresses in session history
 
 [Active sessions and login history](/guide/account#login-history-and-active-sessions) record client-address and browser information when it is available. The address follows the [rules above](#client-addresses-and-rate-limits); an IP value is not independent proof of identity. Keep the application port private and have the trusted edge replace incoming forwarding headers, as in the examples above. A user-agent string is supplied by the client and can be imitated. Do not infer an exact device or physical location from these fields.
+
+## Browser origin checks
+
+When a browser's session cookie authenticates a change, such as saving settings, uploading or deleting, Flare accepts it only from its own pages. The request's `Origin` must be the origin of `NEXTAUTH_URL`, or the address the app itself serves, which is what you use when you open `http://localhost:3000` directly. Behind a proxy that ends TLS, only the first can match, so set `NEXTAUTH_URL` to the exact scheme, hostname and port people use; otherwise every change answers `403` with `Cross-origin requests are not allowed.` Flare never reads the origin from `Host` or `X-Forwarded-Host`. API tokens aren't checked. The [browser-session write rule](/api/authentication#browser-session-writes) has the details.
+
+Flare reads `NEXTAUTH_URL` in one place. It must be an `http` or `https` URL without a username or password. Origin checks, passkeys, the default email link address, archive unlock cookies and upload links ignore any other value, and generated screenshot-tool configurations refuse it with `Invalid server URL configuration`.
+
+Earlier builds read it seven ways. Account security accepted only the exact `NEXTAUTH_URL` origin and answered `503` while it was unset; account email also accepted the origin of the email public URL, and failed with an unrelated error when `NEXTAUTH_URL` wasn't a URL. Both now follow the rule above, and only passkeys need `NEXTAUTH_URL`. A value without `http://` or `https://` used to end up in upload links as written.
 
 ## Passkeys and hostname changes
 

@@ -274,7 +274,6 @@ body {
   }
 }
 
-/* Customize scrollbar for Webkit browsers (Chrome, Safari, etc.) */
 ::-webkit-scrollbar {
   width: 14px;
 }
@@ -290,7 +289,6 @@ body {
   border-radius: 9999px;
 }
 
-/* For Firefox */
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground)) transparent;

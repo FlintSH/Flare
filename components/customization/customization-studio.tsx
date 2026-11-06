@@ -20,8 +20,8 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { colorSwatchClassName } from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+import { colorSwatchClassName } from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,6 +42,9 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { apiRequest } from '@/lib/client/request'
+import { saveBlobAsFile } from '@/lib/client/save-file'
+import { LOGO_ACCEPT, logoProblem } from '@/lib/customization/logo'
 import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
 import {
   type AppearanceCommand,
@@ -52,8 +55,11 @@ import {
   appearancePackSchema,
 } from '@/lib/customization/schema'
 import { exportAppearancePack } from '@/lib/customization/state'
+import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import { cn } from '@/lib/utils'
 
+import { useHydrated } from '@/hooks/use-hydrated'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 import { AppearancePreview } from './appearance-preview'
@@ -182,21 +188,28 @@ function SettingRow({
 
 export function CustomizationStudio({
   initialState,
+  creditsFooter,
   recovery = false,
   onStateChange,
   onDirtyChange,
 }: {
   initialState: CustomizationState
+  /** The instance's saved Show credits footer setting, for the preview. */
+  creditsFooter: boolean
   recovery?: boolean
   onStateChange?: (state: CustomizationState) => void
   onDirtyChange?: (dirty: boolean) => void
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  // The Custom CSS and HTML editors render only for this permission.
+  const customStyles = usePermissions().can(CUSTOM_STYLES_PERMISSION)
   const [state, setState] = useState(initialState)
   const [document, setDocument] = useState<AppearanceDocument | null>(
     initialState?.draft || initialState?.published || null
   )
+  // The publish date is in the reader's time zone, which the server lacks.
+  const hydrated = useHydrated()
   const [section, setSection] =
     useState<(typeof sections)[number]['id']>('identity')
   const [mode, setMode] = useState<'light' | 'dark'>('dark')
@@ -246,15 +259,10 @@ export function CustomizationStudio({
     setBusy(true)
     setError('')
     try {
-      const response = await fetch('/api/customization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(command),
+      const next = await apiRequest<CustomizationState>('/api/customization', {
+        body: command,
+        fallback: 'Appearance could not be saved.',
       })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Appearance could not be saved.')
-      const next = body.data as CustomizationState
       setState(next)
       onStateChange?.(next)
       setDocument(next.draft || next.published)
@@ -289,18 +297,15 @@ export function CustomizationStudio({
     setLogoBusy(variant)
     setError('')
     try {
-      if (file.size > 256 * 1024)
-        throw new Error('Choose a logo smaller than 256 KB.')
+      const problem = logoProblem(file)
+      if (problem) throw new Error(problem.message)
       const form = new FormData()
       form.append('file', file)
-      const response = await fetch('/api/customization/assets', {
-        method: 'POST',
-        body: form,
-      })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Logo could not be uploaded.')
-      change('brand', { [variant]: body.data.url })
+      const { url } = await apiRequest<{ url: string }>(
+        '/api/customization/assets',
+        { body: form, fallback: 'Logo could not be uploaded.' }
+      )
+      change('brand', { [variant]: url })
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Logo could not be uploaded.'
@@ -333,16 +338,12 @@ export function CustomizationStudio({
       setError('Fix the appearance fields before exporting.')
       return
     }
-    const blob = new Blob(
-      [JSON.stringify(exportAppearancePack(parsed.data), null, 2)],
-      { type: 'application/json' }
+    saveBlobAsFile(
+      new Blob([JSON.stringify(exportAppearancePack(parsed.data), null, 2)], {
+        type: 'application/json',
+      }),
+      `${document.brand.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'flare'}-appearance.json`
     )
-    const url = URL.createObjectURL(blob),
-      anchor = window.document.createElement('a')
-    anchor.href = url
-    anchor.download = `${document.brand.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'flare'}-appearance.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -355,13 +356,18 @@ export function CustomizationStudio({
             <p className="text-muted-foreground">
               This page uses Flare’s original appearance with custom CSS and
               head HTML disabled. Your saved settings are unchanged. Restore a
-              previous appearance below, or{' '}
-              <RecoveryLink
-                href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
-                className="underline underline-offset-4"
-              >
-                repair custom CSS and HTML below
-              </RecoveryLink>
+              previous appearance below
+              {customStyles ? (
+                <>
+                  , or{' '}
+                  <RecoveryLink
+                    href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
+                    className="underline underline-offset-4"
+                  >
+                    repair custom CSS and HTML below
+                  </RecoveryLink>
+                </>
+              ) : null}
               .
             </p>
             <RecoveryLink
@@ -514,7 +520,7 @@ export function CustomizationStudio({
                                     : 'Dark logo'}
                                   <input
                                     type="file"
-                                    accept="image/png,image/jpeg,image/webp"
+                                    accept={LOGO_ACCEPT}
                                     className="sr-only"
                                     disabled={!!logoBusy || busy}
                                     onChange={(event) => {
@@ -555,21 +561,28 @@ export function CustomizationStudio({
                         />
                       </div>
                       <p className="text-pretty text-xs text-muted-foreground">
-                        Your favicon is below. Custom CSS and head HTML are
-                        under{' '}
-                        <a
-                          href="#advanced-styles"
-                          onClick={() => {
-                            const styles =
-                              window.document.getElementById('advanced-styles')
-                            if (styles instanceof HTMLDetailsElement)
-                              styles.open = true
-                          }}
-                          className="whitespace-nowrap underline underline-offset-4"
-                        >
-                          Custom CSS and HTML
-                        </a>
-                        .
+                        Your favicon is below.
+                        {customStyles && (
+                          <>
+                            {' '}
+                            Custom CSS and head HTML are under{' '}
+                            <a
+                              href="#advanced-styles"
+                              onClick={() => {
+                                const styles =
+                                  window.document.getElementById(
+                                    'advanced-styles'
+                                  )
+                                if (styles instanceof HTMLDetailsElement)
+                                  styles.open = true
+                              }}
+                              className="whitespace-nowrap underline underline-offset-4"
+                            >
+                              Custom CSS and HTML
+                            </a>
+                            .
+                          </>
+                        )}
                       </p>
                     </CardContent>
                   </>
@@ -1097,6 +1110,7 @@ export function CustomizationStudio({
               <div className="min-w-0 xl:sticky xl:top-28 self-start">
                 <AppearancePreview
                   document={document}
+                  creditsFooter={creditsFooter}
                   mode={mode}
                   onModeChange={setMode}
                   protectedPreview={protectedPreview}
@@ -1117,7 +1131,13 @@ export function CustomizationStudio({
             description={
               dirty || state.draft
                 ? 'Your live instance stays the same until you publish.'
-                : `Revision ${state.revision}${state.publishedAt ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}` : ' · Original Flare appearance'}`
+                : `Revision ${state.revision}${
+                    !state.publishedAt
+                      ? ' · Original Flare appearance'
+                      : hydrated
+                        ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}`
+                        : ' · Published'
+                  }`
             }
           >
             {state.previous && (

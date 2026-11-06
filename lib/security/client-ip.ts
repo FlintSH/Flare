@@ -94,7 +94,8 @@ function firstEntry(value: string | null) {
 
 /**
  * The client address Flare uses for rate limits, login history, and request
- * keys, or null when the request carries none.
+ * keys, or null when the request carries none. Each caller decides what a
+ * request without one counts as.
  *
  * By default this is `X-Real-IP`, then the first `X-Forwarded-For` entry,
  * skipping values that are not addresses. A trusted proxy must set or

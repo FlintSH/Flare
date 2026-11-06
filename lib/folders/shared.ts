@@ -1,4 +1,9 @@
 import { prisma } from '@/lib/database/prisma'
+import {
+  fileUrls,
+  sharedFolderFileUrl,
+  sharedFolderUrl,
+} from '@/lib/files/urls'
 
 export const SHARED_FOLDER_PAGE_SIZE = 48
 
@@ -34,21 +39,21 @@ export async function getSharedFolder(token: string, page = 1) {
     page: currentPage,
     total: folder._count.files,
     pageCount: Math.ceil(folder._count.files / SHARED_FOLDER_PAGE_SIZE),
-    files: folder.files.map((file) => ({
-      id: file.id,
-      name: file.password ? 'Password-protected file' : file.name,
-      // Even the link target must hide a protected file's filename. This route
-      // checks membership and the password before revealing its canonical URL.
-      urlPath: file.password
-        ? `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(file.id)}`
-        : file.urlPath
-            .split('/')
-            .map((segment) => encodeURIComponent(segment))
-            .join('/'),
-      mimeType: file.password ? null : file.mimeType,
-      size: file.password ? null : file.size,
-      hasPassword: Boolean(file.password),
-    })),
+    files: folder.files.map((file) => {
+      const urls = fileUrls(file)
+      return {
+        id: file.id,
+        name: file.password ? 'Password-protected file' : file.name,
+        // Even the link target must hide a protected file's filename. This
+        // route checks membership and the password before revealing its
+        // canonical URL.
+        href: file.password ? sharedFolderFileUrl(token, file.id) : urls.page,
+        rawUrl: file.password ? null : urls.raw,
+        mimeType: file.password ? null : file.mimeType,
+        size: file.password ? null : file.size,
+        hasPassword: Boolean(file.password),
+      }
+    }),
   }
 }
 
@@ -80,11 +85,11 @@ export async function sharedFolderBackLink(
     select: { id: true, name: true },
   })
   if (!folder || folder.id !== file.folderId) return null
-  // Return to the listing page the visitor came from.
   const page = viaFileRoute ? 1 : Number(from.searchParams.get('page') ?? 1)
-  const query =
-    Number.isSafeInteger(page) && page > 1 && page <= 100000
-      ? `?page=${page}`
-      : ''
-  return { href: `/s/folders/${token}${query}`, label: folder.name }
+  return {
+    href: sharedFolderUrl(token, {
+      page: Number.isSafeInteger(page) && page <= 100000 ? page : 1,
+    }),
+    label: folder.name,
+  }
 }

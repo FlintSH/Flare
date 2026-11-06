@@ -12,8 +12,8 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { MetaLine } from '@/components/profile/meta-line'
-import { ITakeSetupButton } from '@/components/profile/tools/itake-tool'
+import { ProfileToolDownloads } from '@/components/profile/tools/profile-tools'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -32,7 +32,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { apiRequest } from '@/lib/client/request'
 import {
+  PROFILE_NAME_MAX_LENGTH,
+  PROFILE_TAG_LIMIT,
+  RECIPE_MAX_BYTES,
   type UploadProfileOptions,
   type UploadProfileView,
   uploadRecipeSchema,
@@ -40,10 +44,11 @@ import {
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
+import { useAccountRefresh } from '@/hooks/use-account-query'
 import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
-import { useUploadProfiles } from './profile-picker'
+import { UPLOAD_PROFILES, useUploadProfiles } from './profile-picker'
 
 // Profiles and recipes are insets inside their cards; both lists share it.
 const listItemClassName =
@@ -173,8 +178,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const [message, setMessage] = useState('')
   const [tagSearch, setTagSearch] = useState('')
   const importInput = useRef<HTMLInputElement>(null)
-  const refresh = () =>
-    window.dispatchEvent(new Event('flare:upload-profiles-changed'))
+  const refresh = useAccountRefresh(UPLOAD_PROFILES)
   const choose = (profile: UploadProfileView | null) => {
     setEditing(profile)
     setName(profile?.name || '')
@@ -183,23 +187,19 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     setTagSearch('')
   }
 
-  async function request(url: string, method: string, body?: unknown) {
-    const result = await fetch(url, {
+  function request<T>(url: string, method: string, body?: unknown) {
+    return apiRequest<T>(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body,
+      fallback: 'Could not save your changes.',
     })
-    const json = await result.json()
-    if (!result.ok)
-      throw new Error(json.error || 'Could not save your changes.')
-    return json.data
   }
   async function perform(action: () => Promise<void>) {
     setBusy(true)
     setMessage('')
     try {
       await action()
-      refresh()
+      void refresh()
     } catch (failure) {
       setMessage(
         failure instanceof Error ? failure.message : 'Please try again.'
@@ -211,7 +211,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
 
   async function save() {
     await perform(async () => {
-      const profile = await request(
+      const profile = await request<UploadProfileView>(
         editing ? `/api/upload-profiles/${editing.id}` : '/api/upload-profiles',
         editing ? 'PUT' : 'POST',
         { name, options, ...(editing ? { revision: editing.updatedAt } : {}) }
@@ -221,45 +221,6 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
         title: 'Upload profile saved',
         description: 'It is ready for your next upload.',
       })
-    })
-  }
-
-  async function downloadClient(client: string) {
-    if (!editing) return
-    await perform(async () => {
-      const postBody =
-        client === 'flameshot'
-          ? { useWayland: false, useCompositor: false, profileId: editing.id }
-          : client === 'spectacle'
-            ? {
-                scriptType: 'screenshot',
-                useWayland: false,
-                includePointer: false,
-                captureMode: 'region',
-                recordingMode: 'region',
-                delay: 0,
-                profileId: editing.id,
-              }
-            : null
-      const response = await fetch(
-        `/api/profile/${client}?profileId=${encodeURIComponent(editing.id)}`,
-        postBody
-          ? {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(postBody),
-            }
-          : undefined
-      )
-      if (!response.ok)
-        throw new Error('Could not generate the uploader configuration.')
-      const url = URL.createObjectURL(await response.blob())
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download =
-        client === 'sharex' ? 'flare-sharex.sxcu' : `flare-${client}.sh`
-      anchor.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
     })
   }
 
@@ -319,12 +280,20 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
           event.target.value = ''
           if (!file) return
           void perform(async () => {
-            if (file.size > 64 * 1024)
-              throw new Error('Recipes must be smaller than 64 KB.')
+            if (file.size > RECIPE_MAX_BYTES)
+              throw new Error(
+                `Recipes must be smaller than ${RECIPE_MAX_BYTES / 1024} KB.`
+              )
             const recipe = uploadRecipeSchema.parse(
               JSON.parse(await file.text())
             )
-            choose(await request('/api/upload-profiles', 'POST', recipe))
+            choose(
+              await request<UploadProfileView>(
+                '/api/upload-profiles',
+                'POST',
+                recipe
+              )
+            )
             toast({
               title: 'Recipe imported',
               description: 'Review it before making it your default.',
@@ -473,7 +442,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="My screenshots"
-                maxLength={80}
+                maxLength={PROFILE_NAME_MAX_LENGTH}
               />
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
@@ -602,7 +571,8 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                                   checked={selected}
                                   disabled={
                                     !selected &&
-                                    (options.tagIds?.length ?? 0) >= 20
+                                    (options.tagIds?.length ?? 0) >=
+                                      PROFILE_TAG_LIMIT
                                   }
                                   onChange={() =>
                                     setOptions((current) => ({
@@ -713,46 +683,11 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               </Button>
             </div>
             {editing && (
-              <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-                <div>
-                  <h3 className="text-sm font-medium">
-                    Use this profile in your tools
-                  </h3>
-                  <p className="mt-1 text-pretty text-xs text-muted-foreground">
-                    Download an uploader with this profile selected. Generated
-                    configs and scripts contain your upload credential; keep
-                    them private.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {['sharex', 'bash', 'flameshot', 'spectacle'].map(
-                    (client) => (
-                      <Button
-                        key={client}
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void downloadClient(client)}
-                      >
-                        {
-                          {
-                            sharex: 'ShareX',
-                            bash: 'Bash',
-                            flameshot: 'Flameshot',
-                            spectacle: 'Spectacle',
-                          }[client]
-                        }
-                      </Button>
-                    )
-                  )}
-                  <ITakeSetupButton
-                    profileId={editing.id}
-                    profileName={editing.name}
-                    disabled={busy}
-                    compact
-                  />
-                </div>
-              </div>
+              <ProfileToolDownloads
+                profileId={editing.id}
+                profileName={editing.name}
+                disabled={busy}
+              />
             )}
           </CardContent>
         </Card>

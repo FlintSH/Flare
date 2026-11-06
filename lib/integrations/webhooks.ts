@@ -3,15 +3,22 @@ import { randomUUID } from 'node:crypto'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 
+import {
+  lockWebhookDeliveryClaims,
+  lockWebhookQueue,
+} from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { decryptSecret } from '@/lib/email/crypto'
+import { decryptSecret } from '@/lib/security/secret-box'
+import { bytesToMB, mbToBytes } from '@/lib/utils/size'
 
 import { resolveWebhookTarget, signWebhook } from './security'
 
 export const WEBHOOK_SECRET_PURPOSE = 'integrations.webhook.v1'
 export const WEBHOOK_MAX_ATTEMPTS = 5
-export const WEBHOOK_MAX_PENDING = 1000
-export const WEBHOOK_MAX_PENDING_PER_USER = 5000
+const WEBHOOK_MAX_PENDING = 1000
+const WEBHOOK_MAX_PENDING_PER_USER = 5000
+/** Starts the event ID of every test delivery. */
+export const TEST_EVENT_PREFIX = 'test:'
 const CONCURRENCY = 4
 type ReadyFile = Pick<
   File,
@@ -29,7 +36,7 @@ type WebhookTransaction = Pick<
   'webhook' | 'webhookDelivery' | '$executeRaw'
 >
 
-export function fileReadyPayload(file: ReadyFile) {
+export function fileReadyPayload(file: Omit<ReadyFile, 'userId'>) {
   return {
     version: 1,
     id: `file.ready:${file.id}`,
@@ -39,11 +46,59 @@ export function fileReadyPayload(file: ReadyFile) {
       id: file.id,
       name: file.name,
       mimeType: file.mimeType,
-      sizeBytes: Math.round(file.size * 1024 * 1024),
+      sizeBytes: Math.round(mbToBytes(file.size)),
       visibility: file.visibility,
       passwordProtected: Boolean(file.password),
     },
   }
+}
+
+/** A file.ready event for a sample file. Delivery skips the source-file check for it. */
+export function testEventPayload() {
+  return {
+    ...fileReadyPayload({
+      id: 'example-file',
+      name: 'example.png',
+      mimeType: 'image/png',
+      size: bytesToMB(1024),
+      uploadedAt: new Date(),
+      visibility: 'PUBLIC',
+      password: null,
+    }),
+    id: `${TEST_EVENT_PREFIX}${randomUUID()}`,
+    test: true,
+  }
+}
+
+/**
+ * The webhooks, of those given and in order, that can each take one more
+ * delivery: a webhook holds at most WEBHOOK_MAX_PENDING pending or processing
+ * deliveries, and its owner at most WEBHOOK_MAX_PENDING_PER_USER. The caller
+ * holds the owner's lockWebhookQueue.
+ */
+export async function webhooksWithQueueRoom(
+  tx: Pick<Prisma.TransactionClient, 'webhookDelivery'>,
+  userId: string,
+  webhookIds: readonly string[]
+): Promise<string[]> {
+  const unfinished = { status: { in: ['pending', 'processing'] } }
+  let available =
+    WEBHOOK_MAX_PENDING_PER_USER -
+    (await tx.webhookDelivery.count({
+      where: { ...unfinished, webhook: { userId } },
+    }))
+  const admitted: string[] = []
+  for (const webhookId of webhookIds) {
+    if (available <= 0) break
+    const count = await tx.webhookDelivery.count({
+      where: { ...unfinished, webhookId },
+    })
+    if (count < WEBHOOK_MAX_PENDING) {
+      admitted.push(webhookId)
+      available--
+    }
+  }
+  return admitted
 }
 
 /** Must be called in the same transaction that makes the file available. */
@@ -51,29 +106,17 @@ export async function enqueueFileReady(
   tx: WebhookTransaction,
   file: ReadyFile
 ): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347213, hashtext(${file.userId}))`
+  await lockWebhookQueue(tx, file.userId)
   const hooks = await tx.webhook.findMany({
     where: { userId: file.userId, enabled: true },
     select: { id: true },
   })
   if (!hooks.length) return
-  const pending = { status: { in: ['pending', 'processing'] } }
-  let available =
-    WEBHOOK_MAX_PENDING_PER_USER -
-    (await tx.webhookDelivery.count({
-      where: { ...pending, webhook: { userId: file.userId } },
-    }))
-  const destinations: string[] = []
-  for (const hook of hooks) {
-    if (available <= 0) break
-    const count = await tx.webhookDelivery.count({
-      where: { ...pending, webhookId: hook.id },
-    })
-    if (count < WEBHOOK_MAX_PENDING) {
-      destinations.push(hook.id)
-      available--
-    }
-  }
+  const destinations = await webhooksWithQueueRoom(
+    tx,
+    file.userId,
+    hooks.map(({ id }) => id)
+  )
   // A stalled receiver must never prevent uploading. Overflow events are skipped.
   if (!destinations.length) return
   const payload = fileReadyPayload(file)
@@ -96,7 +139,7 @@ export function retryDelayMs(attempts: number): number {
 /** Global concurrency and row claims are serialized across app replicas. */
 export async function claimWebhookDeliveries(): Promise<WebhookDelivery[]> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347211)`
+    await lockWebhookDeliveryClaims(tx)
     const now = new Date()
     await tx.webhookDelivery.updateMany({
       where: {
@@ -229,7 +272,8 @@ export async function deliverWebhook(delivery: WebhookDelivery): Promise<void> {
     !Array.isArray(delivery.payload)
       ? delivery.payload
       : null
-  const test = payload?.test === true && delivery.eventId.startsWith('test:')
+  const test =
+    payload?.test === true && delivery.eventId.startsWith(TEST_EVENT_PREFIX)
   if (!test) {
     const data =
       payload?.data &&

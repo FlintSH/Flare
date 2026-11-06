@@ -1,39 +1,25 @@
-import { NextResponse } from 'next/server'
-
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
-import { emailAdminAccess, emailSettingsError } from '@/lib/email/admin'
+import { emailSettingsRoutes } from '@/lib/email/admin'
 import { retryMail } from '@/lib/email/outbox'
-import { startMailWorker } from '@/lib/email/worker'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const { id } = z
-      .object({ id: z.string().min(1).max(100) })
-      .parse(await request.json())
-    const queued = await retryMail(id)
-    if (!queued)
-      return NextResponse.json(
-        {
-          error:
-            'This message cannot be retried. Its account link may have expired or been replaced.',
-        },
-        { status: 400 }
-      )
-    startMailWorker()
-    return NextResponse.json({
-      data: { message: 'Message queued for retry' },
-    })
-  } catch (error) {
-    return emailSettingsError(error)
-  }
-}
+const api = routes('/api/settings/email/retry', emailSettingsRoutes)
 
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/settings/email/retry',
-  })(request)
-}
+export const POST = api(async (request) => {
+  await requireSession(request, 'settings.email')
+  const { id } = await readJson(
+    request,
+    z.object({ id: z.string().min(1).max(100) })
+  )
+  const queued = await retryMail(id)
+  if (!queued)
+    throw new HttpError(
+      400,
+      'This message cannot be retried. Its account link may have expired or been replaced.'
+    )
+  return { data: { message: 'Message queued for retry' } }
+})

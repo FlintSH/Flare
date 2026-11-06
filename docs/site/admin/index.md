@@ -55,6 +55,8 @@ View the installed version and release channel. Official rolling images include 
 
 Most Settings forms maintain a working copy until you save. Changed fields are marked and can be discarded before saving. The appearance studio has its own **Save draft / Publish appearance** workflow, and Email has dedicated testing, policy review, and save behavior. A saved studio draft does not alter the live site.
 
+When a save fails, its message gives Flare's reason. If something between your browser and Flare, such as a reverse proxy or a sign-in gateway, answers with its own page instead, the screen shows its usual failure message, for example **Appearance could not be saved.** in the appearance studio, **Could not save this role.** in **Roles**, or **Failed to update user** in **Users**. Earlier versions showed a script error such as `Unexpected token '<'` on those screens.
+
 Environment-managed email controls are read-only in the dashboard. Adjust the deployment override or remove it to restore the saved fallback. [Configuration precedence](/hosting/configuration#how-changes-take-effect) explains the distinction.
 
 ## A good first-day checklist
@@ -69,6 +71,6 @@ Environment-managed email controls are read-only in the dashboard. Adjust the de
 
 ## What administration means for privacy
 
-Accounts with `content.read`, including Administrator, can inspect private and password-protected files. Content changes and deletion have separate permissions. File privacy is an application access rule, not encryption that hides bytes from the server operator. Grant administrator roles only to people who should control the whole instance.
+Accounts with `content.read`, including Administrator, can inspect private and password-protected files. Content changes and deletion have separate permissions. File privacy is an application access rule, not encryption that hides bytes from the server operator. When a visitor submits a file password on a share page, it travels in the page's address (`?password=…`), and once accepted, in the addresses of the page's preview and download requests too, so reverse-proxy access logs can record it. Signed-in accounts with `content.read` open protected files without the password form. Grant administrator roles only to people who should control the whole instance.
 
 Every account inherits Everyone and can hold multiple additional roles. Assign narrowly scoped roles for moderation, account support, or appearance design. The [roles guide](/admin/roles) explains additive grants, hierarchy, immediate revocation, and recovery protection. There are no per-user numeric quota overrides or built-in account suspension states.

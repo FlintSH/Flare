@@ -1,22 +1,27 @@
-import { VanityIdSchema } from '@/types/dto/user'
 import { z } from 'zod'
 
+import {
+  accountEmailSchema,
+  accountNameSchema,
+  accountPasswordSchema,
+} from '@/lib/users/account-policy'
+import { vanityIdSchema } from '@/lib/users/public-id'
+
+// No `image`: only POST /api/profile/avatar checks and stores an avatar, so
+// an `image` field here is dropped like any other unknown field.
 export const UpdateProfileSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
+  name: accountNameSchema.optional(),
+  email: accountEmailSchema.optional(),
   currentPassword: z.string().max(256).optional(),
   securityCode: z.string().max(80).optional(),
-  newPassword: z.string().min(8).optional(),
-  image: z.string().optional(),
+  newPassword: accountPasswordSchema.optional(),
   randomizeFileUrls: z.boolean().optional(),
   defaultFileExpiration: z
     .enum(['DISABLED', 'HOUR', 'DAY', 'WEEK', 'MONTH'])
     .optional(),
   defaultFileExpirationAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
-  vanityId: VanityIdSchema.nullable().optional(),
+  vanityId: vanityIdSchema.nullable().optional(),
 })
-
-export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>
 
 export interface ProfileResponse {
   id: string

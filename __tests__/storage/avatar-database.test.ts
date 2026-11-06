@@ -17,6 +17,7 @@ import {
   vi,
 } from 'vitest'
 
+import { lockRoleChanges } from '@/lib/database/locks'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 
 const authentication = vi.hoisted(() => ({
@@ -49,17 +50,22 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite.sequential(
   'avatar publication and cleanup against isolated PostgreSQL',
   () => {
     let prisma: typeof import('@/lib/database/prisma').prisma
     let permissions: typeof import('@/lib/permissions/server')
     let cleanup: typeof import('@/lib/storage/deletion')
+    let accounts: typeof import('@/lib/users/delete-account')
     let storage: typeof import('@/lib/storage')
     let configuration: typeof import('@/lib/config')
     let route: typeof import('@/app/api/profile/avatar/route')
     let serve: typeof import('@/app/api/avatars/[filename]/route')
     let remove: typeof import('@/app/api/users/[id]/avatar/route')
+    let profile: typeof import('@/app/api/profile/route')
     const paths = new Set<string>()
     const s3 = mockClient(S3Client)
 
@@ -74,16 +80,17 @@ suite.sequential(
       prisma = (await import('@/lib/database/prisma')).prisma
       permissions = await import('@/lib/permissions/server')
       cleanup = await import('@/lib/storage/deletion')
+      accounts = await import('@/lib/users/delete-account')
       storage = await import('@/lib/storage')
       configuration = await import('@/lib/config')
       route = await import('@/app/api/profile/avatar/route')
       serve = await import('@/app/api/avatars/[filename]/route')
       remove = await import('@/app/api/users/[id]/avatar/route')
+      profile = await import('@/app/api/profile/route')
     }, 120000)
 
     beforeEach(async () => {
       s3.reset()
-      storage.invalidateStorageProvider()
       await prisma.storageDeletion.deleteMany()
       await prisma.user.deleteMany()
       await prisma.role.deleteMany()
@@ -119,7 +126,6 @@ suite.sequential(
 
     afterEach(async () => {
       vi.restoreAllMocks()
-      storage.invalidateStorageProvider()
       for (const path of paths) await rm(path, { force: true })
       paths.clear()
     })
@@ -160,7 +166,6 @@ suite.sequential(
         where: { key: 'flare_config' },
         data: { value: config },
       })
-      storage.invalidateStorageProvider()
     }
 
     async function existingAvatar() {
@@ -229,11 +234,7 @@ suite.sequential(
             writePending: true,
             target: { provider: 'local' },
           })
-          await cleanup.deleteAccountWithStorageCleanup(
-            adminId,
-            memberId,
-            'users.delete'
-          )
+          await accounts.deleteAccount(adminId, memberId, 'users.delete')
           const jobs = await drain()
           expect(jobs.map((job) => job.path)).toEqual([old])
           expect(
@@ -268,7 +269,7 @@ suite.sequential(
       try {
         written = await paused.started.promise
         await prisma.$transaction(async (tx) => {
-          await permissions.lockRoleChanges(tx)
+          await lockRoleChanges(tx)
           await tx.role.update({
             where: { systemKey: 'everyone' },
             data: { permissions: ['files.read'] },
@@ -357,11 +358,7 @@ suite.sequential(
       )
       expect(response.status).toBe(200)
       expect(Buffer.from(await response.arrayBuffer())).toEqual(image)
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       await drain()
       expect(s3.commandCalls(DeleteObjectCommand)).toHaveLength(0)
       await expect(readFile(user.avatarStoragePath!)).rejects.toMatchObject({
@@ -400,11 +397,7 @@ suite.sequential(
       expect((await get()).headers.get('Location')).toBe(url)
       await setS3('different-active-bucket')
       expect((await get()).status).toBe(503)
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       const [job] = await cleanup.claimStorageDeletions()
       expect(await cleanup.processStorageDeletion(job)).toBe(false)
       expect(s3.commandCalls(DeleteObjectCommand)).toHaveLength(0)
@@ -490,11 +483,7 @@ suite.sequential(
         path,
         'image/jpeg'
       )
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       expect(await cleanup.claimStorageDeletions()).toEqual([])
       expect(
         await prisma.storageDeletion.findUnique({ where: { id: intent.id } })
@@ -549,6 +538,62 @@ suite.sequential(
       )
       expect(response.status).toBe(400)
       expect(await prisma.storageDeletion.count()).toBe(0)
+    })
+
+    it('refuses oversized and unaccepted images before creating an upload intent, even with quota bypass', async () => {
+      authentication.permissions = [...DEFAULT_PERMISSIONS, 'quotas.bypass']
+      const write = vi.spyOn(
+        storage.LocalStorageProvider.prototype,
+        'uploadFile'
+      )
+      for (const [bytes, type, status] of [
+        [
+          Buffer.concat([image, Buffer.alloc(2 * 1024 * 1024)]),
+          'image/png',
+          413,
+        ],
+        [
+          Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+          'image/svg+xml',
+          415,
+        ],
+      ] as const) {
+        const form = new FormData()
+        form.set('file', new Blob([new Uint8Array(bytes)], { type }), 'avatar')
+        const response = await route.POST(
+          new Request('http://localhost/api/profile/avatar', {
+            method: 'POST',
+            body: form,
+          })
+        )
+        expect(response.status).toBe(status)
+      }
+      expect(write).not.toHaveBeenCalled()
+      expect(await prisma.storageDeletion.count()).toBe(0)
+      expect(
+        await prisma.user.findUnique({ where: { id: memberId } })
+      ).toMatchObject({ image: null, avatarStoragePath: null })
+    })
+
+    it('ignores an image field in profile updates; only the avatar route publishes one', async () => {
+      const response = await profile.PUT(
+        new Request('http://localhost/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Renamed member',
+            image: 'https://attacker.test/avatar.png',
+          }),
+        })
+      )
+      expect(response.status).toBe(200)
+      expect((await response.json()).data).toMatchObject({
+        name: 'Renamed member',
+        image: null,
+      })
+      expect(
+        await prisma.user.findUnique({ where: { id: memberId } })
+      ).toMatchObject({ name: 'Renamed member', image: null })
     })
   }
 )

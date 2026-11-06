@@ -10,15 +10,15 @@ import {
 } from 'vitest'
 
 const authentication = vi.hoisted(() => ({ userId: 'timeline-owner' }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.userId },
-    response: null,
-  }),
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({ id: authentication.userId }),
 }))
 
 const databaseUrl = process.env.FLARE_TIMELINE_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
+
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
 
 suite('file timeline against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
@@ -93,7 +93,7 @@ suite('file timeline against disposable PostgreSQL', () => {
     const response = await timeline.GET(request('/timeline', params))
     expect(response.status).toBe(200)
     return (await response.json())
-      .data as import('@/lib/files/timeline').FileTimeline
+      .data as import('@/lib/library/contract').FileTimeline
   }
   async function getFiles(params: Record<string, string>) {
     const response = await files.GET(request('', params))

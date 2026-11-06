@@ -43,9 +43,6 @@ const fixture = {
 }
 
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
-vi.mock('@/lib/files/resolve', () => ({
-  resolveFileUrlPath: async () => fixture.urlPath,
-}))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     file: {

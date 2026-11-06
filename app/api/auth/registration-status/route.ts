@@ -1,25 +1,18 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
+import { routes } from '@/lib/http/route'
 
-async function handleGET() {
+const api = routes('/api/auth/registration-status', {
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(async () => {
   try {
     const config = await getConfig()
-    return NextResponse.json({
+    return {
       enabled: config.settings.general.registrations.enabled,
       message: config.settings.general.registrations.disabledMessage,
-    })
+    }
   } catch {
-    return NextResponse.json({
-      enabled: false,
-      message: 'Registration is currently unavailable.',
-    })
+    return { enabled: false, message: 'Registration is currently unavailable.' }
   }
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/auth/registration-status',
-  })()
-}
+})

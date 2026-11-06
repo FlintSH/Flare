@@ -32,7 +32,7 @@ Open **Profile → Account** and scroll to **Active sessions** and **Login histo
 3. To end every browser sign-in, choose **Revoke all sessions**, review the confirmation, and choose **Revoke all and sign out**. This includes the current session; sign in again with an allowed method to continue.
 4. Use **Refresh** to reload the list after activity in another browser. If a revocation fails, read the error and retry after resolving it; an error does not confirm the session ended.
 
-To end only this browser's session, select your avatar and choose **Sign out**. The same action is under **Account** in the navigation sheet on a phone and at the top of **Profile**. Each returns you to the sign-in page; other browsers stay signed in.
+To end only this browser's session, select your avatar and choose **Sign out**. The same action is under **Account** in the navigation sheet on a phone and at the top of **Profile**. Other browsers stay signed in. Every sign-out, including **Revoke and sign out** and **Revoke all and sign out**, opens the local sign-in form (`/auth/login?local=1`), even if your instance normally redirects sign-in to SSO, so your provider doesn't sign you straight back in.
 
 <Screenshot src="/screenshots/audit/revoke-session.webp" alt="Revoke this session confirmation explains that the other browser loses access on its next request" caption="Ending another session preserves the browser you are using." />
 
@@ -70,17 +70,19 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## Update your name and avatar
 
-Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. The name can appear as uploader attribution on share pages when the administrator enables it.
+Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
 
-Choose **Change avatar** and select an image to update your photo. Flare checks that the supplied content is an image. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
+Choose **Change avatar** and select a PNG, JPEG, GIF, or WebP image of at most 2 MB to update your photo. A larger file shows **File too large** and another format, such as SVG, HEIC, or AVIF, shows **Invalid file type**; nothing is uploaded, so resize or convert the image and try again. The server checks the same rules again and also checks that the content really is a PNG, JPEG, GIF, or WebP image, though not necessarily the one its name says: a JPEG saved as `photo.png` works. Earlier versions accepted an image of any type and size, but refused one whose content was another format than its name said. When your instance enforces [storage quotas](#check-storage-and-usage), the image must fit in your remaining space, although it isn't added to your used space. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
+
+If Flare refuses the image, **Upload failed** gives its reason, for example **This would exceed your storage quota.** or **File content is not a PNG, JPEG, GIF, or WebP image.** Earlier versions said **Failed to upload avatar** whatever the reason, which is still the message when Flare gives none.
 
 Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
 
-Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults).
+Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults). The field keeps capital letters as you type them, because links use the vanity URL exactly as written; earlier versions turned everything into lowercase. Flare refuses a vanity URL that another account already uses as its vanity URL or URL ID, or that is your own URL ID, and says which.
 
 ## Change your password
 
-In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place.
+In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place. The new password also cancels an email address change you haven't finished, and links Flare already emailed you, such as verification links, stop working.
 
 If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
 
@@ -108,7 +110,7 @@ There is currently no user-facing flow to link an existing local account to an S
 
 When email features are enabled, **Profile → Account** shows your address and verification status. Choose **Verify my email** if offered, complete any current-password confirmation, and open the message sent to your inbox.
 
-For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry.
+For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry within five minutes. If Flare keeps asking right after you sign in, ask your administrator to check the server clocks: a sign-in timed ahead of the clock of the server checking it doesn't count.
 
 If you require passkeys, starting email enrollment requires a recent passkey or dedicated passkey-recovery sign-in instead, including for SSO-only accounts. This confirmation does not waive mailbox verification.
 
@@ -135,11 +137,13 @@ When email features are enabled:
 
 Your current address remains active until the change is approved. The controls show the pending address and offer **Cancel pending change**. A policy requiring old-address approval may first require you to verify your current email.
 
+An address another account uses is unavailable, whatever its capitalization. Only capitalization is ignored: `a_b@example.com` and `axb@example.com` are different addresses. Earlier versions read `_` and `%` as wildcards here and could refuse an address because it resembled another account's.
+
 These behaviors depend on the administrator's [email settings](../admin/email). If the action is unavailable, use the explanation shown in the interface or contact the administrator.
 
 ## Check storage and usage
 
-Open **Profile → Your data** to see space used, your available quota when enabled, total files, and shortened-link count. The usage bar highlights accounts approaching their quota.
+Open **Profile → Your data** to see space used, your available quota when enabled, total files, and shortened-link count. Sizes use binary units, so 1 GB is 1,024 MB. The usage bar highlights accounts approaching their quota.
 
 **Uncapped storage** means the instance is not enforcing the displayed account quota. Physical disk or object-storage capacity and the maximum size of an individual upload still matter.
 
@@ -151,7 +155,9 @@ To free space, download anything you need and delete unwanted files. Switching f
 
 ## Export your data
 
-Choose **Export all data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage, and shows preparation and download progress. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
+Choose **Export all data** under **Profile → Your data**. Flare builds the ZIP while your browser downloads it, reading one file at a time from storage. The browser saves it as `flare-data-export-` followed by the time the export started, in milliseconds, for example `flare-data-export-1767225600000.zip`. Allow enough disk space on your device. You can keep using Flare in the same tab while it works: the export continues, and the ZIP downloads when it's ready. Closing or reloading the tab cancels the export, and Flare stops reading your files on the server too.
+
+While the export runs, the button shows **Preparing…** with the percentage of your files already added to the ZIP, and the bar below it fills to match. The percentage holds while Flare reads a large file, so a slow export can stay on one number for a while. Each export reports only its own progress: a new export starts from 0%, and exports running in two tabs at once each show their own. Progress comes from the Flare process building your ZIP. On an instance running [several application replicas](/hosting/#multiple-replicas-and-serverless-hosts) that don't keep your requests on one replica, it can stay at 0% while the download still completes.
 
 The archive contains:
 
@@ -162,13 +168,15 @@ Two files with the same name from the same day both appear. The older one keeps 
 
 This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, the passkey requirement, active-session records, login history, or instance audit events. Export profile recipes separately if you want to keep those settings.
 
+If Flare refuses to start the export, the error gives its reason, for example **Permission denied** after your role changed, or **Failed to export data** when it gives none. Earlier versions showed only the status, such as **Export failed with status: 403**.
+
 Inspect the archive and open important files before deleting their originals. A file that storage cannot open, for example because it is missing, is skipped and the rest of the export continues. If storage fails partway through a file, the download stops with an error rather than saving an archive with a cut-off file; start the export again. If an expected file is absent, or an export keeps failing, download the file individually if possible and ask the administrator to check storage.
 
 ## Integrations and connected tools
 
 **Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
 
-**Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
+**Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 
 ## Invite people
 
@@ -180,8 +188,10 @@ Deleting your own account requires `profile.update` and removes its content even
 
 Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, integrations, and invite links from Flare, then signs you out. Accounts that joined with your invites keep their accounts. The same database transaction saves per-file deletion audit evidence and cleanup work for your stored files and uploaded avatar. If that audit insert fails, the account deletion and cleanup work roll back together; ask the operator to resolve the database problem before retrying. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
 
+After deleting the account, Flare opens the local sign-in form (`/auth/login?local=1`), even if your instance normally redirects sign-in to SSO. On such an instance, earlier versions opened the usual sign-in page, where a still-active provider session could sign you straight into a new, empty account.
+
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 
 Storage cleanup can remain pending while the storage service is unavailable, its configuration has changed, or an operator must verify an older file's original storage location. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion removes its personal session/history records but does not erase retained instance audit events, operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
 
-For a normal end to a session, use **Log out** instead of deleting the account.
+For a normal end to a session, use **Sign out** instead of deleting the account.

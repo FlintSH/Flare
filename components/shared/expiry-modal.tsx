@@ -24,6 +24,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -59,8 +60,13 @@ export function ExpiryModal({
   title = 'Configure expiration',
   description = 'Set when this file should expire.',
 }: ExpiryModalProps) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
+  const permitted = (expiry: ExpiryAction) =>
+    allows(user, EXPIRY_EFFECTS[expiry])
   const [expiresAt, setDate] = useState<Date | null>(initialDate || null)
+  // When the date last changed or the dialog opened. Rendering compares the
+  // date with this instead of reading the clock.
+  const [checkedAt, setCheckedAt] = useState(() => Date.now())
   // The quick option that produced the current date, if any. Any other edit
   // clears it, so a highlighted option always matches the date shown.
   const [preset, setPreset] = useState<Preset | null>(null)
@@ -69,11 +75,13 @@ export function ExpiryModal({
   const setExpiresAt = (date: Date | null) => {
     setPreset(null)
     setDate(date)
+    setCheckedAt(Date.now())
   }
 
   useEffect(() => {
     if (isOpen) {
       setDate(initialDate || null)
+      setCheckedAt(Date.now())
       setPreset(null)
       setAction(initialAction)
       setIsLoading(false)
@@ -99,6 +107,7 @@ export function ExpiryModal({
 
   const setPresetExpiry = (value: Preset) => {
     const date = new Date()
+    setCheckedAt(date.getTime())
 
     switch (value) {
       case 'hour':
@@ -126,6 +135,8 @@ export function ExpiryModal({
     setExpiresAt(null)
   }
 
+  const today = new Date(checkedAt).toDateString()
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -148,7 +159,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 aria-pressed={action === ExpiryAction.DELETE}
-                disabled={!can('files.delete')}
+                disabled={!permitted(ExpiryAction.DELETE)}
                 onClick={() => setAction(ExpiryAction.DELETE)}
                 className={cn(action === ExpiryAction.DELETE && selectedOption)}
               >
@@ -158,7 +169,7 @@ export function ExpiryModal({
                 type="button"
                 variant="outline"
                 aria-pressed={action === ExpiryAction.SET_PRIVATE}
-                disabled={!can('files.share')}
+                disabled={!permitted(ExpiryAction.SET_PRIVATE)}
                 onClick={() => setAction(ExpiryAction.SET_PRIVATE)}
                 className={cn(
                   action === ExpiryAction.SET_PRIVATE && selectedOption
@@ -169,7 +180,8 @@ export function ExpiryModal({
             </div>
           </div>
 
-          {(!can('files.delete') || !can('files.share')) && (
+          {(!permitted(ExpiryAction.DELETE) ||
+            !permitted(ExpiryAction.SET_PRIVATE)) && (
             <p className="text-xs text-muted-foreground">
               Scheduling deletion requires Delete files. Making a file private
               requires Share files. You can remove expiration if an inherited
@@ -395,10 +407,8 @@ export function ExpiryModal({
                           }}
                           className="text-center font-mono"
                           min={
-                            expiresAt &&
-                            expiresAt.toDateString() ===
-                              new Date().toDateString()
-                              ? new Date(Date.now() + 5 * 60 * 1000)
+                            expiresAt && expiresAt.toDateString() === today
+                              ? new Date(checkedAt + 5 * 60 * 1000)
                                   .toTimeString()
                                   .slice(0, 5)
                               : undefined
@@ -407,9 +417,8 @@ export function ExpiryModal({
                       </div>
 
                       {expiresAt &&
-                        expiresAt.toDateString() ===
-                          new Date().toDateString() &&
-                        expiresAt <= new Date() && (
+                        expiresAt.toDateString() === today &&
+                        expiresAt.getTime() <= checkedAt && (
                           <p
                             role="alert"
                             className="rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-foreground"
@@ -464,15 +473,7 @@ export function ExpiryModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={
-              isLoading ||
-              (Boolean(expiresAt) &&
-                !can(
-                  action === ExpiryAction.DELETE
-                    ? 'files.delete'
-                    : 'files.share'
-                ))
-            }
+            disabled={isLoading || (Boolean(expiresAt) && !permitted(action))}
           >
             {isLoading ? (
               <>

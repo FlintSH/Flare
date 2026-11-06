@@ -15,6 +15,11 @@ import { ProfileSessions } from '@/components/profile/security/profile-sessions'
 import { SignInSecurity } from '@/components/profile/security/sign-in-security'
 import { QueryProvider } from '@/components/providers/query-provider'
 
+import {
+  type SessionScope,
+  SessionScoped,
+  useAccountQuery,
+} from '@/hooks/use-account-query'
 import { useFolders } from '@/hooks/use-folders'
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useTags } from '@/hooks/use-tags'
@@ -118,7 +123,6 @@ beforeEach(() => {
   renderToStaticMarkup(
     createElement(QueryProvider, null, createElement(CaptureClient))
   )
-  expect(client.getDefaultOptions().queries?.staleTime).toBe(5 * 60 * 1000)
   authenticate('alice')
   vi.stubGlobal('fetch', vi.fn())
 })
@@ -153,19 +157,26 @@ describe('profile activity query ownership', () => {
     expectAbsent(bobMarkup, 'alice')
   })
 
-  it.each(['loading', 'unauthenticated'] as const)(
-    'hides cached activity while authentication is %s even if stale user data remains',
-    (status) => {
-      render()
-      seed(latestKeys(), 'alice')
-      auth.status = status
-      const html = render()
-      expectAbsent(html, 'alice')
-      expect(html).not.toContain('Revoke session')
-      expect(html).not.toContain('Load more attempts')
-      expect(fetch).not.toHaveBeenCalled()
-    }
-  )
+  it('hides cached activity once signed out even if stale user data remains', () => {
+    render()
+    seed(latestKeys(), 'alice')
+    auth.status = 'unauthenticated'
+    const html = render()
+    expectAbsent(html, 'alice')
+    expect(html).not.toContain('Revoke session')
+    expect(html).not.toContain('Load more attempts')
+  })
+
+  it('keeps activity on screen while a session refresh is loading', () => {
+    render()
+    const keys = latestKeys()
+    seed(keys, 'alice')
+    auth.status = 'loading'
+    const html = render()
+    expect(html).toContain('alice-private-user-agent')
+    expect(html).toContain('Load more attempts')
+    expect(latestKeys()).toEqual(keys)
+  })
 
   it('does not inherit current-session markers after the same account signs in with a new browser session', () => {
     render()
@@ -243,31 +254,31 @@ describe('adjacent sign-in security query ownership', () => {
     expect(latestSecurityKey()).not.toEqual(bob)
   })
 
-  it.each(['loading', 'unauthenticated'] as const)(
-    'hides sign-in controls and hook data during %s, even with a populated account cache',
-    (status) => {
-      render(SignInSecurity)
-      seedSecurity(latestSecurityKey(), 'alice')
-      auth.status = status
-      expect(render(SignInSecurity)).toBe('')
-      let security: ReturnType<typeof useSecurityStatus> | undefined
-      function DirectStatusConsumer() {
-        security = useSecurityStatus()
-        return null
-      }
-      render(DirectStatusConsumer)
-      expect(security?.data).toBeUndefined()
-      const query = client.getQueryCache().find({
-        queryKey: latestSecurityKey(),
-        exact: true,
-      })!
-      const observer = new QueryObserver(client, {
-        ...query.options,
-        queryKey: query.queryKey,
-      })
-      expect(observer.options.enabled).toBe(false)
+  it('hides sign-in controls and hook data once signed out, even with a populated account cache', async () => {
+    render(SignInSecurity)
+    seedSecurity(latestSecurityKey(), 'alice')
+    auth.status = 'unauthenticated'
+    expect(render(SignInSecurity)).toBe('')
+    let security: ReturnType<typeof useSecurityStatus> | undefined
+    function DirectStatusConsumer() {
+      security = useSecurityStatus()
+      return null
     }
-  )
+    render(DirectStatusConsumer)
+    expect(security?.data).toBeUndefined()
+    const query = client.getQueryCache().find({
+      queryKey: latestSecurityKey(),
+      exact: true,
+    })!
+    const observer = new QueryObserver(client, {
+      ...query.options,
+      queryKey: query.queryKey,
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    await Promise.resolve()
+    unsubscribe()
+    expect(fetch).not.toHaveBeenCalled()
+  })
 
   it('ignores legacy unscoped security status retained by the root query provider', () => {
     seedSecurity(['account-security'], 'alice')
@@ -333,14 +344,17 @@ describe('administrator audit account boundary', () => {
     expect(render(AuditLog)).toBe('')
   })
 
-  it.each(['loading', 'unauthenticated'] as const)(
-    'hides the audit viewer during %s even if prior administrator details remain',
-    (status) => {
-      auth.data!.user.permissions = ['administrator']
-      auth.status = status
-      expect(render(AuditLog)).toBe('')
-    }
-  )
+  it('hides the audit viewer once signed out even if prior administrator details remain', () => {
+    auth.data!.user.permissions = ['administrator']
+    auth.status = 'unauthenticated'
+    expect(render(AuditLog)).toBe('')
+  })
+
+  it('keeps the audit viewer while a session refresh is loading', () => {
+    auth.data!.user.permissions = ['administrator']
+    auth.status = 'loading'
+    expect(render(AuditLog)).toContain('Audit events')
+  })
 })
 
 function LibraryAssociations() {
@@ -383,26 +397,26 @@ describe('library association query ownership', () => {
     expect(keys()).not.toEqual(bob)
   })
 
-  it.each(['loading', 'unauthenticated'] as const)(
-    'hides association caches and removes query identity during %s even with stale session data',
-    (status) => {
-      render(LibraryAssociations)
-      seedAssociations('alice')
-      auth.status = status
-      expect(render(LibraryAssociations)).not.toContain('alice-private')
-      for (const key of keys()) {
-        expect(key.slice(1)).toEqual([undefined, undefined])
-        const query = client
-          .getQueryCache()
-          .find({ queryKey: key, exact: true })!
-        const observer = new QueryObserver(client, {
-          ...query.options,
-          queryKey: key,
-        })
-        expect(observer.options.enabled).toBe(false)
-      }
+  it('hides association caches and removes query identity once signed out even with stale session data', async () => {
+    render(LibraryAssociations)
+    seedAssociations('alice')
+    auth.status = 'unauthenticated'
+    expect(render(LibraryAssociations)).not.toContain('alice-private')
+    for (const key of keys()) {
+      // The query that stays names no account or browser session.
+      expect(key).not.toContain('alice')
+      expect(key).not.toContain('alice-browser')
+      const query = client.getQueryCache().find({ queryKey: key, exact: true })!
+      const observer = new QueryObserver(client, {
+        ...query.options,
+        queryKey: key,
+      })
+      const unsubscribe = observer.subscribe(() => {})
+      await Promise.resolve()
+      unsubscribe()
     }
-  )
+    expect(fetch).not.toHaveBeenCalled()
+  })
 
   it.each([
     ['vault-tags', '/api/tags'],
@@ -443,4 +457,61 @@ describe('library association query ownership', () => {
       expect(signal?.aborted).toBe(true)
     }
   )
+})
+
+// next-auth's update() reports `loading` while it keeps the session it
+// refreshes, as after saving a profile name or editing your own roles.
+describe('session refresh', () => {
+  const PROBE = 'refresh-probe'
+  function AccountData() {
+    const { data } = useAccountQuery<string>(PROBE, '/api/profile')
+    return createElement('p', null, data ?? 'empty')
+  }
+  const probes = () =>
+    client
+      .getQueryCache()
+      .findAll({ queryKey: [PROBE] })
+      .map((query) => query.queryKey)
+
+  it('keeps account data under the same key until the refresh ends', () => {
+    render(AccountData)
+    const [key] = probes()
+    client.setQueryData(key, 'alice-display-name')
+    auth.status = 'loading'
+    expect(render(AccountData)).toContain('alice-display-name')
+    expect(probes()).toEqual([key])
+    auth.status = 'authenticated'
+    expect(render(AccountData)).toContain('alice-display-name')
+    expect(probes()).toEqual([key])
+  })
+
+  it('keeps sign-in security data under the same key during the refresh', () => {
+    render(SignInSecurity)
+    const key = latestSecurityKey()
+    seedSecurity(key, 'alice')
+    auth.status = 'loading'
+    function PasskeyName() {
+      const { data } = useSecurityStatus()
+      return createElement('p', null, data?.passkeys[0].name ?? 'none')
+    }
+    expect(render(PasskeyName)).toContain('alice-private-passkey-name')
+    expect(latestSecurityKey()).toEqual(key)
+  })
+
+  it('renders SessionScoped content during the refresh, and its loading state only before a session is known', () => {
+    const files = (scope: SessionScope) => `Files of ${scope.userId}`
+    function Scoped() {
+      return SessionScoped({
+        loading: 'Checking your session',
+        signedOut: 'Signed out',
+        children: files,
+      })
+    }
+    auth.status = 'loading'
+    expect(render(Scoped)).toBe('Files of alice')
+    auth.data = null
+    expect(render(Scoped)).toBe('Checking your session')
+    auth.status = 'unauthenticated'
+    expect(render(Scoped)).toBe('Signed out')
+  })
 })

@@ -1,11 +1,12 @@
-import { redactEmailConfig } from '@/lib/email/config'
-
 import { type Permission, hasPermission } from './catalog'
 
 const sectionPermissions: Record<string, Permission> = {
   appearance: 'appearance.manage',
   advanced: 'administrator',
 }
+/** Who may see and change custom CSS and head HTML, the `advanced` section. */
+export const CUSTOM_STYLES_PERMISSION = sectionPermissions.advanced
+
 const generalPermissions: Record<string, Permission> = {
   storage: 'settings.storage',
   oidc: 'settings.security',
@@ -37,27 +38,4 @@ export function settingsPatchAllowed(
       )
     })
   )
-}
-
-/** Never serialize saved infrastructure credentials into a dashboard response. */
-export function redactSettings(config: import('@/lib/config').FlareConfig) {
-  return {
-    ...config,
-    settings: {
-      ...config.settings,
-      email: redactEmailConfig(config.settings.email),
-      general: {
-        ...config.settings.general,
-        oidc: { ...config.settings.general.oidc, clientSecret: '' },
-        storage: {
-          ...config.settings.general.storage,
-          s3: {
-            ...config.settings.general.storage.s3,
-            secretAccessKey: '',
-            accessKeyId: '',
-          },
-        },
-      },
-    },
-  }
 }

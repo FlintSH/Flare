@@ -1,6 +1,5 @@
-export { cn, formatBytes, bytesToMB, formatFileSize } from './formatting'
-
-export { updateProgress, clearProgress, getProgress } from './progress'
+export { cn } from './formatting'
+export { formatBytes, bytesToMB, mbToBytes, formatFileSize } from './size'
 
 export function getRelativeTime(date: Date): string {
   const now = new Date()

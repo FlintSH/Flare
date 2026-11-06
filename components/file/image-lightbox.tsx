@@ -290,7 +290,6 @@ function ImageStage({
     return () => observer.disconnect()
   }, [])
 
-  // Keep the center of the image in view when switching magnification.
   useEffect(() => {
     const element = viewport.current
     if (element) {

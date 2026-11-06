@@ -90,6 +90,9 @@ const storage = {
 const databaseUrl = process.env.FLARE_ARCHIVE_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('archive publication against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let codec: typeof import('@/lib/archives/codec')
@@ -1180,7 +1183,11 @@ suite('archive publication against disposable PostgreSQL', () => {
     const before = (
       await prisma.user.findUniqueOrThrow({ where: { id: 'archive-owner' } })
     ).storageUsed
-    expect((await extract(file.id)).status).toBe(413)
+    const refused = await extract(file.id)
+    expect(refused.status).toBe(413)
+    expect((await refused.json()).error).toBe(
+      'This would exceed your storage quota.'
+    )
     expect(await prisma.file.count()).toBe(1)
     expect(await prisma.vaultFolder.count()).toBe(0)
     expect(
@@ -1365,7 +1372,9 @@ suite('archive publication against disposable PostgreSQL', () => {
     const profile = await prisma.uploadProfile.create({
       data: { userId: 'archive-owner', name: 'Reviewed profile', options },
     })
-    const response = await profileListing.GET()
+    const response = await profileListing.GET(
+      new Request('http://localhost/api/upload-profiles')
+    )
     expect(response.status).toBe(200)
     const data = (await response.json()).data
     const snapshot = data.profiles.find(
@@ -1536,7 +1545,13 @@ suite('archive publication against disposable PostgreSQL', () => {
       },
     })
     await changeEffectiveSettings('style')
-    const data = (await (await profileListing.GET()).json()).data
+    const data = (
+      await (
+        await profileListing.GET(
+          new Request('http://localhost/api/upload-profiles')
+        )
+      ).json()
+    ).data
     const refreshed = data.profiles.find(
       (entry: { id: string }) => entry.id === profile.id
     )
@@ -2051,7 +2066,7 @@ suite('archive publication against disposable PostgreSQL', () => {
     )
 
     it('answers listing progress while a role change holds its lock', async () => {
-      const { lockRoleChanges } = await import('@/lib/permissions/server')
+      const { lockRoleChanges } = await import('@/lib/database/locks')
       const file = await slowTarGz('busy-plans.tar.gz')
       let unblock!: () => void
       const gate = new Promise<void>((resolve) => {

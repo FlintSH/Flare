@@ -6,29 +6,23 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 
 import {
-  Archive,
   ChevronLeft,
   ChevronRight,
   Edit2,
   Eye,
   EyeOff,
-  File,
-  FileText,
   FolderOpen,
   Globe,
-  Image as ImageIcon,
   KeyRound,
   Link2,
   Lock,
   LogOut,
   MoreVertical,
-  Music,
   Plus,
   RefreshCw,
   Search,
   Trash2,
   UserX,
-  Video,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
@@ -37,6 +31,7 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { RoleBadges, RoleChecklist } from '@/components/roles/role-badges'
 import {
@@ -44,7 +39,7 @@ import {
   formDialogBodyClassName,
   formDialogClassName,
   formDialogFooterClassName,
-} from '@/components/settings/form-styles'
+} from '@/components/shared/form-styles'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +83,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -104,57 +100,41 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import type { AccountFile, FileSettings } from '@/lib/files/manage'
 import { filePasswordHint } from '@/lib/files/password-policy'
-import type { RoleSummary } from '@/lib/permissions/catalog'
+import { fileUrls } from '@/lib/files/urls'
+import {
+  type AccountShortLink,
+  type AccountShortLinkPage,
+  shortLinkUrl,
+} from '@/lib/links/schema'
+import { resolvePermissions } from '@/lib/permissions/catalog'
+import {
+  canGrantRole,
+  isEveryoneRole,
+  userManagementRefusal,
+} from '@/lib/permissions/policy'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  URL_ID_LENGTH,
+  VANITY_ID_MAX_LENGTH,
+  VANITY_ID_MIN_LENGTH,
+  isUrlIdDraft,
+  vanityIdDraft,
+} from '@/lib/users/public-id'
 import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
-import { sanitizeUrl } from '@/lib/utils/url'
 
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
-import { UserFormData, useUserManagement } from '@/hooks/use-user-management'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  image: string | null
-  roles: RoleSummary[]
-  urlId: string
-  vanityId: string | null
-  storageUsed: number
-  invitedBy?: { id: string; name: string | null } | null
-  _count: {
-    files: number
-    shortenedUrls: number
-  }
-}
-
-interface File {
-  id: string
-  name: string
-  mimeType: string
-  size: number
-  visibility: 'PUBLIC' | 'PRIVATE'
-  password?: string | null
-  uploadedAt: string
-  urlPath: string
-}
-
-interface ShortenedUrl {
-  id: string
-  shortCode: string
-  targetUrl: string
-  clicks: number
-  createdAt: string
-}
-
-interface PaginationData {
-  total: number
-  pages: number
-  page: number
-  limit: number
-}
+import {
+  type PaginationData,
+  type User,
+  UserFormData,
+  useUserManagement,
+} from '@/hooks/use-user-management'
 
 interface FileFilters {
   search: string
@@ -163,12 +143,7 @@ interface FileFilters {
 }
 
 interface FileResponse {
-  files: File[]
-  pagination: PaginationData
-}
-
-interface UrlResponse {
-  urls: ShortenedUrl[]
+  files: AccountFile[]
   pagination: PaginationData
 }
 
@@ -264,21 +239,18 @@ function VisibilityBadge({
   file,
   className,
 }: {
-  file: Pick<File, 'visibility' | 'password'>
+  file: Pick<AccountFile, 'visibility'>
   className?: string
 }) {
-  // The user files API leaves out passwords and reports password-protected
-  // files as PROTECTED instead.
-  const isProtected =
-    Boolean(file.password) || (file.visibility as string) === 'PROTECTED'
+  const isProtected = file.visibility === 'PROTECTED'
   const Icon = isProtected
     ? KeyRound
     : file.visibility === 'PRIVATE'
       ? Lock
       : Globe
   // Private files are what a moderator scans for, so they take the amber
-  // status tone (as before this pass); public and password ones stay neutral.
-  const isPrivate = !isProtected && file.visibility === 'PRIVATE'
+  // status tone; public and password ones stay neutral.
+  const isPrivate = file.visibility === 'PRIVATE'
   return (
     <Badge variant={isPrivate ? 'warning' : 'neutral'} className={className}>
       <Icon aria-hidden="true" />
@@ -287,36 +259,111 @@ function VisibilityBadge({
   )
 }
 
-interface FileSettingsDialogProps {
-  file: File | null
-  isOpen: boolean
-  onClose: () => void
-  onSave: (visibility: 'PUBLIC' | 'PRIVATE', password?: string) => Promise<void>
+/** `KEEP` sends no visibility. */
+type VisibilityChoice = NonNullable<FileSettings['visibility']> | 'KEEP'
+
+interface FileSettingsForm {
+  visibility: VisibilityChoice
+  /** A new password; empty keeps the current one. */
+  password: string
+  removePassword: boolean
 }
 
-function FileSettingsDialog({
+/**
+ * Where the dialog starts. The list doesn't say which visibility a
+ * password-protected file has, so its dialog starts from keeping it.
+ */
+export function fileSettingsForm(
+  file: Pick<AccountFile, 'visibility'>
+): FileSettingsForm {
+  return {
+    visibility: file.visibility === 'PROTECTED' ? 'KEEP' : file.visibility,
+    password: '',
+    removePassword: false,
+  }
+}
+
+/** What saving the dialog sends: only what it changes. */
+export function fileSettingsChanges(
+  file: Pick<AccountFile, 'visibility'>,
+  form: FileSettingsForm
+): FileSettings {
+  return {
+    ...(form.visibility !== 'KEEP' && form.visibility !== file.visibility
+      ? { visibility: form.visibility }
+      : {}),
+    ...(form.removePassword
+      ? { password: null }
+      : form.password
+        ? { password: form.password }
+        : {}),
+  }
+}
+
+interface FileSettingsDialogProps {
+  file: AccountFile | null
+  isOpen: boolean
+  onClose: () => void
+  onSave: (changes: FileSettings) => Promise<void>
+}
+
+export function FileSettingsDialog({
   file,
   isOpen,
   onClose,
   onSave,
 }: FileSettingsDialogProps) {
-  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PRIVATE')
-  const [password, setPassword] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>File settings</DialogTitle>
+          <DialogDescription className="break-words">
+            Update visibility and password protection for{' '}
+            <span className="font-medium text-foreground">{file?.name}</span>.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while the dialog is open, so each opening starts
+            from the file. */}
+        {file && (
+          <FileSettingsFields
+            key={file.id}
+            file={file}
+            onClose={onClose}
+            onSave={onSave}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-  useEffect(() => {
-    if (file) {
-      setVisibility(file.visibility)
-      setPassword('')
-    }
-  }, [file])
+function FileSettingsFields({
+  file,
+  onClose,
+  onSave,
+}: Omit<FileSettingsDialogProps, 'file' | 'isOpen'> & { file: AccountFile }) {
+  const [form, setForm] = useState(() => fileSettingsForm(file))
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { visibility, password, removePassword } = form
+  const isProtected = file.visibility === 'PROTECTED'
+  const changes = fileSettingsChanges(file, form)
+  const canSave =
+    Object.keys(changes).length > 0 && !(password && filePasswordHint(password))
+  const edit = (change: Partial<FileSettingsForm>) =>
+    setForm({ ...form, ...change })
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (password && filePasswordHint(password)) return
+    if (!canSave) return
     setIsSubmitting(true)
     try {
-      await onSave(visibility, password || undefined)
+      await onSave(changes)
       onClose()
     } catch (error) {
       console.error('Error saving file settings:', error)
@@ -326,84 +373,87 @@ function FileSettingsDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>File settings</DialogTitle>
-          <DialogDescription className="break-words">
-            Update visibility and password protection for{' '}
-            <span className="font-medium text-foreground">{file?.name}</span>.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="visibility">Visibility</Label>
-              <Select
-                value={visibility}
-                onValueChange={(value: 'PUBLIC' | 'PRIVATE') =>
-                  setVisibility(value)
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="grid gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="visibility">Visibility</Label>
+          <Select
+            value={visibility}
+            onValueChange={(value: VisibilityChoice) =>
+              edit({ visibility: value })
+            }
+          >
+            <SelectTrigger id="visibility">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {isProtected && (
+                <SelectItem value="KEEP">Keep current visibility</SelectItem>
+              )}
+              <SelectItem value="PUBLIC">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Public
+                </div>
+              </SelectItem>
+              <SelectItem value="PRIVATE">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-4 w-4" />
+                  Private
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password-protection">
+            {isProtected ? 'New password' : 'Password protection'}
+          </Label>
+          <Input
+            id="password-protection"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            disabled={removePassword}
+            onChange={(e) => edit({ password: e.target.value })}
+            placeholder={
+              removePassword
+                ? 'The password is removed when you save'
+                : isProtected
+                  ? 'Leave empty to keep the current password'
+                  : 'Leave empty for no password'
+            }
+            {...filePasswordFieldProps('password-protection-hint', password)}
+          />
+          <FilePasswordHint id="password-protection-hint" password={password} />
+          {isProtected && (
+            <div className="flex items-center justify-between gap-4 pt-1">
+              <Label htmlFor="remove-password">Remove password</Label>
+              <Switch
+                id="remove-password"
+                checked={removePassword}
+                onCheckedChange={(checked) =>
+                  edit({ removePassword: checked, password: '' })
                 }
-              >
-                <SelectTrigger id="visibility">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PUBLIC">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-4 w-4" />
-                      Public
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="PRIVATE">
-                    <div className="flex items-center gap-2">
-                      <EyeOff className="h-4 w-4" />
-                      Private
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password-protection">Password protection</Label>
-              <Input
-                id="password-protection"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Leave empty for no password"
-                {...filePasswordFieldProps(
-                  'password-protection-hint',
-                  password
-                )}
-              />
-              <FilePasswordHint
-                id="password-protection-hint"
-                password={password}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSubmitting || Boolean(password && filePasswordHint(password))
-              }
-            >
-              {isSubmitting ? 'Saving…' : 'Save changes'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          )}
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting || !canSave}>
+          {isSubmitting ? 'Saving…' : 'Save changes'}
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 
@@ -411,35 +461,14 @@ export function UserList() {
   const router = useRouter()
   const { update: refreshSession } = useSession()
   const { can, user: actor } = usePermissions()
-  const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
-  const [roleLoadError, setRoleLoadError] = useState('')
+  const roles = useRoles({ retry: false })
+  const availableRoles = roles.data?.roles ?? []
+  const roleLoadError = roles.error?.message ?? ''
   const canManageUser = (target: User) =>
-    can('administrator') ||
-    (target.id !== actor?.id &&
-      !target.roles.some((role) =>
-        role.permissions.some(
-          (permission) =>
-            !(actor?.permissions as readonly string[] | undefined)?.includes(
-              permission
-            )
-        )
-      ) &&
-      Math.max(0, ...target.roles.map((role) => role.position)) <
-        highestPosition)
-  const highestPosition = Math.max(
-    0,
-    ...(actor?.roles ?? []).map((role) => role.position)
-  )
-  useEffect(() => {
-    fetch('/api/roles')
-      .then(async (response) => {
-        const result = await response.json()
-        if (!response.ok)
-          throw new Error(result.error || 'Could not load roles.')
-        setAvailableRoles(result.roles)
-      })
-      .catch((error) => setRoleLoadError(error.message))
-  }, [])
+    !userManagementRefusal(actor, {
+      ...target,
+      permissions: resolvePermissions(target.roles),
+    })
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [role, setRole] = useState('ALL')
@@ -468,8 +497,8 @@ export function UserList() {
   const urlsRequest = useRef(0)
   const [filesLoading, setFilesLoading] = useState(false)
   const [urlsLoading, setUrlsLoading] = useState(false)
-  const [userFiles, setUserFiles] = useState<File[]>([])
-  const [userUrls, setUserUrls] = useState<ShortenedUrl[]>([])
+  const [userFiles, setUserFiles] = useState<AccountFile[]>([])
+  const [userUrls, setUserUrls] = useState<AccountShortLink[]>([])
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
     email: '',
@@ -491,7 +520,7 @@ export function UserList() {
     null
   )
   const { toast } = useToast()
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFile, setSelectedFile] = useState<AccountFile | null>(null)
   const [isFileSettingsOpen, setIsFileSettingsOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isFileDeleteDialogOpen, setIsFileDeleteDialogOpen] = useState(false)
@@ -519,13 +548,14 @@ export function UserList() {
           params.set('type', fileFilters.type)
         }
 
-        const response = await fetch(`/api/users/${userId}/files?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch user files')
-        const data: FileResponse = await response.json()
+        const data = await apiRequest<FileResponse>(
+          `/api/users/${userId}/files?${params}`
+        )
         if (requestId !== filesRequest.current) return
         setUserFiles(data.files)
         setFilePagination(data.pagination)
-        setFilePage(page)
+        // A page past the end comes back as the last page.
+        setFilePage(data.pagination.page)
       } catch (error) {
         if (requestId !== filesRequest.current) return
         console.error('Error fetching user files:', error)
@@ -555,13 +585,13 @@ export function UserList() {
           params.set('search', urlSearch)
         }
 
-        const response = await fetch(`/api/users/${userId}/urls?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch user URLs')
-        const data: UrlResponse = await response.json()
+        const data = await apiRequest<AccountShortLinkPage>(
+          `/api/users/${userId}/urls?${params}`
+        )
         if (requestId !== urlsRequest.current) return
         setUserUrls(data.urls)
         setUrlPagination(data.pagination)
-        setUrlPage(page)
+        setUrlPage(data.pagination.page)
       } catch (error) {
         if (requestId !== urlsRequest.current) return
         console.error('Error fetching user URLs:', error)
@@ -601,16 +631,6 @@ export function UserList() {
     }
   }, [urlSearch, viewingUser, fetchUserUrls])
 
-  const notifyUserOfChanges = async (userId: string) => {
-    try {
-      await fetch(`/api/users/${userId}/login`, {
-        method: 'POST',
-      })
-    } catch (error) {
-      console.error('Failed to notify user of changes:', error)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
@@ -623,8 +643,7 @@ export function UserList() {
         if (editingUser.id === actor?.id) {
           await refreshSession()
           router.refresh()
-        } else if (can('users.sessions'))
-          await notifyUserOfChanges(editingUser.id)
+        }
       } else {
         const { roleIds, ...identity } = formData
         await createUser({
@@ -644,7 +663,7 @@ export function UserList() {
       name: user.name,
       email: user.email,
       roleIds: user.roles
-        .filter((role) => role.systemKey !== 'everyone')
+        .filter((role) => !isEveryoneRole(role))
         .map((role) => role.id),
       urlId: user.urlId,
       vanityId: user.vanityId || '',
@@ -687,43 +706,13 @@ export function UserList() {
     setUrlSearch(search)
   }
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/'))
-      return <ImageIcon className="h-4 w-4" aria-label="Image file" />
-    if (mimeType.startsWith('text/')) return <FileText className="h-4 w-4" />
-    if (mimeType.startsWith('application/pdf'))
-      return <FileText className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/msword') ||
-      mimeType.startsWith(
-        'application/vnd.openxmlformats-officedocument.wordprocessingml'
-      )
-    )
-      return <FileText className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/vnd.ms-excel') ||
-      mimeType.startsWith(
-        'application/vnd.openxmlformats-officedocument.spreadsheetml'
-      )
-    )
-      return <FileText className="h-4 w-4" />
-    if (mimeType.startsWith('video/')) return <Video className="h-4 w-4" />
-    if (mimeType.startsWith('audio/')) return <Music className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/zip') ||
-      mimeType.startsWith('application/x-rar-compressed')
-    )
-      return <Archive className="h-4 w-4" />
-    return <File className="h-4 w-4" />
-  }
-
   // A hairline keeps light screenshots from dissolving into the row.
-  const getFilePreview = (file: File) => {
+  const getFilePreview = (file: AccountFile) => {
     if (file.mimeType.startsWith('image/')) {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
           <Image
-            src={`/api/files/${file.id}/thumbnail`}
+            src={fileUrls(file).thumbnail}
             alt={file.name}
             fill
             className="object-cover"
@@ -738,7 +727,7 @@ export function UserList() {
     }
     return (
       <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
-        {getFileIcon(file.mimeType)}
+        <FileTypeIcon file={file} className="h-4 w-4" />
       </div>
     )
   }
@@ -747,16 +736,10 @@ export function UserList() {
     if (!viewingUser) return
 
     try {
-      const response = await fetch(
-        `/api/users/${viewingUser.id}/files/${fileId}`,
-        {
-          method: 'DELETE',
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to delete file')
-      }
+      await apiRequest(`/api/users/${viewingUser.id}/files/${fileId}`, {
+        method: 'DELETE',
+        fallback: 'Failed to delete file',
+      })
 
       toast({
         title: 'Success',
@@ -771,7 +754,10 @@ export function UserList() {
       console.error('Error deleting file:', error)
       toast({
         title: 'Error',
-        description: 'Failed to delete file',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to delete file',
         variant: 'destructive',
       })
     }
@@ -781,16 +767,10 @@ export function UserList() {
     if (!viewingUser) return
 
     try {
-      const response = await fetch(
-        `/api/users/${viewingUser.id}/urls/${urlId}`,
-        {
-          method: 'DELETE',
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to delete URL')
-      }
+      await apiRequest(`/api/users/${viewingUser.id}/urls/${urlId}`, {
+        method: 'DELETE',
+        fallback: 'Failed to delete URL',
+      })
 
       toast({
         title: 'Success',
@@ -805,31 +785,27 @@ export function UserList() {
       console.error('Error deleting URL:', error)
       toast({
         title: 'Error',
-        description: 'Failed to delete URL',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to delete URL',
         variant: 'destructive',
       })
     }
   }
 
-  const handleFileSettings = async (
-    visibility: 'PUBLIC' | 'PRIVATE',
-    password?: string
-  ) => {
+  const handleFileSettings = async (changes: FileSettings) => {
     if (!viewingUser || !selectedFile) return
 
     try {
-      const response = await fetch(
+      await apiRequest(
         `/api/users/${viewingUser.id}/files/${selectedFile.id}`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ visibility, password }),
+          body: changes,
+          fallback: 'Failed to update file settings',
         }
       )
-
-      if (!response.ok) {
-        throw new Error('Failed to update file settings')
-      }
 
       toast({
         title: 'Success',
@@ -841,7 +817,10 @@ export function UserList() {
       console.error('Error updating file settings:', error)
       toast({
         title: 'Error',
-        description: 'Failed to update file settings',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to update file settings',
         variant: 'destructive',
       })
     }
@@ -859,13 +838,10 @@ export function UserList() {
     if (!userToSignOut) return
     setSigningOut(true)
     try {
-      const response = await fetch(`/api/users/${userToSignOut.id}/sessions`, {
+      await apiRequest(`/api/users/${userToSignOut.id}/sessions`, {
         method: 'DELETE',
+        fallback: 'Could not revoke sessions.',
       })
-      if (!response.ok) {
-        const result = await response.json().catch(() => null)
-        throw new Error(result?.error || 'Could not revoke sessions.')
-      }
       toast({
         title: 'Sessions revoked',
         description: `${userToSignOut.name} will need to sign in again.`,
@@ -917,7 +893,7 @@ export function UserList() {
           <SelectContent>
             <SelectItem value="ALL">All roles</SelectItem>
             {availableRoles
-              .filter((role) => role.systemKey !== 'everyone')
+              .filter((role) => !isEveryoneRole(role))
               .map((role) => (
                 <SelectItem key={role.id} value={role.id}>
                   {role.name}
@@ -1316,7 +1292,7 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder="At least 8 characters"
+                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       required
                     />
@@ -1338,7 +1314,7 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder="At least 8 characters"
+                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       aria-describedby="newPassword-help"
                     />
@@ -1363,23 +1339,13 @@ export function UserList() {
                   )}
                   <RoleChecklist
                     roles={availableRoles.filter(
-                      (role) => role.systemKey !== 'everyone'
+                      (role) => !isEveryoneRole(role)
                     )}
                     selected={formData.roleIds ?? []}
                     onChange={(roleIds) =>
                       setFormData({ ...formData, roleIds })
                     }
-                    isDisabled={(role) =>
-                      !can('administrator') &&
-                      (role.position >= highestPosition ||
-                        role.permissions.some(
-                          (permission) =>
-                            !(
-                              actor?.permissions as
-                                readonly string[] | undefined
-                            )?.includes(permission)
-                        ))
-                    }
+                    isDisabled={(role) => !canGrantRole(actor, role)}
                   />
                   {!can('users.roles') && (
                     <p className="text-xs text-muted-foreground">
@@ -1396,20 +1362,19 @@ export function UserList() {
                       disabled={!!editingUser && !can('users.update')}
                       value={formData.urlId || ''}
                       onChange={(e) => {
-                        const value = e.target.value.toUpperCase()
-                        if (/^[A-Z0-9]*$/.test(value) && value.length <= 5) {
-                          setFormData({ ...formData, urlId: value })
-                        }
+                        // File URLs use the ID as written, so case stays as typed.
+                        if (isUrlIdDraft(e.target.value))
+                          setFormData({ ...formData, urlId: e.target.value })
                       }}
                       placeholder="e.g. ABC12"
-                      maxLength={5}
+                      maxLength={URL_ID_LENGTH}
                       aria-describedby="urlId-help"
                     />
                     <p
                       id="urlId-help"
                       className="text-xs text-muted-foreground"
                     >
-                      Exactly 5 letters or numbers.
+                      Exactly {URL_ID_LENGTH} letters or numbers.
                     </p>
                   </div>
                 )}
@@ -1426,23 +1391,22 @@ export function UserList() {
                       spellCheck={false}
                       disabled={!!editingUser && !can('users.update')}
                       value={formData.vanityId || ''}
-                      onChange={(e) => {
-                        const value = e.target.value
-                          .toLowerCase()
-                          .replace(/[^a-z0-9-]/g, '')
-                        if (value.length <= 32) {
-                          setFormData({ ...formData, vanityId: value })
-                        }
-                      }}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          vanityId: vanityIdDraft(e.target.value),
+                        })
+                      }
                       placeholder="e.g. my-custom-url"
-                      maxLength={32}
+                      maxLength={VANITY_ID_MAX_LENGTH}
                       aria-describedby="vanityId-help"
                     />
                     <p
                       id="vanityId-help"
                       className="text-xs text-muted-foreground"
                     >
-                      3–32 letters, numbers or inner hyphens.
+                      {VANITY_ID_MIN_LENGTH}–{VANITY_ID_MAX_LENGTH} letters,
+                      numbers or inner hyphens.
                     </p>
                   </div>
                 )}
@@ -1612,7 +1576,7 @@ export function UserList() {
                       </TableHeader>
                       <TableBody>
                         {!filesLoading &&
-                          userFiles.map((file: File) => {
+                          userFiles.map((file) => {
                             const uploaded = new Date(
                               file.uploadedAt
                             ).toLocaleDateString()
@@ -1621,7 +1585,7 @@ export function UserList() {
                                 <TableCell>{getFilePreview(file)}</TableCell>
                                 <TableCell className="py-3">
                                   <a
-                                    href={sanitizeUrl(file.urlPath)}
+                                    href={fileUrls(file).page}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title={file.name}
@@ -1832,7 +1796,7 @@ export function UserList() {
                               <TableRow key={url.id}>
                                 <TableCell className="py-3 pl-4">
                                   <a
-                                    href={`/u/${url.shortCode}`}
+                                    href={shortLinkUrl(url.shortCode)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex max-w-full items-center gap-2 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
@@ -1996,10 +1960,8 @@ export function UserList() {
       <FileSettingsDialog
         file={selectedFile}
         isOpen={isFileSettingsOpen}
-        onClose={() => {
-          setSelectedFile(null)
-          setIsFileSettingsOpen(false)
-        }}
+        // The file stays selected, so the dialog doesn't change as it closes.
+        onClose={() => setIsFileSettingsOpen(false)}
         onSave={handleFileSettings}
       />
 

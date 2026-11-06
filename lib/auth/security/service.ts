@@ -9,17 +9,28 @@ import {
   createTotp,
   decryptTotp,
   encryptTotp,
+  isRecoveryCodeInput,
   newRecoveryCodes,
   recoveryHash,
   totpCounter,
 } from './crypto'
+import {
+  RECENT_PROOF_MINUTES,
+  RECENT_PROOF_WINDOW,
+  SECURITY_CHALLENGE_MINUTES,
+} from './policy'
 import { SecurityError, lockSecurityUser } from './shared'
 
 export type SecurityProof = { password?: string; code?: string }
 
+/** Whether the session signed in with `method` within the proof window; a sign-in time ahead of the clock never counts. */
 export function recentAuthentication(session: Session, method: string) {
   const age = Date.now() - (session.user.authTime || 0)
-  return session.user.authMethod === method && age >= 0 && age < 5 * 60 * 1000
+  return (
+    session.user.authMethod === method &&
+    age >= 0 &&
+    age < RECENT_PROOF_MINUTES * 60_000
+  )
 }
 
 export function assertSessionVersion(user: User, session: Session) {
@@ -35,7 +46,7 @@ export async function consumeSecondFactor(
 ): Promise<'totp' | 'recovery' | undefined> {
   if (!user.totpSecret) return
   const normalized = code?.trim() || ''
-  if (/^[a-f0-9\s-]{20,80}$/i.test(normalized)) {
+  if (isRecoveryCodeInput(normalized)) {
     const removed = await tx.recoveryCode.deleteMany({
       where: { userId: user.id, hash: recoveryHash(user.id, normalized) },
     })
@@ -56,37 +67,67 @@ export async function consumeSecondFactor(
   throw new SecurityError('Invalid or already used authentication code.')
 }
 
-export async function assertSecurityProof(
-  tx: Prisma.TransactionClient,
+/** Policy-changing actions never fall back to password, TOTP, or ordinary SSO. */
+export function assertRecentPasskeyProof(
   user: User,
-  proof: SecurityProof,
-  session: Session
+  session: Session,
+  allowRecovery = true
 ) {
   assertSessionVersion(user, session)
-  if (user.passkeyRequired) {
-    if (
-      recentAuthentication(session, 'passkey') ||
-      recentAuthentication(session, 'passkey-recovery')
-    )
-      return
-    throw new SecurityError(
-      'Sign in again with a passkey or a passkey recovery code, then retry within five minutes.'
-    )
-  }
   if (
     recentAuthentication(session, 'passkey') ||
-    recentAuthentication(session, 'recovery')
+    (allowRecovery && recentAuthentication(session, 'passkey-recovery'))
+  )
+    return
+  throw new SecurityError(
+    allowRecovery
+      ? `Sign in again with a passkey or a passkey recovery code, then retry within ${RECENT_PROOF_WINDOW}.`
+      : `Sign in again with a passkey, then retry within ${RECENT_PROOF_WINDOW}.`
+  )
+}
+
+/**
+ * Proves that the person changing an account is its owner, now. An account
+ * that requires passkeys proves it with a recent passkey or passkey recovery
+ * code sign-in; any other with its password, or with a recent SSO sign-in when
+ * it has no password.
+ *
+ * Security changes also ask for the `secondFactor`: the authenticator code
+ * when the account has one, used up in `tx` with the account row locked. For
+ * them, a recent passkey or recovery-code sign-in, which proved as much,
+ * stands in for the password and code. Email changes ask for neither.
+ */
+export async function assertFreshIdentity(
+  user: User,
+  proof: SecurityProof,
+  session: Session,
+  options:
+    | { secondFactor: true; tx: Prisma.TransactionClient }
+    | { secondFactor: false }
+) {
+  if (user.passkeyRequired) {
+    assertRecentPasskeyProof(user, session)
+    return
+  }
+  assertSessionVersion(user, session)
+  if (
+    options.secondFactor &&
+    (recentAuthentication(session, 'passkey') ||
+      recentAuthentication(session, 'recovery'))
   )
     return
   if (user.password) {
     if (!proof.password || !(await compare(proof.password, user.password)))
       throw new SecurityError('Confirm your current password to continue.')
-    await consumeSecondFactor(tx, user, proof.code)
+    if (options.secondFactor)
+      await consumeSecondFactor(options.tx, user, proof.code)
     return
   }
   if (!user.oidcSubject || !recentAuthentication(session, 'oidc'))
     throw new SecurityError(
-      'Sign in again with SSO or a passkey, then retry within five minutes.'
+      options.secondFactor
+        ? `Sign in again with SSO or a passkey, then retry within ${RECENT_PROOF_WINDOW}.`
+        : `Sign in again with SSO, then try again within ${RECENT_PROOF_WINDOW}.`
     )
 }
 
@@ -111,7 +152,7 @@ export async function issueChallenge(
     data: {
       ...data,
       id: randomBytes(32).toString('base64url'),
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      expiresAt: new Date(Date.now() + SECURITY_CHALLENGE_MINUTES * 60_000),
     },
   })
 }
@@ -121,7 +162,8 @@ export async function consumeChallenge(
   id: string,
   purpose: string
 ) {
-  // DELETE RETURNING provides one-use claims even with concurrent requests.
+  // The delete is the claim: concurrent requests can both read a challenge,
+  // but only one delete removes it.
   const challenges = await tx.authChallenge.findMany({
     where: { id, purpose, expiresAt: { gt: new Date() } },
     take: 1,
@@ -141,14 +183,31 @@ export async function consumeChallenge(
   return challenge
 }
 
+/**
+ * Signing an account out everywhere, for the caller's update of its row:
+ * deletes its pending security challenges and returns the change that moves
+ * its session version on, which ends every browser session once saved.
+ */
+export async function sessionRevocation(
+  tx: Prisma.TransactionClient,
+  userId: string
+): Promise<Prisma.UserUpdateInput> {
+  await tx.authChallenge.deleteMany({ where: { userId } })
+  return { sessionVersion: { increment: 1 } }
+}
+
+/**
+ * Signs an account out everywhere, in an update of its own. Revoking sessions
+ * does only this; `changeCredentials` in `lib/users` saves the same change
+ * with new credentials.
+ */
 export async function revokeSecuritySessions(
   tx: Prisma.TransactionClient,
   userId: string
 ) {
-  await tx.authChallenge.deleteMany({ where: { userId } })
   await tx.user.update({
     where: { id: userId },
-    data: { sessionVersion: { increment: 1 } },
+    data: await sessionRevocation(tx, userId),
   })
 }
 
@@ -167,7 +226,10 @@ async function replaceRecoveryCodes(
 export async function setupTotp(session: Session, proof: SecurityProof) {
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     if (!user.password)
       throw new SecurityError(
         'Authenticator setup requires an existing local password. Manage SSO authentication with your identity provider.'
@@ -236,7 +298,10 @@ export async function changeTotp(
 ) {
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     if (!user.totpSecret)
       throw new SecurityError('Two-factor authentication is not enabled.')
     let recoveryCodes: string[] | undefined

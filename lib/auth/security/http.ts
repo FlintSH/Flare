@@ -1,16 +1,16 @@
-import { NextResponse } from 'next/server'
+import { z } from 'zod'
 
-import { getServerSession } from 'next-auth'
-import { ZodError, z } from 'zod'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { isWrite } from '@/lib/http/request'
+import type { RouteContract } from '@/lib/http/route'
 
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/database/prisma'
-
-import { SecurityError, securityLimit, validateSecurityOrigin } from './shared'
+import { SECURITY_CODE_MAX_LENGTH } from './policy'
+import { securityLimit } from './shared'
 
 export const proofSchema = z.object({
   password: z.string().max(256).optional(),
-  code: z.string().max(80).optional(),
+  code: z.string().max(SECURITY_CODE_MAX_LENGTH).optional(),
 })
 export const passkeyName = z.string().trim().min(1).max(64)
 export const challengeResponseSchema = z.object({
@@ -26,72 +26,29 @@ export const challengeResponseSchema = z.object({
     .passthrough(),
 })
 
-export async function securityRoute(action: () => Promise<unknown>) {
-  try {
-    const result = await action()
-    if (result instanceof Response) return result
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
-    })
-  } catch (error) {
-    const status = error instanceof SecurityError ? error.status : 400
-    const message =
-      error instanceof SecurityError
-        ? error.message
-        : error instanceof ZodError
-          ? 'Invalid security request.'
-          : 'Unable to complete this security request. Please try again.'
-    return NextResponse.json(
-      { error: message },
-      {
-        status,
-        headers: {
-          'Cache-Control': 'no-store',
-          ...(status === 429 ? { 'Retry-After': '900' } : {}),
-        },
-      }
-    )
-  }
+/** Account security routes never cache, and explain only their own refusals. */
+export const securityRoutes: RouteContract = {
+  headers: { 'Cache-Control': 'no-store' },
+  invalid: () => new HttpError(400, 'Invalid security request.'),
+  failure: {
+    message: 'Unable to complete this security request. Please try again.',
+  },
 }
 
-export async function securitySession(req: Request, mutation = true) {
-  if (mutation) validateSecurityOrigin(req)
-  if (req.headers.has('authorization'))
-    throw new SecurityError('Use a browser session for account security.', 401)
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) throw new SecurityError('Sign in to continue.', 401)
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } })
-  if (!user || user.sessionVersion !== session.user.sessionVersion)
-    throw new SecurityError('Sign in again to continue.', 401)
-  if (mutation) await securityLimit(`management:${user.id}`)
-  return { session, user }
+/**
+ * The browser session's account as it is now, before email verification too,
+ * so a restricted account can still secure itself. Every write counts toward
+ * the account's management limit.
+ */
+export async function securitySession(request: Request) {
+  const { session, account } = await requireSession(request, undefined, {
+    pendingEmail: true,
+    refuseApiCredentials: true,
+    fresh: true,
+  })
+  if (isWrite(request)) await securityLimit(`management:${account.id}`)
+  return { session, user: account }
 }
 
-export async function securityBody(req: Request) {
-  if (
-    !req.headers
-      .get('content-type')
-      ?.toLowerCase()
-      .startsWith('application/json')
-  )
-    throw new SecurityError('Use application/json for security requests.', 415)
-  const reader = req.body?.getReader()
-  if (!reader) throw new SecurityError('Invalid security request.')
-  const chunks: Uint8Array[] = []
-  let size = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > 65536) {
-      await reader.cancel()
-      throw new SecurityError('Security request is too large.', 413)
-    }
-    chunks.push(value)
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  } catch {
-    throw new SecurityError('Invalid security request.')
-  }
-}
+/** Security writes are small JSON documents. */
+export const SECURITY_BODY_LIMIT = 64 * 1024

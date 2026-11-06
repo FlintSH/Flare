@@ -14,9 +14,10 @@ import { prisma } from '@/lib/database/prisma'
 
 import { securityHash, webauthnUserId } from './crypto'
 import { hasFallbackSignIn } from './fallback'
+import { MAX_PASSKEYS, SECURITY_CHALLENGE_MINUTES } from './policy'
 import {
   type SecurityProof,
-  assertSecurityProof,
+  assertFreshIdentity,
   assertSessionVersion,
   consumeChallenge,
   issueChallenge,
@@ -24,10 +25,42 @@ import {
 } from './service'
 import { SecurityError, lockSecurityUser, relyingParty } from './shared'
 
-export function passkeyCookieName() {
-  return relyingParty().origin.startsWith('https:')
-    ? '__Host-flare-passkey-challenge'
-    : 'flare-passkey-challenge'
+/** Over HTTPS the challenge cookie is secure and host-only. */
+function challengeCookie() {
+  const secure = relyingParty().origin.startsWith('https:')
+  return {
+    secure,
+    name: secure ? '__Host-flare-passkey-challenge' : 'flare-passkey-challenge',
+  }
+}
+
+/**
+ * The cookie that binds a passkey sign-in to the browser that asked for its
+ * challenge. It lasts as long as the challenge.
+ */
+export function passkeyChallengeCookie(binding: string) {
+  const { name, secure } = challengeCookie()
+  return {
+    name,
+    value: binding,
+    httpOnly: true,
+    sameSite: 'strict' as const,
+    secure,
+    path: '/',
+    maxAge: SECURITY_CHALLENGE_MINUTES * 60,
+  }
+}
+
+/** The binding a request's `Cookie` header carries, or '' without one. */
+export function readPasskeyChallengeCookie(cookies: string | undefined) {
+  const { name } = challengeCookie()
+  return (
+    cookies
+      ?.split(';')
+      .map((value) => value.trim())
+      .find((value) => value.startsWith(`${name}=`))
+      ?.slice(name.length + 1) || ''
+  )
 }
 
 export async function registrationOptions(
@@ -38,11 +71,14 @@ export async function registrationOptions(
   const rp = relyingParty()
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     const passkeys = await tx.passkey.findMany({ where: { userId: user.id } })
-    if (passkeys.length >= 10)
+    if (passkeys.length >= MAX_PASSKEYS)
       throw new SecurityError(
-        'You can save up to 10 passkeys. Remove one before adding another.'
+        `You can save up to ${MAX_PASSKEYS} passkeys. Remove one before adding another.`
       )
     const options = await generateRegistrationOptions({
       rpName: rp.rpName,
@@ -90,14 +126,22 @@ export async function registerPasskey(
       challenge.sessionVersion !== user.sessionVersion
     )
       throw new SecurityError('Account security changed. Start again.')
-    if ((await tx.passkey.count({ where: { userId: user.id } })) >= 10)
-      throw new SecurityError('You can save up to 10 passkeys.')
+    if (
+      (await tx.passkey.count({ where: { userId: user.id } })) >= MAX_PASSKEYS
+    )
+      throw new SecurityError(`You can save up to ${MAX_PASSKEYS} passkeys.`)
+    // The library throws for a response that fails its checks, such as one
+    // from another origin or without user verification.
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: challenge.challenge,
       expectedOrigin: rp.origin,
       expectedRPID: rp.rpID,
       requireUserVerification: true,
+    }).catch(() => {
+      throw new SecurityError(
+        'Unable to complete this security request. Please try again.'
+      )
     })
     if (!verification.verified)
       throw new SecurityError('Unable to verify this passkey.')
@@ -178,6 +222,8 @@ export async function authenticatePasskey(
         counter: Number(fresh.counter),
         transports: fresh.transports as AuthenticatorTransport[],
       },
+    }).catch(() => {
+      throw new SecurityError('Unable to sign in with this passkey.')
     })
     if (!verification.verified)
       throw new SecurityError('Unable to sign in with this passkey.')
@@ -200,7 +246,10 @@ export async function changePasskey(
 ) {
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     const key = await tx.passkey.findFirst({ where: { id, userId: user.id } })
     if (!key) throw new SecurityError('Passkey not found.', 404)
     if (name !== undefined) {

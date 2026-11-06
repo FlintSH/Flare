@@ -1,30 +1,16 @@
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
+import { requireAccount } from '@/lib/http/access'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { completeChunkUpload } from '@/lib/uploads/chunks'
-import { uploadErrorResponse } from '@/lib/uploads/options'
+import { uploadRoutes } from '@/lib/uploads/http'
 
-async function handlePOST(
-  req: Request,
-  { params }: { params: Promise<{ uploadId: string }> }
-) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
-    const { uploadId } = await params
-    // Keep the established unwrapped response of this completion endpoint.
-    return Response.json(
-      await completeChunkUpload(user, uploadId, await req.json())
-    )
-  } catch (error) {
-    return uploadErrorResponse(error)
-  }
-}
+type Context = { params: Promise<{ uploadId: string }> }
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ uploadId: string }> }
-) {
-  return withAuditRoute(async () => handlePOST(req, { params }), {
-    route: '/api/files/chunks/[uploadId]/complete',
-  })(req)
-}
+const api = routes('/api/files/chunks/[uploadId]/complete', uploadRoutes)
+
+export const POST = api(async (request, { params }: Context) => {
+  const user = await requireAccount(request)
+  const { uploadId } = await params
+  // Keep the established unwrapped response of this completion endpoint.
+  return completeChunkUpload(user, uploadId, await readJson(request))
+})

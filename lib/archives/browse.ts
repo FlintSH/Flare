@@ -19,7 +19,7 @@ import {
 import {
   ARCHIVE_BROWSE_LIMITS,
   type ArchiveListingProgress,
-  getArchiveFormat,
+  detectArchiveFormat,
 } from './shared'
 import { ARCHIVE_IDLE_MS, rejectOnAbort, storageStalled } from './stream-slice'
 
@@ -31,7 +31,6 @@ type BrowseSource = {
   storageTarget: Prisma.JsonValue
 }
 
-/** How long a progress-mode listing waits before reporting progress. */
 const PROGRESS_WAIT_MS = 750
 
 export async function sourceStorage(file: Pick<BrowseSource, 'storageTarget'>) {
@@ -49,10 +48,10 @@ export async function sourceStorage(file: Pick<BrowseSource, 'storageTarget'>) {
 export async function archiveSourceRef(
   file: BrowseSource
 ): Promise<ArchiveSourceRef> {
-  const format = getArchiveFormat(file.name, file.mimeType)
+  const format = detectArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
-  const name = getArchiveFormat(file.name)
+  const name = detectArchiveFormat(file.name)
     ? file.name
     : `${file.name}.${format === 'gzip' ? 'gz' : format}`
   return {
@@ -67,8 +66,8 @@ export async function archiveSourceRef(
 }
 
 /**
- * List an archive. Progress mode returns 202 with the entries found so far
- * while a TAR, TAR.GZ, or GZIP is still being read; otherwise this waits.
+ * Progress mode returns 202 with the entries found so far while the archive,
+ * in any format, is queued or still being read; otherwise this waits.
  */
 export async function archiveListing(
   ref: ArchiveSourceRef,

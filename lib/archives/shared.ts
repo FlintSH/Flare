@@ -1,4 +1,6 @@
 /** Browser-safe archive capabilities. The server always validates the bytes. */
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
 // Extraction and creation stage whole archives; ARCHIVE_LIMITS bounds that work.
 export type ArchiveFormat = 'zip' | 'tar' | 'tar.gz' | 'gzip'
 export type ArchiveOutputFormat = 'zip' | 'tar.gz'
@@ -8,7 +10,7 @@ export const ARCHIVE_LIMITS = {
   expandedBytes: 512 * 1024 ** 2,
   fileBytes: 256 * 1024 ** 2,
   entries: 1000,
-  selectedFiles: 100,
+  selectedFiles: BATCH_LIMIT,
   pathDepth: 20,
   pathLength: 1024,
   timeoutMs: 120_000,
@@ -37,6 +39,12 @@ export const ARCHIVE_BROWSE_LIMITS = {
   textPreviewBytes: 256 * 1024,
   imagePreviewBytes: 50 * 1024 ** 2,
 } as const
+
+/**
+ * How long a file password unlocks a protected archive's previews. The share
+ * page renews the unlock while it stays open.
+ */
+export const ARCHIVE_UNLOCK_SECONDS = 60 * 60
 
 /** Why an entry can be listed but not previewed or extracted. */
 export type ArchiveEntryIssue =
@@ -101,7 +109,7 @@ export interface ArchiveListing extends ArchiveManifest {
   extraction: ArchiveExtraction
 }
 
-/** Returned with HTTP 202 while a TAR, TAR.GZ, or GZIP is still being read. */
+/** Returned with HTTP 202 while an archive is queued or still being read. */
 export interface ArchiveListingProgress {
   status: 'indexing'
   format: ArchiveFormat
@@ -144,8 +152,6 @@ export function detectArchiveFormat(
     return 'gzip'
   return null
 }
-
-export const getArchiveFormat = detectArchiveFormat
 
 export function archiveBasename(name: string): string {
   return name.replace(/\.(tar\.gz|tgz|zip|tar|gz)$/i, '') || 'Archive'

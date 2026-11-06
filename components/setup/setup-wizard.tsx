@@ -23,6 +23,7 @@ import {
   HardDrive,
   InfoIcon,
   KeyRound,
+  type LucideIcon,
   Mail,
   MailCheck,
   Paintbrush,
@@ -35,6 +36,12 @@ import { signIn } from 'next-auth/react'
 import { EmailSettings } from '@/components/email/email-settings'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from '@/components/shared/setup-actions'
+import { SetupOption, SetupOptionIcon } from '@/components/shared/setup-option'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,38 +57,44 @@ import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 
 import {
-  type SetupOptionalStep,
+  SETUP_STEPS,
+  type SetupResumeStep,
+  type SetupStep,
   getSetupResumePath,
   getSetupSignInPath,
+  isSetupResumeStep,
 } from '@/lib/setup/navigation'
 import {
   type SetupData,
   setupAdminSchema,
   setupSchema,
-  setupStorageSchema,
 } from '@/lib/setup/schema'
+import { storageSettingsSchema } from '@/lib/storage/settings'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 import { cn } from '@/lib/utils'
-import { markSetupAsCompleted } from '@/lib/utils/setup-cache'
 
-import {
-  SetupActions,
-  setupPrimaryActionClassName,
-  setupSecondaryActionClassName,
-} from './setup-actions'
+import { useMarkSetupComplete } from '@/hooks/use-setup-status'
+
 import { SetupAppearance } from './setup-appearance'
-import { SetupOption, SetupOptionIcon } from './setup-option'
 
-const steps = [
-  {
-    id: 'account',
+type StepDetails = {
+  label: string
+  detail: string
+  title: string
+  description: string
+  icon: LucideIcon
+  optional?: boolean
+}
+
+const stepDetails: Record<SetupStep, StepDetails> = {
+  account: {
     label: 'Account',
     detail: 'Your administrator account',
     title: 'Your space starts with you.',
     description: 'Create the account you’ll use to manage your Flare instance.',
     icon: KeyRound,
   },
-  {
-    id: 'storage',
+  storage: {
     label: 'Storage',
     detail: 'A home for your files',
     title: 'Give your files a home.',
@@ -89,8 +102,7 @@ const steps = [
       'Keep files on this server or connect storage you already use.',
     icon: HardDrive,
   },
-  {
-    id: 'access',
+  access: {
     label: 'Access',
     detail: 'Choose who can join',
     title: 'Just you, or your people.',
@@ -98,26 +110,25 @@ const steps = [
       'Decide whether others can create an account on your instance.',
     icon: Users,
   },
-  {
-    id: 'appearance',
+  appearance: {
     label: 'Appearance',
     detail: 'Make it feel like yours',
     title: 'A little more you.',
     description:
       'Give your instance a name and a look. Keeping the Flare defaults is a great place to start.',
     icon: Paintbrush,
+    optional: true,
   },
-  {
-    id: 'email',
+  email: {
     label: 'Email',
     detail: 'Account recovery, ready',
     title: 'Make your account recoverable.',
     description:
       'Connect your mail provider for password recovery and email verification. You can do this later.',
     icon: Mail,
+    optional: true,
   },
-  {
-    id: 'ready',
+  ready: {
     label: 'Ready',
     detail: 'Welcome to your Flare',
     title: 'Your Flare is ready.',
@@ -125,9 +136,9 @@ const steps = [
       'A home for your files, screenshots, and everything you want to share.',
     icon: CheckCheck,
   },
-] as const
+}
 
-type Step = (typeof steps)[number]['id']
+const steps = SETUP_STEPS.map((id) => ({ id, ...stepDetails[id] }))
 
 type FormError = { message: string; field?: string }
 
@@ -160,21 +171,21 @@ const initialData: SetupData = {
 
 export function SetupWizard({
   documentationUrl,
-  configured = false,
-  initialStep = 'appearance',
+  resumeStep,
   initialEmailEnabled = false,
   initialEmailRecoveryEnabled = false,
 }: {
   documentationUrl: string
-  configured?: boolean
-  initialStep?: SetupOptionalStep
+  /** Set once the instance exists: the step to continue from. */
+  resumeStep?: SetupResumeStep
   initialEmailEnabled?: boolean
   initialEmailRecoveryEnabled?: boolean
 }) {
   const router = useRouter()
-  const [step, setStep] = useState<Step>(configured ? initialStep : 'account')
+  const markSetupComplete = useMarkSetupComplete()
+  const [step, setStep] = useState<SetupStep>(resumeStep ?? 'account')
   const [data, setData] = useState<SetupData>(initialData)
-  const [created, setCreated] = useState(configured)
+  const [created, setCreated] = useState(resumeStep !== undefined)
   const [busy, setBusy] = useState(false)
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const [error, setError] = useState<FormError | null>(null)
@@ -192,10 +203,10 @@ export function SetupWizard({
     window.scrollTo({ top: 0 })
   }, [step])
 
-  function go(next: Step) {
+  function go(next: SetupStep) {
     setError(null)
     setStep(next)
-    if (next === 'appearance' || next === 'email' || next === 'ready') {
+    if (isSetupResumeStep(next)) {
       // Keep only the resumable stage in the URL; credentials stay in memory.
       window.history.replaceState(null, '', getSetupResumePath(next))
     }
@@ -222,7 +233,7 @@ export function SetupWizard({
       return
     }
     if (step === 'storage') {
-      const result = setupStorageSchema.safeParse(data.storage)
+      const result = storageSettingsSchema.safeParse(data.storage)
       if (!result.success) {
         const issue = result.error.issues[0]
         showValidation(issue.message, `storage.${issue.path.join('.')}`)
@@ -253,7 +264,7 @@ export function SetupWizard({
         )
       accountCreated = true
       setCreated(true)
-      markSetupAsCompleted()
+      markSetupComplete()
       setData((previous) => ({
         ...previous,
         admin: { ...previous.admin, password: '' },
@@ -467,7 +478,7 @@ export function SetupWizard({
             <div className="space-y-3">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Step {index + 1} of {steps.length}
-                {(step === 'appearance' || step === 'email') && ' · Optional'}
+                {current.optional && ' · Optional'}
               </p>
               <h1
                 ref={heading}
@@ -653,7 +664,7 @@ export function SetupWizard({
                           type: 'password',
                           placeholder: 'Choose a strong password',
                           autoComplete: 'new-password',
-                          hint: 'At least 8 characters.',
+                          hint: `At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`,
                         }
                       )}
                     </CardContent>

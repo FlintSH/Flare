@@ -1,21 +1,32 @@
 import { z } from 'zod'
 
-export const tagNameSchema = z
-  .string()
-  .transform((name) => name.normalize('NFKC').trim().replace(/\s+/g, ' '))
-  .pipe(
-    z
-      .string()
-      .min(1, 'Give your tag a name.')
-      .max(40, 'Tag names can be up to 40 characters.')
-      .refine((name) => !/[\p{Cc}\p{Cf}]/u.test(name), 'Use a plain-text name.')
-  )
+import { BATCH_LIMIT } from '@/lib/library/contract'
+import { nameSchema } from '@/lib/library/names'
+
+export const TAG_NAME_MAX_LENGTH = 40
+export const TAG_RULE_MAX_LENGTH = 200
+
+export const tagNameSchema = nameSchema('tag', TAG_NAME_MAX_LENGTH)
+
+/** A tag as the API lists it. */
+export interface TagView {
+  id: string
+  name: string
+  ruleSource: RuleSource | null
+  ruleText: string | null
+  fileCount: number
+}
 
 export const tagInputSchema = z
   .object({
     name: tagNameSchema,
     ruleSource: z.enum(['filename', 'ocr']).nullable().default(null),
-    ruleText: z.string().trim().max(200).nullable().default(null),
+    ruleText: z
+      .string()
+      .trim()
+      .max(TAG_RULE_MAX_LENGTH)
+      .nullable()
+      .default(null),
   })
   .strict()
   .superRefine((input, context) => {
@@ -30,7 +41,7 @@ export const tagInputSchema = z
 
 export const fileTagsInputSchema = z
   .object({
-    fileIds: z.array(z.string().min(1).max(128)).min(1).max(100),
+    fileIds: z.array(z.string().min(1).max(128)).min(1).max(BATCH_LIMIT),
     tagId: z.string().min(1).max(128),
     action: z.enum(['add', 'remove']),
   })

@@ -36,7 +36,6 @@ jobs:
         run: |
           CURRENT_VERSION="${{ steps.get_version.outputs.version }}"
           
-          # Check if tag already exists
           if git show-ref --tags --quiet --verify -- "refs/tags/v$CURRENT_VERSION"; then
             echo "Tag v$CURRENT_VERSION already exists. Skipping release."
             echo "should_release=false" >> $GITHUB_OUTPUT
@@ -177,7 +176,6 @@ jobs:
 
       - name: Create and push multi-arch manifests
         run: |
-          # Docker Hub manifests
           docker buildx imagetools create -t ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }} \
             ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64 \
             ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
@@ -186,7 +184,6 @@ jobs:
             ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-amd64 \
             ${{ env.DOCKERHUB_REGISTRY }}/flintsh/flare:latest-arm64
           
-          # GitHub Container Registry manifests
           docker buildx imagetools create -t ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }} \
             ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-amd64 \
             ${{ env.GHCR_REGISTRY }}/flintsh/flare:${{ needs.check-version.outputs.version }}-arm64
@@ -214,14 +211,11 @@ jobs:
           PREV_TAG=$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
-            # If no previous tag exists, get all commits
             COMMITS=$(git log --pretty=format:"- %s" --no-merges)
           else
-            # Get commits between previous tag and current
             COMMITS=$(git log --pretty=format:"- %s" --no-merges ${PREV_TAG}..HEAD)
           fi
           
-          # If no commits found, add a default message
           if [ -z "$COMMITS" ]; then
             COMMITS="- Version bump to ${{ needs.check-version.outputs.version }}"
           fi

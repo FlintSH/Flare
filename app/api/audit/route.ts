@@ -1,80 +1,62 @@
-import { NextResponse } from 'next/server'
+import type { AuditEvent } from '@prisma/client'
 
-import { withAuditRoute } from '@/lib/audit'
 import { auditQuerySchema, auditWhere } from '@/lib/audit/query'
+import type { AuditPage } from '@/lib/audit/types'
 import { prisma } from '@/lib/database/prisma'
-import { requirePermission } from '@/lib/permissions/server'
+import { requireSession } from '@/lib/http/access'
+import { HttpError, unavailable } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 
-export async function GET(request: Request) {
-  return withAuditRoute(
-    async () => {
-      const { response } = await requirePermission('audit.read')
-      if (response) return response
-      const parameters = new URL(request.url).searchParams
-      const parsed = auditQuerySchema.safeParse(Object.fromEntries(parameters))
-      if (
-        !parsed.success ||
-        [...parameters.keys()].some((key) => parameters.getAll(key).length > 1)
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              'Invalid audit filters. Use bounded page/limit values and ISO timestamps with a timezone.',
-          },
-          { status: 400 }
-        )
-      }
-      const { page, limit } = parsed.data
-      const where = auditWhere(parsed.data)
-      try {
-        const [events, total, categories, actions] = await Promise.all([
-          prisma.auditEvent.findMany({
-            where,
-            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            skip: (page - 1) * limit,
-            take: limit,
-          }),
-          prisma.auditEvent.count({ where }),
-          prisma.auditEvent.groupBy({
-            by: ['category'],
-            orderBy: { category: 'asc' },
-            take: 100,
-          }),
-          prisma.auditEvent.groupBy({
-            by: ['action'],
-            orderBy: { action: 'asc' },
-            take: 500,
-          }),
-        ])
-        return NextResponse.json(
-          {
-            events,
-            total,
-            page,
-            limit,
-            pages: Math.max(1, Math.ceil(total / limit)),
-            filters: {
-              categories: categories.map((item) => item.category),
-              actions: actions.map((item) => item.action),
-            },
-          },
-          { headers: { 'Cache-Control': 'private, no-store' } }
-        )
-      } catch {
-        return NextResponse.json(
-          {
-            error:
-              'Unable to load audit events. Check database availability and migrations.',
-          },
-          { status: 503, headers: { 'Cache-Control': 'private, no-store' } }
-        )
-      }
-    },
-    {
-      route: '/api/audit',
-      action: 'audit.read',
-      category: 'audit',
-      skipSuccess: true,
+const message =
+  'Unable to load audit events. Check database availability and migrations.'
+
+const api = routes('/api/audit', { failure: { message } })
+
+export const GET = api(
+  async (request): Promise<AuditPage<AuditEvent>> => {
+    await requireSession(request, 'audit.read')
+    const parameters = new URL(request.url).searchParams
+    const parsed = auditQuerySchema.safeParse(Object.fromEntries(parameters))
+    if (
+      !parsed.success ||
+      [...parameters.keys()].some((key) => parameters.getAll(key).length > 1)
+    )
+      throw new HttpError(
+        400,
+        'Invalid audit filters. Use bounded page/limit values and ISO timestamps with a timezone.'
+      )
+    const { page, limit } = parsed.data
+    const where = auditWhere(parsed.data)
+    const [events, total, categories, actions] = await Promise.all([
+      prisma.auditEvent.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.auditEvent.count({ where }),
+      prisma.auditEvent.groupBy({
+        by: ['category'],
+        orderBy: { category: 'asc' },
+        take: 100,
+      }),
+      prisma.auditEvent.groupBy({
+        by: ['action'],
+        orderBy: { action: 'asc' },
+        take: 500,
+      }),
+    ]).catch(unavailable(message))
+    return {
+      events,
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      filters: {
+        categories: categories.map((item) => item.category),
+        actions: actions.map((item) => item.action),
+      },
     }
-  )(request)
-}
+  },
+  { audit: { action: 'audit.read', category: 'audit', skipSuccess: true } }
+)

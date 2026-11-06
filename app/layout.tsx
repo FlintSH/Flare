@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 
@@ -7,14 +9,17 @@ import { AuthProvider } from '@/components/providers/auth-provider'
 import { InputModality } from '@/components/providers/input-modality'
 import { MeticulousContext } from '@/components/providers/meticulous-context'
 import { QueryProvider } from '@/components/providers/query-provider'
-import { SetupChecker } from '@/components/setup-checker'
+import { SetupChecker } from '@/components/setup/setup-checker'
 import { ThemeInitializer } from '@/components/theme/theme-initializer'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 
-import { getConfig } from '@/lib/config'
+import { getRequestSession } from '@/lib/auth/page-session'
+import { getConfigOrDefaults } from '@/lib/config'
+import { faviconUrl } from '@/lib/customization/favicon'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
+import { pageSetupStatus } from '@/lib/setup/status'
 
 import './globals.css'
 
@@ -38,12 +43,24 @@ const inter = localFont({
   variable: '--font-inter',
 })
 
-export const metadata: Metadata = {
-  title: null,
-  description: null,
-  icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-  },
+const requestConfig = cache(getConfigOrDefaults)
+
+export async function generateMetadata(): Promise<Metadata> {
+  const favicon = faviconUrl(
+    (await requestConfig()).settings.appearance.favicon
+  )
+  return {
+    title: null,
+    description: null,
+    icons: {
+      icon: [
+        ...(favicon
+          ? [{ url: favicon, type: 'image/png', sizes: '32x32' }]
+          : []),
+        { url: '/icon.svg', type: 'image/svg+xml' },
+      ],
+    },
+  }
 }
 
 export const dynamic = 'force-dynamic'
@@ -73,8 +90,15 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const config = await getConfig()
-  const recovery = await isAppearanceRecovery()
+  const [config, recovery, setupComplete, session] = await Promise.all([
+    requestConfig(),
+    isAppearanceRecovery(),
+    // Unknown while the database can't be read: the browser then asks again,
+    // and the page shows its own error.
+    pageSetupStatus(),
+    // Left out when it can't be read, so the browser asks for it instead.
+    getRequestSession().catch(() => undefined),
+  ])
   const appearance = recovery
     ? {
         ...DEFAULT_APPEARANCE,
@@ -86,20 +110,14 @@ export default async function RootLayout({
       process.env.VERCEL_ENV === 'preview' ||
       process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
     Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
+  // While custom CSS mentions font-family, body text follows the studio's
+  // Typeface rule, which font-sans would outrank.
   const hasCustomFont =
     !recovery && config.settings.advanced.customCSS.includes('font-family')
 
-  if (config.settings.appearance.favicon) {
-    metadata.icons = {
-      icon: [
-        { url: '/api/favicon', type: 'image/png', sizes: '32x32' },
-        { url: '/icon.svg', type: 'image/svg+xml' },
-      ],
-    }
-  }
-
+  // Inter is defined on <html>, where the studio's Typeface reads --font-inter.
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Explicit opt-in also supports the isolated recording container. */}
         {recordMeticulous && (
@@ -119,7 +137,7 @@ export default async function RootLayout({
         <CustomHead recovery={recovery} />
       </head>
       <body
-        className={`${!hasCustomFont ? inter.variable + ' font-sans' : ''} min-h-screen flex flex-col`}
+        className={`${hasCustomFont ? '' : 'font-sans '}min-h-screen flex flex-col`}
       >
         <ThemeProvider
           attribute="class"
@@ -132,7 +150,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
-            <AuthProvider>
+            <AuthProvider session={session}>
               <AppearanceProvider
                 appearance={appearance}
                 legacyTheme={config.settings.appearance.theme}
@@ -142,9 +160,8 @@ export default async function RootLayout({
                     flags={collectBooleanFlags(config.settings.general)}
                   />
                 )}
-                <SetupChecker>
-                  <div className="flex-1">{children}</div>
-                </SetupChecker>
+                <SetupChecker completed={setupComplete} />
+                <div className="flex-1">{children}</div>
               </AppearanceProvider>
             </AuthProvider>
           </QueryProvider>

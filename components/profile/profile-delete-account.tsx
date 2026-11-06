@@ -3,7 +3,6 @@
 import { useState } from 'react'
 
 import { Loader2, Trash2 } from 'lucide-react'
-import { signOut } from 'next-auth/react'
 
 import {
   AlertDialog,
@@ -18,27 +17,31 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 
+import { apiRequest } from '@/lib/client/request'
+
+import { useSignOut } from '@/hooks/use-sign-out'
+
 export function ProfileDeleteAccount() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
+  const failed = (cause: unknown) =>
+    setError(
+      cause instanceof Error ? cause.message : 'Unable to delete your account.'
+    )
+  const signOut = useSignOut({ onError: failed })
 
   async function removeAccount() {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch('/api/profile', { method: 'DELETE' })
-      if (!response.ok) {
-        const body = await response.json()
-        throw new Error(body.error || 'Your account could not be deleted.')
-      }
-      await signOut({ callbackUrl: '/auth/login' })
+      await apiRequest('/api/profile', {
+        method: 'DELETE',
+        fallback: 'Your account could not be deleted.',
+      })
+      await signOut()
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Unable to delete your account.'
-      )
+      failed(cause)
     } finally {
       setBusy(false)
     }

@@ -11,6 +11,12 @@ Use the [OpenAPI document](/openapi.json) for custom clients using `flr_…` tok
 
 Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all path segments. Methods listed here are the implemented handlers; do not assume another method is supported because the path exists.
 
+## Answers and errors
+
+JSON answers, errors included, carry `Cache-Control: private, no-store` unless the route sets its own value: account security sends `no-store`, and file content follows the file's [sharing state](./files#content-caching). Earlier builds sent no `Cache-Control` with many of them, private ones included: `GET /api/urls`, `/api/upload-profiles`, `/api/users`, `/api/users/{id}/files`, `/api/users/{id}/urls`, `/api/users/{id}/email`, `/api/settings/email` and `/api/files/{id}/expiry` among them.
+
+An error answer is `{ "error": "…" }`, with `success: false` on routes whose successful answers use `{ "success": true, "data": … }`, except sign-in and permission refusals. The multipart upload, `POST /api/files`, is also an exception: a successful upload has that envelope, but its errors don't include `success`. A request whose body, query or form a route can't read answers `400` with that route's message. Anything else that goes wrong answers `500` with the route's general message, and the server logs the cause. That includes saved settings or upload profile options Flare can't read. Earlier builds answered some of those failures with `400` and logged nothing: an upload whose saved profile options or settings weren't valid answered `Invalid upload options.`, and unexpected failures on account security, account email, email settings, the settings form, the logo upload and personal appearance answered `400`.
+
 ## Named-token API
 
 All of these routes also use Flare's shared account authentication helper. A named token must have the specific scope and its owner must currently have the matching role permission. Results are limited to its owner's account. See the [scope-to-permission table](./authentication#scopes-and-account-roles).
@@ -31,18 +37,18 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
-See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
+See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. When the dashboard calls the write routes above with a browser session, they follow the [browser-session write rule](./authentication#browser-session-writes); token requests don't. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
 
 ## File content and access checks
 
 These routes check the file's visibility, password, and an optional **browser session**. They do not use named bearer tokens to grant file access. Public unprotected files can be fetched anonymously. Private files require an owner session with `files.read`, or a session with `content.read` and return `404` to ineligible viewers. A password-protected public file requires its password unless the browser session belongs to its owner with `files.read`, or a person with `content.read`.
 
-| Path                        | Methods   | Purpose                                                                                                                            |
-| --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.               |
-| `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value; POST accepts password JSON. S3 storage can redirect after access validation. |
-| `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image.                                                        |
-| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)).                |
+| Path                        | Methods   | Purpose                                                                                                                                                                                                                                           |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/files/{path}`         | GET       | Raw stored content by file URL path; `download=true` requests attachment handling and is audited as `file.download`.                                                                                                                              |
+| `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value and one `Range`; POST accepts password JSON and ignores `Range`. S3 storage can redirect after access validation to a signed URL, which makes S3 send the `Content-Disposition` Flare would. |
+| `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image. Access is checked before the type, so only someone who may read the file gets `400` for a non-image.                                                                  |
+| `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)). A non-image answers `400` only after access validation.                                                                       |
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs. After 10 different incorrect passwords for a file from one client address, or 100 from all addresses, within 15 minutes, these routes, downloads, and shared-archive reads answer `429` with `Retry-After` in seconds until the window ends, even for the correct password, unless that address unlocked the file in the last 10 minutes. Repeating an identical wrong password does not count again. See [incorrect password attempts](/guide/sharing#incorrect-password-attempts).
 
@@ -60,7 +66,7 @@ The public-facing route `/{userUrlId}/{filename}/raw` also enforces file access.
 
 Each successful raw-content `GET` adds one file view, including `206` range responses; denied requests, missing files, failures opening storage, and `HEAD` probes do not. This route uses public-file/password or browser-session access, not named-token authorization. The file-list `views` field includes these increments. See [raw request examples](./files#check-raw-view-counts) and the [view-count limitations](/guide/sharing#view-counts).
 
-A local file-open failure or failed view-counter write returns `500` and closes the acquired storage stream. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
+When the stored object itself is gone (`ENOENT` on local storage, `NoSuchKey` or a `404` HEAD on S3), the raw, content, download, and thumbnail routes answer `404` with an empty body; earlier builds answered `500` from raw, download, and thumbnail requests. On S3, a download redirects to its signed URL without reading the object, so S3 answers a missing key itself. Another storage failure or a failed view-counter write returns `500` and closes the acquired storage stream; `/api/files/{path}` answers `404` for every failure. Resolve the [storage or database failure](/hosting/troubleshooting#raw-links-return-500) before retrying.
 
 ### OCR request limits
 
@@ -82,22 +88,24 @@ These routes explicitly read an interactive session. Neither a named API token n
 | Path                               | Methods       | Purpose                                                                                                                           |
 | ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests.            |
-| `/api/upload-profiles`             | GET, POST     | List profiles with their `updatedAt` and effective-settings `effectiveRevision`; create/import a profile.                         |
+| `/api/upload-profiles`             | GET, POST     | List profiles with `updatedAt` and effective-settings `effectiveRevision`; create or import one (JSON up to 64 KiB, else `413`).  |
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                                          |
-| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                                 |
+| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe: the `flare-upload-profile` version 1 JSON that POST imports.                                    |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                                    |
 | `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                                    |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                                         |
-| `/api/profile/avatar`              | POST          | Upload an account avatar with a durable write intent and live authorization at publication; success remains `{success:true,url}`. |
-| `/api/profile/sharex`              | GET           | Download a ShareX uploader configuration.                                                                                         |
-| `/api/profile/itake`               | GET           | Download an iTake uploader configuration.                                                                                         |
-| `/api/profile/bash`                | GET           | Download the Bash uploader script.                                                                                                |
-| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from submitted tool options.                                                                          |
-| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from submitted tool options.                                                                          |
-| `/api/profile/export/progress`     | GET           | Stream account-export progress using server-sent events.                                                                          |
+| `/api/profile/avatar`              | POST          | Upload a PNG, JPEG, GIF, or WebP avatar up to 2 MB (`413` if larger, `415` for other types); success yields `{success:true,url}`. |
+| `/api/profile/sharex`              | GET           | Download a ShareX configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).               |
+| `/api/profile/itake`               | GET           | Download an iTake configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).               |
+| `/api/profile/bash`                | GET           | Download the Bash uploader script. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).             |
+| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from JSON `useWayland` and `useCompositor`. `?profileId=` selects a profile; never cached.            |
+| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from JSON tool options (`delay` is optional). `?profileId=` selects a profile; never cached.          |
+| `/api/profile/export/progress`     | GET           | Stream server-sent progress of the caller's export started with this `id`; ends when it finishes or fails, or the client leaves.  |
 | `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                                          |
 
-Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
+Every write these routes take from a browser session follows the [browser-session write rule](./authentication#browser-session-writes): Flare's own origin, and JSON or multipart bodies sent as such. Integration commands also bound the body size. Generated uploader configurations contain a credential and should be treated as private downloads.
+
+`POST /api/profile/avatar` reads its image as the logo and favicon uploads do: content that isn't a PNG, JPEG, GIF, or WebP image answers `400` with `File content is not a PNG, JPEG, GIF, or WebP image.` An image in one of those formats sent as another of them, such as a JPEG sent as `image/png`, is accepted. Earlier builds refused that too and answered both with `File content does not match claimed image type`.
 
 ### Archive workspace
 
@@ -112,7 +120,7 @@ The following owner-library archive operations require the owner's browser sessi
 
 ### Email account flows
 
-Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions.
+Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions. Email requests are limited per client IP address and per email address ([limits](/admin/email#limits-and-delivery-history)); a refused request returns `429` with `Retry-After` set to the seconds until the limit that refused it resets.
 
 | Path                            | Methods | Authentication and purpose                                                              |
 | ------------------------------- | ------- | --------------------------------------------------------------------------------------- |
@@ -126,11 +134,13 @@ Email enrollment and change operations use an account session that remains avail
 | `/api/auth/email/verify`        | POST    | A valid one-time email action token.                                                    |
 | `/api/auth/email/capabilities`  | GET     | Public view of enabled email capabilities.                                              |
 
-Email session mutations validate the request origin when provided. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
+Email session mutations follow the [browser-session write rule](./authentication#browser-session-writes); earlier builds also accepted the origin of the email public URL. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
+
+`GET /api/auth/email/status` gives the account's eligibility already worked out, by the rules the email routes apply. `canRequestChange` says whether the account may ask for a new address now, which also needs a verified current address when the old address must approve changes. `verifyBy` is the date the account must verify by to keep access during an all-user grace period, or `null` when no deadline applies to it. Both fields are new; the older ones keep their values. `canChangeEmail` only says whether the instance allows address changes, `graceEndsAt` is the instance's grace end whether or not it applies to the account, `verificationMode` is the saved mode even while email is disabled (`/api/auth/email/capabilities` gives the mode in force), and `hasPassword` and `requiresPassword` always carry the same value.
 
 ### Authenticator, recovery-code, and passkey flows
 
-Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutation origins must match `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
+Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutations follow the [browser-session write rule](./authentication#browser-session-writes); only passkeys need `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
 
 | Path                                         | Methods       | Authentication and purpose                                                                                               |
 | -------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -160,23 +170,23 @@ These routes require the caller's own current browser session and do not require
 
 ## Dashboard routes using the shared account helper
 
-These routes use `requireAuth`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
+These routes use `requireAccount`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
 
 | Path                        | Methods           | Purpose                                                                                                                                                                                                                       |
 | --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/profile`              | PUT, DELETE       | Update the account, or delete it with `profile.update`; password/plain-email updates additionally require browser-session identity proof. DELETE returns `204` after account removal and durable storage-cleanup work commit. |
-| `/api/profile/upload-token` | GET, POST         | Read or regenerate the legacy account upload credential.                                                                                                                                                                      |
-| `/api/profile/export`       | GET               | Stream a ZIP of account data and stored files; the [account guide](/guide/account#export-your-data) describes its layout, entry names, and cancellation.                                                                      |
-| `/api/files/{id}/expiry`    | GET, POST, DELETE | Inspect, schedule, or cancel expiration for an owned file.                                                                                                                                                                    |
+| `/api/profile`              | PUT, DELETE       | Update the account (`image` is ignored) or delete it with `profile.update`; password/plain-email updates also need browser-session identity proof. DELETE returns `204` once account removal and durable cleanup work commit. |
+| `/api/profile/upload-token` | GET, POST         | Read or regenerate the legacy account upload credential. Responses send `Cache-Control: private, no-store`.                                                                                                                   |
+| `/api/profile/export`       | GET               | Stream a ZIP of account data and stored files; the [account guide](/guide/account#export-your-data) describes its layout, entry names, and cancellation. Optional `id` (16-64 of `A-Za-z0-9_-`) names it for progress.        |
+| `/api/files/{id}/expiry`    | GET, POST, DELETE | Inspect, schedule, or cancel expiration for an owned file (`404` for any other). POST takes `expiresAt` in the [form uploads take](./files#upload-options) and `action`: `DELETE` (default) or `SET_PRIVATE`.                 |
 | `/api/folders`              | GET, POST         | List or create folders.                                                                                                                                                                                                       |
-| `/api/folders/{id}`         | PATCH, DELETE     | Rename/move or delete an owned folder.                                                                                                                                                                                        |
+| `/api/folders/{id}`         | PATCH, DELETE     | Rename an owned folder or turn its share link on or off (sharing also needs `folders.share`). DELETE dissolves it: its files and subfolders move up one level. PATCH can't move a folder.                                     |
 | `/api/files/folders`        | POST              | Move owned files into a folder or make them unfiled.                                                                                                                                                                          |
-| `/api/tags`                 | GET, POST         | List or create tags and their rules.                                                                                                                                                                                          |
+| `/api/tags`                 | GET, POST         | List or create tags and their rules. Names are unique per account without regard to letter case; a duplicate answers `409`.                                                                                                   |
 | `/api/tags/{id}`            | PATCH, DELETE     | Edit or delete an owned tag.                                                                                                                                                                                                  |
 | `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                                                                                                                                                                         |
 | `/api/files/tags`           | GET, PATCH        | GET reads current tag assignments for 1–100 owned file IDs with `files.read`; PATCH changes assignments with `files.update` and `tags.manage`. See the [selection contract](./files#read-current-tags-for-a-selection).       |
 
-Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
+Writes from a browser session follow the [browser-session write rule](./authentication#browser-session-writes); legacy-token requests are not origin- or type-checked. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 
 ## Invite routes
 
@@ -201,40 +211,48 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/users/{id}`                | DELETE         | `users.delete`; remove an account within delegation limits. Returns `204` after account removal and durable storage-cleanup work commit.                  |
 | `/api/users/{id}/avatar`         | DELETE         | `users.update`; clear an account's avatar and queue its stored bytes for cleanup; `204` after commit.                                                     |
 | `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account’s browser sessions. Success is `204 No Content`, with no JSON body. API credentials remain active.                |
-| `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
-| `/api/users/{id}/files`          | GET            | `content.read`; inspect an account's files.                                                                                                               |
-| `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`.                                                                                                        |
-| `/api/users/{id}/urls`           | GET            | `content.read`; inspect an account's short links.                                                                                                         |
+| `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access. GET adds `canResend`, whether the resend action would send another verification link.                         |
+| `/api/users/{id}/files`          | GET            | `content.read`; page through an account's files (`limit` default 10, at most 100). [Contract](/admin/users#moderate-files-and-shortened-links).           |
+| `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`, returns `204`. Wrong owner/missing file returns `404` (PATCH returned `500` before).                   |
+| `/api/users/{id}/urls`           | GET            | `content.read`; page through an account's short links: `page`, `limit` (default 10, at most 100), `search`. [Contract](./short-links#moderation-routes).  |
 | `/api/users/{id}/urls/{urlId}`   | DELETE         | `content.delete`; session-only deletion of a short link owned by that target account. Returns `204`; wrong owner/missing URL returns `404`.               |
-| `/api/users/{id}/login`          | POST           | `users.read`; fetch target account information. Does not itself issue a login session.                                                                    |
+| `/api/users/{id}/login`          | POST           | `users.read`; fetch target account information. Does not itself issue a login session. The dashboard no longer calls it; it remains for existing clients. |
 | `/api/settings`                  | PATCH, POST    | PATCH: corresponding section permission; legacy whole-settings POST: Administrator. [Field mapping](./roles#delegated-settings-writes).                   |
-| `/api/settings/favicon`          | POST           | `appearance.manage`; upload a legacy instance favicon.                                                                                                    |
+| `/api/settings/favicon`          | POST           | `appearance.manage`; replace the favicon with a multipart `file`: a PNG of at most 1 MB, else `413`, `415` or `400`. Answers `{ url }`, its new address.  |
 | `/api/settings/email`            | GET, PUT       | `settings.email`; read/save email configuration and diagnostics.                                                                                          |
 | `/api/settings/email/impact`     | GET, POST      | `settings.email`; preview email-policy impact.                                                                                                            |
 | `/api/settings/email/test`       | POST           | `settings.email`; test SMTP or send a test message.                                                                                                       |
 | `/api/settings/email/retry`      | POST           | `settings.email`; retry an eligible outbox entry.                                                                                                         |
 | `/api/customization`             | POST           | `appearance.manage`; save/import/publish/restore appearance.                                                                                              |
-| `/api/customization/assets`      | POST           | `appearance.manage`; upload an appearance asset.                                                                                                          |
+| `/api/customization/assets`      | POST           | `appearance.manage`; turn a multipart `file`, a PNG, JPEG, or WebP of at most 256 KB, into a data URL, else `413`, `415` or `400`, as for the favicon.    |
 | `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 
-Email administration validates origins for mutations; appearance administration uses same-origin/content-type guards. Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
+Administration writes follow the [browser-session write rule](./authentication#browser-session-writes). Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
+
+A `/api/settings` save that includes storage settings with S3 selected answers `400` with the missing or invalid value, such as `Bucket name is required`, when the [saved result](/hosting/storage#s3-compatible-storage) would lack a bucket, region, either key, or a valid HTTP(S) endpoint; a blank key keeps the saved one. Earlier builds saved such settings.
+
+`PATCH` and the legacy `POST` on `/api/settings` both save submitted custom CSS trimmed, with at most one blank line in a row. Earlier builds tidied it only in the `POST`, so CSS saved from Settings kept its extra blank lines.
 
 ## Public and bootstrap routes
 
 | Path                            | Methods   | Authentication and purpose                                                                                                                                                                      |
 | ------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                               |
-| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                            |
-| `/api/setup/check`              | GET       | Public setup-completion state.                                                                                                                                                                  |
+| `/api/storage/type`             | GET       | Public storage kind the saved settings name (`local` or `s3`). Earlier builds answered `local` when S3 couldn't start. Not a storage health check.                                              |
+| `/api/setup/check`              | GET       | Public setup-completion state: `{ "completed": boolean }`, `true` once any account exists. Answers `503` when the database can't be read instead of reporting `false`.                          |
 | `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates Everyone, the full-access Admin role, the first account assignment, and settings atomically and rate-limits attempts.                    |
 | `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                                   |
 | `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits. An active `invite` creates an account while registration is closed and applies its roles. |
 | `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                         |
 | `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection.     |
-| `/api/favicon`                  | GET       | Serve the configured favicon/fallback.                                                                                                                                                          |
+| `/api/favicon`                  | GET       | Serve the uploaded favicon; `404` when there is none. Only a `?v=` matching the image hash is cached (one year); other requests revalidate. S3 storage redirects to a signed URL.               |
 | `/api/avatars/{filename}`       | GET       | Serve a currently referenced avatar; `404` for obsolete/unowned keys and `503` when its recorded storage target is unavailable.                                                                 |
 
 Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. With closed registration, account creation additionally requires an active [invite](./invites#register-with-an-invite). Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
+
+While the saved settings can't be read, because the database is unavailable or the saved document is invalid, routes that need them fail instead of using the defaults: `GET /api/settings` and `POST /api/auth/register` answer `500`, and `GET /api/auth/registration-status` answers `{ "enabled": false, "message": "Registration is currently unavailable." }`. Earlier builds answered with the default settings, which allow registration. See [troubleshooting](/hosting/troubleshooting#pages-show-something-went-wrong).
+
+Every route that sets an account's name, address, or password applies one set of rules: `POST /api/auth/register`, `POST /api/setup`, `POST` and `PUT /api/users`, `PUT /api/profile`, and `POST /api/auth/email/reset`. A name needs at least one character, and a password needs at least 8 characters and at most 72 UTF-8 bytes whether or not account email is enabled; a longer one answers `400` with `Password must use at most 72 bytes.` Earlier versions applied that limit at registration and in `/api/users` only while account email was enabled, and needed two characters for a name outside setup. With account email enabled, an address another account uses in any capitalization is refused, and `_` and `%` in an address are ordinary characters, not wildcards; with it disabled, one another account uses as written is refused, which `PUT /api/users` answered with `500` in earlier versions. A URL ID or vanity ID that another account uses as either kind of ID is refused with `400`; see [account contract changes](./roles#account-contract-changes). When the daily email limit stops a new account's verification message, `POST /api/auth/register` and `POST /api/users` answer `400` with `The daily email sending limit has been reached. Try again tomorrow or contact your administrator.`, as the email routes do, where earlier versions answered `500`.
 
 ## Maintaining an integration
 

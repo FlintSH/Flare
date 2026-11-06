@@ -1,7 +1,22 @@
 import type { PersonalAppearance } from '@/lib/customization/schema'
 import type { PROFILE_SECTIONS } from '@/lib/preferences/navigation'
 
-import { User } from './user'
+export interface User {
+  id: string
+  name: string | null
+  email: string | null
+  image: string | null
+  storageUsed: number
+  roles: import('@/lib/permissions/catalog').RoleSummary[]
+  permissions: string[]
+  randomizeFileUrls: boolean
+  urlId: string
+  vanityId: string | null
+  fileCount: number
+  shortUrlCount: number
+  defaultFileExpiration: 'DISABLED' | 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | null
+  defaultFileExpirationAction: 'DELETE' | 'SET_PRIVATE' | null
+}
 
 export interface ProfileClientProps {
   user: User
@@ -29,29 +44,6 @@ export interface ProfileAccountProps {
 
 export interface ProfileSecurityProps {
   onUpdate: () => void
-}
-
-export interface ProfileExportProps {
-  onExportStart: () => void
-  onExportComplete: () => void
-}
-
-export interface ProfileToolsProps {
-  user: User
-}
-
-export interface FlameshotFormValues {
-  useWayland: boolean
-  useCompositor: boolean
-}
-
-export interface SpectacleFormValues {
-  scriptType: 'screenshot' | 'recording'
-  useWayland: boolean
-  includePointer: boolean
-  captureMode: 'fullscreen' | 'current' | 'activewindow' | 'region'
-  recordingMode: 'fullscreen' | 'current' | 'region'
-  delay: number
 }
 
 export interface UploadToken {

@@ -1,25 +1,20 @@
-import { withAuditRoute } from '@/lib/audit'
 import {
+  SECURITY_BODY_LIMIT,
   proofSchema,
-  securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { changeTotp } from '@/lib/auth/security/service'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    return changeTotp(
-      session,
-      proofSchema.parse(await securityBody(req)),
-      false
-    )
-  })
-}
+const api = routes('/api/auth/security/recovery-codes', securityRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/security/recovery-codes',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { session } = await securitySession(request)
+  return changeTotp(
+    session,
+    await readJson(request, proofSchema, { limit: SECURITY_BODY_LIMIT }),
+    false
+  )
+})

@@ -1,71 +1,44 @@
 import { NextResponse } from 'next/server'
 
-import { randomUUID } from 'crypto'
-
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
+import { newUploadToken } from '@/lib/users/credentials'
 
-const logger = loggers.users
+const api = routes('/api/profile/upload-token', {
+  failure: { message: 'Internal server error' },
+  logger: loggers.users,
+})
 
-async function handleGET(req: Request) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+export const GET = api(async (request) => {
+  const user = await requireAccount(request)
 
-    const userData = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { uploadToken: true },
-    })
+  const userData = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { uploadToken: true },
+  })
 
-    if (!userData) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ uploadToken: userData.uploadToken })
-  } catch (error) {
-    logger.error('Error fetching upload token:', error as Error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+  if (!userData) {
+    throw new HttpError(404, 'User not found')
   }
-}
 
-async function handlePOST(req: Request) {
-  const limited = await rateLimit(req, generalLimiter)
+  return NextResponse.json({ uploadToken: userData.uploadToken })
+})
+
+export const POST = api(async (request) => {
+  const limited = await rateLimit(request, generalLimiter)
   if (limited) return limited
 
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+  const user = await requireAccount(request)
 
-    const userData = await prisma.user.update({
-      where: { id: user.id },
-      data: { uploadToken: randomUUID() },
-      select: { uploadToken: true },
-    })
+  const userData = await prisma.user.update({
+    where: { id: user.id },
+    data: { uploadToken: newUploadToken() },
+    select: { uploadToken: true },
+  })
 
-    return NextResponse.json({ uploadToken: userData.uploadToken })
-  } catch (error) {
-    logger.error('Error refreshing upload token:', error as Error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET(req: Request) {
-  return withAuditRoute(async () => handleGET(req), {
-    route: '/api/profile/upload-token',
-  })(req)
-}
-
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/profile/upload-token',
-  })(req)
-}
+  return NextResponse.json({ uploadToken: userData.uploadToken })
+})

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ZodError } from 'zod'
 
 // One saved row served through both the model delegate and raw SQL, so the
 // assertions describe behavior rather than which query shape is used.
@@ -34,20 +35,19 @@ vi.mock('@/lib/database/prisma', () => {
           db.valueReads++
           return { id: row.id, key: 'flare_config', value: row.value }
         },
-        findFirst: async () => {
-          const row = read()
-          return row && { id: row.id, key: 'flare_config', value: row.value }
-        },
-        create: async ({ data }: { data: { value: unknown } }) => {
+        createMany: async ({ data }: { data: { value: unknown } }) => {
+          if (read()) return { count: 0 }
           db.row = { id: 'created', xmin: '1', value: data.value }
-          return db.row
+          return { count: 1 }
         },
       },
     },
   }
 })
 
-const { DEFAULT_CONFIG, configSchema, getConfig } = await import('@/lib/config')
+const { DEFAULT_CONFIG, configSchema, getConfig, getConfigOrDefaults } =
+  await import('@/lib/config')
+const { loggers } = await import('@/lib/logger')
 const { getEmailConfig, getSavedEmailConfig } =
   await import('@/lib/email/config')
 
@@ -124,10 +124,10 @@ describe('configuration revision cache', () => {
     expect((await getConfig()).settings.general.storage.provider).toBe('local')
   })
 
-  it('keeps the default fallback when the database is unavailable, then recovers', async () => {
+  it('propagates a database error instead of the defaults, then recovers', async () => {
     saved((config) => (config.settings.appearance.theme = 'light'), 'row-f')
     db.fail = true
-    expect(await getConfig()).toBe(DEFAULT_CONFIG)
+    await expect(getConfig()).rejects.toThrow('database unavailable')
 
     db.fail = false
     expect((await getConfig()).settings.appearance.theme).toBe('light')
@@ -157,13 +157,47 @@ describe('configuration revision cache', () => {
     expect(parse).toHaveBeenCalledTimes(1)
   })
 
-  it('does not re-parse an invalid saved configuration on every call', async () => {
+  it('throws for an invalid saved configuration without re-parsing it on every call', async () => {
     db.row = { id: 'row-g', xmin: '1', value: { version: 1 } }
     const parse = vi.spyOn(configSchema, 'parse')
 
-    expect(await getConfig()).toBe(DEFAULT_CONFIG)
-    expect(await getConfig()).toBe(DEFAULT_CONFIG)
+    await expect(getConfig()).rejects.toBeInstanceOf(ZodError)
+    await expect(getConfig()).rejects.toBeInstanceOf(ZodError)
     expect(parse).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives the page shell the defaults, and logs why, only when settings cannot be read', async () => {
+    const logged = vi.spyOn(loggers.config, 'warn').mockImplementation(() => {})
+    saved((config) => (config.settings.appearance.theme = 'light'), 'row-m')
+    expect((await getConfigOrDefaults()).settings.appearance.theme).toBe(
+      'light'
+    )
+    expect(logged).not.toHaveBeenCalled()
+
+    db.fail = true
+    expect(await getConfigOrDefaults()).toBe(DEFAULT_CONFIG)
+    db.fail = false
+    db.row = { id: 'row-n', xmin: '1', value: { version: 1 } }
+    expect(await getConfigOrDefaults()).toBe(DEFAULT_CONFIG)
+    expect(logged).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps one parse per module copy while copies take turns reading', async () => {
+    // Each route bundle loads its own copy of the module; they share the row.
+    saved((config) => (config.settings.appearance.theme = 'light'), 'row-o')
+    const parse = vi.spyOn(configSchema, 'parse')
+    await getConfig()
+    vi.resetModules()
+    const other = await import('@/lib/config')
+    const otherParse = vi.spyOn(other.configSchema, 'parse')
+
+    for (let turn = 0; turn < 3; turn++) {
+      expect((await getConfig()).settings.appearance.theme).toBe('light')
+      expect((await other.getConfig()).settings.appearance.theme).toBe('light')
+    }
+
+    expect(parse).toHaveBeenCalledTimes(1)
+    expect(otherParse).toHaveBeenCalledTimes(1)
   })
 
   it('serves email settings from the same read and still propagates database errors', async () => {

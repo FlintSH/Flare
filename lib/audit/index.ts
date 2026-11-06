@@ -1,7 +1,8 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
 import { auditContext } from './context'
+import { auditedModels } from './models'
 import { auditText, sanitizeAuditDetails } from './sanitize'
 import type { AuditInput } from './types'
 
@@ -46,17 +47,22 @@ function reportAuditFailure(error: unknown) {
   )
 }
 
-export async function recordAudit(input: AuditInput): Promise<void> {
-  return recordAuditMany([input])
+const textLimits = {
+  action: 150,
+  category: 80,
+  actorId: 200,
+  actorName: 300,
+  targetType: 80,
+  targetId: 200,
+  targetName: 500,
+  requestId: 100,
+  method: 12,
+  route: 300,
 }
 
-/** Flush all per-object evidence in bounded writes, retaining best-effort behavior. */
-export async function recordAuditMany(
-  inputs: readonly AuditInput[]
-): Promise<void> {
-  if (!inputs.length) return
+function inRequest(input: AuditInput): AuditInput {
   const context = auditContext.getStore()
-  const events = inputs.map((input): AuditInput => ({
+  return {
     requestId: context?.requestId,
     method: context?.method,
     route: context?.route,
@@ -72,43 +78,51 @@ export async function recordAuditMany(
       tokenId: context?.tokenId,
       ...input.details,
     },
-  }))
+  }
+}
+
+function auditRow(event: AuditInput): Prisma.AuditEventCreateManyInput {
+  return {
+    action: auditText(event.action, textLimits.action) ?? 'unknown',
+    category: auditText(event.category, textLimits.category) ?? 'system',
+    outcome: event.outcome ?? 'success',
+    actorId: auditText(event.actorId, textLimits.actorId),
+    actorName: auditText(event.actorName, textLimits.actorName),
+    targetType: auditText(event.targetType, textLimits.targetType),
+    targetId: auditText(event.targetId, textLimits.targetId),
+    targetName: auditText(event.targetName, textLimits.targetName),
+    requestId: auditText(event.requestId, textLimits.requestId),
+    method: auditText(event.method, textLimits.method),
+    route: auditText(event.route, textLimits.route),
+    status: event.status,
+    details: sanitizeAuditDetails(event.details) as Prisma.InputJsonValue,
+  }
+}
+
+export async function recordAudit(input: AuditInput): Promise<void> {
+  return recordAuditMany([input])
+}
+
+/** Flush all per-object evidence in bounded writes, retaining best-effort behavior. */
+export async function recordAuditMany(
+  inputs: readonly AuditInput[]
+): Promise<void> {
+  if (!inputs.length) return
+  const context = auditContext.getStore()
+  const events = inputs.map(inRequest)
   if (context?.pending) {
     for (const event of events) context.pending.push(event)
     return
   }
-  try {
-    if (!globalAudit.flareAuditWriter) {
-      // Auth/workers can be the first module to ask for an audit writer.
-      await import('@/lib/database/prisma')
-    }
-    if (!globalAudit.flareAuditWriter)
-      throw new Error('Audit writer unavailable')
-  } catch (error) {
-    reportAuditFailure(error)
-    return
-  }
   const write = globalAudit.flareAuditWriter
   const writeMany = globalAudit.flareAuditBatchWriter
+  if (!write) {
+    reportAuditFailure(new Error('Audit writer unavailable'))
+    return
+  }
   for (let offset = 0; offset < events.length; offset += AUDIT_BATCH_SIZE) {
     try {
-      const data = events
-        .slice(offset, offset + AUDIT_BATCH_SIZE)
-        .map((event) => ({
-          action: auditText(event.action, 150) ?? 'unknown',
-          category: auditText(event.category, 80) ?? 'system',
-          outcome: event.outcome ?? 'success',
-          actorId: auditText(event.actorId, 200),
-          actorName: auditText(event.actorName),
-          targetType: auditText(event.targetType, 80),
-          targetId: auditText(event.targetId, 200),
-          targetName: auditText(event.targetName, 500),
-          requestId: auditText(event.requestId, 100),
-          method: auditText(event.method, 12),
-          route: auditText(event.route, 300),
-          status: event.status,
-          details: sanitizeAuditDetails(event.details) as Prisma.InputJsonValue,
-        }))
+      const data = events.slice(offset, offset + AUDIT_BATCH_SIZE).map(auditRow)
       if (writeMany && events.length > 1) await writeMany(data)
       else
         for (const event of data) {
@@ -124,132 +138,126 @@ export async function recordAuditMany(
   }
 }
 
-/** Route templates only. Actual IDs and names belong in explicit target fields. */
-export function auditRoutePath(url: string): string {
-  const segments = new URL(url).pathname.split('/').filter(Boolean)
-  const known = new Set([
-    'api',
-    'auth',
-    'login',
-    'logout',
-    'register',
-    'callback',
-    'signin',
-    'signout',
-    'session',
-    'csrf',
-    'providers',
-    'credentials',
-    'oidc',
-    'passkeys',
-    'options',
-    'verify',
-    'authenticate',
-    'registration',
-    'recovery',
-    'codes',
-    'totp',
-    'profile',
-    'users',
-    'roles',
-    'invites',
-    'settings',
-    'appearance',
-    'assets',
-    'avatar',
-    'files',
-    'upload',
-    'paste',
-    'download',
-    'raw',
-    'thumbnail',
-    'ocr',
-    'tags',
-    'folders',
-    'share',
-    'unshare',
-    'urls',
-    'shorten',
-    'tokens',
-    'webhooks',
-    'deliveries',
-    'test',
-    'retry',
-    'export',
-    'email',
-    'verification',
-    'resend',
-    'confirm',
-    'change',
-    'password',
-    'reset',
-    'forgot',
-    'sessions',
-    'history',
-    'security',
-    'setup',
-    'config',
-    'upload-profiles',
-    'preferences',
-    'f',
-    's',
-  ])
-  return (
-    '/' +
-    segments.map((segment) => (known.has(segment) ? segment : ':id')).join('/')
+/**
+ * Records a delete event for each `model` row matching `where`, for rows a
+ * database cascade is about to remove, which the Prisma audit extension never
+ * sees. It is one INSERT ... SELECT in the caller's transaction, so the events
+ * commit with the deletion and no row is read into memory. The action,
+ * category and target type come from `auditedModels`; `name` is the column
+ * naming each row, and `copy` maps detail keys to columns. Every column must
+ * be one of the model's audited fields.
+ */
+export async function recordCascadedDeletes(
+  tx: Prisma.TransactionClient,
+  model: 'File' | 'Invite',
+  {
+    where,
+    name,
+    copy,
+    ...event
+  }: {
+    where: Record<string, string>
+    name: string
+    copy: Record<string, string>
+    actorId: string
+    actorName: string
+    reason: string
+  }
+) {
+  const { target, category, fields, keys } = auditedModels[model]!
+  const column = (field: string) => {
+    if (!fields.includes(field))
+      throw new Error(`${model}.${field} is not an audited field`)
+    return Prisma.raw(`"${field}"`)
+  }
+  const row = auditRow(
+    inRequest({
+      action: `${target}.delete`,
+      category,
+      targetType: target,
+      actorId: event.actorId,
+      actorName: event.actorName,
+      details: { reason: event.reason },
+    })
   )
+  const copied = Object.entries(copy).map(
+    ([detail, field]) => Prisma.sql`${detail}::text, ${column(field)}`
+  )
+  await tx.$executeRaw`
+    INSERT INTO "AuditEvent"
+      (id, action, category, outcome, "actorId", "actorName", "targetType",
+       "targetId", "targetName", "requestId", method, route, details)
+    SELECT gen_random_uuid()::text, ${row.action}, ${row.category},
+      ${row.outcome}, ${row.actorId ?? null}, ${row.actorName ?? null},
+      ${row.targetType ?? null},
+      LEFT(${column(keys?.[0] ?? 'id')}, ${textLimits.targetId}::int),
+      NULLIF(LEFT(${column(name)}, ${textLimits.targetName}::int), ''),
+      ${row.requestId ?? null}, ${row.method ?? null}, ${row.route ?? null},
+      ${JSON.stringify(row.details)}::jsonb ||
+        ${copied.length ? Prisma.sql`jsonb_build_object(${Prisma.join(copied)})` : Prisma.sql`'{}'::jsonb`}
+    FROM ${Prisma.raw(`"${model}"`)}
+    WHERE ${Prisma.join(
+      Object.entries(where).map(
+        ([field, value]) => Prisma.sql`${column(field)} = ${value}`
+      ),
+      ' AND '
+    )}
+  `
 }
 
-export function withAuditRoute<Args extends unknown[], Result extends Response>(
-  handler: (...args: Args) => Promise<Result>,
+/**
+ * Record one HTTP request under its route template (never the actual path:
+ * IDs and names belong in explicit target fields), with the actor and target
+ * the handler sets, the outcome and the duration.
+ */
+export async function auditRequest(
+  request: Request,
   options: {
+    route: string
     action?: string
     category?: string
-    route?: string
     skipSuccess?: boolean
-  } = {}
-): (...args: Args extends [] ? [request?: Request] : Args) => Promise<Result> {
-  return async (...args) => {
-    const request = args[0] instanceof Request ? args[0] : undefined
-    const route =
-      options.route ?? (request ? auditRoutePath(request.url) : undefined)
-    const method = request?.method ?? 'GET'
-    const started = Date.now()
-    return auditContext.run(
-      { requestId: randomUUID(), method, route },
-      async () => {
-        try {
-          const response = await handler(...(args as Args))
-          const outcome =
-            auditContext.getStore()?.outcome ??
-            (response.status === 401 || response.status === 403
-              ? 'denied'
-              : response.status >= 400
-                ? 'failure'
-                : 'success')
-          if (options.skipSuccess && outcome === 'success') return response
-          await recordAudit({
-            action: options.action ?? `http.${method.toLowerCase()}`,
-            category: options.category ?? 'requests',
-            outcome,
-            status: response.status,
-            details: { durationMs: Date.now() - started },
-          })
-          return response
-        } catch (error) {
-          await recordAudit({
-            action: options.action ?? `http.${method.toLowerCase()}`,
-            category: options.category ?? 'requests',
-            outcome: 'failure',
-            status: 500,
-            details: {
-              durationMs: Date.now() - started,
-              reason: 'Unhandled request error',
-            },
-          })
-          throw error
-        }
+  },
+  handle: () => Promise<Response>
+): Promise<Response> {
+  const method = request.method
+  const started = Date.now()
+  const action = options.action ?? `http.${method.toLowerCase()}`
+  const category = options.category ?? 'requests'
+  return auditContext.run(
+    { requestId: randomUUID(), method, route: options.route },
+    async () => {
+      try {
+        const response = await handle()
+        const outcome =
+          auditContext.getStore()?.outcome ??
+          (response.status === 401 || response.status === 403
+            ? 'denied'
+            : response.status >= 400
+              ? 'failure'
+              : 'success')
+        if (options.skipSuccess && outcome === 'success') return response
+        await recordAudit({
+          action,
+          category,
+          outcome,
+          status: response.status,
+          details: { durationMs: Date.now() - started },
+        })
+        return response
+      } catch (error) {
+        await recordAudit({
+          action,
+          category,
+          outcome: 'failure',
+          status: 500,
+          details: {
+            durationMs: Date.now() - started,
+            reason: 'Unhandled request error',
+          },
+        })
+        throw error
       }
-    )
-  }
+    }
+  )
 }

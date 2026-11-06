@@ -5,7 +5,7 @@ description: Organize files and subfolders, move files in bulk, and share a coll
 
 # Folders and collections
 
-Browsing folders uses `files.read`; creating and organizing them requires `folders.manage`. Moving existing files also needs `files.update`. Publishing or revoking a folder link requires `folders.share`. These grants come from your [roles](/admin/roles), not from membership in the folder.
+Browsing folders uses `files.read`; creating and organizing them requires `folders.manage`. Moving existing files also needs `files.update`, and uploading into a folder also needs `files.upload`. Publishing or revoking a folder link requires `folders.share` as well as `folders.manage`. These grants come from your [roles](/admin/roles), not from membership in the folder.
 
 Folders give a project or collection its own place while **All files** keeps your entire library available. Each file belongs to one folder or is unfiled. [Tags](./tags) work across folders when a file belongs to several topics.
 
@@ -22,7 +22,7 @@ Everyone initially includes folder permissions; an administrator can restrict th
 3. Open the folder to see its direct files and subfolders.
 4. Choose **New folder** inside it to create a subfolder, or **Upload here** to add files.
 
-Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Names must be distinct within the same parent. The same name can be useful in separate projects.
+Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Flare trims the ends of a name and saves each run of spaces as one space; unlike a tag name, a folder name can't contain a tab or line break. Names must be distinct within the same parent, ignoring letter case, so `Photos` and `photos` can't share a parent. The same name can be useful in separate projects. Folders that [archive extraction](./archives#extract-into-your-library) creates follow the same rules.
 
 **All files** includes files from every folder. **Unfiled** includes files that do not belong to a folder. Opening a specific folder shows its direct files; open a subfolder to see the files inside that subfolder.
 
@@ -46,10 +46,12 @@ When a folder has a share link, moving a public file into it adds that file to t
 
 ## Upload into the right place
 
-- **Upload here** opens the upload page with the current folder selected.
-- **Save to** on the upload page lets you choose a folder when you have folders.
-- Dropping files onto the library uploads them into the folder currently open.
+- **Upload here**, beside the folder's path and in an empty folder, opens the upload page with the current folder selected. It appears only when your role has both `files.upload` and `folders.manage`, because Flare saves uploads into a folder only for roles that can manage folders. Earlier versions showed it with `files.upload` alone, and the upload then failed.
+- **Save to** on the upload page lets you choose a folder when you have folders. It appears only with `folders.manage`; without it, uploads are unfiled, even from a link that opens the upload page with a folder selected. Earlier versions showed it anyway, and the upload then failed.
+- Dropping files onto the library uploads them into the folder currently open when your role has `folders.manage`, and leaves them unfiled otherwise. Earlier versions tried the open folder, and the upload then failed. See [quick drag-and-drop](./uploading#quick-drag-and-drop).
 - Dropping files elsewhere in the dashboard leaves them unfiled.
+
+An empty folder's message suggests only what your role allows: uploading here, or moving existing files in, which needs `files.update` and `folders.manage`. With neither, it says your role can't add files to folders.
 
 The destination is chosen for the upload; it is not saved inside an upload profile. If a folder is removed while an upload is running, finalization can fail instead of quietly putting the file somewhere else. Choose a valid destination and retry.
 
@@ -64,9 +66,11 @@ Folders start private. To publish a collection:
 3. Copy the generated URL and send it to your recipients.
 4. Review the page in a signed-out browser window to check what visitors see.
 
+**Share** and **Share folder** appear only when your role has both `folders.share` and `folders.manage`, the permissions Flare checks when it creates or disables a link. Earlier versions showed them with `folders.share` alone, and creating or disabling the link then failed.
+
 The shared page uses a link under `/s/folders/…`. It lists up to 48 files per page and follows changes to the collection: newly added public files appear, and files moved out or made private disappear.
 
-A visitor who opens a file from the shared page sees **Back to** and the folder's name above the file, including on the password page of a locked tile, to return to the listing. Flare shows the link only while the file is still a public member of that folder. The file's own link doesn't change: the folder pages pass their address, as the browser's referrer, only to your Flare instance, so the folder link never appears in a file URL or reaches other sites. A browser set to send no referrer opens the file without the link.
+A visitor who opens a file from the shared page sees **Back to** and the folder's name above the file, including on the password page of a locked tile, to return to the listing page they opened it from. From a locked tile, both its password page and the unlocked file return to the first page. Flare shows the link only while the file is still a public member of that folder. The file's own link doesn't change: the folder pages pass their address, as the browser's referrer, only to your Flare instance, so the folder link never appears in a file URL or reaches other sites. A browser set to send no referrer opens the file without the link.
 
 <Screenshot src="/evidence/vault-folders/shared-folder-desktop.jpg" alt="Public shared collection with public files and a generic password-protected tile" caption="The public collection excludes private files and hides the filename and preview of locked files." />
 
@@ -77,6 +81,8 @@ A visitor who opens a file from the shared page sees **Back to** and the folder'
 | Private file                          | Nothing; it is excluded from the listing.                                           |
 | Subfolder and its files               | Nothing; sharing does not recursively publish subfolders.                           |
 | Tags and account details              | Not listed.                                                                         |
+
+A tile without an image preview shows the same icon for the file's kind as your [library cards](./library#read-a-file-card): video, audio, text or PDF, code, table, archive, or a plain file. Earlier versions told only video and audio apart, and showed a plain file for everything else.
 
 There is no separate folder password. Protect individual public files with their own passwords, or keep them private. A shared folder is a collection for viewing, not a collaborative upload or editing space.
 

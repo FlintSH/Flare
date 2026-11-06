@@ -31,11 +31,17 @@ Create a bucket and credentials with your provider, then enter:
 | **Custom endpoint**   | Your provider's HTTP(S) S3 API origin; leave empty for the AWS regional default                   |
 | **Force path style**  | Enable when your compatible provider expects `endpoint/bucket/key` rather than a bucket subdomain |
 
-The provider is configured through saved instance settings. Flare does not read `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, or an IAM role as substitutes for these configured credentials. Setup validates required fields but does not perform a live bucket test.
+The provider is configured through saved instance settings. Flare does not read `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, or an IAM role as substitutes for these configured credentials.
+
+Setup and **Settings → Storage** check S3 settings the same way: the bucket, region, access key ID, and secret access key are required, and a custom endpoint must be an HTTP or HTTPS URL. Settings adds `https://` to an endpoint typed without a scheme, as before. It checks the values as they will be saved, so a key field left blank keeps the saved key. A save that fails the check answers `400` with the missing or invalid value, for example **Bucket name is required**, and saves nothing. Earlier versions saved incomplete S3 settings from Settings, and Flare then wrote new files to local disk instead. Neither check connects to the bucket.
+
+Flare stores files only where the saved settings say. If the saved S3 settings can't be used, for example ones an earlier version saved incomplete, uploads, downloads, and previews fail instead of using local storage, and each app process logs `Storage is unavailable until its settings are fixed` with the missing value once, until the settings change. Complete or correct them under **Settings → Storage**. Earlier versions quietly fell back to local storage. Files they wrote that way are on the app's local `uploads` volume; copy them to the bucket as described under [changing backend or bucket](#changing-backend-or-bucket).
 
 The credential needs the object operations Flare uses: read, write, delete, object metadata, and multipart upload/complete/abort. Bucket listing and copying are used by storage-level folder operations. Provider-specific permission names differ; scope access to this bucket and test upload, download, delete, avatar, and larger multipart workflows before inviting users. Flare's dashboard folders organize database records and do not create a public directory listing in the bucket.
 
 Thumbnail and other streamed reads keep the S3 response unread until their consumer starts reading, so response setup does not discard the image bytes. If an older build returns an empty `200` for a thumbnail, or the image optimizer returns `400` for it, update Flare and restart its replicas. Stored objects and credentials need no changes for this fix; follow [thumbnail troubleshooting](./troubleshooting#image-thumbnails-fail) if a preview remains broken.
+
+Reading an object retries only inside the AWS SDK: up to five attempts in all, with a short backoff, for throttling, server errors, and dropped connections. A missing object is not retried, so its `404` answers at once. Earlier versions repeated each failed read up to five times on top of that, waiting 2 to 16 seconds between tries, so a missing object took about 30 seconds to answer and a failing bucket could receive 25 requests for one read.
 
 ### Private files and signed links
 
@@ -55,6 +61,8 @@ The default maximum is **100 MB per file**. The setting supports MB or GB and us
 
 This limit is checked during upload and finalization. It does not shrink or remove files uploaded before you lower it.
 
+Avatars don't use this setting. For every role, an avatar must be a PNG, JPEG, GIF, or WebP image of at most 2 MB, and Flare stops reading a larger upload rather than holding the whole request in memory, as earlier versions did for an avatar of any size. An avatar must also fit in the account's remaining quota, but its bytes aren't added to the account's recorded usage. Avatars uploaded before this limit existed stay as they are.
+
 ## User quotas
 
 Quotas are **disabled by default**. Enabling them applies a shared per-user allowance; its starting value is **10 GB**. Each account's recorded storage usage is checked against that allowance unless its roles grant `quotas.bypass` or Administrator. Grant quota bypass independently of administration when appropriate.
@@ -71,7 +79,7 @@ A listing stops early, with a notice, if it would use more than about **64 MiB**
 
 **Extraction and creation still stage files.** They work in a private `flare-archive-*` directory under the operating system's temporary directory, so keep room for the compressed source, expanded members, and generated output as well as other uploads in progress. Normal completion, failure, or cancellation removes that workspace. A process crash or failed removal can leave temporary files. Inspect the warning logs and, with every process using that temporary mount stopped, remove only identified abandoned workspaces. These files are temporary processing copies, not a replacement for the stored source files. At most two extraction or creation operations run per process, one per account, within a 120-second deadline; their [fixed limits](../guide/archives#supported-sizes-and-formats) apply regardless of upload settings.
 
-Archive reads honor a file's recorded storage target. Historical files without a recorded target use the active provider, matching the older download behavior. A recorded target that is unavailable or conflicts with the current S3 configuration causes a conflict response instead of reading another bucket. Restore matching configuration or follow the [verified storage migration procedure](#changing-backend-or-bucket); do not clear provenance metadata to bypass it.
+Archive reads honor a file's recorded storage target. Historical files without a recorded target use the active provider. Raw links, downloads, and thumbnails always read from the active provider, whatever target a file records. A recorded target that is unavailable or conflicts with the current S3 configuration causes a conflict response instead of reading another bucket. Restore matching configuration or follow the [verified storage migration procedure](#changing-backend-or-bucket); do not clear provenance metadata to bypass it.
 
 Anonymous share pages can start listings, so the per-process limits above bound that work too. Shared listing requests are limited to 120 and shared entry requests to 600 per IP per minute per process. Shared requests read at most 16 KiB under a separate five-second deadline, with up to 32 pending body reads per process. Header/origin and IP-rate checks run first; strict body validation and file authorization finish before any archive data is read. A full body-read pool returns `429` with `Retry-After: 5`; a stalled body returns `408`. These are process limits, not a distributed queue or rate budget across replicas.
 
@@ -100,10 +108,10 @@ Plan a maintenance window:
 3. Pause uploads and stop application writes while copying data.
 4. Copy every object, including avatars and favicon, preserving relative keys. A database path such as `uploads/abc/image.png` maps to local `/app/uploads/abc/image.png` and S3 key `abc/image.png`.
 5. Compare object counts, sizes, and representative checksums. Preserve appropriate content types and avatar access behavior. Copying bytes outside Flare does not update `File.storageTarget` or the account's `avatarStoragePath`/`avatarStorageTarget`. Record which verified copy is authoritative and [reconcile the affected metadata](#reconcile-copied-object-metadata) as part of the migration; otherwise later cleanup still follows the original target and can leave the new copy behind. Retain an inventory of old copies for separate retirement after verification.
-6. Change the stored provider/bucket configuration, restart all app processes to clear cached providers, and test before reopening access.
+6. Change the stored provider/bucket configuration and test before reopening access. Every app process, replicas included, uses the new settings from its next storage operation; earlier versions needed a restart of every process that didn't save the change.
 7. Keep the old files and backup until the migrated installation is verified.
 
-Account-cleanup jobs preserve each object's recorded upload target, even when storage settings changed before the account was deleted. Older records with no reliable target remain unresolved for operator reconciliation. Local jobs continue against the local volume after a switch to S3. S3 jobs wait when the saved bucket, region, endpoint, or path-style setting differs from their recorded target; changing the active provider alone does not cancel them. Restore matching settings during planned maintenance to resume pending work.
+Account-cleanup jobs preserve each object's recorded upload target, even when storage settings changed before the account was deleted. Older records with no reliable target remain unresolved for operator reconciliation. Local jobs continue against the local volume after a switch to S3. S3 jobs wait when the saved bucket, region, endpoint, or path-style setting differs from their recorded target; changing the active provider alone does not cancel them. Spaces around a saved value don't count as a difference: setup and **Settings → Storage** trim them, and files, avatars, and cleanup jobs recorded while a value had them still match. Restore matching settings during planned maintenance to resume pending work.
 
 There is no built-in cross-provider migration wizard. Changing credentials or backend during a chunked upload can invalidate that upload; ask users to start it again after maintenance. See [backup and restore](/hosting/maintenance) for preserving the database/file relationship.
 

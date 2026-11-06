@@ -1,12 +1,12 @@
 import type { Prisma } from '@prisma/client'
 
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
 import type { Permission } from './catalog'
 import {
   assertAccessibleAdministrator,
   assertCanManageUser,
-  lockRoleChanges,
   requireActorPermission,
 } from './server'
 

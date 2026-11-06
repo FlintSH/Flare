@@ -1,4 +1,3 @@
-# Stage 1: Dependencies  
 # Node.js 25 and later no longer bundle Corepack, which installs pnpm below.
 # Stay on Node.js 24 LTS, the version CI uses, rather than the moving node:lts.
 FROM node:24 AS deps
@@ -15,11 +14,9 @@ RUN corepack enable pnpm
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma ./prisma
 
+# The postinstall script generates the Prisma client from prisma/.
 RUN pnpm install --frozen-lockfile
 
-RUN pnpm prisma generate
-
-# Stage 2: Builder
 FROM node:24 AS builder
 WORKDIR /app
 
@@ -34,14 +31,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY . .
 
-# Set up environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application
 RUN pnpm build
 
-# Stage 3: Runner
 FROM node:24 AS runner
 WORKDIR /app
 
@@ -61,10 +55,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # cache is placed somewhere world-readable and warmed at build time. Otherwise
 # pnpm would land in root's cache and the container would need network access on
 # every boot. node_modules is baked into the image, so pnpm's staleness check is
-# disabled to keep `pnpm start` from attempting an install at runtime.
+# disabled to keep start.sh's pnpm commands from attempting an install at
+# runtime. pnpm 11 no longer reads this setting from npm_config_ variables.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV COREPACK_HOME=/usr/local/corepack
-ENV npm_config_verify_deps_before_run=false
+ENV pnpm_config_verify_deps_before_run=false
 ENV HUSKY=0
 RUN corepack enable pnpm
 
@@ -74,12 +69,10 @@ RUN useradd --system --uid 1001 --gid nodejs nextjs
 # Install curl for healthcheck and OpenSSL for Prisma
 RUN apt-get update && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
 
-# Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
     chown nextjs:nodejs /app/uploads && \
     chmod 775 /app/uploads
 
-# Copy necessary files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
@@ -96,11 +89,9 @@ COPY --from=builder /app/scripts/start.sh ./start.sh
 # unprivileged runtime user.
 RUN corepack install && chmod -R a+rX /usr/local/corepack
 
-# Set correct permissions
 RUN chown -R nextjs:nodejs /app
 RUN chmod +x /app/start.sh
 
-# Create the entrypoint script that will run as root
 RUN echo '#!/bin/bash' > /entrypoint.sh && \
     echo 'mkdir -p /app/uploads' >> /entrypoint.sh && \
     echo 'chown -R nextjs:nodejs /app/uploads' >> /entrypoint.sh && \
@@ -113,8 +104,10 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Add healthcheck
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+# Failed checks don't count for the first 150 seconds: start.sh tries the
+# database up to 30 times, and each failed try takes about 2 seconds before
+# its 2-second pause, so the wait alone can last 2 minutes before migrations.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=150s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # The entrypoint script runs as root but switches to nextjs user

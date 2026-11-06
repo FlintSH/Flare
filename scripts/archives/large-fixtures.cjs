@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Generates disposable large archives for the optional large-archive checks.
-// Nothing here is committed: outputs go to a temporary directory.
 const { randomBytes } = require('node:crypto')
 const { createWriteStream } = require('node:fs')
 const { mkdtemp, readdir, readFile, rm, stat } = require('node:fs/promises')
@@ -26,7 +25,6 @@ function noise(bytes) {
   )
 }
 
-/** A short, valid PCM WAV chord. */
 function wav(seconds = 3, rate = 22050) {
   const samples = seconds * rate
   const data = Buffer.alloc(samples * 2)
@@ -121,7 +119,6 @@ async function largeZip(directory, payloadBytes) {
     name: 'datasets/raw-capture.bin',
     store: true,
   })
-  // Photos, video, audio, log, README, modules, and the payload.
   const files = photos.length + 5 + 20_000
   return { destination, files, size: await write(archive, destination) }
 }

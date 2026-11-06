@@ -4,30 +4,26 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
-import { EmailCapabilities, emailPost, emailRequest } from './api'
+import { apiRequest } from '@/lib/client/request'
+import type { UserEmailStatus } from '@/lib/email/eligibility'
 
-interface UserEmailState {
-  verified: boolean
-  exempt: boolean
-  required: boolean
-  pendingEmail: string | null
-}
+import { fetchEmailCapabilities } from './api'
 
 export function UserEmailControls({ userId }: { userId: string }) {
-  const [status, setStatus] = useState<UserEmailState | null>(null)
+  const [status, setStatus] = useState<UserEmailStatus | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const refresh = useCallback(async () => {
-    const result = await emailRequest<UserEmailState>(
+    const result = await apiRequest<UserEmailStatus>(
       `/api/users/${encodeURIComponent(userId)}/email`
     )
     setStatus(result)
   }, [userId])
   useEffect(() => {
     let active = true
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
+    fetchEmailCapabilities()
       .then(async (capabilities) => {
         if (!active || !capabilities.enabled) return
         setEnabled(true)
@@ -45,9 +41,9 @@ export function UserEmailControls({ userId }: { userId: string }) {
     setError('')
     setMessage('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         `/api/users/${encodeURIComponent(userId)}/email`,
-        { action: value }
+        { body: { action: value } }
       )
       setMessage(result.message)
       await refresh()
@@ -92,7 +88,7 @@ export function UserEmailControls({ userId }: { userId: string }) {
                 ? 'Follow instance policy'
                 : 'Exempt from requirement'}
             </Button>
-            {!status.verified && (
+            {status.canResend && (
               <Button
                 type="button"
                 size="sm"

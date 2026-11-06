@@ -2,26 +2,20 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import {
-  ArrowLeft,
-  ArrowRight,
-  File,
-  FolderOpen,
-  Lock,
-  Music,
-  Video,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, Lock } from 'lucide-react'
 
 import {
   PublicHeader,
   publicColumnClassName,
 } from '@/components/customization/share-layout'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { pagePanelClassName } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 
 import { getConfig } from '@/lib/config'
+import { showsShareFooter } from '@/lib/customization/sharing'
 import { getSharedFolder } from '@/lib/folders/shared'
 import { cn, formatFileSize } from '@/lib/utils'
 
@@ -55,9 +49,12 @@ export default async function SharedFolderPage({
   const folder = await getSharedFolder(token, requestedPage)
   if (!folder || (folder.page > 1 && folder.page > folder.pageCount)) notFound()
   const config = await getConfig()
-  const { sharing } = config.settings.customization.published
-  const showFooter =
-    sharing.showFooter ?? config.settings.general.credits.showFooter
+  const appearance = config.settings.customization.published
+  const { sharing } = appearance
+  const showFooter = showsShareFooter(
+    appearance,
+    config.settings.general.credits.showFooter
+  )
 
   return (
     <div className="relative isolate flex min-h-dvh min-w-0 flex-col">
@@ -92,19 +89,15 @@ export default async function SharedFolderPage({
             {folder.files.length ? (
               <ul className="grid grid-cols-1 gap-4 p-6 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {folder.files.map((file) => {
-                  const Icon = file.hasPassword
-                    ? Lock
-                    : file.mimeType?.startsWith('video/')
-                      ? Video
-                      : file.mimeType?.startsWith('audio/')
-                        ? Music
-                        : File
-                  const image =
-                    !file.hasPassword && file.mimeType?.startsWith('image/')
+                  const image = file.mimeType?.startsWith('image/')
+                    ? file.rawUrl
+                    : null
+                  const iconClassName =
+                    'h-8 w-8 text-muted-foreground min-[480px]:h-10 min-[480px]:w-10'
                   return (
                     <li key={file.id} className="min-w-0">
                       <Link
-                        href={file.urlPath}
+                        href={file.href}
                         prefetch={false}
                         className="group flex h-full flex-col overflow-hidden rounded-xl border bg-muted/30 transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       >
@@ -121,15 +114,23 @@ export default async function SharedFolderPage({
                           {image ? (
                             // Raw routes apply file access checks again if visibility changes.
                             <img
-                              src={`${file.urlPath}/raw`}
+                              src={image}
                               alt=""
                               loading="lazy"
                               className="h-full w-full object-cover"
                             />
-                          ) : (
-                            <Icon
-                              className="h-8 w-8 text-muted-foreground min-[480px]:h-10 min-[480px]:w-10"
+                          ) : file.hasPassword ? (
+                            <Lock
+                              className={iconClassName}
                               aria-hidden="true"
+                            />
+                          ) : (
+                            <FileTypeIcon
+                              file={{
+                                name: file.name,
+                                mimeType: file.mimeType ?? '',
+                              }}
+                              className={iconClassName}
                             />
                           )}
                         </div>

@@ -1,19 +1,19 @@
 import type { Prisma } from '@prisma/client'
 import { randomBytes } from 'node:crypto'
 
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import type {
   FolderInput,
   FolderUpdate,
   FolderView,
 } from '@/lib/folders/schema'
+import { HttpError } from '@/lib/http/errors'
+import { nameKey } from '@/lib/library/names'
 
-export class FolderError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class FolderError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
     this.name = 'FolderError'
   }
 }
@@ -38,6 +38,15 @@ export function folderView(
   }
 }
 
+export async function listFolders(userId: string) {
+  const folders = await prisma.vaultFolder.findMany({
+    where: { userId },
+    orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
+    select: folderViewSelect,
+  })
+  return folders.map(folderView)
+}
+
 /** The caller must hold the owner's row lock when using this before a write. */
 export async function validateOwnedFolderId(
   userId: string,
@@ -53,15 +62,27 @@ export async function validateOwnedFolderId(
   return folder.id
 }
 
+/**
+ * Adds a folder in the caller's transaction, which holds the owner's row lock
+ * and has checked that the parent is theirs. `name` is already normalized.
+ */
+export function insertFolder<Select extends Prisma.VaultFolderSelect>(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  { name, parentId }: { name: string; parentId: string | null },
+  select: Select
+) {
+  return tx.vaultFolder.create({
+    data: { userId, name, normalizedName: nameKey(name), parentId },
+    select,
+  })
+}
+
 export async function createFolder(userId: string, input: FolderInput) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     await validateOwnedFolderId(userId, input.parentId, tx)
-    const folder = await tx.vaultFolder.create({
-      data: { ...input, userId, normalizedName: input.name.toLowerCase() },
-      select: folderViewSelect,
-    })
-    return folderView(folder)
+    return folderView(await insertFolder(tx, userId, input, folderViewSelect))
   })
 }
 
@@ -71,7 +92,7 @@ export async function updateFolder(
   input: FolderUpdate
 ) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     const current = await tx.vaultFolder.findFirst({
       where: { id, userId },
       select: { id: true, shareToken: true },
@@ -81,7 +102,7 @@ export async function updateFolder(
       where: { id, userId },
       data: {
         ...(input.name !== undefined
-          ? { name: input.name, normalizedName: input.name.toLowerCase() }
+          ? { name: input.name, normalizedName: nameKey(input.name) }
           : {}),
         ...(input.sharing !== undefined
           ? {
@@ -100,7 +121,7 @@ export async function updateFolder(
 /** Dissolve a folder, moving its direct contents up one level without deleting files. */
 export async function deleteFolder(userId: string, id: string) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     const folder = await tx.vaultFolder.findFirst({
       where: { id, userId },
       select: { id: true, parentId: true },
@@ -150,7 +171,7 @@ export async function moveFilesToFolder(
 ): Promise<number> {
   const fileIds = [...new Set(input.fileIds)]
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+    await lockUserRow(tx, userId)
     await validateOwnedFolderId(userId, input.folderId, tx)
     const ownedFiles = await tx.file.count({
       where: { id: { in: fileIds }, userId },

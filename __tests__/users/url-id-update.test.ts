@@ -17,17 +17,16 @@ const mocks = vi.hoisted(() => ({
   },
   tx: {
     $executeRaw: vi.fn(),
-    user: { update: vi.fn() },
+    user: { update: vi.fn(), findMany: vi.fn() },
     file: { findMany: vi.fn(), update: vi.fn() },
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requirePermission: mocks.requirePermission,
+vi.mock('@/lib/http/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/http/access')>()),
+  requireSession: mocks.requirePermission,
 }))
 vi.mock('@/lib/permissions/server', () => ({
-  PermissionError: class PermissionError extends Error {},
-  lockRoleChanges: vi.fn(),
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),
@@ -35,16 +34,19 @@ vi.mock('@/lib/permissions/server', () => ({
   getUserAccess: async () => ({ roles: [], permissions: [] }),
 }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks.db }))
+vi.mock('@/lib/database/locks', () => ({
+  lockRoleChanges: vi.fn(),
+  lockEmailAddress: vi.fn(),
+}))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfigForUpdate: mocks.getEmailConfigForUpdate,
 }))
 vi.mock('@/lib/email/account', () => ({
   lockEmailUser: mocks.lockEmailUser,
-  lockEmailAddress: vi.fn(),
   sendAccountToken: vi.fn(),
 }))
 vi.mock('@/lib/email/tokens', () => ({ invalidateEmailTokens: vi.fn() }))
-vi.mock('@/lib/users/create-user', () => ({ createUser: vi.fn() }))
+vi.mock('@/lib/users/create-account', () => ({ createAccount: vi.fn() }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: mocks.getStorageProvider,
 }))
@@ -131,6 +133,8 @@ beforeEach(async () => {
   })
   mocks.getEmailConfigForUpdate.mockResolvedValue(DEFAULT_EMAIL_CONFIG)
   mocks.getStorageProvider.mockResolvedValue(storage)
+  // No other account holds a URL ID or vanity ID the test claims.
+  mocks.tx.user.findMany.mockResolvedValue([])
   mocks.db.user.findUnique.mockImplementation(async ({ where }) =>
     where.id === state.user.id || where.urlId === state.user.urlId
       ? { ...state.user }
@@ -208,13 +212,9 @@ describe('administrator URL ID updates', () => {
   })
 
   it('rejects an already assigned URL ID before changing files', async () => {
-    mocks.db.user.findUnique
-      .mockResolvedValueOnce(initialUser)
-      .mockResolvedValueOnce({
-        ...initialUser,
-        id: 'someone-else',
-        urlId: 'SPECC',
-      })
+    mocks.tx.user.findMany.mockResolvedValue([
+      { id: 'someone-else', urlId: 'SPECC', vanityId: null },
+    ])
 
     const response = await PUT(request('SPECC'))
 
@@ -222,9 +222,46 @@ describe('administrator URL ID updates', () => {
     expect(await response.json()).toMatchObject({
       error: 'URL ID is already in use',
     })
-    expect(mocks.db.$transaction).not.toHaveBeenCalled()
+    expect(mocks.tx.user.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [{ urlId: { in: ['SPECC'] } }, { vanityId: { in: ['SPECC'] } }],
+      },
+      select: { id: true, urlId: true, vanityId: true },
+    })
+    expect(mocks.tx.file.update).not.toHaveBeenCalled()
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
     expect(state).toEqual({ user: initialUser, files: initialFiles })
     await expectOriginalObjects()
+  })
+
+  // File URLs try the URL ID before vanity IDs, so this ID would take over
+  // the other account's vanity links.
+  it('rejects a URL ID another account uses as its vanity URL', async () => {
+    mocks.tx.user.findMany.mockResolvedValue([
+      { id: 'someone-else', urlId: 'other', vanityId: 'SPECC' },
+    ])
+
+    const response = await PUT(request('SPECC'))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: 'This URL ID conflicts with an existing vanity URL',
+    })
+    expect(mocks.tx.file.update).not.toHaveBeenCalled()
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    expect(state).toEqual({ user: initialUser, files: initialFiles })
+  })
+
+  it('refuses a reserved path as a URL ID, in any letter case', async () => {
+    for (const urlId of ['admin', 'Setup']) {
+      const response = await PUT(request(urlId))
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({
+        error: 'This URL path is reserved and cannot be used',
+      })
+    }
+    expect(mocks.db.$transaction).not.toHaveBeenCalled()
+    expect(state).toEqual({ user: initialUser, files: initialFiles })
   })
 
   it('preserves a concurrent URL ID edit when the submitted URL ID was unchanged', async () => {

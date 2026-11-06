@@ -1,12 +1,6 @@
 'use client'
 
-import {
-  FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from 'react'
+import { FormEvent, type ReactNode, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -22,8 +16,8 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 
-import { MetaLine } from '@/components/profile/meta-line'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,6 +39,18 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import { apiRequest } from '@/lib/client/request'
+import {
+  API_SCOPE_CATALOG,
+  scopeUsable,
+} from '@/lib/integrations/bearer-routes'
+import {
+  CONNECTION_NAME_MAX_LENGTH,
+  WEBHOOK_URL_MAX_LENGTH,
+} from '@/lib/integrations/limits'
+import { allows } from '@/lib/permissions/actions'
+
+import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
 
 type Token = {
@@ -73,12 +79,6 @@ type Snapshot = {
   deliveries: Delivery[]
   profiles: { id: string; name: string }[]
 }
-const scopes = [
-  ['files:upload', 'Upload files', 'Send screenshots and files'],
-  ['files:read', 'Read files', 'List your files and metadata'],
-  ['urls:read', 'Read short links', 'List your shortened URLs'],
-  ['urls:write', 'Manage short links', 'Create and delete your short links'],
-] as const
 // Card titles that are also headings, so each card is reachable by heading.
 const cardTitle = 'font-semibold leading-none tracking-tight'
 // One header layout for cards with actions, as on the other profile tabs:
@@ -136,14 +136,30 @@ function Tip({
 
 export function IntegrationsPanel({
   embedded = false,
+  active = true,
   onSetupTool,
 }: {
   embedded?: boolean
+  /** False while the panel's section is hidden; it then stops polling. */
+  active?: boolean
   onSetupTool?: () => void
 }) {
-  const { can } = usePermissions()
-  const [data, setData] = useState<Snapshot | null>(null)
-  const [error, setError] = useState('')
+  const { can, user } = usePermissions()
+  // Delivery statuses change on their own, so a visible panel polls.
+  const snapshot = useAccountQuery<Snapshot>(
+    'integrations',
+    '/api/integrations',
+    {
+      enabled: active,
+      refetchInterval: 5000,
+      retry: false,
+      fallback: 'Could not load integrations.',
+    }
+  )
+  const data = snapshot.data
+  const refresh = snapshot.refetch
+  const [actionError, setError] = useState('')
+  const error = actionError || snapshot.error?.message
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<'token' | 'webhook' | null>(null)
@@ -152,40 +168,22 @@ export function IntegrationsPanel({
   )
   const [copied, setCopied] = useState(false)
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
-  const refresh = useCallback(async () => {
-    try {
-      const response = await fetch('/api/integrations', { cache: 'no-store' })
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not load integrations.')
-      setData(result)
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : 'Could not load integrations.'
-      )
-    }
-  }, [])
-  useEffect(() => {
-    void refresh()
-    const timer = setInterval(() => void refresh(), 5000)
-    return () => clearInterval(timer)
-  }, [refresh])
 
   async function run(command: Record<string, unknown>, message: string) {
     setBusy(true)
     setError('')
     setNotice('')
     try {
-      const response = await fetch('/api/integrations', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(command),
+      const result = await apiRequest<{
+        secret?: string
+        secretKind?: string
+      }>('/api/integrations', {
+        body: command,
+        fallback: 'Could not save integration.',
+        whole: true,
       })
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not save integration.')
       if (result.secret) {
-        setSecret({ value: result.secret, kind: result.secretKind })
+        setSecret({ value: result.secret, kind: result.secretKind ?? '' })
         setCopied(false)
         setForm(null)
       }
@@ -272,26 +270,24 @@ export function IntegrationsPanel({
           </p>
         </div>
       )}
-      <PermissionGate permission="files.upload">
-        <PermissionGate permission="tokens.manage">
-          <Tip
-            title="Setting up a screenshot tool?"
-            action={
-              <Link
-                href="/dashboard/profile?section=uploads#upload-tools"
-                onNavigate={onSetupTool}
-                className={tipLinkClassName}
-              >
-                Set up a tool
-                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            }
-          >
-            ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
-            downloads with your upload token included. No API key setup needed.
-          </Tip>
-        </PermissionGate>
-      </PermissionGate>
+      {allows(user, 'uploaderTools') && (
+        <Tip
+          title="Setting up a screenshot tool?"
+          action={
+            <Link
+              href="/dashboard/profile?section=uploads#upload-tools"
+              onNavigate={onSetupTool}
+              className={tipLinkClassName}
+            >
+              Set up a tool
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          }
+        >
+          ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
+          downloads with your upload token included. No API key setup needed.
+        </Tip>
+      )}
       {error && (
         <Alert variant="destructive">
           <AlertCircle aria-hidden="true" />
@@ -371,53 +367,44 @@ export function IntegrationsPanel({
                       name="name"
                       placeholder="My automation script"
                       required
-                      maxLength={80}
+                      maxLength={CONNECTION_NAME_MAX_LENGTH}
                     />
                   </div>
                   <fieldset className="space-y-2">
                     <legend className="mb-2 text-sm font-medium">
                       Allowed actions
                     </legend>
-                    {scopes
-                      .filter(
-                        ([scope]) =>
-                          ({
-                            'files:upload': can('files.upload'),
-                            'files:read': can('files.read'),
-                            'urls:read': can('links.read'),
-                            'urls:write':
-                              can('links.create') || can('links.delete'),
-                          })[scope]
-                      )
-                      .map(([value, label, description]) => (
-                        <label
-                          key={value}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            checked={selectedScopes.includes(value)}
-                            onChange={(event) =>
-                              setSelectedScopes(
-                                event.target.checked
-                                  ? [...selectedScopes, value]
-                                  : selectedScopes.filter(
-                                      (scope) => scope !== value
-                                    )
-                              )
-                            }
-                          />
-                          <span>
-                            <span className="block text-sm font-medium">
-                              {label}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {description}
-                            </span>
+                    {API_SCOPE_CATALOG.filter(({ scope }) =>
+                      scopeUsable(scope, can)
+                    ).map(({ scope: value, label, description }) => (
+                      <label
+                        key={value}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={selectedScopes.includes(value)}
+                          onChange={(event) =>
+                            setSelectedScopes(
+                              event.target.checked
+                                ? [...selectedScopes, value]
+                                : selectedScopes.filter(
+                                    (scope) => scope !== value
+                                  )
+                            )
+                          }
+                        />
+                        <span>
+                          <span className="block text-sm font-medium">
+                            {label}
                           </span>
-                        </label>
-                      ))}
+                          <span className="text-xs text-muted-foreground">
+                            {description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
                   </fieldset>
                   <div className="space-y-2">
                     <Label htmlFor="token-profile">Upload profile</Label>
@@ -481,15 +468,8 @@ export function IntegrationsPanel({
                   </p>
                 )}
                 {data?.tokens.map((token) => {
-                  const tokenScopes = token.scopes.filter(
-                    (scope) =>
-                      ({
-                        'files:upload': can('files.upload'),
-                        'files:read': can('files.read'),
-                        'urls:read': can('links.read'),
-                        'urls:write':
-                          can('links.create') || can('links.delete'),
-                      })[scope]
+                  const tokenScopes = token.scopes.filter((scope) =>
+                    scopeUsable(scope, can)
                   )
                   return (
                     <div
@@ -547,8 +527,9 @@ export function IntegrationsPanel({
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {tokenScopes.map((scope) => (
                             <Badge key={scope}>
-                              {scopes.find(([value]) => value === scope)?.[1] ||
-                                scope}
+                              {API_SCOPE_CATALOG.find(
+                                (entry) => entry.scope === scope
+                              )?.label || scope}
                             </Badge>
                           ))}
                           {/* The bound profile is a different kind of chip
@@ -603,7 +584,7 @@ export function IntegrationsPanel({
                       name="name"
                       placeholder="My automation server"
                       required
-                      maxLength={80}
+                      maxLength={CONNECTION_NAME_MAX_LENGTH}
                     />
                   </div>
                   <div className="space-y-2">
@@ -614,7 +595,7 @@ export function IntegrationsPanel({
                       type="url"
                       placeholder="https://automation.example.com/flare"
                       required
-                      maxLength={2048}
+                      maxLength={WEBHOOK_URL_MAX_LENGTH}
                     />
                     <p className="text-xs text-muted-foreground">
                       Your receiver gets signed file metadata when your uploads

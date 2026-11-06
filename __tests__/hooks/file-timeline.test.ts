@@ -1,11 +1,11 @@
-import type { FileFilterOptions, FileType } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { FileTimeline } from '@/lib/files/timeline-layout'
+import type { FileTimeline, LibraryFilters } from '@/lib/library/contract'
 import {
   TIMELINE_CACHE_PAGES,
   TIMELINE_PAGE_SIZE,
-} from '@/lib/files/timeline-layout'
+} from '@/lib/library/timeline-layout'
 
 import { useFileTimeline } from '@/hooks/use-file-timeline'
 
@@ -69,7 +69,9 @@ vi.mock('react', () => ({
   },
 }))
 
-const filters: FileFilterOptions = {
+const filters: LibraryFilters = {
+  folder: null,
+  tag: null,
   search: '',
   types: [],
   visibility: [],
@@ -96,7 +98,7 @@ const summary: FileTimeline = {
   ],
 }
 type Props = {
-  filters: FileFilterOptions
+  filters: LibraryFilters
   refreshKey: number
   scope?: string | null
 }
@@ -372,6 +374,27 @@ describe('virtual file library requests', () => {
     expect(hook.timeline).toBeNull()
     expect(requests).toHaveLength(2)
     expect(requests[1].url.pathname).toBe('/api/files/timeline')
+    const limited = render({
+      ...props,
+      filters: { ...props.filters, limit: 5 },
+    })
+    expect(limited.timeline).toBeNull()
+    expect(requests).toHaveLength(3)
+  })
+
+  it('leaves the legacy page position out of the summary and window requests', async () => {
+    const hook = await initialize({
+      ...initial,
+      filters: { ...filters, page: 9, limit: 5 },
+    })
+    hook.ensureRange([0])
+    const [summaryRequest, windowRequest] = requests
+    expect(summaryRequest.url.searchParams.has('page')).toBe(false)
+    expect(summaryRequest.url.searchParams.has('limit')).toBe(false)
+    expect(windowRequest.url.searchParams.get('page')).toBe('1')
+    expect(windowRequest.url.searchParams.get('limit')).toBe(
+      String(TIMELINE_PAGE_SIZE)
+    )
   })
 
   it('surfaces summary errors and ignores invalid or empty account ranges', async () => {

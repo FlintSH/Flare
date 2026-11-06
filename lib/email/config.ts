@@ -1,38 +1,38 @@
 import { Prisma } from '@prisma/client'
 import { readFileSync } from 'node:fs'
 
-import { getConfig, readSavedConfigRow } from '@/lib/config'
+import {
+  getConfig,
+  readSavedConfigRow,
+  readSavedConfigValue,
+  replaceSavedConfigSection,
+} from '@/lib/config'
+import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
-
+import { publicOrigin } from '@/lib/security/public-origin'
 import {
   assertEmailEncryptionKey,
   decryptSecret,
   encryptSecret,
   isEncryptedSecret,
-} from './crypto'
-import { EmailConfig, emailConfigSchema, validateEnabledEmail } from './schema'
+} from '@/lib/security/secret-box'
+
+import { emailCapabilities } from './eligibility'
+import { emailOverrides } from './environment'
+import { EmailHttpError } from './errors'
+import { effectiveVerificationMode, isEnforcedVerificationMode } from './policy'
+import {
+  EmailConfig,
+  emailConfigSchema,
+  redactEmailConfig,
+  validateEnabledEmail,
+} from './schema'
+
+const SMTP_PURPOSE = 'smtp'
 
 type Environment = Record<string, string | undefined>
 type ObjectValue = Record<string, unknown>
-
-// Every operator-facing setting can be overridden. Dates are controlled by the
-// policy transition, not by a browser-supplied config snapshot.
-export function emailEnvironmentName(path: string): string {
-  return `FLARE_EMAIL_${path
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/\./g, '_')
-    .toUpperCase()}`
-}
-
-function leafEntries(value: ObjectValue, prefix = ''): [string, unknown][] {
-  return Object.entries(value).flatMap(([key, entry]) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    return entry !== null && typeof entry === 'object'
-      ? leafEntries(entry as ObjectValue, path)
-      : [[path, entry] as [string, unknown]]
-  })
-}
 
 function assignPath(object: ObjectValue, path: string, value: unknown) {
   const keys = path.split('.')
@@ -48,16 +48,7 @@ export function resolveEmailConfig(
 ): { config: EmailConfig; managedFields: string[] } {
   const config = emailConfigSchema.parse(saved ?? {})
   const managedFields: string[] = []
-  for (const [path, fallback] of leafEntries(config)) {
-    if (
-      [
-        'verification.requiredSince',
-        'verification.graceEndsAt',
-        'verification.appliedMode',
-      ].includes(path)
-    )
-      continue
-    const name = emailEnvironmentName(path)
+  for (const { path, name, value: fallback } of emailOverrides(config)) {
     let value = env[name]
     if (env[`${name}_FILE`]) {
       if (value !== undefined)
@@ -84,8 +75,9 @@ export function resolveEmailConfig(
     managedFields.push(path)
   }
   // Configuring a server never enables sending or account enforcement.
-  if (!config.publicUrl && env.NEXTAUTH_URL)
-    config.publicUrl = env.NEXTAUTH_URL.replace(/\/+$/, '')
+  const serverUrl = publicOrigin(env)
+  if (!config.publicUrl && serverUrl)
+    config.publicUrl = serverUrl.href.replace(/\/+$/, '')
   // An administrator can explicitly test delivery without changing automatic sending.
   if (options.testDelivery) config.enabled = true
   if (
@@ -94,7 +86,7 @@ export function resolveEmailConfig(
     !managedFields.includes('smtp.password') &&
     config.smtp.password
   )
-    config.smtp.password = decryptSecret(config.smtp.password)
+    config.smtp.password = decryptSecret(config.smtp.password, SMTP_PURPOSE)
   return { config: emailConfigSchema.parse(config), managedFields }
 }
 
@@ -103,11 +95,11 @@ export async function getSavedEmailConfig(
 ): Promise<EmailConfig> {
   // Outside a transaction, reuse the shared read of the saved row; it is
   // re-read whenever the row changes.
-  const row =
+  const value =
     client === prisma
-      ? await readSavedConfigRow()
-      : await client.config.findUnique({ where: { key: 'flare_config' } })
-  const settings = (row?.value as { settings?: { email?: unknown } } | null)
+      ? (await readSavedConfigRow())?.value
+      : await readSavedConfigValue(client)
+  const settings = (value as { settings?: { email?: unknown } } | null)
     ?.settings
   // Database errors deliberately propagate instead of relaxing a saved policy.
   return emailConfigSchema.parse(settings?.email ?? {})
@@ -120,48 +112,46 @@ function validateEffectiveConfig(saved: EmailConfig): EmailConfig {
   return config
 }
 
+/**
+ * The effective settings Flare runs with. Unusable ones, such as an
+ * environment that enables email without an SMTP host, are the server's
+ * fault, not a requester's: they throw a plain error, which routes log and
+ * answer with a 500, instead of the 400 a submitted draft gets.
+ */
+function effectiveConfig(saved: EmailConfig): EmailConfig {
+  try {
+    return validateEffectiveConfig(saved)
+  } catch (error) {
+    if (error instanceof EmailHttpError)
+      throw new Error(error.message, { cause: error })
+    throw error
+  }
+}
+
 /** Read policy under the same lock as settings writers, before taking user locks. */
 export async function getEmailConfigForUpdate(
   tx: Prisma.TransactionClient
 ): Promise<EmailConfig> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
-  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const value = row?.value as ObjectValue | undefined
-  const settings = value?.settings as ObjectValue | undefined
-  const saved = emailConfigSchema.parse(settings?.email ?? {})
-  const config = validateEffectiveConfig(saved)
-  if (
-    row &&
-    config.verification.appliedMode !==
-      (config.enabled ? config.verification.mode : 'off')
-  ) {
+  await lockSettings(tx)
+  const saved = await getSavedEmailConfig(tx)
+  const config = effectiveConfig(saved)
+  if (config.verification.appliedMode !== effectiveVerificationMode(config)) {
     const transition = transitionEmailPolicy(saved, config)
     // Persist only server-owned transition state, never environment overrides.
     saved.verification.requiredSince = transition.requiredSince
     saved.verification.graceEndsAt = transition.graceEndsAt
     saved.verification.appliedMode = transition.appliedMode
-    await tx.config.update({
-      where: { key: 'flare_config' },
-      data: {
-        value: {
-          ...value,
-          settings: { ...settings, email: saved },
-        } as Prisma.InputJsonValue,
-      },
-    })
-    return validateEffectiveConfig(saved)
+    if (await replaceSavedConfigSection(tx, 'email', saved))
+      return effectiveConfig(saved)
   }
   return config
 }
 
 export async function getEmailConfig(): Promise<EmailConfig> {
-  const config = validateEffectiveConfig(await getSavedEmailConfig())
+  const config = effectiveConfig(await getSavedEmailConfig())
   // A mutation uses getEmailConfigForUpdate directly, keeping policy stable until
   // commit. Ordinary reads take the lock only to record an environment transition.
-  if (
-    config.verification.appliedMode !==
-    (config.enabled ? config.verification.mode : 'off')
-  )
+  if (config.verification.appliedMode !== effectiveVerificationMode(config))
     return prisma.$transaction(getEmailConfigForUpdate)
   return config
 }
@@ -171,7 +161,7 @@ export function transitionEmailPolicy(
   next: EmailConfig,
   now = new Date()
 ): EmailConfig['verification'] {
-  const appliedMode = next.enabled ? next.verification.mode : 'off'
+  const appliedMode = effectiveVerificationMode(next)
   const prior = previous.verification.appliedMode
   const verification = {
     ...next.verification,
@@ -180,8 +170,8 @@ export function transitionEmailPolicy(
     appliedMode,
   }
   if (
-    ['new_users', 'all_users'].includes(appliedMode) &&
-    (!['new_users', 'all_users'].includes(prior) || !verification.requiredSince)
+    isEnforcedVerificationMode(appliedMode) &&
+    (!isEnforcedVerificationMode(prior) || !verification.requiredSince)
   )
     verification.requiredSince = now.toISOString()
   if (appliedMode === 'all_users' && prior !== 'all_users')
@@ -189,10 +179,6 @@ export function transitionEmailPolicy(
       now.getTime() + next.verification.graceDays * 86400000
     ).toISOString()
   return verification
-}
-
-export function redactEmailConfig(config: EmailConfig): EmailConfig {
-  return { ...config, smtp: { ...config.smtp, password: '' } }
 }
 
 export async function getEmailSettingsView() {
@@ -217,17 +203,21 @@ export async function prepareEmailConfig(
     decryptPassword: false,
   }).managedFields
   // Ignore stale UI values for operator-managed fields; retain their saved fallback.
-  const previousLeaves = new Map(leafEntries(previous))
-  for (const path of managed)
-    assignPath(candidate, path, previousLeaves.get(path))
+  for (const { path, value } of emailOverrides(previous))
+    if (managed.includes(path)) assignPath(candidate, path, value)
   if (!managed.includes('smtp.password')) {
     if (clearPassword) candidate.smtp.password = ''
     else if (!candidate.smtp.password)
       candidate.smtp.password = previous.smtp.password
     else {
       if (isEncryptedSecret(candidate.smtp.password))
-        throw new Error('Enter a new SMTP password, not an encrypted value')
-      candidate.smtp.password = encryptSecret(candidate.smtp.password)
+        throw new EmailHttpError(
+          'Enter a new SMTP password, not an encrypted value'
+        )
+      candidate.smtp.password = encryptSecret(
+        candidate.smtp.password,
+        SMTP_PURPOSE
+      )
     }
   }
   candidate.verification.requiredSince = previous.verification.requiredSince
@@ -247,7 +237,7 @@ export async function saveEmailConfig(
   // Prepare against the latest saved settings while serializing policy changes
   // with account mutations and all other JSON settings writers.
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
+    await lockRoleChanges(tx)
     const { candidate, previous, effective } = await prepareEmailConfig(
       input,
       options.clearPassword,
@@ -259,7 +249,7 @@ export async function saveEmailConfig(
       previous.verification.appliedMode !== 'all_users'
     ) {
       if (!options.applyToExisting)
-        throw new Error(
+        throw new EmailHttpError(
           'Review affected existing users and confirm applying verification to them'
         )
     }
@@ -268,25 +258,14 @@ export async function saveEmailConfig(
     candidate.verification.graceEndsAt = transition.graceEndsAt
     candidate.verification.appliedMode = transition.appliedMode
     validateEffectiveConfig(candidate)
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
     const finalConfig = resolveEmailConfig(candidate).config
     if (finalConfig.enabled && finalConfig.verification.mode === 'all_users') {
       await assertAccessibleAdministrator(tx, finalConfig)
     }
-    const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-    if (!row)
-      throw new Error('Complete instance setup before configuring email')
-    const value = row.value as ObjectValue
-    const settings = value.settings as ObjectValue
-    await tx.config.update({
-      where: { key: 'flare_config' },
-      data: {
-        value: {
-          ...value,
-          settings: { ...settings, email: candidate },
-        } as Prisma.InputJsonValue,
-      },
-    })
+    if (!(await replaceSavedConfigSection(tx, 'email', candidate)))
+      throw new EmailHttpError(
+        'Complete instance setup before configuring email'
+      )
     if (!finalConfig.enabled) {
       await tx.mailOutbox.updateMany({
         where: { status: { in: ['pending', 'processing'] } },
@@ -305,14 +284,5 @@ export async function saveEmailConfig(
 
 export async function getEmailCapabilities() {
   const config = await getEmailConfig()
-  const oidc = (await getConfig()).settings.general.oidc
-  return {
-    enabled: config.enabled,
-    recoveryEnabled:
-      config.enabled &&
-      config.recovery.enabled &&
-      !(oidc.enabled && oidc.enforceSso),
-    verificationMode: config.enabled ? config.verification.mode : 'off',
-    changesEnabled: config.enabled && config.changes.enabled,
-  }
+  return emailCapabilities(config, (await getConfig()).settings.general.oidc)
 }

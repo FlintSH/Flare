@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
+import { apiRequest } from '@/lib/client/request'
+
 import { useToast } from './use-toast'
 
 export interface User {
@@ -25,11 +27,6 @@ export interface PaginationData {
   pages: number
   page: number
   limit: number
-}
-
-export interface UsersResponse {
-  users: User[]
-  pagination: PaginationData
 }
 
 export interface UserFormData {
@@ -86,11 +83,13 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
           search: query.search,
           ...(query.role !== 'ALL' ? { roleId: query.role } : {}),
         })
-        const response = await fetch(`/api/users?${params}`, {
+        const data = await apiRequest<{
+          data?: User[]
+          pagination?: Omit<PaginationData, 'pages'> & { pageCount: number }
+        }>(`/api/users?${params}`, {
           signal: controller.signal,
+          whole: true,
         })
-        if (!response.ok) throw new Error('Failed to fetch users')
-        const data = await response.json()
         if (controller.signal.aborted) return
         setUsers(data.data || [])
         setPagination(
@@ -119,21 +118,10 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
     async (formData: UserFormData) => {
       try {
         setPendingMutations((count) => count + 1)
-        const response = await fetch('/api/users', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
+        const newUser = await apiRequest<User>('/api/users', {
+          body: formData,
+          fallback: 'Failed to create user',
         })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to create user')
-        }
-
-        const responseData = await response.json()
-        const newUser = responseData.data
 
         await fetchUsers(1)
 
@@ -167,28 +155,18 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
     async (userId: string, formData: UserFormData) => {
       try {
         setPendingMutations((count) => count + 1)
-        const response = await fetch('/api/users', {
+        const updatedUser = await apiRequest<User>('/api/users', {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+          body: {
             ...formData,
             password: formData.password || undefined,
             ...(formData.vanityId !== undefined
               ? { vanityId: formData.vanityId?.trim() || null }
               : {}),
             id: userId,
-          }),
+          },
+          fallback: 'Failed to update user',
         })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to update user')
-        }
-
-        const responseData = await response.json()
-        const updatedUser = responseData.data
 
         await fetchUsers(currentPage)
 
@@ -222,14 +200,10 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
     async (userId: string) => {
       try {
         setPendingMutations((count) => count + 1)
-        const response = await fetch(`/api/users/${userId}`, {
+        await apiRequest(`/api/users/${userId}`, {
           method: 'DELETE',
+          fallback: 'Failed to delete user',
         })
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => null)
-          throw new Error(data?.error || 'Failed to delete user')
-        }
 
         await fetchUsers(currentPage)
 
@@ -263,14 +237,10 @@ export function useUserManagement(options: UseUserManagementOptions = {}) {
     async (userId: string) => {
       try {
         setPendingMutations((count) => count + 1)
-        const response = await fetch(`/api/users/${userId}/avatar`, {
+        await apiRequest(`/api/users/${userId}/avatar`, {
           method: 'DELETE',
+          fallback: 'Failed to remove avatar',
         })
-
-        if (!response.ok) {
-          const data = await response.json().catch(() => null)
-          throw new Error(data?.error || 'Failed to remove avatar')
-        }
 
         setUsers((prevUsers) =>
           prevUsers.map((user) =>

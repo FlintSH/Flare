@@ -1,44 +1,39 @@
 import {
+  ARCHIVE_BODY_LIMIT,
   archiveActor,
-  archiveBody,
-  archiveRoute,
+  archiveRoutes,
   extractArchiveSchema,
 } from '@/lib/archives/http'
 import { withArchiveOperation } from '@/lib/archives/operation'
 import { extractArchive } from '@/lib/archives/service'
-import { setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditTarget } from '@/lib/audit'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { actionPermissions } from '@/lib/permissions/actions'
 
-export const runtime = 'nodejs'
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(
-    async () => {
-      const { id } = await params
-      setAuditTarget({ type: 'file', id })
-      return archiveRoute(async () => {
-        const actor = await archiveActor(request, [
-          'files.read',
-          'files.upload',
-          'folders.manage',
-        ])
-        return withArchiveOperation(
-          actor.user.id,
-          request.signal,
-          async (operation) => {
-            const input = extractArchiveSchema.parse(
-              await archiveBody(request, operation.signal)
-            )
-            return extractArchive(actor, id, input, operation)
-          }
-        )
-      })
-    },
-    {
-      action: 'archive.extract',
-      category: 'archives',
-      route: '/api/files/[id]/archive/extract',
-    }
-  )(request)
-}
+type Context = { params: Promise<{ id: string }> }
+
+const api = routes('/api/files/[id]/archive/extract', archiveRoutes)
+
+export const POST = api(
+  async (request, { params }: Context) => {
+    const { id } = await params
+    setAuditTarget({ type: 'file', id })
+    const actor = await archiveActor(
+      request,
+      actionPermissions('extractArchive')
+    )
+    return withArchiveOperation(
+      actor.user.id,
+      request.signal,
+      async (operation) => {
+        const input = await readJson(request, extractArchiveSchema, {
+          limit: ARCHIVE_BODY_LIMIT,
+          signal: operation.signal,
+        })
+        return extractArchive(actor, id, input, operation)
+      }
+    )
+  },
+  { audit: { action: 'archive.extract', category: 'archives' } }
+)

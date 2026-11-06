@@ -10,7 +10,7 @@ The 2.1 dependency refresh preserves existing provider settings and issuer/subje
 
 ## Connect a provider
 
-The administrator recovery safeguard checks that an SSO-only administrator’s saved issuer matches the configured, enabled provider. Disabling or changing the only working administrator provider is refused; create and test a local-password administrator before making that change.
+The administrator recovery safeguard checks that an SSO-only administrator’s saved issuer matches the configured, enabled provider. A trailing slash on the issuer URL doesn't affect the match. Disabling or changing the only working administrator provider is refused; create and test a local-password administrator before making that change.
 
 1. Keep a working local administrator account and test `/auth/login?local=1` before changing the normal sign-in flow.
 2. Create a confidential OIDC application in your identity provider.
@@ -43,7 +43,9 @@ Flare uses provider discovery, ID tokens, PKCE, and state checks. The callback o
 
 These settings are stored in the database. There are no `FLARE_OIDC_*` server environment overrides in the current implementation.
 
-With auto-login on, **Sign out** in the account menu, the phone navigation sheet, and Profile opens `/auth/login?local=1`, so Flare doesn't send the person straight back to the provider. Signing out of Flare doesn't end the provider's own session; choosing the sign-in button can still continue without a password prompt. Earlier builds sent the Profile button to the auto-login page, which could sign someone with an active provider session straight back in.
+With auto-login on, every sign-out opens `/auth/login?local=1`, so Flare doesn't send the person straight back to the provider. That includes **Sign out** in the account menu, the phone navigation sheet, Profile, and the email verification page, and the sign-out after someone deletes their own account. Signing out of Flare doesn't end the provider's own session; choosing the sign-in button can still continue without a password prompt. Earlier builds sent the Profile button, the verification page's **Sign out**, and account deletion to the auto-login page. An active provider session could then sign the person straight back in or, after deletion, create a new, empty account when **Auto-provision users** is on.
+
+A session that ends without a sign-out, for example one an administrator revokes, sends that browser to the usual login page on its next visit, where auto-login can sign it in again while the provider session lasts.
 
 ## Account creation and identity
 
@@ -98,6 +100,9 @@ When trust is enabled, Flare accepts a verified claim tied to the current accoun
 | Automatic sign-up is disabled           | Review whether auto-provisioning should be enabled for eligible provider users                                            |
 | Provider has not verified this email    | Complete provider verification or deliberately reconsider the verified-email requirement                                  |
 | Account requires a passkey              | Use local login's passkey or dedicated recovery option; resetting the provider/password does not disable the requirement. |
+| Account uses local two-factor           | Sign in with the account's password and authenticator or recovery code, or a passkey; SSO stays refused for this account. |
 | Generic sign-in failure                 | Check callback URI, issuer discovery, secret, provider logs, public origin, and connectivity                              |
+
+The passkey and two-factor refusals open the local sign-in form (`/auth/login?local=1`) with the message, so auto-login doesn't send the person straight back to the provider.
 
 If auto-login prevents reaching the normal form, open `/auth/login?local=1`, sign in locally, and repair OIDC in Settings. If the local account is also gated by email verification, use the documented [email operator recovery](/admin/email#recover-from-an-email-lockout) to relax that policy while preserving authentication.

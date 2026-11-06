@@ -1,56 +1,26 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
+import { revokeSecuritySessions } from '@/lib/auth/security/service'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
-import { PermissionError } from '@/lib/permissions/server'
-import { requirePermission } from '@/lib/permissions/server'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
 
-const logger = loggers.users
+type Context = { params: Promise<{ id: string }> }
 
-async function handleDELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  if (!isSameOriginRequest(request))
-    return new NextResponse('Invalid request origin', { status: 403 })
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('users.sessions')
-    if (permissionDenied) return permissionDenied
+const api = routes('/api/users/[id]/sessions', {
+  failure: { message: 'Internal Server Error' },
+  logger: loggers.users,
+})
 
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
+export const DELETE = api(async (request, { params }: Context) => {
+  const { user } = await requireSession(request, 'users.sessions')
 
-    const { id } = await params
+  const { id } = await params
 
-    await mutateAccount(session.user.id, id, 'users.sessions', (tx) =>
-      tx.user.update({
-        where: { id },
-        data: {
-          sessionVersion: {
-            increment: 1,
-          },
-        },
-      })
-    )
+  await mutateAccount(user.id, id, 'users.sessions', (tx) =>
+    revokeSecuritySessions(tx, id)
+  )
 
-    return new NextResponse(null, { status: 204 })
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return Response.json({ error: error.message }, { status: error.status })
-    logger.error('Error invalidating sessions:', error as Error)
-    return new NextResponse('Internal Server Error', { status: 500 })
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleDELETE(request, { params }), {
-    route: '/api/users/[id]/sessions',
-  })(request)
-}
+  return new NextResponse(null, { status: 204 })
+})

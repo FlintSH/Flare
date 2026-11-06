@@ -27,7 +27,7 @@ import {
   bucketLabel,
   timelineLayout,
   timelineWindowStart,
-} from '@/lib/files/timeline-layout'
+} from '@/lib/library/timeline-layout'
 
 import type { useFileTimeline } from '@/hooks/use-file-timeline'
 

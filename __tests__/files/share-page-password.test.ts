@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   notFound: vi.fn((): never => {
     throw new Error('NOT_FOUND')
   }),
+  file: undefined as unknown,
 }))
 
 const password = 'share-page-password-1'
@@ -34,11 +35,10 @@ vi.mock('next/headers', () => ({
 }))
 vi.mock('next/navigation', () => ({ notFound: mocks.notFound }))
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
-vi.mock('@/lib/files/resolve', () => ({
-  resolveFileUrlPath: async () => file.urlPath,
-}))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { file: { findUnique: async () => file, update: mocks.update } },
+  prisma: {
+    file: { findUnique: async () => mocks.file, update: mocks.update },
+  },
 }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
@@ -60,7 +60,7 @@ vi.mock('@/components/layout/dynamic-background', () => ({
   DynamicBackground: () => null,
 }))
 
-function open(guess: string) {
+function open(guess: string | string[]) {
   return FilePage({
     params: Promise.resolve({ userUrlId: 'owner', filename: 'contract.pdf' }),
     searchParams: Promise.resolve({ password: guess }),
@@ -69,6 +69,8 @@ function open(guess: string) {
 
 beforeEach(() => {
   configureAuditWriter(async () => undefined)
+  mocks.file = file
+  mocks.update.mockReset()
 })
 
 describe('share page password pause', () => {
@@ -89,5 +91,42 @@ describe('share page password pause', () => {
     )
     expect(html).not.toContain('That password didn’t match.')
     expect(html).not.toContain(file.password)
+  })
+})
+
+describe('share page views', () => {
+  // Attempt limits are process-wide; use a file the pause test never touches.
+  const viewed = { ...file, id: 'share-page-views-file' }
+  beforeEach(() => {
+    mocks.file = viewed
+  })
+
+  it('counts no view for the password form or a wrong password', async () => {
+    renderToStaticMarkup(await open(''))
+    renderToStaticMarkup(await open('not-the-password'))
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('counts no view for a private file hidden from the visitor', async () => {
+    mocks.file = { ...viewed, visibility: 'PRIVATE', password: null }
+    await expect(open('')).rejects.toThrow('NOT_FOUND')
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('counts one view once the visitor may see the file', async () => {
+    await open(password)
+    expect(mocks.update).toHaveBeenCalledOnce()
+    expect(mocks.update).toHaveBeenCalledWith({
+      where: { id: viewed.id },
+      data: { views: { increment: 1 } },
+    })
+  })
+
+  it('reads the first of repeated passwords', async () => {
+    await open([password, 'not-the-password'])
+    expect(mocks.update).toHaveBeenCalledOnce()
+    mocks.update.mockReset()
+    renderToStaticMarkup(await open(['not-the-password', password]))
+    expect(mocks.update).not.toHaveBeenCalled()
   })
 })

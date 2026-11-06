@@ -21,24 +21,18 @@ const errors = []
 const inventory = await read('docs/site/api/endpoint-inventory.md')
 const config = await read('docs/site/hosting/configuration.md')
 const spec = JSON.parse(await read('docs/site/public/openapi.json'))
-const moduleSource = stripTypeScriptTypes(
-  await read('lib/integrations/tokens.ts')
+// A data: URL module cannot resolve imports, so the app modules loaded this way,
+// the bearer route table, the permission catalog and the email overrides,
+// import nothing but types.
+const importTypeScript = async (path) =>
+  import(
+    `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(await read(path))).toString('base64')}`
+  )
+const { requestPermissions, requiredApiScope } = await importTypeScript(
+  'lib/integrations/bearer-routes.ts'
 )
-const { requiredApiScope } = await import(
-  `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`
-)
-const permissionSource = stripTypeScriptTypes(
-  await read('lib/permissions/requests.ts')
-)
-const { requestPermissions } = await import(
-  `data:text/javascript;base64,${Buffer.from(permissionSource).toString('base64')}`
-)
-const catalogSource = stripTypeScriptTypes(
-  await read('lib/permissions/catalog.ts')
-)
-const { ALL_PERMISSIONS } = await import(
-  `data:text/javascript;base64,${Buffer.from(catalogSource).toString('base64')}`
-)
+const { ALL_PERMISSIONS } = await importTypeScript('lib/permissions/catalog.ts')
+const { emailOverrides } = await importTypeScript('lib/email/environment.ts')
 const rolesGuide = await read('docs/site/admin/roles.md')
 for (const permission of ALL_PERMISSIONS)
   if (!rolesGuide.includes('`' + permission + '`'))
@@ -60,14 +54,14 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
   const source = await readFile(file, 'utf8')
   const methods = [
     ...source.matchAll(
-      /export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g
+      /export\s+(?:(?:async\s+)?function|const)\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g
     ),
   ].map((match) => match[1])
+  const examplePath = path
+    .replace(/\{partNumber\}/g, '1')
+    .replace(/\{[^}]+\}/g, 'example-id')
   for (const method of methods) {
-    const scope = requiredApiScope(
-      method,
-      path.replace(/\{partNumber\}/g, '1').replace(/\{[^}]+\}/g, 'example-id')
-    )
+    const scope = requiredApiScope(method, examplePath)
     if (!scope) continue
     operations.add(`${method.toLowerCase()} ${path}`)
     const operation = spec.paths?.[path]?.[method.toLowerCase()]
@@ -78,10 +72,7 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
         `Wrong OpenAPI scope for ${method} ${path}: expected ${scope}`
       )
     if (operation) {
-      const permissions = requestPermissions(
-        method,
-        path.replace(/\{partNumber\}/g, '1').replace(/\{[^}]+\}/g, 'example-id')
-      )
+      const permissions = requestPermissions(method, examplePath)
       if (
         JSON.stringify(operation['x-flare-permissions']) !==
         JSON.stringify(permissions)
@@ -114,41 +105,17 @@ const sourceFiles = [
   resolve(repo, 'next.config.ts'),
 ].filter((file) => /\.(ts|tsx|js|mjs|sh)$/.test(file))
 const envNames = new Set(['DATABASE_URL', 'NEXTAUTH_URL', 'NEXTAUTH_SECRET'])
-function emailLeaves(value, prefix = '') {
-  return Object.entries(value).flatMap(([key, entry]) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    return entry !== null && typeof entry === 'object'
-      ? emailLeaves(entry, path)
-      : [path]
-  })
-}
-for (const path of emailLeaves(
+for (const { name } of emailOverrides(
   JSON.parse(await read('lib/email/defaults.json'))
-)) {
-  if (
-    [
-      'verification.requiredSince',
-      'verification.graceEndsAt',
-      'verification.appliedMode',
-    ].includes(path)
-  )
-    continue
-  envNames.add(
-    'FLARE_EMAIL_' +
-      path
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .replaceAll('.', '_')
-        .toUpperCase()
-  )
-}
+))
+  envNames.add(name)
 for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8')
   for (const [, name] of source.matchAll(/process\.env\.([A-Z_0-9]+)/g)) {
     envNames.add(name)
   }
   for (const [, name] of source.matchAll(/\b(FLARE_[A-Z_]+)\b/g)) {
-    if (!/DATABASE_URL$|^FLARE_PREVIEW_|^FLARE_TEST_|^FLARE_SETUP_/.test(name))
-      envNames.add(name)
+    envNames.add(name)
   }
 }
 for (const name of envNames)

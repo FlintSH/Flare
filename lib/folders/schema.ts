@@ -1,18 +1,23 @@
 import { z } from 'zod'
 
+import { BATCH_LIMIT } from '@/lib/library/contract'
+import {
+  PLAIN_NAME_MESSAGE,
+  isPlainName,
+  nameSchema,
+} from '@/lib/library/names'
+
+export const FOLDER_NAME_MAX_LENGTH = 80
+
 export const folderNameSchema = z
   .string()
-  .refine((name) => !/[\p{Cc}\p{Cf}]/u.test(name), 'Use a plain-text name.')
-  .transform((name) => name.normalize('NFKC').trim().replace(/\s+/g, ' '))
-  .pipe(
-    z
-      .string()
-      .min(1, 'Give your folder a name.')
-      .max(80, 'Folder names can be up to 80 characters.')
-      .refine(
-        (name) => !/[\\/]/.test(name) && name !== '.' && name !== '..',
-        'Choose a name without slashes; "." and ".." are reserved.'
-      )
+  // Folder names have always refused control characters as typed, so a tab or
+  // line break fails here where a tag name turns it into a space.
+  .refine(isPlainName, PLAIN_NAME_MESSAGE)
+  .pipe(nameSchema('folder', FOLDER_NAME_MAX_LENGTH))
+  .refine(
+    (name) => !/[\\/]/.test(name) && name !== '.' && name !== '..',
+    'Choose a name without slashes; "." and ".." are reserved.'
   )
 
 export const folderIdSchema = z.string().min(1).max(128)
@@ -37,7 +42,7 @@ export const folderUpdateSchema = z
 
 export const fileFoldersInputSchema = z
   .object({
-    fileIds: z.array(folderIdSchema).min(1).max(100),
+    fileIds: z.array(folderIdSchema).min(1).max(BATCH_LIMIT),
     folderId: folderIdSchema.nullable(),
   })
   .strict()

@@ -16,6 +16,9 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { type ProfilePatch, updateProfile } from '@/lib/client/profile'
+import { VANITY_ID_MAX_LENGTH, vanityIdDraft } from '@/lib/users/public-id'
+
 import { useToast } from '@/hooks/use-toast'
 
 export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
@@ -25,26 +28,12 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
   const [vanityError, setVanityError] = useState<string | null>(null)
 
   const handleValueChange = async (
-    value: boolean | string,
-    key: string,
+    patch: ProfilePatch,
     description: string
   ) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          [key]: value,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update settings')
-      }
+      await updateProfile(patch, 'Failed to update settings')
 
       onUpdate()
 
@@ -87,14 +76,11 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                 id="vanity-url"
                 value={vanityId}
                 onChange={(e) => {
-                  const value = e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '')
-                  setVanityId(value)
+                  setVanityId(vanityIdDraft(e.target.value))
                   setVanityError(null)
                 }}
                 placeholder={`e.g. ${user.name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'my-name'}`}
-                maxLength={32}
+                maxLength={VANITY_ID_MAX_LENGTH}
                 disabled={isLoading}
               />
               {vanityError && (
@@ -111,16 +97,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                 setVanityError(null)
                 try {
                   const newVanityId = vanityId.trim() || null
-                  const response = await fetch('/api/profile', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ vanityId: newVanityId }),
-                  })
-                  if (!response.ok) {
-                    const data = await response.json()
-                    setVanityError(data.error || 'Failed to update vanity URL')
-                    return
-                  }
+                  await updateProfile(
+                    { vanityId: newVanityId },
+                    'Failed to update vanity URL'
+                  )
                   onUpdate()
                   toast({
                     title: 'Success',
@@ -150,18 +130,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                   setIsLoading(true)
                   setVanityError(null)
                   try {
-                    const response = await fetch('/api/profile', {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ vanityId: null }),
-                    })
-                    if (!response.ok) {
-                      const data = await response.json()
-                      setVanityError(
-                        data.error || 'Failed to remove vanity URL'
-                      )
-                      return
-                    }
+                    await updateProfile(
+                      { vanityId: null },
+                      'Failed to remove vanity URL'
+                    )
                     setVanityId('')
                     onUpdate()
                     toast({
@@ -199,8 +171,7 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
           checked={user.randomizeFileUrls}
           onCheckedChange={(c) =>
             handleValueChange(
-              c,
-              'randomizeFileUrls',
+              { randomizeFileUrls: c },
               'File URL settings updated successfully'
             )
           }
@@ -221,8 +192,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
             value={user.defaultFileExpirationAction ?? 'DELETE'}
             onValueChange={(v) =>
               handleValueChange(
-                v,
-                'defaultFileExpirationAction',
+                {
+                  defaultFileExpirationAction:
+                    v as ProfilePatch['defaultFileExpirationAction'],
+                },
                 'Default file expiration action updated successfully'
               )
             }
@@ -251,8 +224,10 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
             value={user.defaultFileExpiration ?? 'DISABLED'}
             onValueChange={(v) =>
               handleValueChange(
-                v,
-                'defaultFileExpiration',
+                {
+                  defaultFileExpiration:
+                    v as ProfilePatch['defaultFileExpiration'],
+                },
                 'Default file expiration time updated successfully'
               )
             }

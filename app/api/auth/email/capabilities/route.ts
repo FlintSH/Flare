@@ -1,21 +1,11 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import { getEmailCapabilities } from '@/lib/email/config'
+import { unavailable } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 
-async function handleGET() {
-  try {
-    return NextResponse.json(await getEmailCapabilities())
-  } catch {
-    return NextResponse.json(
-      { error: 'Email settings are temporarily unavailable' },
-      { status: 503 }
-    )
-  }
-}
+const message = 'Email settings are temporarily unavailable'
 
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/auth/email/capabilities',
-  })()
-}
+const api = routes('/api/auth/email/capabilities', { failure: { message } })
+
+// Only the saved and environment email settings are read here, so a failure
+// means they are unusable, not that the request was wrong.
+export const GET = api(() => getEmailCapabilities().catch(unavailable(message)))

@@ -1,9 +1,10 @@
-import type { FileFilterOptions, FileType } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { adjacentImagePage, fileQuery, groupFiles } from '@/lib/files/gallery'
+import { type LibraryFilters, listQuery } from '@/lib/library/contract'
+import { adjacentImagePage } from '@/lib/library/gallery'
 
-const filters: FileFilterOptions = {
+const filters: LibraryFilters = {
   groupBy: 'none',
   page: 1,
   limit: 24,
@@ -38,57 +39,13 @@ function file(
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('file grouping', () => {
-  it('groups uploads by local month while preserving chronological navigation order', () => {
-    const files = [
-      file('sept-2'),
-      file('sept-1', '2026-09-01T12:00:00', 'application/pdf'),
-      file('aug', '2026-08-31T12:00:00'),
-    ]
-    const groups = groupFiles(files, 'month')
-    expect(groups.map((group) => group.label)).toEqual([
-      'September 2026',
-      'August 2026',
-    ])
-    expect(groups.flatMap((group) => group.files)).toEqual(files)
-  })
-
-  it('uses Monday-based weeks that include the year across year boundaries', () => {
-    const groups = groupFiles(
-      [file('jan', '2026-01-01T12:00:00'), file('dec', '2025-12-29T12:00:00')],
-      'week'
-    )
-    expect(groups).toEqual([
-      {
-        label: 'Week of Dec 29, 2025',
-        files: [
-          file('jan', '2026-01-01T12:00:00'),
-          file('dec', '2025-12-29T12:00:00'),
-        ],
-      },
-    ])
-  })
-
-  it('supports years and leaves an ungrouped gallery in its selected sort order', () => {
-    const files = [
-      file('2025', '2025-12-31T12:00:00'),
-      file('2026', '2026-01-01T12:00:00'),
-    ]
-    expect(groupFiles(files, 'year').map((group) => group.label)).toEqual([
-      '2025',
-      '2026',
-    ])
-    expect(groupFiles(files, 'none')).toEqual([{ label: '', files }])
-  })
-})
-
 describe('gallery page navigation', () => {
-  it('preserves the whole filter when generating an adjacent page request', () => {
+  it('preserves the whole filter, and no page position, when generating a list request', () => {
     expect(
-      Object.fromEntries(fileQuery({ ...filters, groupBy: 'month' }, 3))
+      Object.fromEntries(
+        listQuery({ ...filters, groupBy: 'month', page: 3, limit: 5 })
+      )
     ).toEqual({
-      page: '3',
-      limit: '24',
       search: 'trip',
       tag: 'travel-tag',
       folder: 'week-one',
@@ -97,6 +54,24 @@ describe('gallery page navigation', () => {
       visibility: 'private',
       dateFrom: filters.dateFrom,
     })
+  })
+
+  it('loads neighbors in default-size windows whatever limit an old page link carried', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [], pagination: { offset: 0 } }))
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    await adjacentImagePage({
+      filters: { ...filters, page: 4, limit: 5 },
+      anchorId: 'current',
+      direction: 1,
+      signal: new AbortController().signal,
+    })
+    const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost')
+    expect(url.searchParams.get('limit')).toBe('24')
+    expect(url.searchParams.has('page')).toBe(false)
   })
 
   it.each([1, -1] as const)(

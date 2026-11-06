@@ -11,18 +11,21 @@ import {
 } from 'vitest'
 
 const authentication = vi.hoisted(() => ({ userId: 'folder-owner' }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.userId, permissions: ['administrator'] },
-    response: null,
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({
+    id: authentication.userId,
+    permissions: ['administrator'],
   }),
 }))
-vi.mock('@/lib/events/handlers/file-expiry', () => ({
+vi.mock('@/lib/files/expiry', () => ({
   getFilesExpirationInfo: async () => new Map(),
 }))
 
 const databaseUrl = process.env.FLARE_FOLDERS_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
+
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
 
 suite('vault folders against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
@@ -386,7 +389,8 @@ suite('vault folders against disposable PostgreSQL', () => {
         }),
         expect.objectContaining({
           name: 'Password-protected file',
-          urlPath: `/s/folders/${enabled.shareToken}/files/${protectedFile.id}`,
+          href: `/s/folders/${enabled.shareToken}/files/${protectedFile.id}`,
+          rawUrl: null,
           mimeType: null,
           size: null,
           hasPassword: true,

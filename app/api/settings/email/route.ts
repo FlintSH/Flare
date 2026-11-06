@@ -1,59 +1,33 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import {
-  emailAdminAccess,
   emailDiagnostics,
-  emailSettingsError,
+  emailSettingsRoutes,
+  readEmailDraft,
 } from '@/lib/email/admin'
 import { getEmailSettingsView, saveEmailConfig } from '@/lib/email/config'
-import { startMailWorker } from '@/lib/email/worker'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
 
-async function handleGET(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const view = await getEmailSettingsView()
-    return NextResponse.json({
-      data: {
-        ...view,
-        diagnostics: await emailDiagnostics(view.config.enabled),
-      },
-    })
-  } catch (error) {
-    return emailSettingsError(error)
+const api = routes('/api/settings/email', emailSettingsRoutes)
+
+export const GET = api(async (request) => {
+  await requireSession(request, 'settings.email')
+  const view = await getEmailSettingsView()
+  return {
+    data: {
+      ...view,
+      diagnostics: await emailDiagnostics(view.config.enabled),
+    },
   }
-}
+})
 
-async function handlePUT(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const body = await request.json()
-    const view = await saveEmailConfig(body.config, {
-      clearPassword: body.clearPassword === true,
-      applyToExisting: body.applyToExisting === true,
-    })
-    if (view.config.enabled) startMailWorker()
-    return NextResponse.json({
-      data: {
-        ...view,
-        diagnostics: await emailDiagnostics(view.config.enabled),
-      },
-    })
-  } catch (error) {
-    return emailSettingsError(error)
+export const PUT = api(async (request) => {
+  await requireSession(request, 'settings.email')
+  const { config, ...options } = await readEmailDraft(request)
+  const view = await saveEmailConfig(config, options)
+  return {
+    data: {
+      ...view,
+      diagnostics: await emailDiagnostics(view.config.enabled),
+    },
   }
-}
-
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/settings/email',
-  })(request)
-}
-
-export async function PUT(request: Request) {
-  return withAuditRoute(async () => handlePUT(request), {
-    route: '/api/settings/email',
-  })(request)
-}
+})

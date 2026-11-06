@@ -18,8 +18,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { apiRequest } from '@/lib/client/request'
+import {
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_BYTES,
+} from '@/lib/users/account-policy'
+
 import { AccountEmail, useAccountEmailStatus } from './account-email'
-import { EmailCapabilities, emailPost, emailRequest } from './api'
+import { fetchEmailCapabilities } from './api'
 
 function Feedback({ error, message }: { error: string; message: string }) {
   return (
@@ -40,32 +47,36 @@ function Feedback({ error, message }: { error: string; message: string }) {
   )
 }
 
-export function ForgotPasswordForm() {
-  const [capabilities, setCapabilities] = useState<EmailCapabilities | null>(
-    null
-  )
+/** `recoveryEnabled` is the page's answer; without one, the browser asks. */
+export function ForgotPasswordForm({
+  recoveryEnabled: known = null,
+}: {
+  recoveryEnabled?: boolean | null
+}) {
+  const [recoveryEnabled, setRecoveryEnabled] = useState(known)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
-      .then(setCapabilities)
+    if (known !== null) return
+    fetchEmailCapabilities()
+      .then((capabilities) => setRecoveryEnabled(capabilities.recoveryEnabled))
       .catch(() =>
         setError(
           'Unable to check whether recovery is available. Please try again later.'
         )
       )
-  }, [])
+  }, [known])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/request-reset',
-        { email }
+        { body: { email } }
       )
       setMessage(result.message)
     } catch (error) {
@@ -80,7 +91,7 @@ export function ForgotPasswordForm() {
   }
   return (
     <div className="space-y-5">
-      {capabilities?.enabled && capabilities.recoveryEnabled ? (
+      {recoveryEnabled ? (
         <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
           <div className="space-y-2">
             <Label htmlFor="recovery-email">Email address</Label>
@@ -99,7 +110,7 @@ export function ForgotPasswordForm() {
             {busy ? 'Requesting…' : 'Send reset link'}
           </Button>
         </form>
-      ) : capabilities ? (
+      ) : recoveryEnabled === false ? (
         <Alert variant="info" role="status">
           <Info aria-hidden="true" />
           <AlertDescription>
@@ -120,7 +131,7 @@ export function ForgotPasswordForm() {
       )}
       <Feedback error={error} message={message} />
       <AuthFooter>
-        <Link href="/auth/login?local=1" className={authLinkClassName}>
+        <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
           Back to sign in
         </Link>
       </AuthFooter>
@@ -143,9 +154,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
     setBusy(true)
     setError('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/reset',
-        { token, password: data.get('password') }
+        { body: { token, password: data.get('password') } }
       )
       setComplete(true)
       setMessage(
@@ -181,13 +192,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
-                maxLength={72}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_BYTES}
                 required
                 disabled={busy}
               />
               <p className="text-sm text-muted-foreground">
-                Use at least 8 characters.
+                Use at least {ACCOUNT_PASSWORD_MIN_LENGTH} characters.
               </p>
             </div>
             <div className="space-y-2">
@@ -198,8 +209,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 name="confirmPassword"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
-                maxLength={72}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_BYTES}
                 required
                 disabled={busy}
               />
@@ -213,7 +224,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <Feedback error={error} message={message} />
       {complete ? (
         <Button asChild className="h-11 w-full">
-          <Link href="/auth/login?local=1">Sign in with your new password</Link>
+          <Link href={LOCAL_SIGN_IN_PATH}>Sign in with your new password</Link>
         </Button>
       ) : (
         <AuthFooter>
@@ -221,7 +232,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             Request a new reset link
           </Link>
           <span aria-hidden="true"> · </span>
-          <Link href="/auth/login?local=1" className={authLinkClassName}>
+          <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
             Back to sign in
           </Link>
         </AuthFooter>
@@ -239,9 +250,9 @@ export function VerifyEmailForm({ token }: { token: string }) {
     setBusy(true)
     setError('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/verify',
-        { token }
+        { body: { token } }
       )
       setMessage(result.message || 'Email confirmed.')
       setComplete(true)
@@ -289,7 +300,7 @@ export function VerifyEmailForm({ token }: { token: string }) {
             <span aria-hidden="true"> · </span>
           </>
         )}
-        <Link href="/auth/login?local=1" className={authLinkClassName}>
+        <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
           Back to sign in
         </Link>
       </AuthFooter>
@@ -315,7 +326,7 @@ function VerificationStatus() {
           Try again
         </Button>
         <AuthFooter>
-          <Link className={authLinkClassName} href="/auth/login?local=1">
+          <Link className={authLinkClassName} href={LOCAL_SIGN_IN_PATH}>
             Sign in
           </Link>
         </AuthFooter>

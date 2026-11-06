@@ -3,18 +3,16 @@ import { redirect } from 'next/navigation'
 import { UploadForm } from '@/components/file/upload-form'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 
-import { getPageSession } from '@/lib/auth/page-session'
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
+import { maxUploadBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
-import { hasPermission } from '@/lib/permissions/catalog'
 import { formatBytes } from '@/lib/utils'
 
-export default async function UploadPage() {
-  const session = await getPageSession()
+import { requireDashboardPage } from '../page-access'
 
-  if (!session?.user) {
-    redirect('/auth/login')
-  }
+export default async function UploadPage() {
+  const session = await requireDashboardPage('/dashboard/upload')
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -26,16 +24,11 @@ export default async function UploadPage() {
   })
 
   if (!user) {
-    redirect('/auth/login')
+    redirect(SIGN_IN_PATH)
   }
 
   const config = await getConfig()
-  const { value, unit } = config.settings.general.storage.maxUploadSize
-  const maxSizeBytes =
-    value * (unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
-
-  if (!hasPermission(session.user, 'files.upload'))
-    redirect('/dashboard/profile')
+  const maxSizeBytes = maxUploadBytes(config)
 
   return (
     <div className="container space-y-7">

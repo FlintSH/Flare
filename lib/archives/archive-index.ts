@@ -72,7 +72,6 @@ export class ArchiveIndex {
     this.dataEnd = archiveBytes
   }
 
-  /** Whether an entry with this path still fits the listing's memory budget. */
   hasRoomFor(path: string) {
     return this.memoryBytes + entryCost(path) <= this.maxBytes
   }
@@ -120,10 +119,6 @@ export class ArchiveIndex {
     }
   }
 
-  /**
-   * The complete listing as JSON, encoded once. Repeat visits to a large
-   * archive then cost no serialization work.
-   */
   listingJson() {
     if (!this.complete) throw new Error('The archive listing is incomplete.')
     this.encoded ??= new Blob([JSON.stringify(this.listing())])

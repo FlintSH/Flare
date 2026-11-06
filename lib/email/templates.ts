@@ -1,3 +1,4 @@
+import type { EmailTokenPurpose } from './links'
 import type { EmailConfig } from './schema'
 
 export interface RenderedEmail {
@@ -6,14 +7,9 @@ export interface RenderedEmail {
   html: string
 }
 
+/** Each link's own message, and the notices that carry no link. */
 export type AccountEmailKind =
-  | 'verify'
-  | 'reset'
-  | 'change'
-  | 'change_approval'
-  | 'password_changed'
-  | 'email_changed'
-  | 'test'
+  EmailTokenPurpose | 'password_changed' | 'email_changed' | 'test'
 
 export interface AccountEmailInput {
   kind: AccountEmailKind

@@ -17,7 +17,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import type { AppearanceDocument } from '@/lib/customization/schema'
-import { shareMetadataText } from '@/lib/customization/sharing'
+import {
+  shareMetadataText,
+  showsShareFooter,
+} from '@/lib/customization/sharing'
 import { paletteVariables } from '@/lib/customization/theme'
 import { cn } from '@/lib/utils'
 
@@ -26,12 +29,15 @@ const previewToggleClassName =
 
 export function AppearancePreview({
   document,
+  creditsFooter,
   mode,
   onModeChange,
   protectedPreview,
   onProtectedChange,
 }: {
   document: AppearanceDocument
+  /** The instance's saved Show credits footer setting. */
+  creditsFooter: boolean
   mode: 'light' | 'dark'
   onModeChange: (mode: 'light' | 'dark') => void
   protectedPreview: boolean
@@ -237,7 +243,7 @@ export function AppearancePreview({
               </div>
             )}
           </div>
-          {sharing.showFooter !== false && (
+          {showsShareFooter(document, creditsFooter) && (
             <p className="text-[10px] text-muted-foreground text-center px-5 pb-5">
               {brand.footerText}
             </p>

@@ -2,6 +2,11 @@ import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  API_SCOPE_CATALOG,
+  scopeUsable,
+} from '@/lib/integrations/bearer-routes'
+import {
+  WebhookTargetError,
   isPublicAddress,
   parseWebhookUrl,
   resolveWebhookTarget,
@@ -9,9 +14,12 @@ import {
 } from '@/lib/integrations/security'
 import {
   createRandomApiToken,
+  createWebhookSecret,
   hashApiToken,
   tokenAllowsRequest,
+  tokenUsable,
 } from '@/lib/integrations/tokens'
+import type { Permission } from '@/lib/permissions/catalog'
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }))
 vi.mock('node:dns/promises', () => dns)
@@ -30,6 +38,35 @@ describe('scoped API tokens', () => {
     expect(hashApiToken(first.token)).toBe(first.hash)
     expect(first.token).not.toBe(second.token)
     expect(first.hash).not.toBe(second.hash)
+  })
+  it('accepts a token until it is revoked or reaches its expiry', () => {
+    const now = Date.now()
+    const token = (revokedAt: Date | null, expiresAt: Date | null) =>
+      tokenUsable({ revokedAt, expiresAt })
+    expect(token(null, null)).toBe(true)
+    expect(token(null, new Date(now + 60_000))).toBe(true)
+    expect(token(null, new Date(now - 1))).toBe(false)
+    expect(token(new Date(now - 60_000), null)).toBe(false)
+  })
+  it('mints high entropy webhook signing secrets', () => {
+    const secret = createWebhookSecret()
+    expect(secret).toMatch(/^whsec_[\w-]{43}$/)
+    expect(createWebhookSecret()).not.toBe(secret)
+  })
+  it('offers a scope while the owner can use at least one of its routes', () => {
+    const usable = (granted: Permission[]) =>
+      API_SCOPE_CATALOG.map(({ scope }) => scope).filter((scope) =>
+        scopeUsable(scope, (permission) => granted.includes(permission))
+      )
+    expect(usable(['files.upload', 'files.read', 'links.read'])).toEqual([
+      'files:upload',
+      'files:read',
+      'urls:read',
+    ])
+    expect(usable(['links.create'])).toEqual(['urls:write'])
+    expect(usable(['links.delete'])).toEqual(['urls:write'])
+    expect(usable(['tokens.manage', 'files.update', 'tags.manage'])).toEqual([])
+    expect(scopeUsable('files:delete', () => true)).toBe(false)
   })
   it('allows only exact route/method combinations and never account or token management', () => {
     const allowed = (method: string, path: string, scopes = ['files:upload']) =>
@@ -141,5 +178,27 @@ describe('webhook destination and signing contracts', () => {
       'public IP'
     )
     expect(dns.lookup).toHaveBeenCalledTimes(2)
+  })
+  it('refuses an unusable destination with a 400 for the person adding it', async () => {
+    vi.stubEnv('FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK', '')
+    expect(() => parseWebhookUrl('not a url')).toThrow(WebhookTargetError)
+    dns.lookup.mockResolvedValue([{ address: '10.0.0.1', family: 4 }])
+    await expect(
+      resolveWebhookTarget('https://example.com/hook')
+    ).rejects.toMatchObject({ status: 400 })
+    // A name that doesn't resolve keeps the lookup's own explanation.
+    dns.lookup.mockRejectedValue(
+      Object.assign(new Error('getaddrinfo ENOTFOUND hooks.invalid'), {
+        code: 'ENOTFOUND',
+      })
+    )
+    const missing = await resolveWebhookTarget(
+      'https://hooks.invalid/hook'
+    ).catch((error: unknown) => error)
+    expect(missing).toBeInstanceOf(WebhookTargetError)
+    expect(missing).toMatchObject({
+      status: 400,
+      message: 'getaddrinfo ENOTFOUND hooks.invalid',
+    })
   })
 })

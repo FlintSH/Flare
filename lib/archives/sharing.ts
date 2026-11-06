@@ -1,9 +1,9 @@
 import type { Prisma } from '@prisma/client'
-import { RateLimiterMemory } from 'rate-limiter-flexible'
 import { z } from 'zod'
 
 import { setAuditActor, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
@@ -12,12 +12,18 @@ import {
   checkFileAccess,
   retryAfterMinutes,
 } from '@/lib/files/access'
-import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
-import { rateLimit } from '@/lib/security/rate-limit'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
+import { refuseApiCredentials } from '@/lib/http/access'
+import {
+  assertSameOrigin,
+  mediaType,
+  readBody,
+  readJson,
+} from '@/lib/http/request'
+import { getUserAccess } from '@/lib/permissions/server'
+import { rateLimit, requestLimit } from '@/lib/security/rate-limit'
 
 import { ArchiveError } from './errors'
-import { archiveBody } from './http'
+import { ARCHIVE_BODY_LIMIT } from './http'
 import { ARCHIVE_BROWSE_LIMITS } from './shared'
 import {
   createArchiveUnlock,
@@ -42,31 +48,24 @@ export const sharedArchiveEntrySchema = z
   })
   .strict()
 
-// Share routes can be compiled into separate Next bundles. Keep one budget per
-// process rather than one limiter per route module. Listings poll while a slow
-// archive is read; entry reads include image loads and media seeking.
-const processState = globalThis as typeof globalThis & {
-  [key: symbol]: unknown
-}
+// Requests per client address per minute. Listings poll while a slow archive
+// is read; entry reads include image loads and media seeking.
 export const SHARED_ARCHIVE_RATE_LIMITS = {
   listing: 120,
   entry: 600,
 } as const
-const limiters = (processState[Symbol.for('flare.archive.share-limits')] ??= {
-  listing: new RateLimiterMemory({
-    points: SHARED_ARCHIVE_RATE_LIMITS.listing,
-    duration: 60,
-    keyPrefix: 'archive-share',
-  }),
-  entry: new RateLimiterMemory({
-    points: SHARED_ARCHIVE_RATE_LIMITS.entry,
-    duration: 60,
-    keyPrefix: 'archive-share-entry',
-  }),
-}) as Record<'listing' | 'entry', RateLimiterMemory>
+const limiters = {
+  listing: requestLimit('archive-share', SHARED_ARCHIVE_RATE_LIMITS.listing),
+  entry: requestLimit('archive-share-entry', SHARED_ARCHIVE_RATE_LIMITS.entry),
+}
 
 export const SHARED_ARCHIVE_BODY_TIMEOUT_MS = 5_000
 export const SHARED_ARCHIVE_PENDING_BODIES = 32
+// Share routes can be compiled into separate Next bundles; keep one pool of
+// pending bodies per process rather than one per route module.
+const processState = globalThis as typeof globalThis & {
+  [key: symbol]: unknown
+}
 const bodyKey = Symbol.for('flare.archive.pending-share-bodies')
 const pendingBodies = (processState[bodyKey] ??=
   new Set<symbol>()) as Set<symbol>
@@ -98,7 +97,7 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   if (request.signal.aborted) abort()
   try {
     controller.signal.throwIfAborted()
-    return await archiveBody(request, controller.signal, allowForm)
+    return await readSharedBody(request, controller.signal, allowForm)
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason
     throw error
@@ -109,16 +108,38 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   }
 }
 
+async function readSharedBody(
+  request: Request,
+  signal: AbortSignal,
+  allowForm: boolean
+) {
+  const type = mediaType(request)
+  if (allowForm && type === 'application/x-www-form-urlencoded') {
+    const fields = new URLSearchParams(
+      (await readBody(request, ARCHIVE_BODY_LIMIT, signal)).toString('utf8')
+    )
+    if ([...fields.keys()].some((key) => fields.getAll(key).length !== 1))
+      throw new ArchiveError('Use each archive field only once.', 400)
+    return Object.fromEntries(fields)
+  }
+  if (type !== 'application/json')
+    throw new ArchiveError(
+      allowForm ? 'Use JSON or a URL-encoded form.' : 'Use application/json.',
+      415
+    )
+  return readJson(request, { limit: ARCHIVE_BODY_LIMIT, signal })
+}
+
+/**
+ * Share pages call these routes from Flare itself, and only from there:
+ * reads too, so other sites can't embed shared entries.
+ */
 export async function sharedArchiveGuard(
   request: Request,
   kind: 'listing' | 'entry'
 ) {
-  if (request.headers.has('authorization'))
-    throw new ArchiveError(
-      'API credentials cannot authorize shared archives.',
-      401
-    )
-  if (!isSameOriginRequest(request)) throw new ArchiveError('Forbidden', 403)
+  refuseApiCredentials(request)
+  assertSameOrigin(request)
   return rateLimit(request, limiters[kind])
 }
 
@@ -175,8 +196,8 @@ function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
 }
 
 /**
- * Check a shared archive request. A visitor proves a file password either in
- * the body or with an unlock cookie issued after an earlier password check.
+ * A visitor proves a file password either in the body or with an unlock
+ * cookie issued after an earlier password check.
  */
 export async function authorizeSharedArchive(
   id: string,

@@ -91,6 +91,21 @@ async function top(page) {
   await page.evaluate(() => window.scrollTo(0, 0))
 }
 
+// A card's hover veil fails the contrast check while it fades in, so an
+// accessibility scan needs nothing under the pointer and no running transition.
+async function clearPointer(page) {
+  await page.mouse.move(0, 0)
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          !(animation instanceof CSSTransition) ||
+          animation.playState !== 'running'
+      )
+  )
+}
+
 async function verifyArchiveSelection(page) {
   const selectedNames = [
     'Alpine morning 00001.webp',
@@ -283,7 +298,6 @@ async function screenshot(page, name) {
     .toFile(path.join(screenshots, `${name}.webp`))
 }
 
-// Distinct rendered heights of mounted file cards (or placeholders).
 async function cardHeights(
   page,
   selector = '[data-file-index] > :first-child'
@@ -1101,6 +1115,7 @@ async function main() {
     await expect(page.getByRole('menu')).toBeVisible()
     await page.keyboard.press('Escape')
     await top(page)
+    await clearPointer(page)
     await page.addScriptTag({
       path: path.join(
         __dirname,
@@ -1129,6 +1144,7 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 })
     await ready(page)
     await verifyArchiveSelection(page)
+    await clearPointer(page)
     await page.getByRole('slider', { name: 'Browse files by date' }).focus()
     const mobileAccessibility = await page.evaluate(async () => {
       const result = await window.axe.run(document, {

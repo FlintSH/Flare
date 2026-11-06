@@ -36,7 +36,6 @@ function frame(dark: boolean) {
         // scroll by its padding alone.
         maxHeight: `calc(round(nearest, 60vh - ${2 * EDGE}px, ${LINE_HEIGHT}px) + ${2 * EDGE}px)`,
       },
-      // Browsers without CSS round() use this height.
       '@supports not (height: round(nearest, 1px, 1px))': {
         '.cm-scroller': { maxHeight: '60vh' },
       },

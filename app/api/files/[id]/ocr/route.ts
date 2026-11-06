@@ -1,21 +1,14 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
-import { prisma } from '@/lib/database/prisma'
-import {
-  checkFileAccess,
-  fileAccessDeniedHeaders,
-  retryAfterMinutes,
-} from '@/lib/files/access'
+import { authorizeFile } from '@/lib/files/delivery'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { takeOcrRequest } from '@/lib/ocr/limits'
-import { getClientIp } from '@/lib/security/rate-limit'
+import { requesterKey } from '@/lib/security/rate-limit'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
-const logger = loggers.files
+type Context = { params: Promise<{ id: string }> }
 
 // Storage and recognition errors can name internal paths; never return them.
 const RECOGNITION_FAILED = 'Flare couldn’t read text from this image.'
@@ -40,7 +33,7 @@ async function recognize(
     { fileId: file.id, filePath: file.path },
     {
       admit: () =>
-        takeOcrRequest(userId ? `user:${userId}` : `ip:${getClientIp(req)}`),
+        takeOcrRequest(userId ? `user:${userId}` : requesterKey(req)),
     }
   )
   switch (outcome.status) {
@@ -79,101 +72,42 @@ function waitText(seconds: number) {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`
 }
 
-async function handleGET(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params
-    const url = new URL(req.url)
-    const providedPassword = url.searchParams.get('password')
+const api = routes('/api/files/[id]/ocr', {
+  envelope: 'api',
+  failure: { message: 'Failed to fetch OCR text' },
+  logger: loggers.files,
+})
 
-    const file = await prisma.file.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        userId: true,
-        mimeType: true,
-        isOcrProcessed: true,
-        ocrText: true,
-        path: true,
-        ocrConfidence: true,
-        ocrTagsPendingAt: true,
-        visibility: true,
-        password: true,
-      },
-    })
+export const GET = api(async (request, { params }: Context) => {
+  const { id } = await params
+  const grant = await authorizeFile(request, { id }, 'api', {
+    isOcrProcessed: true,
+    ocrText: true,
+    ocrConfidence: true,
+    ocrTagsPendingAt: true,
+  })
+  if (grant instanceof Response) return grant
+  const { file, session } = grant
 
-    if (!file) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'File not found',
-        },
-        { status: 404 }
-      )
-    }
-
-    if (!file.mimeType.startsWith('image/')) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'File is not an image',
-        },
-        { status: 400 }
-      )
-    }
-
-    const session = await getAccessSession()
-
-    setAuditTarget({ type: 'file', id: file.id, name: file.name })
-    const access = await checkFileAccess(file, session, providedPassword, {
-      requester: requestIp(req.headers),
-    })
-    if (!access.allowed) {
-      setAuditOutcome('denied')
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            access.reason === 'private'
-              ? 'Unauthorized'
-              : access.reason === 'password_rate_limited'
-                ? `Too many incorrect passwords for this file. Try again in ${retryAfterMinutes(access)} min.`
-                : 'Password required',
-        },
-        { status: access.status, headers: fileAccessDeniedHeaders(access) }
-      )
-    }
-
-    if (!file.isOcrProcessed || file.ocrText === null)
-      return await recognize(req, file, session?.user?.id)
-
-    if (file.ocrTagsPendingAt) await applyPendingOcrTags(id)
-
-    return NextResponse.json({
-      success: true,
-      text: file.ocrText,
-      confidence: file.ocrConfidence,
-    })
-  } catch (error) {
-    logger.error('OCR fetch error:', error as Error)
+  // Checked after access, so a file the requester can't read stays hidden.
+  if (!file.mimeType.startsWith('image/')) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch OCR text',
+        error: 'File is not an image',
       },
-      { status: 500 }
+      { status: 400 }
     )
   }
-}
 
-export async function GET(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, context), {
-    route: '/api/files/[id]/ocr',
-  })(req)
-}
+  if (!file.isOcrProcessed || file.ocrText === null)
+    return recognize(request, file, session?.user?.id)
+
+  if (file.ocrTagsPendingAt) await applyPendingOcrTags(id)
+
+  return NextResponse.json({
+    success: true,
+    text: file.ocrText,
+    confidence: file.ocrConfidence,
+  })
+})

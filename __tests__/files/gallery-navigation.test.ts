@@ -1,21 +1,23 @@
 import { GET } from '@/app/api/files/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AccessError } from '@/lib/http/errors'
+
 const mocks = vi.hoisted(() => ({
-  requireAuth: vi.fn(),
+  requireAccount: vi.fn(),
   transaction: vi.fn(),
   file: { count: vi.fn(), findMany: vi.fn() },
   transactionFile: { findFirst: vi.fn(), count: vi.fn(), findMany: vi.fn() },
   expiration: vi.fn(),
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({ requireAuth: mocks.requireAuth }))
+vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: mocks.file, $transaction: mocks.transaction },
 }))
 vi.mock('@/lib/logger', () => ({ loggers: { files: { error: vi.fn() } } }))
 vi.mock('@/lib/config', () => ({ getConfig: vi.fn() }))
-vi.mock('@/lib/events/handlers/file-expiry', () => ({
+vi.mock('@/lib/files/expiry', () => ({
   getFilesExpirationInfo: async (ids: string[]) =>
     new Map(
       await Promise.all(
@@ -79,7 +81,7 @@ function request(params: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.requireAuth.mockResolvedValue({ user: { id: 'owner' } })
+  mocks.requireAccount.mockResolvedValue({ id: 'owner' })
   mocks.transaction.mockImplementation(async (callback) =>
     callback({ file: mocks.transactionFile })
   )
@@ -284,7 +286,7 @@ describe('anchored image navigation API', () => {
 
   it('preserves public metadata and expiry without returning password hashes', async () => {
     const expiresAt = new Date('2026-12-01T00:00:00Z')
-    mocks.expiration.mockResolvedValue(expiresAt)
+    mocks.expiration.mockResolvedValue({ expiresAt, action: 'SET_PRIVATE' })
     const response = await request()
     const body = await response.json()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
@@ -292,9 +294,15 @@ describe('anchored image navigation API', () => {
       id: 'neighbor-a',
       hasPassword: true,
       expiresAt: expiresAt.toISOString(),
+      expiryAction: 'SET_PRIVATE',
       tags: [{ id: 'tag-work', name: 'Work' }],
     })
     expect(body.data[0]).not.toHaveProperty('password')
+  })
+
+  it('sends no expiry time or action for a file without one', async () => {
+    const body = await (await request()).json()
+    expect(body.data[0]).toMatchObject({ expiresAt: null, expiryAction: null })
   })
 
   it.each([
@@ -421,9 +429,7 @@ describe('anchored image navigation API', () => {
   })
 
   it('requires authentication before accessing an anchor', async () => {
-    mocks.requireAuth.mockResolvedValue({
-      response: new Response(null, { status: 401 }),
-    })
+    mocks.requireAccount.mockRejectedValue(new AccessError(401, 'Denied'))
     expect((await request()).status).toBe(401)
     expect(mocks.transaction).not.toHaveBeenCalled()
   })

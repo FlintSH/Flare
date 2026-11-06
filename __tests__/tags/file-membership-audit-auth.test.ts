@@ -165,12 +165,6 @@ describe('tag membership authentication and audit integration', () => {
         account.id,
         fileId,
       ])
-      if (method === 'legacy token')
-        expect(mocks.user.findUnique).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: { uploadToken: legacySecret },
-          })
-        )
       auditResult(200, 'success')
     }
   )
@@ -188,10 +182,6 @@ describe('tag membership authentication and audit integration', () => {
       })
       const response = await GET(request(namedSecret))
       expect(response.status).toBe(401)
-      expect(mocks.apiToken.findUnique).toHaveBeenCalledWith({
-        where: { hash: hashApiToken(namedSecret) },
-        include: { user: true },
-      })
       expect(mocks.session).not.toHaveBeenCalled()
       expect(mocks.apiToken.update).not.toHaveBeenCalled()
       expect(mocks.queryRaw).not.toHaveBeenCalled()

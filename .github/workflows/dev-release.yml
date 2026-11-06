@@ -151,7 +151,6 @@ jobs:
 
       - name: Create and push multi-arch manifests
         run: |
-          # GitHub Container Registry manifests
           docker buildx imagetools create -t ghcr.io/flintsh/flare:rolling \
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64
@@ -160,7 +159,6 @@ jobs:
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
             ghcr.io/flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64
           
-          # Docker Hub manifests
           docker buildx imagetools create -t flintsh/flare:rolling \
             flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-amd64 \
             flintsh/flare:rolling-${{ needs.get-commit-info.outputs.sha }}-arm64

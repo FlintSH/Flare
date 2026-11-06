@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { BATCH_LIMIT } from '@/lib/library/contract'
+
+import { TAG_REQUEST_FAILED } from '@/hooks/use-tags'
+
 type Tag = { id: string; name: string }
 export type FileTagMembership = { id: string; tags: Tag[] }
 type MembershipState = {
@@ -17,7 +22,7 @@ const loadFailed =
 
 /** A dialog-scoped snapshot; retained grid cards are not tag membership caches. */
 export function useFileTagMemberships(fileIds: string[]) {
-  const valid = fileIds.length > 0 && fileIds.length <= 100
+  const valid = fileIds.length > 0 && fileIds.length <= BATCH_LIMIT
   // Primitive identity prevents grid refreshes and onChanged from refetching.
   const key = valid ? JSON.stringify([...new Set(fileIds)].sort()) : ''
   const [attempt, setAttempt] = useState(0)
@@ -40,14 +45,10 @@ export function useFileTagMemberships(fileIds: string[]) {
     const load = async () => {
       try {
         const params = new URLSearchParams({ fileIds: ids.join(',') })
-        const response = await fetch(`/api/files/tags?${params}`, {
-          signal: controller.signal,
-          cache: 'no-store',
-        })
-        if (!response.ok)
-          throw new Error(response.status === 404 ? unavailable : loadFailed)
-        const result = await response.json()
-        const files: FileTagMembership[] = result.data?.files
+        const { files } = await apiRequest<{ files?: FileTagMembership[] }>(
+          `/api/files/tags?${params}`,
+          { signal: controller.signal }
+        )
         if (
           !Array.isArray(files) ||
           files.length !== ids.length ||
@@ -65,9 +66,13 @@ export function useFileTagMemberships(fileIds: string[]) {
             key,
             files: null,
             error:
-              error instanceof Error && error.message === unavailable
-                ? unavailable
-                : loadFailed,
+              error instanceof RefusedRequest
+                ? error.status === 404
+                  ? unavailable
+                  : loadFailed
+                : error instanceof Error && error.message === unavailable
+                  ? unavailable
+                  : loadFailed,
           })
       }
     }
@@ -80,7 +85,7 @@ export function useFileTagMemberships(fileIds: string[]) {
 
   const files = state.key === key ? state.files : null
   const error = !valid
-    ? 'Choose between 1 and 100 files, then reopen tags.'
+    ? `Choose between 1 and ${BATCH_LIMIT} files, then reopen tags.`
     : state.key === key
       ? state.error
       : ''
@@ -90,22 +95,16 @@ export function useFileTagMemberships(fileIds: string[]) {
     if (!files || !request || request.key !== key || active.current !== request)
       return null
     try {
-      const response = await fetch('/api/files/tags', {
+      await apiRequest('/api/files/tags', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           fileIds: files.map((file) => file.id),
           tagId: tag.id,
           action,
-        }),
+        },
         signal: request.controller.signal,
+        fallback: TAG_REQUEST_FAILED,
       })
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(
-          result.error || 'Couldn’t update tags. Please try again.'
-        )
-      }
     } catch (error) {
       if (request.controller.signal.aborted || active.current !== request)
         return null

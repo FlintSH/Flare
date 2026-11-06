@@ -310,9 +310,3 @@ export function resolvePermissions(
     (permission) => granted.has('administrator') || granted.has(permission)
   )
 }
-
-export function highestRolePosition(subject: {
-  roles: readonly Pick<RoleSummary, 'position'>[]
-}): number {
-  return Math.max(0, ...subject.roles.map((role) => role.position))
-}

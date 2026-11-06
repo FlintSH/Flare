@@ -7,6 +7,8 @@ import { ArrowUpRight, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
+import { apiRequest } from '@/lib/client/request'
+
 export function InstanceVersion({ buildInfo }: { buildInfo: BuildInfo }) {
   const isRolling = buildInfo.channel === 'rolling'
   const [isChecking, setIsChecking] = useState(isRolling)
@@ -17,12 +19,10 @@ export function InstanceVersion({ buildInfo }: { buildInfo: BuildInfo }) {
     setIsChecking(true)
     setError(null)
     try {
-      const response = await fetch('/api/updates/check', {
-        cache: 'no-store',
+      const data = await apiRequest<UpdateInfo>('/api/updates/check', {
         signal,
+        whole: true,
       })
-      if (!response.ok) throw new Error('Update check failed')
-      const data: UpdateInfo = await response.json()
       if (!signal?.aborted) setUpdateInfo(data)
     } catch {
       if (signal?.aborted) return

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  checkerClassName,
-  checkerToneFromPixels,
-} from '@/components/file/checker-tone'
+import { checkerToneFromPixels } from '@/components/file/checker-tone'
 
 const SIZE = 48
 
@@ -61,15 +58,5 @@ describe('checkerToneFromPixels', () => {
         SIZE
       )
     ).toBe('none')
-  })
-})
-
-describe('checkerClassName', () => {
-  it('maps tones to board classes, keeping the theme board when unknown', () => {
-    expect(checkerClassName('none')).toBe('')
-    expect(checkerClassName('opaque')).toBe('')
-    expect(checkerClassName('light')).toBe('bg-checker checker-light')
-    expect(checkerClassName('dark')).toBe('bg-checker checker-dark')
-    expect(checkerClassName(null)).toBe('bg-checker')
   })
 })

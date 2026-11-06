@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  auditRequest,
   configureAuditWriter,
   recordAudit,
   recordAuditMany,
   setAuditActor,
   setAuditOutcome,
   setAuditTarget,
-  withAuditRoute,
 } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
 import { auditQuerySchema, auditWhere } from '@/lib/audit/query'
@@ -22,6 +22,19 @@ beforeEach(() => {
     events.push(event)
   })
 })
+
+/** A route body under the request audit, as the route kernel runs it. */
+function withAuditRoute(
+  handle: (request: Request) => Promise<Response>,
+  options: { route?: string; skipSuccess?: boolean } = {}
+) {
+  return (request: Request) =>
+    auditRequest(
+      request,
+      { ...options, route: options.route ?? '/api/test' },
+      () => handle(request)
+    )
+}
 
 describe('safe durable audit events', () => {
   it('keeps attempting later events when a single-writer adapter rejects one event', async () => {
@@ -191,6 +204,19 @@ describe('safe durable audit events', () => {
     })
     expect(JSON.stringify(events)).not.toContain('secret')
     expect(events[0].actorName).toBe('System')
+  })
+
+  it('keeps the byte count an archive member read sends', async () => {
+    await recordAudit({
+      action: 'archive.member.read',
+      category: 'archives',
+      details: { name: 'notes/readme.txt', size: 4096, bytes: 1024 },
+    })
+    expect(events[0].details).toEqual({
+      name: 'notes/readme.txt',
+      size: 4096,
+      bytes: 1024,
+    })
   })
 
   it('bounds strings, arrays and nesting, and removes non-finite numbers', () => {

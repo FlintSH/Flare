@@ -45,10 +45,8 @@ jobs:
 
       - name: Test Docker container
         run: |
-          # Create network
           docker network create flare-network
 
-          # Start PostgreSQL
           docker run -d --name postgres \
             --network flare-network \
             -e POSTGRES_USER=postgres \
@@ -56,7 +54,6 @@ jobs:
             -e POSTGRES_DB=flare_test \
             postgres:16
 
-          # Wait for PostgreSQL to be ready
           timeout=30
           while [ $timeout -gt 0 ]; do
             if docker exec postgres pg_isready -U postgres; then
@@ -70,33 +67,32 @@ jobs:
             exit 1
           fi
 
-          # Run migrations
-          docker run --rm \
-            --network flare-network \
-            -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
-            flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }} \
-            pnpm prisma migrate deploy
-
-          # Start the application
+          # The image's own startup applies the migrations.
           docker run --name flare-test -d \
             -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
-            -e NEXTAUTH_SECRET=test-secret \
+            -e NEXTAUTH_SECRET=flare-docker-test-disposable-session-secret \
             -e NEXTAUTH_URL=http://localhost:3000 \
             --network flare-network \
             flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
-          
-          # Wait for container to be healthy
-          timeout=60
-          while [ $timeout -gt 0 ]; do
-            if docker inspect flare-test --format='{{.State.Health.Status}}' | grep -q healthy; then
+
+          # The image's health check ignores failures for 150 seconds, then
+          # three failures 10 seconds apart make it unhealthy. Docker also
+          # reports a container that has stopped as unhealthy.
+          deadline=$((SECONDS + 180))
+          while :; do
+            state=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' flare-test) || state=missing
+            if [ "$state" = 'running healthy' ]; then
               echo "Container is healthy"
               exit 0
             fi
-            sleep 1
-            timeout=$((timeout-1))
+            if [ "$state" != 'running starting' ] || [ $SECONDS -ge $deadline ]; then
+              break
+            fi
+            sleep 2
           done
-          echo "Container failed to become healthy"
-          docker logs flare-test
+          echo "Container failed to become healthy (status: $state)"
+          docker inspect --format '{{json .State.Health}}' flare-test || true
+          docker logs flare-test || true
           exit 1
 
       - name: Cleanup

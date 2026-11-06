@@ -4,8 +4,8 @@ import Link from 'next/link'
 
 import { Github } from 'lucide-react'
 
-import { useAppearance } from '@/components/customization/appearance-provider'
 import { pagePanelClassName } from '@/components/layout/page-header'
+import { useAppearance } from '@/components/providers/appearance-context'
 import { Button } from '@/components/ui/button'
 
 import { cn } from '@/lib/utils'

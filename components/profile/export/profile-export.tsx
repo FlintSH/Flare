@@ -6,13 +6,7 @@ import { Progress } from '@/components/ui/progress'
 import { useDataExport } from '@/hooks/use-data-export'
 
 export function ProfileExport() {
-  const {
-    isExporting,
-    exportProgress,
-    downloadProgress,
-    status,
-    handleExport,
-  } = useDataExport()
+  const { isExporting, progress, handleExport } = useDataExport()
 
   return (
     <div className="space-y-4">
@@ -22,18 +16,12 @@ export function ProfileExport() {
         variant="outline"
         className="w-full sm:w-auto"
       >
-        {isExporting
-          ? status === 'preparing'
-            ? `Preparing… ${exportProgress}%`
-            : status === 'downloading'
-              ? `Downloading… ${downloadProgress}%`
-              : 'Starting…'
-          : 'Export all data'}
+        {isExporting ? `Preparing… ${progress}%` : 'Export all data'}
       </Button>
       {isExporting && (
         <Progress
           className="max-w-md"
-          value={status === 'preparing' ? exportProgress : downloadProgress}
+          value={progress}
           aria-label="Data export progress"
         />
       )}

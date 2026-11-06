@@ -47,6 +47,11 @@ export function parseStorageTarget(value: unknown): StorageTarget | null {
   }
 }
 
+/**
+ * Spaces around a value don't count: providers trim their settings, while
+ * records written before that, and settings saved before saves trimmed them,
+ * can keep spaces.
+ */
 export function sameStorageTarget(
   left: StorageTarget,
   right: StorageTarget
@@ -54,9 +59,9 @@ export function sameStorageTarget(
   if (left.provider !== right.provider) return false
   if (left.provider === 'local' || right.provider === 'local') return true
   return (
-    left.bucket === right.bucket &&
-    left.region === right.region &&
-    left.endpoint === right.endpoint &&
+    left.bucket.trim() === right.bucket.trim() &&
+    left.region.trim() === right.region.trim() &&
+    left.endpoint.trim() === right.endpoint.trim() &&
     left.forcePathStyle === right.forcePathStyle
   )
 }

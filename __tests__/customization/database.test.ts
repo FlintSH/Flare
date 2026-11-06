@@ -25,6 +25,9 @@ vi.mock('@/lib/auth', () => ({
 const databaseUrl = process.env.FLARE_CUSTOMIZATION_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('customization contracts against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let config: typeof import('@/lib/config')
@@ -137,7 +140,11 @@ suite('customization contracts against disposable PostgreSQL', () => {
       where: { id: 'owner-one' },
     })
     const { getUserAccess } = await import('@/lib/permissions/server')
-    return { ...user, ...(await getUserAccess(user.id)) }
+    return {
+      ...user,
+      ...(await getUserAccess(user.id)),
+      credential: 'session' as const,
+    }
   }
 
   async function prepared(text = 'A private test document', overrides = {}) {
@@ -180,12 +187,16 @@ suite('customization contracts against disposable PostgreSQL', () => {
   })
 
   it('keeps profile defaults owned by the user and resolves instance share defaults', async () => {
-    await config.updateConfigSection('customization', {
-      published: {
-        ...config.DEFAULT_CONFIG.settings.customization.published,
-        sharing: {
-          ...config.DEFAULT_CONFIG.settings.customization.published.sharing,
-          defaultStyle: 'minimal',
+    await config.updateConfig({
+      settings: {
+        customization: {
+          published: {
+            ...config.DEFAULT_CONFIG.settings.customization.published,
+            sharing: {
+              ...config.DEFAULT_CONFIG.settings.customization.published.sharing,
+              defaultStyle: 'minimal',
+            },
+          },
         },
       },
     })
@@ -235,13 +246,26 @@ suite('customization contracts against disposable PostgreSQL', () => {
         )
       ).status
     ).toBe(404)
-    expect((await profiles.GET()).status).toBe(200)
-    expect((await (await profiles.GET()).json()).data.profiles).toHaveLength(0)
+    expect(
+      (await profiles.GET(new Request('http://localhost/api/upload-profiles')))
+        .status
+    ).toBe(200)
+    expect(
+      (
+        await (
+          await profiles.GET(
+            new Request('http://localhost/api/upload-profiles')
+          )
+        ).json()
+      ).data.profiles
+    ).toHaveLength(0)
   })
 
   it('lists, exports and imports old profiles without the retired copy-format option', async () => {
     const profile = await routeFixture('download')
-    const listed = await profiles.GET()
+    const listed = await profiles.GET(
+      new Request('http://localhost/api/upload-profiles')
+    )
     expect(listed.status).toBe(200)
     const listedBody = (await listed.json()).data
     expect(listedBody.profiles[0].options).not.toHaveProperty('copyFormat')
@@ -322,7 +346,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       enabled: true,
       default: { value: 1, unit: 'MB' },
     }
-    await config.updateConfigSection('general', general)
+    await config.updateConfig({ settings: { general } })
     const first = await prepared('a'.repeat(700_000))
     const second = await prepared('b'.repeat(700_000))
     const attempts = await Promise.allSettled([
@@ -371,13 +395,13 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(saved.path).toBe(input.filePath)
     expect(saved.urlPath).toBe(first.urlPath.replace('/owner-one/', '/SPECC/'))
     expect((await principal()).urlId).toBe('SPECC')
-    const { resolveFileUrlPath } = await import('@/lib/files/resolve')
-    expect(
-      await resolveFileUrlPath('SPECC', saved.urlPath.split('/').pop()!)
-    ).toBe(saved.urlPath)
-    expect(
-      await resolveFileUrlPath('owner-alias', saved.urlPath.split('/').pop()!)
-    ).toBe(saved.urlPath)
+    const { findFile } = await import('@/lib/files/delivery')
+    const name = saved.urlPath.split('/').pop()!
+    for (const userUrlId of ['SPECC', 'owner-alias'])
+      expect(
+        (await findFile({ userUrlId, filename: name }, { urlPath: true }))
+          ?.urlPath
+      ).toBe(saved.urlPath)
     const stream = await storage.getFileStream(saved.path)
     const chunks: Buffer[] = []
     for await (const chunk of stream) chunks.push(Buffer.from(chunk))
@@ -412,27 +436,51 @@ suite('customization contracts against disposable PostgreSQL', () => {
     })
     authentication.user = { id: 'owner-one', permissions: ['administrator'] }
     const users = await import('@/app/api/users/route')
-    const response = await users.PUT(
-      jsonRequest(
-        '/api/users',
-        {
-          id: 'owner-one',
-          name: 'Owner',
-          email: 'taken@example.test',
-          urlId: 'SPECC',
-        },
-        'PUT'
+    const edit = (email: string) =>
+      users.PUT(
+        jsonRequest(
+          '/api/users',
+          { id: 'owner-one', name: 'Owner', email, urlId: 'SPECC' },
+          'PUT'
+        )
       )
+    async function expectUnchanged() {
+      expect((await principal()).urlId).toBe('owner-one')
+      for (const file of [first, second]) {
+        const saved = await prisma.file.findUniqueOrThrow({
+          where: { id: file.id },
+        })
+        expect(saved.urlPath).toBe(file.urlPath)
+        expect(saved.path).toBe(file.path)
+        expect(await storage.getFileSize(saved.path)).toBeGreaterThan(0)
+      }
+    }
+    // The address is claimed before anything moves; with email disabled, a
+    // duplicate was a database error (500) before.
+    const duplicate = await edit('taken@example.test')
+    expect(duplicate.status).toBe(400)
+    expect(await duplicate.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+    await expectUnchanged()
+    // Fail the account's own update, after its file URLs have moved.
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION customization_test_reject_url_id() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected account update failure'; END $$`
     )
-    expect(response.status).toBe(500)
-    expect((await principal()).urlId).toBe('owner-one')
-    for (const file of [first, second]) {
-      const saved = await prisma.file.findUniqueOrThrow({
-        where: { id: file.id },
-      })
-      expect(saved.urlPath).toBe(file.urlPath)
-      expect(saved.path).toBe(file.path)
-      expect(await storage.getFileSize(saved.path)).toBeGreaterThan(0)
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER customization_test_reject_url_id BEFORE UPDATE OF "urlId" ON "User" FOR EACH ROW EXECUTE FUNCTION customization_test_reject_url_id()`
+    )
+    try {
+      expect((await edit('owner@example.test')).status).toBe(500)
+      await expectUnchanged()
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER customization_test_reject_url_id ON "User"'
+      )
+      await prisma.$executeRawUnsafe(
+        'DROP FUNCTION customization_test_reject_url_id()'
+      )
     }
   })
 
@@ -488,7 +536,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(
       await auth.getAuthenticatedUser(tokenRequest('/api/profile/upload-token'))
     ).toBeNull()
-    expect((await integrations.GET()).status).toBe(401)
+    expect(
+      (await integrations.GET(new Request('http://localhost/api/integrations')))
+        .status
+    ).toBe(401)
     expect((await options.resolveUploadOptions(user!)).visibility).toBe(
       'PRIVATE'
     )
@@ -872,7 +923,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       enabled: true,
       default: { value: 1, unit: 'MB' },
     }
-    await config.updateConfigSection('general', general)
+    await config.updateConfig({ settings: { general } })
     const routes = await import('@/app/api/files/route')
     const upload = (character: string) => {
       const form = new FormData()
@@ -1076,9 +1127,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
   })
 
   it('applies expiry actions once and honors a cancellation racing a queued worker', async () => {
-    const expiry = await import('@/lib/events/handlers/file-expiry')
-    const { events } = await import('@/lib/events')
-    await expiry.registerFileExpiryHandlers()
+    const expiry = await import('@/lib/files/expiry')
     const makeDue = async (
       file: Awaited<ReturnType<typeof uploads.finalizeUpload>>
     ) => {
@@ -1108,10 +1157,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       })
     )
     const privateEvent = await makeDue(privateFile)
-    expect(
-      (await events.processEvent((await events.getEvent(privateEvent))!))
-        .success
-    ).toBe(true)
+    await expiry.processDueExpirations()
     expect(
       (await prisma.file.findUniqueOrThrow({ where: { id: privateFile.id } }))
         .visibility
@@ -1120,11 +1166,14 @@ suite('customization contracts against disposable PostgreSQL', () => {
       where: { id: privateFile.id },
       data: { visibility: 'PUBLIC' },
     })
-    // A delayed duplicate must not undo the owner's later explicit change.
-    expect(
-      (await events.processEvent((await events.getEvent(privateEvent))!))
-        .success
-    ).toBe(true)
+    // A delayed duplicate must not undo the owner's later explicit change,
+    // even from an older version that reset the finished job to PROCESSING.
+    await expiry.applyFileExpiration(
+      await prisma.event.update({
+        where: { id: privateEvent },
+        data: { status: 'PROCESSING' },
+      })
+    )
     expect(
       (await prisma.file.findUniqueOrThrow({ where: { id: privateFile.id } }))
         .visibility
@@ -1133,13 +1182,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
       await prepared('Delete me', { expiration: 'DAY', expiryAction: 'DELETE' })
     )
     const deleteEvent = await makeDue(deleteFile)
-    ;(await import('@/lib/storage')).invalidateStorageProvider()
-    expect(
-      (await events.processEvent((await events.getEvent(deleteEvent))!)).success
-    ).toBe(true)
-    expect(
-      (await events.processEvent((await events.getEvent(deleteEvent))!)).success
-    ).toBe(true)
+    await expiry.processDueExpirations()
+    await expiry.applyFileExpiration(
+      await prisma.event.findUniqueOrThrow({ where: { id: deleteEvent } })
+    )
     expect(
       await prisma.file.findUnique({ where: { id: deleteFile.id } })
     ).toBeNull()
@@ -1150,17 +1196,20 @@ suite('customization contracts against disposable PostgreSQL', () => {
     const pending = await prisma.event.findFirstOrThrow({
       where: { payload: { path: ['fileId'], equals: retained.id } },
     })
-    await prisma.event.update({
+    const stale = await prisma.event.update({
       where: { id: pending.id },
       data: { status: 'PROCESSING' },
     })
-    const stale = (await events.getEvent(pending.id))!
-    expect(await expiry.cancelFileExpiration(retained.id)).toBe(true)
-    expect((await events.processEvent(stale)).success).toBe(true)
+    expect(await expiry.cancelFileExpiration('owner-one', retained.id)).toBe(
+      true
+    )
+    await expiry.applyFileExpiration(stale)
     expect(
       await prisma.file.findUnique({ where: { id: retained.id } })
     ).not.toBeNull()
-    expect(await expiry.getFileExpirationInfo(retained.id)).toBeNull()
+    expect(
+      (await expiry.getFilesExpirationInfo([retained.id])).has(retained.id)
+    ).toBe(false)
   })
 
   it('publishes same-name and non-ASCII uploads under clean, distinct URL names', async () => {

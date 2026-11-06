@@ -13,6 +13,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import {
+  RECOVERY_CODE_INPUT_LENGTH,
+  TOTP_CODE_PATTERN,
+  TOTP_DIGITS,
+  TOTP_PLACEHOLDER,
+} from '@/lib/auth/security/policy'
+
 import { PasskeyConfirmation } from './passkey-confirmation'
 
 export function readSecurityProof(form: HTMLFormElement) {
@@ -129,10 +136,12 @@ export function SecurityProof({
             spellCheck={false}
             data-sensitive="true"
             placeholder={
-              useRecoveryCode ? 'Enter a saved recovery code' : '000000'
+              useRecoveryCode ? 'Enter a saved recovery code' : TOTP_PLACEHOLDER
             }
-            pattern={useRecoveryCode ? undefined : '[0-9]{6}'}
-            maxLength={useRecoveryCode ? 32 : 6}
+            pattern={useRecoveryCode ? undefined : TOTP_CODE_PATTERN}
+            maxLength={
+              useRecoveryCode ? RECOVERY_CODE_INPUT_LENGTH : TOTP_DIGITS
+            }
             required
             disabled={busy}
           />

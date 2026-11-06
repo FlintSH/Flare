@@ -1,4 +1,5 @@
 import io
+import itertools
 from pathlib import Path
 import stat
 import tempfile
@@ -368,7 +369,10 @@ class ReconcileTests(unittest.TestCase):
 
     def test_time_budget_leaves_work_queued_for_next_reconciliation(self):
         gh, runtime = FakeGitHub(), FakeRuntime()
-        with patch.object(c.time, "monotonic", side_effect=[0, 301]):
+        # Start the pass, then stay one second inside the provisioning reserve
+        # no matter how often the controller reads the clock.
+        elapsed = c.RECONCILE_BUDGET_SECONDS - c.PROVISION_RESERVE_SECONDS + 1
+        with patch.object(c.time, "monotonic", side_effect=itertools.chain([0], itertools.repeat(elapsed))):
             self.reconcile(gh, runtime)
         self.assertFalse(runtime.deployed)
         self.assertEqual(gh.states, [(1, "queued")])

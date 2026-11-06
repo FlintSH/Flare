@@ -12,7 +12,7 @@ import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
-import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
+import { LOCAL_SIGN_IN_PATH, getOidcErrorMessage } from '@/lib/auth/sign-in'
 
 interface OidcAutoRedirectProps {
   buttonText: string
@@ -66,7 +66,7 @@ export function OidcAutoRedirect({
         </Button>
       </div>
       <AuthFooter>
-        <Link href="/auth/login?local=1" className={authLinkClassName}>
+        <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
           Use local sign-in instead
         </Link>
       </AuthFooter>

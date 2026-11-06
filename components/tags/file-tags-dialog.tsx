@@ -16,12 +16,16 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
+import { apiRequest } from '@/lib/client/request'
+import { nameKey, normalizeName } from '@/lib/library/names'
+import { TAG_NAME_MAX_LENGTH } from '@/lib/tags/schema'
+import type { TagView } from '@/lib/tags/schema'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFileTagMemberships } from '@/hooks/use-file-tag-memberships'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
-import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
+import { TAG_REQUEST_FAILED, useTags } from '@/hooks/use-tags'
 
 /** Each change is additive/removing, so bulk edits preserve every other tag. */
 export function FileTagsDialog({
@@ -42,9 +46,9 @@ export function FileTagsDialog({
   const [announcement, setAnnouncement] = useState('')
   const currentFiles = memberships.files
   const ready = !!currentFiles && !loading && !loadError
-  const matching = tags.filter((tag) =>
-    tag.name.toLowerCase().includes(search.toLowerCase())
-  )
+  // Names compare as they are stored, so the list and Create agree.
+  const searchKey = nameKey(normalizeName(search))
+  const matching = tags.filter((tag) => nameKey(tag.name).includes(searchKey))
   const update = async (
     tag: Pick<TagView, 'id' | 'name'>,
     action: 'add' | 'remove'
@@ -60,7 +64,7 @@ export function FileTagsDialog({
         tags: freshTags.get(file.id) ?? [],
       }))
     )
-    changed()
+    void changed()
     setAnnouncement(`${tag.name} ${action === 'add' ? 'added' : 'removed'}.`)
   }
   const toggle = async (tag: TagView, all: boolean) => {
@@ -85,23 +89,16 @@ export function FileTagsDialog({
     setBusy(true)
     setError('')
     try {
-      const normalized = search
-        .normalize('NFKC')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .toLowerCase()
+      const key = nameKey(normalizeName(search))
       const tag =
-        tags.find((tag) => tag.name.toLowerCase() === normalized) ??
-        (await tagRequest<TagView>(
-          '/api/tags',
-          'POST',
-          {
-            name: search.trim(),
-          },
-          signal
-        ))
+        tags.find((tag) => nameKey(tag.name) === key) ??
+        (await apiRequest<TagView>('/api/tags', {
+          body: { name: search.trim() },
+          signal,
+          fallback: TAG_REQUEST_FAILED,
+        }))
       if (signal.aborted) return
-      changed()
+      void reload()
       await update(tag, 'add')
       if (signal.aborted) return
       setSearch('')
@@ -153,7 +150,7 @@ export function FileTagsDialog({
             placeholder="Find or create a tag…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            maxLength={40}
+            maxLength={TAG_NAME_MAX_LENGTH}
             disabled={busy}
           />
         </form>
@@ -238,9 +235,7 @@ export function FileTagsDialog({
           )}
           {search.trim() &&
             ready &&
-            !tags.some(
-              (tag) => tag.name.toLowerCase() === search.trim().toLowerCase()
-            ) && (
+            !tags.some((tag) => nameKey(tag.name) === searchKey) && (
               <Button
                 variant="ghost"
                 // On the rows' columns: the plus over the checkboxes.

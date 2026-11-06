@@ -1,10 +1,14 @@
 import { type MailOutbox, Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
+import { lockMailBudget, lockMailClaims } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
+import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 import { getEmailConfig } from './config'
-import { decryptSecret, encryptSecret } from './crypto'
+import { EmailHttpError } from './errors'
+import { emailLinkAvailable, isEmailLinkPurpose } from './links'
 import type { EmailConfig } from './schema'
 import { type RenderedEmail, renderAccountEmail } from './templates'
 import {
@@ -14,9 +18,10 @@ import {
   sendMail,
 } from './transport'
 
-export class MailLimitError extends MailDeliveryError {
+export class MailLimitError extends HttpError {
   constructor() {
     super(
+      400,
       'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.'
     )
     this.name = 'MailLimitError'
@@ -43,9 +48,9 @@ export async function enqueueMail(
   config?: EmailConfig
 ): Promise<MailOutbox> {
   const settings = config ?? (await getEmailConfig())
-  if (!settings.enabled) throw new Error('Email delivery is disabled.')
+  if (!settings.enabled) throw new EmailHttpError('Email delivery is disabled.')
   // Serialize admission across replicas. This includes messages later rejected by SMTP.
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347201)`
+  await lockMailBudget(tx)
   const midnight = new Date()
   midnight.setUTCHours(0, 0, 0, 0)
   // Keep usage independent of accounts and delivery-history retention. Deleting
@@ -90,7 +95,7 @@ function leaseDuration(config: EmailConfig): number {
 /** SKIP LOCKED and one UPDATE ensure independent workers cannot claim the same row. */
 export async function claimMail(config: EmailConfig): Promise<MailOutbox[]> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
+    await lockMailClaims(tx)
     const now = new Date()
     const active = await tx.mailOutbox.count({
       where: { status: 'processing', leaseUntil: { gt: now } },
@@ -173,9 +178,7 @@ export async function deliverClaimedMail(
       })
       return false
     }
-  } else if (
-    ['verify', 'reset', 'change', 'change_approval'].includes(mail.purpose)
-  ) {
+  } else if (isEmailLinkPurpose(mail.purpose)) {
     // A deleted token sets tokenId to null. Never send its orphaned account link.
     await finishMail(mail, {
       status: 'cancelled',
@@ -212,9 +215,8 @@ export async function deliverClaimedMail(
     const current = mail.purpose === 'test' ? config : await getEmailConfig()
     if (
       !current.enabled ||
-      (mail.purpose === 'reset' && !current.recovery.enabled) ||
-      (['change', 'change_approval'].includes(mail.purpose) &&
-        !current.changes.enabled)
+      (isEmailLinkPurpose(mail.purpose) &&
+        !emailLinkAvailable(current, mail.purpose))
     ) {
       await finishMail(mail, {
         status: 'cancelled',
@@ -310,7 +312,7 @@ export async function cleanupMail(config: EmailConfig): Promise<void> {
 /** A manual retry never revives an expired/revoked account link. */
 export async function retryMail(id: string): Promise<boolean> {
   const config = await getEmailConfig()
-  if (!config.enabled) throw new Error('Email delivery is disabled.')
+  if (!config.enabled) throw new EmailHttpError('Email delivery is disabled.')
   const mail = await prisma.mailOutbox.findUnique({ where: { id } })
   if (
     !mail ||
@@ -348,7 +350,7 @@ export async function deliverTestEmail(
 ): Promise<void> {
   const mail = await prisma.$transaction(async (tx) => {
     // Same admission lock as background claims: test messages share their slots.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
+    await lockMailClaims(tx)
     const active = await tx.mailOutbox.count({
       where: { status: 'processing', leaseUntil: { gt: new Date() } },
     })

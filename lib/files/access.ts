@@ -71,10 +71,7 @@ export async function checkFileAccess(
       return { allowed: false, reason: 'password_required', status: 401 }
     }
 
-    const requester =
-      options.requester && options.requester !== 'unknown'
-        ? options.requester
-        : null
+    const requester = options.requester || null
     const verifiedKey = await verifiedFilePasswordKey(
       file.id,
       file.password,
@@ -118,15 +115,6 @@ export async function checkFileAccess(
   }
 
   return { allowed: true, isOwner, canModerate }
-}
-
-/** Headers for a denied file response; tells clients when to retry a 429. */
-export function fileAccessDeniedHeaders(
-  access: FileAccessDenied
-): Record<string, string> {
-  return access.retryAfterSeconds
-    ? { 'Retry-After': String(access.retryAfterSeconds) }
-    : {}
 }
 
 /** Whole minutes until a paused file accepts passwords again, for messages. */

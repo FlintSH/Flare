@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -9,7 +9,6 @@ import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
-import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -17,30 +16,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+
 export function RegisterForm({
   invite,
   inviteRoles = [],
   notice,
+  verificationRequired,
 }: {
   invite?: string
   inviteRoles?: { id: string; name: string; color: string }[]
   notice?: string
+  /** New accounts must confirm their address before using Flare. */
+  verificationRequired: boolean
 }) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [verificationRequired, setVerificationRequired] = useState(false)
-
-  useEffect(() => {
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
-      .then((email) =>
-        setVerificationRequired(
-          email.enabled &&
-            ['new_users', 'all_users'].includes(email.verificationMode)
-        )
-      )
-      .catch(() => {})
-  }, [])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -59,37 +53,22 @@ export function RegisterForm({
       return
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
+    if (password.length < ACCOUNT_PASSWORD_MIN_LENGTH) {
+      setError(
+        `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters long`
+      )
       setIsLoading(false)
       return
     }
 
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          name,
-          ...(invite ? { invite } : {}),
-        }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof data.code === 'string' && data.code.startsWith('invite_')
-            ? `${data.error} Ask the person who invited you for a new link.`
-            : data.error || 'Failed to register'
-        )
-      }
-
-      const registered = await res.json()
-      const nextAction = (registered.data ?? registered).nextAction
+      const { nextAction } = await apiRequest<{ nextAction?: string }>(
+        '/api/auth/register',
+        {
+          body: { email, password, name, ...(invite ? { invite } : {}) },
+          fallback: 'Failed to register',
+        }
+      )
 
       const result = await signIn('credentials', {
         email,
@@ -105,7 +84,13 @@ export function RegisterForm({
         nextAction === 'verify_email' ? '/auth/verify-email' : '/dashboard'
       )
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Something went wrong')
+      setError(
+        error instanceof RefusedRequest && error.code?.startsWith('invite_')
+          ? `${error.message} Ask the person who invited you for a new link.`
+          : error instanceof Error
+            ? error.message
+            : 'Something went wrong'
+      )
     } finally {
       setIsLoading(false)
     }
@@ -177,11 +162,11 @@ export function RegisterForm({
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="new-password"
             placeholder="Create a password"
-            minLength={8}
+            minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
             aria-describedby="password-hint"
           />
           <p id="password-hint" className="text-xs text-muted-foreground">
-            Use at least 8 characters.
+            {`Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`}
           </p>
         </div>
         <div className="space-y-2">
@@ -220,7 +205,7 @@ export function RegisterForm({
       </div>
       <AuthFooter>
         Already have an account?{' '}
-        <Link href="/auth/login" className={authLinkClassName}>
+        <Link href={SIGN_IN_PATH} className={authLinkClassName}>
           Sign in
         </Link>
       </AuthFooter>

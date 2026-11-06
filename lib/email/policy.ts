@@ -1,3 +1,4 @@
+import { emailLinkAvailable } from './links'
 import type { EmailConfig } from './schema'
 
 export interface EmailPolicyUser {
@@ -7,6 +8,19 @@ export interface EmailPolicyUser {
   emailVerificationSource?: string | null
   emailExempt: boolean
   createdAt: Date
+}
+
+type VerificationMode = EmailConfig['verification']['mode']
+
+export function effectiveVerificationMode(
+  config: Pick<EmailConfig, 'enabled' | 'verification'>
+): VerificationMode {
+  return config.enabled ? config.verification.mode : 'off'
+}
+
+/** Whether a mode makes accounts verify their address before using Flare. */
+export function isEnforcedVerificationMode(mode: VerificationMode) {
+  return mode === 'new_users' || mode === 'all_users'
 }
 
 /** A legacy timestamp alone never establishes mailbox ownership. */
@@ -28,15 +42,21 @@ export function hasVerifiedEmail(
   )
 }
 
+export function satisfiesEmailPolicy(
+  user: Omit<EmailPolicyUser, 'createdAt'>,
+  config: Pick<EmailConfig, 'verification'>
+) {
+  return user.emailExempt || hasVerifiedEmail(user, config)
+}
+
 export function requiresEmailVerification(
   user: EmailPolicyUser,
   config: EmailConfig,
   now = new Date()
 ) {
-  if (!config.enabled || user.emailExempt || hasVerifiedEmail(user, config))
-    return false
+  if (!config.enabled || satisfiesEmailPolicy(user, config)) return false
   const policy = config.verification
-  if (policy.mode === 'off' || policy.mode === 'optional') return false
+  if (!isEnforcedVerificationMode(policy.mode)) return false
   if (policy.mode === 'new_users') {
     if (
       !policy.requiredSince ||
@@ -50,13 +70,32 @@ export function requiresEmailVerification(
   return !policy.graceEndsAt || now >= new Date(policy.graceEndsAt)
 }
 
+/**
+ * When an account must verify its address to keep access: the end of the
+ * all-user grace period that still lets it in. Null when no deadline applies.
+ */
+export function verificationDeadline(
+  user: EmailPolicyUser,
+  config: EmailConfig,
+  now = new Date()
+) {
+  const { graceEndsAt } = config.verification
+  if (
+    effectiveVerificationMode(config) !== 'all_users' ||
+    !graceEndsAt ||
+    satisfiesEmailPolicy(user, config) ||
+    requiresEmailVerification(user, config, now)
+  )
+    return null
+  return graceEndsAt
+}
+
 export function canRecoverPassword(
   user: EmailPolicyUser & { password: string | null },
   config: EmailConfig
 ) {
   return (
-    config.enabled &&
-    config.recovery.enabled &&
+    emailLinkAvailable(config, 'reset') &&
     Boolean(user.password) &&
     hasVerifiedEmail(user, config)
   )
@@ -67,8 +106,7 @@ export function hasDurableEmailAccess(
   user: EmailPolicyUser,
   config: EmailConfig
 ) {
-  if (config.enabled && config.verification.mode === 'all_users') {
-    return user.emailExempt || hasVerifiedEmail(user, config)
-  }
+  if (effectiveVerificationMode(config) === 'all_users')
+    return satisfiesEmailPolicy(user, config)
   return !requiresEmailVerification(user, config)
 }

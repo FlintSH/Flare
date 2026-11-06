@@ -110,6 +110,28 @@ vi.mock('@/lib/database/prisma', async () => {
       return row ? { ...row } : null
     }),
     count: vi.fn(async () => db.rows.length),
+    // Setup status asks for any account; address claims for one using an address.
+    findFirst: vi.fn(
+      async ({
+        where,
+      }: {
+        where?: { email?: string; id?: { not: string } }
+      } = {}) => {
+        const row = db.rows.find(
+          (candidate) =>
+            (where?.email === undefined || candidate.email === where.email) &&
+            candidate.id !== where?.id?.not
+        )
+        return row ? { id: row.id } : null
+      }
+    ),
+    // Accounts holding a URL ID a new account could draw.
+    findMany: vi.fn(
+      async ({ where }: { where: { OR: [{ urlId: { in: string[] } }] } }) =>
+        db.rows
+          .filter((row) => where.OR[0].urlId.in.includes(row.urlId))
+          .map((row) => ({ id: row.id, urlId: row.urlId, vanityId: null }))
+    ),
     create: vi.fn(async ({ data }: { data: CreateUserData }) => {
       db.create(data)
       const row: StoredUser = {

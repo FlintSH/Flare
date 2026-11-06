@@ -12,21 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: flare_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,17 +33,10 @@ jobs:
           max_attempts: 3
           command: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma Client
-        run: pnpm prisma generate
-
-      - name: Run Prisma Migrations
-        run: pnpm prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flare_test
-
+      # Like the Docker image build, this needs no database: the install's
+      # postinstall script generates the Prisma client.
       - name: Build
         run: pnpm build
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/flare_test
           NEXTAUTH_SECRET: test-secret
           NEXTAUTH_URL: http://localhost:3000 

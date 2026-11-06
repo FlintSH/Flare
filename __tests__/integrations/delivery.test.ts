@@ -3,7 +3,6 @@ import { type Server, createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { encryptSecret } from '@/lib/email/crypto'
 import { signWebhook } from '@/lib/integrations/security'
 import {
   WEBHOOK_SECRET_PURPOSE,
@@ -12,7 +11,10 @@ import {
   fileReadyPayload,
   retryDelayMs,
   sendWebhook,
+  testEventPayload,
+  webhooksWithQueueRoom,
 } from '@/lib/integrations/webhooks'
+import { encryptSecret } from '@/lib/security/secret-box'
 
 const db = vi.hoisted(() => ({
   findUnique: vi.fn(),
@@ -155,6 +157,56 @@ describe('webhook delivery contract', () => {
       })
     ).resolves.toBeUndefined()
     expect(createMany).not.toHaveBeenCalled()
+  })
+  it('admits webhooks in order until the webhook or account queue is full', async () => {
+    const count = vi
+      .fn()
+      .mockResolvedValueOnce(4998)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(1000)
+      .mockResolvedValueOnce(5)
+    const tx = {
+      webhookDelivery: { count },
+    } as unknown as Prisma.TransactionClient
+    await expect(
+      webhooksWithQueueRoom(tx, 'user', ['a', 'b', 'c', 'd'])
+    ).resolves.toEqual(['a', 'c'])
+    const unfinished = { status: { in: ['pending', 'processing'] } }
+    expect(count.mock.calls).toEqual([
+      [{ where: { ...unfinished, webhook: { userId: 'user' } } }],
+      [{ where: { ...unfinished, webhookId: 'a' } }],
+      [{ where: { ...unfinished, webhookId: 'b' } }],
+      [{ where: { ...unfinished, webhookId: 'c' } }],
+    ])
+  })
+  it('builds test events from the file-ready contract', () => {
+    const event = testEventPayload()
+    expect(event).toEqual({
+      version: 1,
+      id: expect.stringMatching(/^test:[0-9a-f-]{36}$/),
+      type: 'file.ready',
+      test: true,
+      occurredAt: expect.any(String),
+      data: {
+        id: 'example-file',
+        name: 'example.png',
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+        visibility: 'PUBLIC',
+        passwordProtected: false,
+      },
+    })
+    expect(Date.parse(event.occurredAt)).not.toBeNaN()
+    expect(testEventPayload().id).not.toBe(event.id)
+  })
+  it('sends a test event without looking for a source file', async () => {
+    const payload = testEventPayload()
+    const event = { ...claimed(), eventId: payload.id, payload }
+    configure(event)
+    db.file.mockResolvedValue(null)
+    await deliverWebhook(event)
+    expect(received).toHaveLength(1)
+    expect(JSON.parse(received[0].body)).toEqual(payload)
   })
   it('sends signed bytes and stable event IDs through a pinned DNS connection', async () => {
     const event = claimed()

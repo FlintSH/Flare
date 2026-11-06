@@ -1,38 +1,34 @@
 import {
+  ARCHIVE_BODY_LIMIT,
   archiveActor,
-  archiveBody,
-  archiveRoute,
+  archiveRoutes,
   createArchiveSchema,
 } from '@/lib/archives/http'
 import { withArchiveOperation } from '@/lib/archives/operation'
 import { createAccountArchive } from '@/lib/archives/service'
-import { withAuditRoute } from '@/lib/audit'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { actionPermissions } from '@/lib/permissions/actions'
 
-export const runtime = 'nodejs'
-export async function POST(request: Request) {
-  return withAuditRoute(
-    async () => {
-      return archiveRoute(async () => {
-        const actor = await archiveActor(request, [
-          'files.read',
-          'files.upload',
-        ])
-        return withArchiveOperation(
-          actor.user.id,
-          request.signal,
-          async (operation) => {
-            const input = createArchiveSchema.parse(
-              await archiveBody(request, operation.signal)
-            )
-            return createAccountArchive(actor, input, operation)
-          }
-        )
-      })
-    },
-    {
-      action: 'archive.create',
-      category: 'archives',
-      route: '/api/files/archive',
-    }
-  )(request)
-}
+const api = routes('/api/files/archive', archiveRoutes)
+
+export const POST = api(
+  async (request) => {
+    const actor = await archiveActor(
+      request,
+      actionPermissions('createArchive')
+    )
+    return withArchiveOperation(
+      actor.user.id,
+      request.signal,
+      async (operation) => {
+        const input = await readJson(request, createArchiveSchema, {
+          limit: ARCHIVE_BODY_LIMIT,
+          signal: operation.signal,
+        })
+        return createAccountArchive(actor, input, operation)
+      }
+    )
+  },
+  { audit: { action: 'archive.create', category: 'archives' } }
+)

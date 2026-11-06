@@ -96,11 +96,6 @@ class OCRQueue {
     void this.enqueue(task, false)
   }
 
-  /** True while recognition for this file is queued or running. */
-  isQueued(fileId: string): boolean {
-    return this.inFlight.has(fileId)
-  }
-
   /**
    * Recognition someone asked for. Joins work already queued for the file and
    * shares the queue's single recognition slot with upload processing.

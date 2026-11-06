@@ -1,11 +1,47 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  FOLDER_NAME_MAX_LENGTH,
   fileFoldersInputSchema,
   folderInputSchema,
   folderNameSchema,
   folderUpdateSchema,
 } from '@/lib/folders/schema'
+import { nameKey, normalizeName } from '@/lib/library/names'
+import { tagNameSchema } from '@/lib/tags/schema'
+
+describe('folder and tag names', () => {
+  it('store one normalized form and compare without case', () => {
+    expect(normalizeName('  Ｗeek \u3000 1\t')).toBe('Week 1')
+    expect(nameKey('Week 1')).toBe('week 1')
+    // The tag dialog finds an existing tag by this key before creating one.
+    expect(nameKey(normalizeName(' work  NOTES'))).toBe(
+      nameKey(tagNameSchema.parse('Work notes'))
+    )
+    expect(folderNameSchema.parse('  Ｗork   notes ')).toBe(
+      tagNameSchema.parse('  Ｗork   notes ')
+    )
+  })
+
+  it('enforces the folder limit the forms use, with the same messages', () => {
+    expect(
+      folderNameSchema.parse('x'.repeat(FOLDER_NAME_MAX_LENGTH))
+    ).toHaveLength(FOLDER_NAME_MAX_LENGTH)
+    expect(
+      folderNameSchema.safeParse('x'.repeat(FOLDER_NAME_MAX_LENGTH + 1)).error
+        ?.issues[0].message
+    ).toBe('Folder names can be up to 80 characters.')
+    expect(folderNameSchema.safeParse(' ').error?.issues[0].message).toBe(
+      'Give your folder a name.'
+    )
+    expect(folderNameSchema.safeParse('Work\tnotes').error?.issues).toEqual([
+      expect.objectContaining({ message: 'Use a plain-text name.' }),
+    ])
+    expect(folderNameSchema.safeParse(' .. ').error?.issues[0].message).toBe(
+      'Choose a name without slashes; "." and ".." are reserved.'
+    )
+  })
+})
 
 describe('folder input', () => {
   it('normalizes names while keeping nesting separate from names', () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import defaults from './defaults.json'
+import { EmailHttpError } from './errors'
 
 const line = z
   .string()
@@ -123,7 +124,7 @@ export const DEFAULT_EMAIL_CONFIG: EmailConfig =
 export function validateEnabledEmail(config: EmailConfig): void {
   if (!config.enabled) return
   if (!config.smtp.host || !config.fromAddress || !config.publicUrl) {
-    throw new Error(
+    throw new EmailHttpError(
       'SMTP host, sender address, and public instance URL are required to enable email'
     )
   }
@@ -131,7 +132,7 @@ export function validateEnabledEmail(config: EmailConfig): void {
     config.smtp.authentication &&
     (!config.smtp.username || !config.smtp.password)
   ) {
-    throw new Error(
+    throw new EmailHttpError(
       'SMTP username and password are required when authentication is enabled'
     )
   }
@@ -140,8 +141,13 @@ export function validateEnabledEmail(config: EmailConfig): void {
     url.protocol !== 'https:' &&
     !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
   ) {
-    throw new Error(
+    throw new EmailHttpError(
       'Use HTTPS for account email links (HTTP is allowed on localhost for testing)'
     )
   }
+}
+
+/** Never serialize the saved SMTP password into a dashboard response. */
+export function redactEmailConfig(config: EmailConfig): EmailConfig {
+  return { ...config, smtp: { ...config.smtp, password: '' } }
 }

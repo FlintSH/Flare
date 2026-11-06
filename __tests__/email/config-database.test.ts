@@ -20,15 +20,16 @@ vi.mock('next-auth', async (original) => ({
     },
   }),
 }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.id },
-    response: null,
-  }),
+vi.mock('@/lib/http/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/http/access')>()),
+  requireAccount: async () => ({ id: authentication.id }),
 }))
 
 const databaseUrl = process.env.FLARE_EMAIL_CONFIG_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
+
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
 
 suite('email configuration against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
@@ -233,7 +234,7 @@ suite('email configuration against disposable PostgreSQL', () => {
   it('serializes independent email and appearance writes without losing either change', async () => {
     await Promise.all([
       configModule.saveEmailConfig(workingConfig()),
-      appConfig.updateConfigSection('appearance', { theme: 'light' }),
+      appConfig.updateConfig({ settings: { appearance: { theme: 'light' } } }),
     ])
     const actual = await appConfig.getConfig()
     expect(actual.settings.appearance.theme).toBe('light')

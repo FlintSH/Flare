@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,58 +11,31 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-import { useToast } from '@/hooks/use-toast'
+import { uploaderClients } from '@/lib/uploads/uploader-clients'
 
-export function ITakeSetupButton({
+import { ToolRow, type UploaderToolProps } from './tool-parts'
+import { useUploaderDownload } from './use-uploader-download'
+
+export function ITakeTool({
   profileId,
   profileName,
+  compact,
   disabled,
-  compact = false,
-}: {
-  profileId?: string
-  profileName?: string
-  disabled?: boolean
-  compact?: boolean
-}) {
-  const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
+}: UploaderToolProps) {
+  const { download, isLoading } = useUploaderDownload('itake', {
+    ready: {
+      title: 'iTake configuration ready',
+      description:
+        'Open the downloaded .itup file and confirm Import in iTake.',
+    },
+    failed: {
+      title: 'Download failed',
+      description:
+        'Could not download the iTake configuration. Please try again.',
+    },
+  })
 
-  async function download() {
-    setIsLoading(true)
-    try {
-      const response = await fetch(
-        `/api/profile/itake${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`
-      )
-      if (!response.ok)
-        throw new Error('Failed to download iTake configuration')
-
-      const url = URL.createObjectURL(await response.blob())
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = 'flare-itake.itup'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-
-      toast({
-        title: 'iTake configuration ready',
-        description:
-          'Open the downloaded .itup file and confirm Import in iTake.',
-      })
-    } catch {
-      toast({
-        title: 'Download failed',
-        description:
-          'Could not download the iTake configuration. Please try again.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
+  const dialog = (
     <Dialog>
       <DialogTrigger asChild>
         <Button
@@ -72,7 +43,7 @@ export function ITakeSetupButton({
           size={compact ? 'sm' : 'default'}
           disabled={disabled}
         >
-          {compact ? 'iTake' : 'Set up iTake'}
+          {compact ? uploaderClients.itake.label : 'Set up iTake'}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
@@ -124,26 +95,23 @@ export function ITakeSetupButton({
           remove its old uploader in iTake first.
         </p>
         <DialogFooter>
-          <Button onClick={() => void download()} disabled={isLoading}>
+          <Button
+            onClick={() => void download({}, profileId)}
+            disabled={isLoading}
+          >
             {isLoading ? 'Downloading…' : 'Download config'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-}
+  if (compact) return dialog
 
-export function ITakeTool() {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium">iTake</h3>
-        <p className="text-pretty text-sm text-muted-foreground">
-          Screenshots and screen recording on macOS 15 or newer. Import a
-          ready-to-use config to upload and copy links automatically.
-        </p>
-      </div>
-      <ITakeSetupButton />
-    </div>
+    <ToolRow
+      title="iTake"
+      description="Screenshots and screen recording on macOS 15 or newer. Import a ready-to-use config to upload and copy links automatically."
+      action={dialog}
+    />
   )
 }

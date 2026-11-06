@@ -82,11 +82,11 @@ Under **Profile → Uploads → Account upload defaults**, you can set:
 - **When files expire:** choose delete or set private as the default expiry action.
 - **Default expiration:** disabled, one hour, one day, one week, or one month.
 
-The vanity path is account-wide and is separate from profiles. Changing or clearing it can stop older vanity links from resolving. Generated account-ID file paths remain a separate way to resolve the files. Use the current **Copy link** action when distributing a new address.
+The vanity path is account-wide and is separate from profiles. Changing or clearing it can stop older vanity links from resolving. Generated account-ID file paths remain a separate way to resolve the files. The links shown after an upload use the vanity path. **Copy link** in the library and on a file's page copies the account-ID path, which keeps working when you change or clear the vanity path.
 
 ## Connect a saved profile to a tool
 
-On a saved profile, use **Use this profile in your tools** to download a configuration or script for ShareX, iTake, Bash, Flameshot, or Spectacle. The file includes your account upload token and selects that profile automatically.
+On a saved profile, use **Use this profile in your tools** to download a configuration or script for ShareX, Bash, Flameshot, Spectacle, or iTake. The file includes your account upload token and selects that profile automatically. ShareX and Bash download at once. Flameshot, Spectacle, and iTake open the same setup dialog as the general [screenshot tools](./screenshot-tools), so you can choose Wayland support, a screen recording, or any other option for the profile. The buttons appear only when your role has both `files.upload` and `tokens.manage`, like the general tools.
 
 Downloads from the general **Screenshot tools and scripts** section use your account's default behavior instead. This is useful if you want changing your default profile to change how those tools upload.
 
@@ -98,9 +98,11 @@ Edits apply to future uploads. They do not change the visibility, expiration, na
 
 Archive creation and extraction also check the profile and effective settings shown in the dialog, including any inherited account or instance defaults. A relevant default or sharing permission changing can require another review even when the saved profile itself was not edited. If those settings change before submission or during processing, the operation fails without publishing outputs. Review the refreshed summary and submit again. The fixed **Private (no profile)** archive option does not inherit these defaults.
 
-If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes.
+If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes. Deleting a tag counts as such a change for every profile that selects it: Flare takes the tag out of those profiles and keeps their other settings.
 
 Before deleting a profile, update clients that select it explicitly and any bound tokens. A missing profile is an error rather than an automatic switch to weaker settings.
+
+A saved profile can hold a setting this version of Flare doesn't have, such as the retired copy format. Flare leaves it out when it reads the profile. If a saved setting has a value Flare can't read, uploads that use the profile fail with **Upload could not be completed.** and the server logs which setting it couldn't read, so tell your administrator. Earlier versions answered those uploads with **Invalid upload options.**, as if the upload itself had asked for something wrong, and logged nothing.
 
 ## Export and import a recipe
 
@@ -123,6 +125,6 @@ Before deleting a profile, update clients that select it explicitly and any boun
 }
 ```
 
-The browser importer accepts recipes up to 64 KiB. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
+Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger file, and `POST /api/upload-profiles` answers `413` to a larger request, whether it carries a recipe or a new profile. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.

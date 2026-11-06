@@ -1,67 +1,26 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { requirePermission } from '@/lib/permissions/server'
-import { clearProgress, getProgress } from '@/lib/utils'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
+import { requestedExportId } from '@/lib/users/export-id'
+import { exportProgressEvents } from '@/lib/users/export-progress'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-async function handleGET() {
-  const { session, response: permissionDenied } =
-    await requirePermission('profile.export')
-  if (permissionDenied) return permissionDenied
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+const api = routes('/api/profile/export/progress', {
+  failure: { message: 'Internal server error' },
+})
 
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    start(controller) {
-      let lastProgress = -1
-      let inactivityCounter = 0
+export const GET = api(async (request) => {
+  const { user } = await requireSession(request, 'profile.export')
+  const exportId = requestedExportId(request)
+  if (!exportId) throw new HttpError(400, 'Missing export id.')
 
-      const interval = setInterval(() => {
-        const progress = getProgress(session.user.id)
-
-        if (progress !== lastProgress || inactivityCounter >= 20) {
-          const data = encoder.encode(
-            `data: ${JSON.stringify({ progress })}\n\n`
-          )
-          controller.enqueue(data)
-          lastProgress = progress
-          inactivityCounter = 0
-        } else {
-          inactivityCounter++
-        }
-
-        if (progress === 100 || inactivityCounter > 100) {
-          clearInterval(interval)
-
-          if (lastProgress !== 100) {
-            const finalData = encoder.encode(
-              `data: ${JSON.stringify({ progress: 100 })}\n\n`
-            )
-            controller.enqueue(finalData)
-          }
-
-          controller.close()
-          clearProgress(session.user.id)
-        }
-      }, 100)
+  return new Response(exportProgressEvents(user.id, exportId, request.signal), {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
     },
   })
-
-  const headers = new Headers()
-  headers.set('Content-Type', 'text/event-stream')
-  headers.set('Cache-Control', 'no-cache, no-transform')
-  headers.set('Connection', 'keep-alive')
-
-  return new Response(stream, { headers })
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/profile/export/progress',
-  })()
-}
+})

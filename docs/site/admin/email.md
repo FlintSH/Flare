@@ -16,13 +16,15 @@ Open **Settings → Email** with `settings.email` (and `settings.read` to naviga
 2. Select **TLS** for implicit TLS, usually port 465, or **STARTTLS** for a connection that must upgrade to TLS, usually port 587. Flare defaults to TLS on 465.
 3. Enable authentication and enter the provider's username and password. An explicitly trusted local relay can use no authentication and/or no encryption when appropriate to that relay.
 4. Set a sender address the provider authorizes, a display name, and optional Reply-To.
-5. Set the public Flare URL, or let it use `NEXTAUTH_URL`. It must use HTTPS outside localhost testing.
+5. Set the public Flare URL, or let it use `NEXTAUTH_URL`. It must use HTTPS outside localhost testing. Keep it on the same origin as `NEXTAUTH_URL`: it only builds the links in messages, and someone who signs in at another origin can't change their account email there. Earlier builds accepted email changes from the public URL's origin too.
 6. Choose **Test connection**, then **Send test email** to an address you control. Open the inbox to confirm receipt.
 7. Turn on **Enable email** and choose **Save email settings** when you are satisfied with the result.
 
 The bar with **Save email settings** sits at the end of the settings and shows whether you have unsaved changes. Its buttons become available once you change something; **Discard** returns every field to the saved settings. Email settings save separately from the rest of Settings. **Delivery status**, below the bar, is not part of that save; its **Refresh delivery status** and **Retry delivery** buttons act immediately.
 
-Tests can use the draft configuration before saving or enabling automatic email. Connection testing checks connectivity/authentication; sending tests SMTP acceptance of sender and recipient. Test messages count toward the daily cap. Server acceptance does not guarantee inbox delivery.
+Tests can use the draft configuration before saving or enabling automatic email. Connection testing checks connectivity/authentication; sending tests SMTP acceptance of sender and recipient. **Send test email** without a recipient says _A test recipient is required_; earlier versions reported it as an SMTP failure. Test messages count toward the daily cap. Server acceptance does not guarantee inbox delivery.
+
+A value the form can't accept, or a draft that can't be enabled as it is, such as one without an SMTP host, is refused with a message that says what to change. If saving or testing fails for any other reason, Flare shows **Could not update email settings** and the server logs the cause. That includes saved email settings the server can't read, a `FLARE_EMAIL_*` override that isn't valid, and an encryption key that is missing, too short or different from the one that encrypted the saved credentials: only the operator can fix those, in the deployment's environment. Earlier versions answered those failures with the failure's own text, which could describe internals rather than the settings.
 
 Certificate verification stays enabled. For a private relay with a custom certificate authority, supply the CA in advanced SMTP settings or through `FLARE_EMAIL_SMTP_CA_FILE`.
 
@@ -39,7 +41,7 @@ Saved email settings, including the access policy, apply from the next request w
 | **Required for new users** | Accounts created after activation must verify for protected features | Earlier accounts keep access                                 |
 | **Required for all users** | New accounts must verify immediately                                 | Unverified existing accounts get the configured grace period |
 
-The default is **Off**. The default existing-user grace period is **7 days**, configurable from 0–90 days. Activating all-user enforcement requires reviewing the affected-user count in the dashboard. At least one administrator must already have trusted verification proof or an explicit exemption before that policy can be saved.
+The default is **Off**. The default existing-user grace period is **7 days**, configurable from 0–90 days. Activating all-user enforcement requires reviewing the affected-user count in the dashboard: it counts the accounts that are neither verified nor exempt, which lose access to protected features when the grace period ends. At least one administrator must already have trusted verification proof or an explicit exemption before that policy can be saved; otherwise saving is refused with a `409` and the previous policy stays in force.
 
 Turning enforcement off and back on establishes a new activation boundary. Moving into all-user mode starts a new existing-user grace window. Do not treat a policy toggle as a permanent record of which historical users were once required to verify.
 
@@ -62,7 +64,7 @@ An upgrade leaves email disabled and keeps existing access unchanged. Older `ema
 
 Recovery works for **local-password accounts whose current email address has verified proof**. It is disabled by default. Once enabled, an eligible user can request a reset from the sign-in flow, open the link, and submit a new password.
 
-Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload token** is enabled; scoped API tokens should be managed separately.
+Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. The new password follows the rules for every account password, at least 8 characters and at most 72 UTF-8 bytes, and Flare stores only its bcrypt hash. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload tokens after a password reset** is enabled; scoped API tokens should be managed separately.
 
 Recovery requests do not reveal whether the submitted email belongs to an eligible account. If an old user never enrolled a recovery address, an administrator must help them regain access; the stored address alone is insufficient. An exemption from verification does not enable recovery.
 
@@ -97,9 +99,9 @@ Use sender-domain SPF, DKIM, and DMARC settings as provided by your mail service
 
 ## Limits and delivery history
 
-Defaults are a 60-second resend interval, 5 messages per address per hour, 20 per IP per hour, and a daily admission cap of 500. Rate-limit accounting is stored in PostgreSQL. Your reverse proxy must supply trusted client-IP headers for IP limits to work as intended; the per-IP limit uses the same client address as sign-in and request limits, described in [client addresses and rate limits](/hosting/reverse-proxy#client-addresses-and-rate-limits).
+Defaults are a 60-second resend interval, 5 messages per address per hour, 20 per IP per hour, and a daily admission cap of 500. Rate-limit accounting is stored in PostgreSQL. Your reverse proxy must supply trusted client-IP headers for IP limits to work as intended; the per-IP limit uses the same client address as sign-in and request limits, described in [client addresses and rate limits](/hosting/reverse-proxy#client-addresses-and-rate-limits). A request over the resend interval or an hourly limit gets `429` with `Retry-After` set to the seconds until that limit's window ends. Once the daily cap is used up, registration, account email requests and accounts created by administrators that would send mail are refused with `400` and _The daily email sending limit has been reached. Try again tomorrow or contact your administrator._; earlier versions answered _Unable to complete this email request. Please try again._ Each window opens with the first request it counts, and refused requests don't extend it. Earlier versions always sent `Retry-After: 60`, so a client that waited that long could be refused again until the hour ended.
 
-Queued messages survive restarts. Workers use leases to coordinate attempts and default to 2 concurrent sends, 3 attempts, and 60-second initial retry delay with exponential backoff. An expired or revoked account link cannot be made useful by retrying its old message.
+Queued messages survive restarts. Every running Flare process checks the queue every 5 seconds, starting when the process starts, and uses the settings in effect at each check: sending resumes on the first check after a restart, and saving these settings or choosing **Retry delivery** takes effect on the next check without a restart. A message that was being sent when its process stopped is tried again once its lease expires, 2 minutes after that attempt began or five SMTP timeouts if that is longer, or is marked failed if it has no attempts left. Workers use leases to coordinate attempts and default to 2 concurrent sends, 3 attempts, and 60-second initial retry delay with exponential backoff. An expired or revoked account link cannot be made useful by retrying its old message.
 
 Settings → Email shows pending, processing, accepted/sent, and failed deliveries with masked recipients and sanitized error messages. Retry an eligible failed message after fixing its cause. Retrying uses the same token rather than creating a new account action. Successful/expired message bodies are cleared, and diagnostic history follows the default 14-day retention setting.
 
@@ -125,7 +127,7 @@ FLARE_EMAIL_VERIFICATION_MODE=new_users
 
 Mount the referenced file so the app user can read it, and add these variables to the Flare service's environment; putting new keys in Compose's `.env` alone does not automatically pass them into the container. Redeploy after changes.
 
-Every operator-facing email setting has an override and optional `_FILE` form. Overrides take precedence, are marked in the UI, and never overwrite the saved fallback. See the [complete variable/default reference](/hosting/configuration#email-environment-variables).
+Every operator-facing email setting has an override and optional `_FILE` form, named `FLARE_EMAIL_` plus the setting's key in upper snake case: **Accounts created by administrators** (`verification.adminCreated`) is `FLARE_EMAIL_VERIFICATION_ADMIN_CREATED`. Overrides take precedence and never overwrite the saved fallback. Settings → Email shows **Managed by environment** under each overridden control and keeps it read-only. See the [complete variable/default reference](/hosting/configuration#email-environment-variables).
 
 ## Recover from an email lockout
 
@@ -139,4 +141,4 @@ Recreate/redeploy the app with that value passed into its environment. It disabl
 
 Open `/auth/login?local=1` and use an allowed administrator method: the local password and required authenticator, or a passkey. If that account requires passkeys, use a passkey or dedicated passkey recovery code instead of the password. Repair the configuration, verify recovery access, then remove the override and redeploy. This does not reset passwords, bypass authentication, disable SSO configuration, or turn off a passkey requirement.
 
-If decryption is the problem, restore the original key from your secret backup. Changing to a new key requires re-entering credentials and replacing affected queued messages; it also affects encrypted webhook secrets. [Key rotation and backups](/hosting/maintenance#secrets-and-key-rotation).
+If decryption is the problem, restore the original key from your secret backup. Changing to a new key requires re-entering credentials and replacing affected queued messages. It also makes webhook signing secrets unreadable, and creators can no longer copy existing invite links again, although those links keep working. [Key rotation and backups](/hosting/maintenance#secrets-and-key-rotation).

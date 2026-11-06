@@ -13,73 +13,6 @@ import {
 
 import { useToast } from '@/hooks/use-toast'
 
-export type OcrOutcome =
-  | { kind: 'text'; text: string; confidence: number | null }
-  /** Recognition continues on the server; asking again later returns the text. */
-  | { kind: 'pending'; message: string }
-  | { kind: 'error'; message: string; canRetry: boolean }
-
-/** Request OCR text and describe the result, including busy and limit responses. */
-export async function requestOcr(
-  url: string,
-  signal?: AbortSignal
-): Promise<OcrOutcome> {
-  const response = await fetch(url, { signal })
-  const data = await response.json().catch(() => null)
-  const message = typeof data?.error === 'string' ? data.error : null
-  if (response.status === 202)
-    return {
-      kind: 'pending',
-      message:
-        message ??
-        'Flare is still reading this image. Check again in a moment.',
-    }
-  if (response.ok && data?.success)
-    return {
-      kind: 'text',
-      text: data.text ?? '',
-      confidence: data.confidence ?? null,
-    }
-  return {
-    kind: 'error',
-    message: message ?? 'Couldn’t extract text. Please try again.',
-    // Access errors need a password or permission, not another attempt.
-    canRetry: response.ok || ![400, 401, 403, 404].includes(response.status),
-  }
-}
-
-export type OcrDialogState = {
-  text: string | null
-  confidence: number | null
-  notice: string | null
-  error: string | null
-  canRetry: boolean
-}
-
-/**
- * What the dialog shows for an outcome. `null` means the request itself
- * failed, for example on a network error, which can always be retried.
- */
-export function ocrDialogState(outcome: OcrOutcome | null): OcrDialogState {
-  if (!outcome)
-    return {
-      text: null,
-      confidence: null,
-      notice: null,
-      error: 'Couldn’t extract text. Please try again.',
-      canRetry: true,
-    }
-  return {
-    text: outcome.kind === 'text' ? outcome.text : null,
-    confidence: outcome.kind === 'text' ? outcome.confidence : null,
-    notice: outcome.kind === 'pending' ? outcome.message : null,
-    error: outcome.kind === 'error' ? outcome.message : null,
-    canRetry:
-      outcome.kind === 'pending' ||
-      (outcome.kind === 'error' && outcome.canRetry),
-  }
-}
-
 interface OcrDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -109,11 +42,19 @@ export function OcrDialog({
 
   const handleCopy = async () => {
     if (!text) return
-    await navigator.clipboard.writeText(text)
-    toast({
-      title: 'Copied to clipboard',
-      description: 'The extracted text has been copied to your clipboard',
-    })
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: 'Copied to clipboard',
+        description: 'The extracted text has been copied to your clipboard',
+      })
+    } catch {
+      toast({
+        title: 'Couldn’t copy the text',
+        description: 'Select the text above and copy it instead.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const dialogTitle = filename

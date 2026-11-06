@@ -7,7 +7,8 @@ export async function register() {
         process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
       Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
 
-    // Initialize before importing application modules, including Prisma.
+    // Initialize before importing application modules: the recorder has to
+    // wrap the database client before anything builds it.
     if (recording || replay) {
       const { initBackendRecorder } =
         await import('@alwaysmeticulous/backend-recorder-launcher')
@@ -17,8 +18,12 @@ export async function register() {
         meticulousProjectName: 'fl1nt.dev/Flare',
         recordingToken: process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN,
       })
-      const { meticulousState } = await import('./lib/meticulous')
-      meticulousState.meticulousRecorder = recorder
+      const extension = recorder?.meticulousPrismaExtension
+      if (extension) {
+        const { recordDatabaseQueries } =
+          await import('./lib/database/query-recorder')
+        recordDatabaseQueries(extension)
+      }
       // Flush outstanding backend spans during normal Next.js shutdown.
       const flush = () => {
         void recorder?.stopRecording().catch((error: unknown) => {
@@ -35,20 +40,5 @@ export async function register() {
 
     await runStartupTasks()
     logger.debug('Startup tasks completed via instrumentation hook')
-
-    // Monitor memory usage in production
-    if (process.env.NODE_ENV === 'production') {
-      setInterval(() => {
-        const memUsage = process.memoryUsage()
-        if (memUsage.heapUsed > 1024 * 1024 * 1024) {
-          // 1GB threshold
-          logger.warn('High memory usage detected', {
-            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
-            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB',
-            external: Math.round(memUsage.external / 1024 / 1024) + 'MB',
-          })
-        }
-      }, 60000) // Check every minute
-    }
   }
 }

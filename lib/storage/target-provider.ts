@@ -1,8 +1,7 @@
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
+import { getConfig } from '@/lib/config'
 
+import { createStorageProvider, savedStorageProvider } from './index'
 import { LocalStorageProvider } from './providers/local'
-import { S3StorageProvider } from './providers/s3'
 import { s3StorageTarget, sameStorageTarget } from './targets'
 import type { StorageTarget } from './targets'
 import type { StorageProvider } from './types'
@@ -14,10 +13,12 @@ export async function getStorageProviderForTarget(
   target: StorageTarget
 ): Promise<StorageProvider> {
   if (target.provider === 'local') return new LocalStorageProvider()
-  const row = await prisma.config.findUnique({ where: { key: 'flare_config' } })
-  const s3 = configSchema.parse(row?.value ?? DEFAULT_CONFIG).settings.general
-    .storage.s3
-  if (!sameStorageTarget(s3StorageTarget(s3), target))
+  const { storage } = (await getConfig()).settings.general
+  if (!sameStorageTarget(s3StorageTarget(storage.s3), target))
     throw new StorageTargetChangedError()
-  return new S3StorageProvider({ ...s3, endpoint: s3.endpoint || undefined })
+  // After a switch to local storage, the saved S3 details still reach the
+  // files recorded there.
+  return storage.provider === 's3'
+    ? savedStorageProvider(storage)
+    : createStorageProvider({ ...storage, provider: 's3' })
 }

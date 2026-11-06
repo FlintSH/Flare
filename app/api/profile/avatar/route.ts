@@ -1,72 +1,20 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
+import { readImageUpload } from '@/lib/customization/image-upload'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { PermissionError, requirePermission } from '@/lib/permissions/server'
-import { validateFileType } from '@/lib/security/file-validation'
-import { uploadAvatar } from '@/lib/storage/avatar'
+import { AVATAR_POLICY } from '@/lib/storage/avatar-policy'
+import { uploadAvatar } from '@/lib/users/avatar'
 
-const logger = loggers.users
+const api = routes('/api/profile/avatar', {
+  failure: { message: 'Failed to upload avatar' },
+  logger: loggers.users,
+})
 
-async function handlePOST(req: Request) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('profile.update')
-    if (permissionDenied) return permissionDenied
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const formData = await req.formData()
-    const file = formData.get('file')
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    }
-
-    if (!file.type.startsWith('image/')) {
-      return NextResponse.json(
-        { error: 'File must be an image' },
-        { status: 400 }
-      )
-    }
-
-    const avatarBytes = await file.arrayBuffer()
-    const avatarBuffer = Buffer.from(avatarBytes)
-    const typeCheck = await validateFileType(avatarBuffer, file.type)
-    if (!typeCheck.valid) {
-      return NextResponse.json(
-        { error: 'File content does not match claimed image type' },
-        { status: 400 }
-      )
-    }
-    if (
-      typeCheck.detectedType &&
-      !typeCheck.detectedType.startsWith('image/')
-    ) {
-      return NextResponse.json(
-        { error: 'File must be an image' },
-        { status: 400 }
-      )
-    }
-
-    const publicPath = await uploadAvatar(session.user.id, avatarBuffer)
-    return NextResponse.json({ success: true, url: publicPath })
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
-    logger.error('Avatar upload error', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to upload avatar' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/profile/avatar',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { session } = await requireSession(request, 'profile.update')
+  const { bytes } = await readImageUpload(request, AVATAR_POLICY)
+  const publicPath = await uploadAvatar(session.user.id, bytes)
+  return NextResponse.json({ success: true, url: publicPath })
+})

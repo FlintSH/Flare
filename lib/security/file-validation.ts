@@ -98,7 +98,6 @@ export function mimeTypesMatch(detected: string, claimed: string): boolean {
   return false
 }
 
-// checks actual file bytes against what the client claimed.
 // can't detect text-based formats (html, json, etc.) — those fall through
 // as valid since they're already sandboxed when served.
 export async function validateFileType(

@@ -1,17 +1,12 @@
 import type { PrismaClient } from '@prisma/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { configureAuditWriter } from '@/lib/audit'
 import {
   auditRetentionSetting,
   pruneAuditEvents,
   startAuditRetentionWorker,
 } from '@/lib/audit/retention'
-
-const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }))
-vi.mock('@/lib/audit', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/audit')>()),
-  recordAudit: audit.recordAudit,
-}))
 
 describe('FLARE_AUDIT_RETENTION_DAYS', () => {
   it('keeps every event when unset, empty, or 0', () => {
@@ -44,29 +39,29 @@ describe('FLARE_AUDIT_RETENTION_DAYS', () => {
 })
 
 describe('audit retention worker', () => {
-  const state = globalThis as { flareAuditRetention?: unknown }
+  let worker: ReturnType<typeof startAuditRetentionWorker>
   afterEach(() => {
-    vi.clearAllTimers()
+    worker?.stop()
+    worker = undefined
     vi.useRealTimers()
-    delete state.flareAuditRetention
   })
 
   it('schedules nothing unless retention is set to a valid number of days', () => {
     vi.useFakeTimers()
     for (const value of [undefined, '0', 'abc', '-1']) {
-      startAuditRetentionWorker(value)
+      expect(startAuditRetentionWorker(value)).toBeUndefined()
       expect(vi.getTimerCount()).toBe(0)
-      expect(state.flareAuditRetention).toBeUndefined()
     }
   })
 
-  it('runs shortly after startup and then hourly, once per process', () => {
+  it('runs once per process, however often it is started', async () => {
     vi.useFakeTimers()
-    expect(startAuditRetentionWorker('90')).toEqual({ days: 90 })
-    // The first run and the hourly interval.
-    expect(vi.getTimerCount()).toBe(2)
-    startAuditRetentionWorker('90')
-    expect(vi.getTimerCount()).toBe(2)
+    const prune = vi.fn(async () => pruned())
+    worker = startAuditRetentionWorker('90', { prune })
+    expect(worker).toBeDefined()
+    expect(startAuditRetentionWorker('90', { prune })).toBe(worker)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(prune).toHaveBeenCalledTimes(1)
   })
 
   const pruned = (complete = true) => ({
@@ -79,7 +74,7 @@ describe('audit retention worker', () => {
   it('prunes a minute after startup and then every hour', async () => {
     vi.useFakeTimers()
     const prune = vi.fn(async () => pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(59_000)
     expect(prune).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1_000)
@@ -95,7 +90,7 @@ describe('audit retention worker', () => {
       .fn()
       .mockResolvedValueOnce(pruned(false))
       .mockResolvedValue(pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(60_000)
     expect(prune).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(60_000)
@@ -115,7 +110,7 @@ describe('audit retention worker', () => {
       )
       .mockRejectedValueOnce(new Error('database unavailable'))
       .mockResolvedValue(pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(60_000)
     // The hourly run arrives while the first is still deleting.
     await vi.advanceTimersByTimeAsync(60 * 60_000)
@@ -130,7 +125,10 @@ describe('audit retention worker', () => {
 
 describe('pruneAuditEvents', () => {
   it('still records what earlier batches removed when a later batch fails', async () => {
-    audit.recordAudit.mockClear()
+    const recorded: Record<string, unknown>[] = []
+    configureAuditWriter(async (event) => {
+      recorded.push(event)
+    })
     let batch = 0
     const client = {
       $transaction: async (work: (tx: unknown) => Promise<unknown>) => {
@@ -149,8 +147,8 @@ describe('pruneAuditEvents', () => {
     await expect(
       pruneAuditEvents(30, { client, batchSize: 2 })
     ).rejects.toThrow('connection lost')
-    expect(audit.recordAudit).toHaveBeenCalledTimes(1)
-    expect(audit.recordAudit.mock.calls[0][0]).toMatchObject({
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]).toMatchObject({
       action: 'audit.retention.applied',
       details: { count: 4, complete: false, retentionDays: 30 },
     })

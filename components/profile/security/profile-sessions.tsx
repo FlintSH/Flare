@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Laptop, RefreshCw } from 'lucide-react'
-import { signOut, useSession } from 'next-auth/react'
 
-import { MetaLine } from '@/components/profile/meta-line'
+import { MetaLine } from '@/components/shared/meta-line'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +34,21 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import {
+  BROWSER_SESSION_DAYS,
+  LOGIN_HISTORY_DAYS,
+} from '@/lib/auth/security/policy'
+import { apiRequest } from '@/lib/client/request'
+
+import {
+  ACCOUNT_DATA,
+  type SessionScope,
+  SessionScoped,
+  accountKey,
+  useAccountQuery,
+} from '@/hooks/use-account-query'
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
+import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
 
 type BrowserSession = {
@@ -57,15 +71,7 @@ type LoginAttempt = {
 }
 type HistoryPage = { attempts: LoginAttempt[]; nextCursor: string | null }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...options })
-  const result = await response.json()
-  if (!response.ok)
-    throw new Error(
-      result.error || 'Unable to load account activity. Please try again.'
-    )
-  return result
-}
+const activityFailed = 'Unable to load account activity. Please try again.'
 
 function methodName(method: string) {
   return (
@@ -112,99 +118,75 @@ function date(value: string) {
 }
 
 export function ProfileSessions() {
-  const { data: session, status } = useSession()
-  if (status !== 'authenticated' || !session?.user?.id) return null
   return (
-    <AccountSessions
-      key={JSON.stringify([session.user.id, session.user.sessionId])}
-      userId={session.user.id}
-      sessionId={session.user.sessionId}
-    />
+    <SessionScoped>
+      {(scope) => <AccountSessions scope={scope} />}
+    </SessionScoped>
   )
 }
 
-function AccountSessions({
-  userId,
-  sessionId,
-}: {
-  userId: string
-  sessionId?: string
-}) {
+function AccountSessions({ scope }: { scope: SessionScope }) {
   const { toast } = useToast()
+  const lifetime = useRequestLifetime()
   const [pending, setPending] = useState<BrowserSession | 'all' | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [outcome, setOutcome] = useState('all')
-  const lifecycle = useRef<AbortController | null>(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    lifecycle.current = controller
-    return () => {
-      controller.abort()
-      if (lifecycle.current === controller) lifecycle.current = null
-    }
-  }, [])
-  const sessions = useQuery({
-    queryKey: ['profile-sessions', userId, sessionId],
-    queryFn: ({ signal }) =>
-      request<{ sessions: BrowserSession[] }>('/api/profile/sessions', {
-        signal,
-      }),
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: true,
-  })
+  const sessions = useAccountQuery<{ sessions: BrowserSession[] }>(
+    'profile-sessions',
+    '/api/profile/sessions',
+    { fallback: activityFailed, refetchOnWindowFocus: true }
+  )
   const history = useInfiniteQuery({
-    queryKey: ['profile-login-history', userId, sessionId, outcome],
-    staleTime: 0,
-    gcTime: 0,
+    queryKey: accountKey('profile-login-history', scope, outcome),
+    ...ACCOUNT_DATA,
     initialPageParam: '',
     queryFn: ({ pageParam, signal }) =>
-      request<HistoryPage>(
+      apiRequest<HistoryPage>(
         `/api/profile/login-history?outcome=${outcome}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
-        { signal }
+        { signal, fallback: activityFailed }
       ),
     getNextPageParam: (last) => last.nextCursor || undefined,
   })
   const attempts = history.data?.pages.flatMap((page) => page.attempts) || []
+  const revokeFailed = (error: unknown) => {
+    if (lifetime.current.signal.aborted) return
+    toast({
+      title: 'Unable to revoke session',
+      description: error instanceof Error ? error.message : 'Please try again.',
+      variant: 'destructive',
+    })
+    void sessions.refetch()
+  }
+  const signOut = useSignOut({ onError: revokeFailed })
   async function revoke() {
-    const controller = lifecycle.current
-    if (!pending || revoking || !controller || controller.signal.aborted) return
-    const active = () =>
-      lifecycle.current === controller && !controller.signal.aborted
+    const { signal } = lifetime.current
+    if (!pending || revoking || signal.aborted) return
     setRevoking(true)
     try {
-      const result = await request<{
+      const result = await apiRequest<{
         signedOut: boolean
         revokedCount: number
       }>(
         pending === 'all'
           ? '/api/profile/sessions'
           : `/api/profile/sessions/${encodeURIComponent(pending.id)}`,
-        { method: 'DELETE', signal: controller.signal }
+        { method: 'DELETE', signal, fallback: activityFailed }
       )
-      if (!active()) return
       setPending(null)
       if (result.signedOut) {
-        await signOut({ callbackUrl: '/auth/login?local=1' })
+        await signOut()
         return
       }
       await sessions.refetch()
-      if (!active()) return
+      if (signal.aborted) return
       toast({
         title: 'Session revoked',
         description: 'That browser must sign in again to continue.',
       })
     } catch (error) {
-      if (!active()) return
-      toast({
-        title: 'Unable to revoke session',
-        description:
-          error instanceof Error ? error.message : 'Please try again.',
-        variant: 'destructive',
-      })
-      void sessions.refetch()
+      revokeFailed(error)
     } finally {
-      if (active()) setRevoking(false)
+      if (!signal.aborted) setRevoking(false)
     }
   }
   return (
@@ -309,9 +291,10 @@ function AccountSessions({
           ))}
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-lg text-xs text-muted-foreground">
-              Sessions expire 30 days after sign-in. Browser and IP details come
-              from the request; they may be shared or inaccurate. Revocation
-              takes effect on the next request and does not revoke API tokens.
+              Sessions expire {BROWSER_SESSION_DAYS} days after sign-in. Browser
+              and IP details come from the request; they may be shared or
+              inaccurate. Revocation takes effect on the next request and does
+              not revoke API tokens.
             </p>
             <Button
               variant="destructive"
@@ -330,8 +313,8 @@ function AccountSessions({
             <div className="space-y-1.5">
               <CardTitle>Login history</CardTitle>
               <CardDescription>
-                Your successful and failed sign-in attempts from the last 90
-                days.
+                Your successful and failed sign-in attempts from the last{' '}
+                {LOGIN_HISTORY_DAYS} days.
               </CardDescription>
             </div>
             <div className="w-full space-y-1 sm:w-44">

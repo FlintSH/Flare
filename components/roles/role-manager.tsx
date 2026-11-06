@@ -24,8 +24,8 @@ import {
   colorSwatchClassName,
   destructiveActionClassName,
   numberFieldClassName,
-} from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+} from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -42,16 +42,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
+import { apiRequest } from '@/lib/client/request'
+import { PERMISSION_GROUPS, hasPermission } from '@/lib/permissions/catalog'
 import {
-  PERMISSION_GROUPS,
-  type RoleSummary,
-  hasPermission,
-} from '@/lib/permissions/catalog'
+  type Access,
+  ROLE_DEFAULTS,
+  ROLE_LIMITS,
+  canGrantPermissions,
+  canManageRole,
+  highestRolePosition,
+  isEveryoneRole,
+  roleCanHold,
+} from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 
+import { type ListedRole as Role, readRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
 
-type Role = RoleSummary & { memberCount: number }
 type Draft = {
   name: string
   description: string
@@ -59,16 +66,47 @@ type Draft = {
   position: number
   permissions: string[]
 }
-const blank: Draft = {
-  name: '',
-  description: '',
-  color: '#64748b',
-  position: 1,
-  permissions: [],
+const blank: Draft = { name: '', ...ROLE_DEFAULTS, permissions: [] }
+
+/**
+ * Whether the actor may edit the role in the editor. A new role is judged as
+ * it starts, not by its unsaved draft, so a position typed out of reach
+ * can't lock the field that corrects it.
+ */
+export function canEditRole(
+  actor: Access | null | undefined,
+  selected: Role | undefined
+) {
+  return canManageRole(actor, selected ?? blank)
+}
+
+/**
+ * The highest position the actor may give a role: one below their own
+ * highest role, unless they're an administrator.
+ */
+export function maxRolePosition(actor: Access | null | undefined) {
+  return hasPermission(actor, 'administrator')
+    ? ROLE_LIMITS.position.max
+    : Math.max(ROLE_LIMITS.position.min, highestRolePosition(actor) - 1)
+}
+
+/** Why a role can't be saved at this position, or null when it can. */
+export function rolePositionProblem(
+  actor: Access | null | undefined,
+  position: number
+) {
+  const { min } = ROLE_LIMITS.position
+  const max = maxRolePosition(actor)
+  if (Number.isInteger(position) && position >= min && position <= max)
+    return null
+  return hasPermission(actor, 'administrator')
+    ? `Use a whole number from ${min} to ${max.toLocaleString()}.`
+    : `Use a whole number from ${min} to ${max.toLocaleString()}, below your highest role.`
 }
 
 export function RoleManager() {
   const { data: session, update } = useSession()
+  const actor = session?.user
   const router = useRouter()
   const { toast } = useToast()
   const [roles, setRoles] = useState<Role[]>([])
@@ -93,22 +131,21 @@ export function RoleManager() {
   // hand focus back to the button that opened it as it closes.
   const focusNameOnClose = useRef(false)
   const selected = roles.find((role) => role.id === selectedId)
-  const isEveryone = selected?.systemKey === 'everyone'
-  const isAdministrator = hasPermission(session?.user, 'administrator')
-  const highest = Math.max(
-    0,
-    ...(session?.user?.roles ?? []).map((role) => role.position)
-  )
-  const editable =
-    isAdministrator ||
-    ((selected?.position ?? draft?.position ?? 1) < highest &&
-      !selected?.permissions.includes('administrator'))
+  const isEveryone = isEveryoneRole(selected)
+  const editable = canEditRole(actor, selected)
+  const canToggle = (permission: string) =>
+    roleCanHold(selected, permission) &&
+    canGrantPermissions(actor, [permission])
   const dirty = draft !== null && JSON.stringify(draft) !== savedDraft
+  const positionProblem =
+    draft && editable && !isEveryone
+      ? rolePositionProblem(actor, draft.position)
+      : null
 
   const select = useCallback((role: Role | 'new') => {
     const next =
       role === 'new'
-        ? { ...blank, position: 1 }
+        ? { ...blank }
         : {
             name: role.name,
             description: role.description,
@@ -123,11 +160,9 @@ export function RoleManager() {
     setQuery('')
   }, [])
   const load = useCallback(async () => {
-    const response = await fetch('/api/roles', { cache: 'no-store' })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error || 'Could not load roles.')
-    setRoles(data.roles)
-    return data.roles as Role[]
+    const { roles } = await readRoles()
+    setRoles(roles)
+    return roles
   }, [])
   useEffect(() => {
     let cancelled = false
@@ -194,17 +229,14 @@ export function RoleManager() {
             permissions: draft.permissions,
           }
         : draft
-      const response = await fetch(
+      const result = await apiRequest<{ id?: string; role?: { id: string } }>(
         selectedId ? `/api/roles/${selectedId}` : '/api/roles',
         {
           method: selectedId ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
+          fallback: 'Could not save this role.',
         }
       )
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not save this role.')
       const loaded = await load()
       const saved =
         loaded.find(
@@ -231,13 +263,10 @@ export function RoleManager() {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch(`/api/roles/${selected.id}`, {
+      await apiRequest(`/api/roles/${selected.id}`, {
         method: 'DELETE',
+        fallback: 'Could not delete this role.',
       })
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Could not delete this role.')
-      }
       const loaded = await load()
       if (loaded[0]) select(loaded[0])
       await update()
@@ -275,7 +304,7 @@ export function RoleManager() {
         actions={
           <Button
             onClick={() => requestSelection('new')}
-            disabled={busy || (!isAdministrator && highest <= 1)}
+            disabled={busy || !canManageRole(actor, blank)}
           >
             <Plus className="h-4 w-4" />
             Create role
@@ -335,7 +364,7 @@ export function RoleManager() {
                       {role.name}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      {role.systemKey === 'everyone'
+                      {isEveryoneRole(role)
                         ? 'Every account'
                         : `${role.memberCount} ${role.memberCount === 1 ? 'member' : 'members'}`}
                     </span>
@@ -415,7 +444,7 @@ export function RoleManager() {
                         id="role-name"
                         ref={nameRef}
                         required
-                        maxLength={50}
+                        maxLength={ROLE_LIMITS.name}
                         disabled={isEveryone}
                         placeholder="For example, Moderator"
                         value={draft.name}
@@ -448,7 +477,7 @@ export function RoleManager() {
                       </Label>
                       <Input
                         id="role-description"
-                        maxLength={300}
+                        maxLength={ROLE_LIMITS.description}
                         placeholder="What is this role for?"
                         value={draft.description}
                         onChange={(event) =>
@@ -467,10 +496,8 @@ export function RoleManager() {
                           className={numberFieldClassName}
                           type="number"
                           inputMode="numeric"
-                          min={1}
-                          max={
-                            isAdministrator ? 1000000 : Math.max(1, highest - 1)
-                          }
+                          min={ROLE_LIMITS.position.min}
+                          max={maxRolePosition(actor)}
                           required
                           value={draft.position}
                           onChange={(event) =>
@@ -479,10 +506,20 @@ export function RoleManager() {
                               position: Number(event.target.value),
                             })
                           }
+                          aria-invalid={Boolean(positionProblem)}
+                          aria-describedby="role-position-hint"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Higher numbers rank above lower numbers. Roles at the
-                          same position cannot manage one another.
+                        <p
+                          id="role-position-hint"
+                          className={cn(
+                            'text-xs',
+                            positionProblem
+                              ? 'text-destructive'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {positionProblem ??
+                            'Higher numbers rank above lower numbers. Roles at the same position cannot manage one another.'}
                         </p>
                       </div>
                     )}
@@ -512,8 +549,8 @@ export function RoleManager() {
                       />
                     </div>
                   </div>
-                  {/* The shared note surface: a primary tint read as a
-                      grey, disabled block in light themes. */}
+                  {/* The shared note surface rather than a primary tint,
+                      which reads as a grey, disabled block in light themes. */}
                   {draft.permissions.includes('administrator') && (
                     <Alert variant="info" role="status">
                       <Shield aria-hidden="true" />
@@ -534,13 +571,8 @@ export function RoleManager() {
                   )}
                   {groups.map((group) => {
                     const grantable = group.permissions
-                      .filter(
-                        (permission) =>
-                          (permission.key !== 'administrator' ||
-                            (isAdministrator && !isEveryone)) &&
-                          hasPermission(session?.user, permission.key)
-                      )
                       .map((permission) => permission.key)
+                      .filter(canToggle)
                     const allEnabled =
                       grantable.length > 0 &&
                       grantable.every((key) => draft.permissions.includes(key))
@@ -583,9 +615,7 @@ export function RoleManager() {
                               !editable ||
                               busy ||
                               administratorOverride ||
-                              !hasPermission(session?.user, permission.key) ||
-                              (permission.key === 'administrator' &&
-                                (!isAdministrator || isEveryone))
+                              !canToggle(permission.key)
                             return (
                               <div
                                 key={permission.key}
@@ -652,7 +682,10 @@ export function RoleManager() {
                       Delete
                     </Button>
                   )}
-                  <Button type="submit" disabled={busy || !editable || !dirty}>
+                  <Button
+                    type="submit"
+                    disabled={busy || !editable || !dirty || !!positionProblem}
+                  >
                     {busy ? (
                       <Loader2 className="animate-spin" aria-hidden="true" />
                     ) : (

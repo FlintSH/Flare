@@ -15,9 +15,9 @@ Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upg
 
 ## Read a file card
 
-Every card has the same layout and height, whether or not a file has tags or a folder. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
+Every card has the same layout and height, whether or not a file has tags or a folder. A file without an image preview shows an icon for its kind: video, audio, text or PDF, code, table for CSV and spreadsheets, archive, or a plain file. The icon follows the same rules as the [share page viewer](./sharing#what-recipients-can-preview), so a CSV file or archive saved under a generic type is recognized by its name, and **Users → View content** shows the same icons. Earlier builds chose the icon from the stored type alone and matched parts of it, so code types such as JSON, XML, Markdown, and shell scripts showed a text or plain file icon, while Java archives showed a code icon. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
 
-A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; choose it to see every tag in **Edit tags**. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
+A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
 ## Scroll through your library
 
@@ -57,14 +57,14 @@ Type in the search field to find matches in filenames and extracted OCR text. Ma
 
 Use the controls beside search to narrow the current library:
 
-| Control         | Choices and behavior                                                                                                                                      |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Folder**      | All files, Unfiled, or the direct contents of a folder. Opening a folder does not merge its subfolders' contents into the results.                        |
-| **Tags**        | Choose a tag, return to all tags, or find untagged files.                                                                                                 |
-| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, or most/least downloaded.                                                                             |
-| **Visibility**  | Public, private, and password-protected. Multiple checked choices are alternatives: public plus password-protected includes files matching either choice. |
-| **File type**   | Select the MIME types present in your library. These are grouped into images, videos, audio, documents, and other files.                                  |
-| **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                 |
+| Control         | Choices and behavior                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Folder**      | All files, Unfiled, or the direct contents of a folder. Opening a folder does not merge its subfolders' contents into the results.                                                                                                                     |
+| **Tags**        | Choose a tag, return to all tags, or find untagged files.                                                                                                                                                                                              |
+| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, or most/least downloaded.                                                                                                                                                                          |
+| **Visibility**  | Public, private, and password-protected. Multiple checked choices are alternatives: public plus password-protected includes files matching either choice.                                                                                              |
+| **File type**   | Select the MIME types present in your library. These are grouped into images, videos, audio, documents, and other files. Documents include PDF, text, code, and CSV types, such as `application/json`, and office documents; archives are other files. |
+| **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                                                                                                              |
 
 Separate controls combine. For example, a folder, an image type, and a search phrase narrow results to matching images in that folder. Visibility is the notable exception within its own menu: checking multiple values includes any selected value.
 
@@ -88,7 +88,7 @@ Image cards show previews for public images and for your private or password-pro
 
 <Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
 
-Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence.
+Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence. The viewer's header shows the image's name and upload date; once you move to another image, it also shows that image's place in the sequence, such as **12 of 40**.
 
 | Action                 | How                                        |
 | ---------------------- | ------------------------------------------ |
@@ -108,9 +108,9 @@ If an image disappears from the filtered results while you browse, Flare may ask
 Open the card's menu for the full action list. On a desktop, preview actions also appear on hover or keyboard focus; the menu keeps the same actions available on touch screens.
 
 - **Open file:** open its share/viewer page.
-- **Copy link:** copy its share-page URL.
+- **Copy link:** copy its share-page URL. The link starts with the address you opened Flare at and uses your account's URL ID, not your [vanity URL](./upload-profiles#account-upload-defaults). Links shown after an upload start with the instance's public URL instead, and use your vanity URL when you have one.
 - **Download file:** save a copy to your device.
-- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives).
+- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives). Flare offers it for ZIP, TAR, TAR.GZ, GZIP, RAR, and 7z files, recognized by their type or name. An image, video, audio, or PDF file named like an archive, such as `photo.zip`, opens as that file; earlier builds offered **Browse archive** for it.
 - **Edit tags:** add or remove private organizational labels.
 - **Move to folder:** change its library location without changing the file link.
 - **Change visibility:** switch between public and private.
@@ -125,6 +125,10 @@ The card menu and the buttons shown when you hover a file follow the same permis
 
 <Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
 
+If a visibility, password, expiration, or delete action fails, its message gives Flare's reason when there is one, for example **File not found** for a file deleted in another tab, or **Permission denied** after your role changed. Without a reason, for example when the connection drops, it says **Please try again.** Earlier versions said **Please try again.** for every failure. After any of these actions succeeds, the library reloads to show the changed file.
+
+When you confirm **Delete file**, the file's size stops counting toward your storage use in **Profile → Your data** at once. Flare removes the stored copy in the same step. If the storage service fails at that moment, the file is still deleted from your library and you see **File deleted**; Flare records the failure for your administrator, who may need to remove the leftover copy.
+
 ## Work with several files
 
 Choose **Select**, then select individual cards or **Select visible files**. The latter selects loaded cards currently on screen, up to the selection limit; it does not select your whole library or files loaded just beyond the screen. Scroll to add files from another part of the library. Your selection stays selected as cards leave the screen, and the selection bar remains available while you scroll.
@@ -137,6 +141,8 @@ Before **Edit tags**, **Move**, or **Create archive** opens, Flare fetches curre
 
 Changing the search, filters, folder, sort, or grouping clears the selection. **Done** leaves selection mode and clears it too.
 
+**Select** is available when your role allows at least one bulk action, and the selection bar shows only those: **Create archive** needs `files.read` and `files.upload`, **Move** needs `files.update` and `folders.manage`, and **Edit tags** needs `files.update` and `tags.manage`.
+
 **Edit tags** reloads current tag assignments for the whole selection before enabling edits, including selected files outside the visible window. See [bulk tagging](./tags#tag-several-files-together) for checkbox meanings and loading recovery.
 
 <Screenshot src="/screenshots/timeline/library-selection.webp" alt="Library selection mode with Select visible files, a selected-file count, Move, Create archive, Edit tags, and Done controls" caption="Keep a selection while scrolling; bulk actions apply to the selected files, up to 100 at a time." />
@@ -145,7 +151,7 @@ With `files.read` and `files.upload`, **Create archive** packages up to 100 sele
 
 ## Read text in images with OCR
 
-For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
+For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the card shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
 
 If the administrator enables automatic OCR, images can be processed after upload without a manual request. Upload completion does not mean OCR has completed. Manual extraction remains useful when automatic processing is disabled.
 

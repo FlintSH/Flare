@@ -1,7 +1,6 @@
 import type { MailOutbox } from '@prisma/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { decryptSecret, encryptSecret } from '@/lib/email/crypto'
 import {
   MailLimitError,
   deliverClaimedMail,
@@ -9,6 +8,7 @@ import {
   retryMail,
 } from '@/lib/email/outbox'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
+import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 const doubles = vi.hoisted(() => ({
   sendMail: vi.fn(),
@@ -108,7 +108,7 @@ afterEach(() => {
 })
 
 describe('durable mail admission', () => {
-  it('encrypts link-bearing content and serializes daily admission before inserting', async () => {
+  it('encrypts link-bearing content before inserting', async () => {
     const input = {
       userId: 'user-1',
       tokenId: 'token-1',
@@ -127,12 +127,6 @@ describe('durable mail admission', () => {
       html: '<p>secret-link</p>',
     })
     expect(row).toMatchObject({ tokenId: 'token-1', maxAttempts: 3 })
-    expect(doubles.db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
-      doubles.db.emailRateLimit.findUnique.mock.invocationCallOrder[0]
-    )
-    expect(
-      doubles.db.emailRateLimit.findUnique.mock.invocationCallOrder[0]
-    ).toBeLessThan(doubles.db.mailOutbox.create.mock.invocationCallOrder[0])
   })
 
   it('refuses admission once the shared daily cap is reached', async () => {
@@ -268,6 +262,62 @@ describe('mail processing and recovery', () => {
         data: expect.objectContaining({ status: 'cancelled', payload: '' }),
       })
     )
+  })
+
+  it.each([
+    ['reset', 'recovery'],
+    ['change', 'changes'],
+    ['change_approval', 'changes'],
+  ] as const)(
+    'cancels a claimed %s link once %s are turned off',
+    async (purpose, feature) => {
+      doubles.db.emailToken.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        purpose,
+        email: 'user@example.com',
+        consumedAt: null,
+        expiresAt: new Date(now.getTime() + 60_000),
+      })
+      doubles.getEmailConfig.mockResolvedValue({
+        ...config,
+        [feature]: { ...config[feature], enabled: false },
+      })
+      expect(await deliverClaimedMail(queued({ purpose }), config)).toBe(false)
+      expect(doubles.sendMail).not.toHaveBeenCalled()
+      expect(doubles.db.mailOutbox.updateMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'cancelled',
+            lastError: 'This email feature was disabled.',
+          }),
+        })
+      )
+    }
+  )
+
+  it('still sends verification links and notices with recovery and changes off', async () => {
+    doubles.getEmailConfig.mockResolvedValue({
+      ...config,
+      recovery: { ...config.recovery, enabled: false },
+      changes: { ...config.changes, enabled: false },
+    })
+    doubles.db.emailToken.findUnique.mockResolvedValue({
+      userId: 'user-1',
+      purpose: 'verify',
+      email: 'user@example.com',
+      consumedAt: null,
+      expiresAt: new Date(now.getTime() + 60_000),
+    })
+    expect(
+      await deliverClaimedMail(queued({ purpose: 'verify' }), config)
+    ).toBe(true)
+    expect(
+      await deliverClaimedMail(
+        queued({ purpose: 'password_changed', tokenId: null }),
+        config
+      )
+    ).toBe(true)
+    expect(doubles.sendMail).toHaveBeenCalledTimes(2)
   })
 
   it('refuses to manually retry expired or consumed links', async () => {

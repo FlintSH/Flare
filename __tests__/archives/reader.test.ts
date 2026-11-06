@@ -842,6 +842,24 @@ describe('TAR.GZ and GZIP seeking', () => {
     ).toBe(true)
   })
 
+  it('names a downloaded member as the archive does, dots included', async () => {
+    const tarball = await tarBytes([{ name: 'docs/notes..txt', data: 'notes' }])
+    const { index, source } = await indexOf(tarball, 'tar')
+    const response = await entryResponse({
+      source,
+      index,
+      entry: index.find('docs/notes..txt')!,
+      range: null,
+      inline: false,
+      release: () => {},
+      signal: new AbortController().signal,
+    })
+    expect(response.headers.get('content-disposition')).toBe(
+      `attachment; filename="notes..txt"; filename*=UTF-8''notes..txt`
+    )
+    expect(await response.text()).toBe('notes')
+  })
+
   it('keeps the second member start even right after a block checkpoint', async () => {
     const small = 'This file starts in the second gzip member.'
     const tarball = await tarBytes([

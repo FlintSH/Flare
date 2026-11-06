@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 
 import { ProfileAccountProps } from '@/types/components/profile'
-import { signIn, signOut, useSession } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
 
 import {
   hasRecentSecurityProof,
@@ -18,7 +18,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
+import { updateProfile } from '@/lib/client/profile'
+import { apiRequest } from '@/lib/client/request'
+import { AVATAR_ACCEPT, avatarProblem } from '@/lib/storage/avatar-policy'
+import { ACCOUNT_NAME_MIN_LENGTH } from '@/lib/users/account-policy'
+
 import { useSecurityStatus } from '@/hooks/use-security-status'
+import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
 
 import { PasskeyConfirmation } from '../security/passkey-confirmation'
@@ -50,29 +57,28 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
+    const problem = avatarProblem(e.target.files[0])
+    if (problem) {
+      toast({
+        title: problem.title,
+        description: problem.message,
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
     setIsLoading(true)
     try {
       const file = e.target.files[0]
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/profile/avatar', {
-        method: 'POST',
+      await apiRequest('/api/profile/avatar', {
         body: formData,
+        fallback: 'Failed to upload avatar',
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to upload avatar')
-      }
-
-      const { url } = await response.json()
-
-      await updateSession({
-        user: {
-          ...user,
-          image: url,
-        },
-      })
+      await updateSession()
 
       onUpdate()
 
@@ -95,6 +101,17 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
       }
     }
   }
+
+  const saveFailed = (error: unknown, mutationStarted: boolean) => {
+    if (mutationStarted) void refreshSecurity()
+    toast({
+      title: 'Error',
+      description:
+        error instanceof Error ? error.message : 'Failed to update profile',
+      variant: 'destructive',
+    })
+  }
+  const signOut = useSignOut({ onError: (error) => saveFailed(error, true) })
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -119,45 +136,29 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         }
       }
       mutationStarted = true
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const saved = await updateProfile(
+        {
           name: nameRef.current?.value,
           ...(emailStatus?.enabled ? {} : { email: emailRef.current?.value }),
           ...(changesEmail ? proof : {}),
-        }),
-      })
+        },
+        'Failed to update profile'
+      )
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update profile')
-      }
-
-      const { data } = await response.json()
-
-      if (!emailStatus?.enabled && emailChanged) {
+      if (changesEmail) {
         toast({
           title: 'Email updated',
           description: 'Sign in again with your new email address.',
         })
-        await signOut({ callbackUrl: '/auth/login?local=1' })
+        await signOut()
         return
       }
 
-      await updateSession({
-        user: {
-          ...user,
-          name: data.name,
-          email: data.email,
-        },
-      })
+      await updateSession()
 
       onUpdate()
 
-      setSavedName(data.name ?? '')
+      setSavedName(saved.name ?? '')
       setNameChanged(false)
       setEmailChanged(false)
       if (emailPasswordRef.current) emailPasswordRef.current.value = ''
@@ -168,13 +169,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
         description: 'Profile updated successfully',
       })
     } catch (error) {
-      if (mutationStarted) void refreshSecurity()
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to update profile',
-        variant: 'destructive',
-      })
+      saveFailed(error, mutationStarted)
     } finally {
       setIsLoading(false)
     }
@@ -206,7 +201,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           <Input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={AVATAR_ACCEPT}
             className="hidden"
             onChange={handleAvatarUpload}
           />
@@ -233,7 +228,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                   ref={nameRef}
                   defaultValue={user.name || ''}
                   placeholder="Your username"
-                  minLength={2}
+                  minLength={ACCOUNT_NAME_MIN_LENGTH}
                   autoComplete="username"
                   required
                   disabled={isLoading}
@@ -297,7 +292,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                           autoComplete="one-time-code"
                           autoCapitalize="none"
                           spellCheck={false}
-                          maxLength={32}
+                          maxLength={RECOVERY_CODE_INPUT_LENGTH}
                           placeholder="Enter an authenticator or recovery code"
                           required
                           disabled={isLoading}

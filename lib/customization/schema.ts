@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { LOGO_DATA_URL_MAX_LENGTH, isLogoDataUrl } from './logo'
+
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color')
 const paletteShape = {
   background: color,
@@ -74,22 +76,11 @@ export const LIGHT_PALETTE: Palette = {
 // Uploaded raster assets are embedded, so a pack remains portable.
 const logoSchema = z
   .string()
-  .max(360_000)
-  .refine((value) => {
-    if (value === '') return true
-    const match =
-      /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
-    if (!match) return false
-    try {
-      const bytes = atob(match[2])
-      if (bytes.length > 256 * 1024) return false
-      if (match[1] === 'png') return bytes.startsWith('\x89PNG\r\n\x1a\n')
-      if (match[1] === 'jpeg') return bytes.startsWith('\xff\xd8\xff')
-      return bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP'
-    } catch {
-      return false
-    }
-  }, 'Upload a PNG, JPEG, or WebP logo')
+  .max(LOGO_DATA_URL_MAX_LENGTH)
+  .refine(
+    (value) => value === '' || isLogoDataUrl(value),
+    'Upload a PNG, JPEG, or WebP logo'
+  )
 
 export const SHARE_TEMPLATE_FIELDS = [
   'instanceName',

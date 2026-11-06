@@ -1,24 +1,32 @@
-import { NextResponse } from 'next/server'
-
 import { Prisma } from '@prisma/client'
 
-import { getAccessSession } from '@/lib/auth'
+import { readConfig } from '@/lib/config'
+import { oidcSubjectPrefix } from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
-import { getEmailConfigForUpdate } from '@/lib/email/config'
+import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import {
+  type EmailPolicyUser,
   hasDurableEmailAccess,
   requiresEmailVerification,
 } from '@/lib/email/policy'
 import type { EmailConfig } from '@/lib/email/schema'
+import { HttpError } from '@/lib/http/errors'
 
 import {
   DEFAULT_PERMISSIONS,
   Permission,
   RoleSummary,
   hasPermission,
-  highestRolePosition,
   resolvePermissions,
 } from './catalog'
+import {
+  EVERYONE_POSITION,
+  EVERYONE_ROLE,
+  canGrantPermissions,
+  canManageRole,
+  isEveryoneRole,
+  userManagementRefusal,
+} from './policy'
 
 type AccessClient = Pick<Prisma.TransactionClient, 'user' | 'role'>
 export const roleSelect = {
@@ -35,34 +43,25 @@ export interface UserAccess {
   permissions: Permission[]
 }
 
-export class PermissionError extends Error {
-  constructor(
-    message: string,
-    public readonly status = 403
-  ) {
-    super(message)
+export class PermissionError extends HttpError {
+  constructor(message: string, status = 403) {
+    super(status, message)
     this.name = 'PermissionError'
   }
-}
-
-/** Settings must always be locked before access, matching email-policy writers. */
-export async function lockRoleChanges(tx: Prisma.TransactionClient) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
 }
 
 /** Safe for migrated instances and freshly initialized databases. Never overwrite customizations. */
 export async function ensureBuiltInRoles(tx: Prisma.TransactionClient) {
   const everyone = await tx.role.upsert({
-    where: { systemKey: 'everyone' },
+    where: { systemKey: EVERYONE_ROLE },
     update: {},
     create: {
       name: 'Everyone',
       description: 'Base permissions for every account.',
       color: '#64748b',
-      position: 0,
+      position: EVERYONE_POSITION,
       permissions: [...DEFAULT_PERMISSIONS],
-      systemKey: 'everyone',
+      systemKey: EVERYONE_ROLE,
     },
   })
   const administrator = await tx.role.upsert({
@@ -85,7 +84,7 @@ function combineAccess(
   everyone: RoleSummary | null
 ): UserAccess {
   const roles = [
-    ...assigned.filter((role) => role.systemKey !== 'everyone'),
+    ...assigned.filter((role) => !isEveryoneRole(role)),
     ...(everyone ? [everyone] : []),
   ].sort((a, b) => b.position - a.position || a.name.localeCompare(b.name))
   return { roles, permissions: resolvePermissions(roles) }
@@ -101,7 +100,7 @@ export async function getUserAccess(
       select: { roles: { select: roleSelect } },
     }),
     tx.role.findUnique({
-      where: { systemKey: 'everyone' },
+      where: { systemKey: EVERYONE_ROLE },
       select: roleSelect,
     }),
   ])
@@ -121,7 +120,7 @@ export async function getUsersAccess(
       select: { id: true, roles: { select: roleSelect } },
     }),
     tx.role.findUnique({
-      where: { systemKey: 'everyone' },
+      where: { systemKey: EVERYONE_ROLE },
       select: roleSelect,
     }),
   ])
@@ -130,28 +129,11 @@ export async function getUsersAccess(
   )
 }
 
-/** Session-only guard. A named or legacy API token can never authorize role management. */
-export async function requirePermission(permission: Permission) {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return {
-      user: null,
-      session: null,
-      response: NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      ),
-    } as const
-  if (!hasPermission(session.user, permission))
-    return {
-      user: null,
-      session: null,
-      response: NextResponse.json(
-        { error: 'Permission denied' },
-        { status: 403 }
-      ),
-    } as const
-  return { user: session.user, session, response: null } as const
+function canAct(
+  user: EmailPolicyUser | null | undefined,
+  email: EmailConfig
+): user is EmailPolicyUser {
+  return user != null && !requiresEmailVerification(user, email)
 }
 
 /** Recheck authority after acquiring the mutation lock, never trust a pre-lock session snapshot. */
@@ -162,12 +144,47 @@ export async function requireActorPermission(
 ): Promise<UserAccess> {
   const user = await tx.user.findUnique({ where: { id: userId } })
   const email = await getEmailConfigForUpdate(tx)
-  if (!user || requiresEmailVerification(user, email))
+  if (!canAct(user, email))
     throw new PermissionError('Your account no longer has access')
   const access = await getUserAccess(userId, tx)
   if (!hasPermission(access, permission))
     throw new PermissionError('You no longer have permission for this action')
   return access
+}
+
+/**
+ * What `requireActorPermission` would see for each account, read without
+ * locks for display: its access, or null when it can't act. Mutations still
+ * recheck under the lock.
+ */
+export async function getActingAccess(
+  userIds: readonly string[]
+): Promise<Map<string, UserAccess | null>> {
+  if (!userIds.length) return new Map()
+  // A constant number of reads, however many accounts are asked about.
+  const [users, accessById, email] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: [...userIds] } },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        emailVerifiedFor: true,
+        emailVerificationSource: true,
+        emailExempt: true,
+        createdAt: true,
+      },
+    }),
+    getUsersAccess(userIds),
+    getEmailConfig(),
+  ])
+  return new Map(
+    userIds.map((id) => {
+      const access = accessById.get(id)
+      const user = users.find((candidate) => candidate.id === id)
+      return [id, access && canAct(user, email) ? access : null]
+    })
+  )
 }
 
 export async function assertCanManageUser(
@@ -179,35 +196,18 @@ export async function assertCanManageUser(
     getUserAccess(actorId, tx),
     getUserAccess(targetId, tx),
   ])
-  if (hasPermission(actor, 'administrator')) return
-  if (
-    actorId === targetId ||
-    hasPermission(target, 'administrator') ||
-    highestRolePosition(actor) <= highestRolePosition(target)
+  const refusal = userManagementRefusal(
+    { ...actor, id: actorId },
+    { ...target, id: targetId }
   )
-    throw new PermissionError(
-      'You can only manage accounts below your highest role'
-    )
-  // Resetting a lower account’s credentials must not transfer authority the
-  // actor could not grant directly. Hierarchy alone does not imply a subset.
-  if (
-    target.permissions.some((permission) => !hasPermission(actor, permission))
-  ) {
-    throw new PermissionError(
-      'You can only manage accounts whose permissions you already have'
-    )
-  }
+  if (refusal) throw new PermissionError(refusal)
 }
 
 export function assertCanManageRole(
   actor: UserAccess,
   role: Pick<RoleSummary, 'position' | 'permissions'>
 ) {
-  if (hasPermission(actor, 'administrator')) return
-  if (
-    role.position >= highestRolePosition(actor) ||
-    role.permissions.includes('administrator')
-  )
+  if (!canManageRole(actor, role))
     throw new PermissionError(
       'You can only manage roles below your highest role'
     )
@@ -217,14 +217,7 @@ export function assertCanGrantPermissions(
   actor: UserAccess,
   permissions: readonly string[]
 ) {
-  if (hasPermission(actor, 'administrator')) return
-  if (
-    permissions.some(
-      (permission) =>
-        permission === 'administrator' ||
-        !actor.permissions.includes(permission as Permission)
-    )
-  )
+  if (!canGrantPermissions(actor, permissions))
     throw new PermissionError('You can only grant permissions you already have')
 }
 
@@ -243,17 +236,14 @@ export async function validateRoleAssignment(
     where: { id: { in: roleIds } },
     select: roleSelect,
   })
-  if (
-    roles.length !== roleIds.length ||
-    roles.some((role) => role.systemKey === 'everyone')
-  )
+  if (roles.length !== roleIds.length || roles.some(isEveryoneRole))
     throw new PermissionError(
       'Choose existing roles; Everyone applies automatically',
       400
     )
   const current = targetId
     ? (await getUserAccess(targetId, tx)).roles.filter(
-        (role) => role.systemKey !== 'everyone'
+        (role) => !isEveryoneRole(role)
       )
     : []
   const changed = [
@@ -276,29 +266,15 @@ export async function assertAccessibleAdministrator(
   emailConfig?: EmailConfig
 ) {
   const email = emailConfig ?? (await getEmailConfigForUpdate(tx))
-  const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-  const oidc = (
-    row?.value as {
-      settings?: {
-        general?: {
-          oidc?: {
-            enabled?: boolean
-            issuer?: string
-            clientId?: string
-            clientSecret?: string
-          }
-        }
-      }
-    } | null
-  )?.settings?.general?.oidc
-  const oidcPrefix =
-    oidc?.enabled && oidc.issuer && oidc.clientId && oidc.clientSecret
-      ? `${oidc.issuer.replace(/\/+$/, '')}|`
-      : null
+  const oidcPrefix = oidcSubjectPrefix(
+    (await readConfig(tx)).settings.general.oidc
+  )
   const everyone = await tx.role.findUnique({
-    where: { systemKey: 'everyone' },
+    where: { systemKey: EVERYONE_ROLE },
     select: { permissions: true },
   })
+  // The role API never lets Everyone hold Administrator, but a direct database
+  // edit can, and then every account is an administrator.
   const administrators = await tx.user.findMany({
     where: everyone?.permissions.includes('administrator')
       ? {}

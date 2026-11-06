@@ -36,6 +36,9 @@ import {
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { ARCHIVE_LIMITS, type ArchiveOutputFormat } from '@/lib/archives/shared'
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { UNFILED, libraryHref } from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
 import { formatBytes, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -46,13 +49,12 @@ import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { ArchiveDestination } from './archive-destination'
 import {
   ARCHIVE_FORM_DIALOG_CLASS,
+  ARCHIVE_REQUEST_FAILED,
   type ArchiveFileRef,
   type ArchiveProfileSnapshot,
-  ArchiveRequestError,
   archiveErrorMessage,
   archiveOutputName,
   archiveProfileRequest,
-  archiveRequest,
   archiveSelectionSize,
 } from './archive-utils'
 
@@ -67,7 +69,8 @@ export function CreateArchiveDialog({
   onClose: () => void
   onOpenArchive: (file: ArchiveFileRef) => void
 }) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
+  const canUseFolders = allows(user, 'fileIntoFolder')
   const lifetime = useRequestLifetime()
   const {
     folders,
@@ -77,7 +80,7 @@ export function CreateArchiveDialog({
     changed,
   } = useFolders()
   const [folderId, setFolderId] = useState<string | null>(() =>
-    can('folders.manage') ? initialFolderId : null
+    canUseFolders ? initialFolderId : null
   )
   const [format, setFormat] = useState<ArchiveOutputFormat>('zip')
   const [name, setName] = useState('Archive.zip')
@@ -97,11 +100,11 @@ export function CreateArchiveDialog({
   const { totalBytes, overLimit } = archiveSelectionSize(files)
   const destinationUnavailable =
     !!folderId &&
-    (!can('folders.manage') ||
+    (!canUseFolders ||
       loading ||
       foldersError ||
       !folders.some((folder) => folder.id === folderId))
-  const allowed = can('files.read') && can('files.upload')
+  const allowed = allows(user, 'createArchive')
 
   async function create(event: React.FormEvent) {
     event.preventDefault()
@@ -118,29 +121,29 @@ export function CreateArchiveDialog({
     setBusy(true)
     setError('')
     try {
-      const next = await archiveRequest<{
+      const next = await apiRequest<{
         file: ArchiveFileRef
         totalBytes: number
-      }>(
-        '/api/files/archive',
-        {
+      }>('/api/files/archive', {
+        body: {
           fileIds: files.map((file) => file.id),
           name: archiveOutputName(name, format),
           format,
           folderId,
           ...archiveProfileRequest(profileId, profileSnapshot),
         },
-        signal
-      )
+        signal,
+        fallback: ARCHIVE_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       setResult(next)
     } catch (cause) {
       if (signal.aborted) return
       setError(archiveErrorMessage(cause))
       if (
         profileId &&
-        cause instanceof ArchiveRequestError &&
+        cause instanceof RefusedRequest &&
         cause.status === 409
       ) {
         setProfileSnapshot(null)
@@ -190,7 +193,9 @@ export function CreateArchiveDialog({
             <DialogFooter>
               <Button type="button" variant="outline" asChild>
                 <Link
-                  href={`/dashboard?folder=${encodeURIComponent(result.file.folderId || 'unfiled')}`}
+                  href={libraryHref({
+                    folder: result.file.folderId || UNFILED,
+                  })}
                   onClick={onClose}
                 >
                   <FolderOpen className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -290,7 +295,7 @@ export function CreateArchiveDialog({
                   value={folderId}
                   onChange={setFolderId}
                   disabled={busy}
-                  allowFolders={can('folders.manage')}
+                  allowFolders={canUseFolders}
                 />
                 <ProfilePicker
                   mode="archive"

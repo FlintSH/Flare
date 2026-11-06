@@ -6,18 +6,28 @@ import { URLForm } from '@/components/dashboard/url-form'
 import { URLList } from '@/components/dashboard/url-list'
 import { PermissionGate } from '@/components/roles/permission-gate'
 
+import { shortLinkUrl } from '@/lib/links/schema'
+
 export function URLsClient() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [createdUrl, setCreatedUrl] = useState('')
+  const [created, setCreated] = useState<{
+    shortCode: string
+    url: string
+  } | null>(null)
 
   return (
     <div className="space-y-6">
       <PermissionGate permission="links.create">
         <URLForm
-          createdUrl={createdUrl}
+          createdUrl={created?.url ?? ''}
           onUrlAdded={(shortCode) => {
-            setCreatedUrl(
-              shortCode ? `${window.location.origin}/u/${shortCode}` : ''
+            setCreated(
+              shortCode
+                ? {
+                    shortCode,
+                    url: shortLinkUrl(shortCode, window.location.origin),
+                  }
+                : null
             )
             setRefreshTrigger((previous) => previous + 1)
           }}
@@ -26,8 +36,8 @@ export function URLsClient() {
       <URLList
         refreshTrigger={refreshTrigger}
         onUrlDeleted={(shortCode) => {
-          setCreatedUrl((current) =>
-            current.endsWith(`/u/${shortCode}`) ? '' : current
+          setCreated((current) =>
+            current?.shortCode === shortCode ? null : current
           )
         }}
       />

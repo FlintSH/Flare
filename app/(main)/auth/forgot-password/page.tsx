@@ -2,11 +2,12 @@ import Link from 'next/link'
 
 import { Info } from 'lucide-react'
 
-import { EmailAuthCard } from '@/components/email/auth-card'
+import { AuthShell } from '@/components/auth/auth-shell'
 import { ForgotPasswordForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getEmailCapabilities } from '@/lib/email/config'
 
 export const dynamic = 'force-dynamic'
@@ -26,9 +27,10 @@ async function recoveryAvailable() {
 }
 
 export default async function ForgotPasswordPage() {
-  if ((await recoveryAvailable()) === false)
+  const recoveryEnabled = await recoveryAvailable()
+  if (recoveryEnabled === false)
     return (
-      <EmailAuthCard
+      <AuthShell
         title="Forgot your password?"
         description="Ask your administrator for help signing in."
       >
@@ -39,17 +41,17 @@ export default async function ForgotPasswordPage() {
           </AlertDescription>
         </Alert>
         <Button asChild className="mt-6 h-11 w-full">
-          <Link href="/auth/login?local=1">Back to sign in</Link>
+          <Link href={LOCAL_SIGN_IN_PATH}>Back to sign in</Link>
         </Button>
-      </EmailAuthCard>
+      </AuthShell>
     )
 
   return (
-    <EmailAuthCard
+    <AuthShell
       title="Forgot your password?"
       description="Enter your account email and we will send a reset link if recovery is available for it."
     >
-      <ForgotPasswordForm />
-    </EmailAuthCard>
+      <ForgotPasswordForm recoveryEnabled={recoveryEnabled} />
+    </AuthShell>
   )
 }

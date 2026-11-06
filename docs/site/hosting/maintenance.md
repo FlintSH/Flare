@@ -97,7 +97,7 @@ docker compose logs --tail=150 flare
 docker compose ps
 ```
 
-The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. Settings you saved keep their values; settings sections added by a newer release, such as email, single sign-on, invite limits, and appearance, start with their defaults. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
+The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. If a migration fails, the container stops before starting Flare, and `docker compose logs` shows the migration's error followed by `Failed to run migrations`. Earlier images retried a failed migration 30 times, hid its error and reported `Could not connect to database after 30 attempts`. Keep that log and your backup, and follow [The container never becomes healthy](./troubleshooting#the-container-never-becomes-healthy). Settings you saved keep their values; settings sections added by a newer release, such as email, single sign-on, invite limits, and appearance, start with their defaults. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
@@ -284,7 +284,7 @@ For an email lockout, `FLARE_EMAIL_ENABLED=false` disables sending and local ver
 
 Deleting an account from Profile or Users commits account removal and durable cleanup jobs together, using the objects' recorded storage locations rather than the current instance backend. The worker performs storage I/O only after that commit. Rejected deletions, including the last-administrator safeguard, leave the account and bytes intact. This queue covers **whole-account deletion** and avatar replacement, removal, or failed publication; individual file or moderation deletion does not use it.
 
-Large libraries are copied into the queue directly by PostgreSQL in bulk. Account deletion has a **120-second database transaction budget**; other account mutations keep their normal limits. This is an upper bound, not a promised completion time. If the request times out, check whether the account still exists before retrying. A failed transaction rolls back both account removal and the queued work.
+Large libraries are copied into the queue directly by PostgreSQL in bulk, and their per-file `file.delete` audit events are written the same way, in the same transaction. Account deletion has a **120-second database transaction budget**; other account mutations keep their normal limits. This is an upper bound, not a promised completion time. If the request times out, check whether the account still exists before retrying. A failed transaction rolls back both account removal and the queued work.
 
 The worker polls every **5 seconds** and allows **4 active jobs globally** across app processes. A claimed job has a **2-minute lease**, renewed every **30 seconds**; an expired lease can be claimed after a process stops. A missing object counts as success. Other failures retry after **30 seconds**, doubling up to **1 hour** between attempts, with no retry limit. Successful jobs are removed; pending jobs survive restarts. Keep at least one application process running to make progress.
 
@@ -381,6 +381,41 @@ SQL
 
 Once the selected repairs are verified, restart the app with `docker compose start flare` and inspect the queue. The worker now retries deletion normally. Do not remove the row to dismiss the warning: it is the durable record needed to clean up those bytes.
 
+## File expiry jobs
+
+Each scheduled [file expiration](/guide/uploading#set-an-expiration) is a row in the `Event` table. Every application process checks for due rows every **5 seconds** and claims up to 10 at a time with a conditional database update, so two processes never apply the same expiration. A claim that hasn't finished after **5 minutes**, for example because its process stopped, is claimed again. A failed attempt is retried **1, 5 and 30 minutes** later. If the last retry fails too, the row is marked `FAILED` and the file keeps its state until its owner schedules the expiration again. Completed and failed rows are deleted **30 days** after they finish. Pending rows survive restarts, so restoring a backup restores them too.
+
+Upgrading needs no migration or new setting. Rows that earlier versions wrote, including the older `file.expired` type, are applied normally. The `EventHandler` table is no longer read or written, so startup no longer records `event_handler.upsert` audit events; leave the table in place. Inspect expiry jobs with read-only SQL:
+
+```sh
+docker compose exec -T db psql -U flare -d flare -c \
+  "SELECT status, count(*) FROM \"Event\" WHERE type IN ('file.schedule-expiration', 'file.expired') GROUP BY status ORDER BY status;"
+
+docker compose exec -T db psql -U flare -d flare -c \
+  "SELECT id, payload->>'fileId' AS \"fileId\", payload->>'action' AS action, \"scheduledAt\", status, \"retryCount\", \"failedAt\", error FROM \"Event\" WHERE type IN ('file.schedule-expiration', 'file.expired') AND (status = 'FAILED' OR \"retryCount\" > 0) ORDER BY \"failedAt\" DESC LIMIT 50;"
+```
+
+`error` holds the most recent failure, and logs use the `file-expiry` component. For storage errors, check storage reachability, credentials and delete permissions as for [account storage cleanup](#inspect-pending-cleanup). Treat file IDs as private when sharing diagnostics.
+
+## Background workers
+
+Background work runs inside the application. Each process starts these workers when it starts, so no separate worker service is needed, but a stopped process runs none of them:
+
+| Worker                                                                                                         | Runs                              | Log component      |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------ |
+| [Rate-limit and login-history cleanup](#authentication-rate-limit-cleanup)                                     | Every 60 seconds                  | `security-cleanup` |
+| [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set | 1 minute after start, then hourly | `audit-retention`  |
+| [Account storage cleanup](#account-storage-cleanup)                                                            | Every 5 seconds                   | `storage-cleanup`  |
+| [File expiry](#file-expiry-jobs)                                                                               | Every 5 seconds                   | `file-expiry`      |
+| [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
+| [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
+| [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
+| Memory check, production only                                                                                  | Every 60 seconds                  | `startup`          |
+
+Apart from audit retention, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.
+
+Each worker starts on its own, so one that fails to start can't keep the others from starting. The `startup` component logs `Startup tasks failed` with the task's name and continues. In earlier versions, the first failure skipped every task after it. A database error while file expiry started, for example, kept webhooks and OCR-tag retries from running in that process until it restarted, and email delivery until an administrator saved email settings or retried a message.
+
 ## Monitoring and routine checks
 
 | Signal                                | Why it matters                                                                            |
@@ -390,6 +425,7 @@ Once the selected repairs are verified, restart the app with `docker compose sta
 | Memory and CPU                        | Large uploads and OCR increase resource use                                               |
 | Database reachability and connections | Authentication, settings, file records, and durable jobs rely on PostgreSQL               |
 | Pending account-cleanup jobs          | Storage failures can outlive the deleted account; inspect retries and the recorded target |
+| Failed file-expiry jobs               | A failed expiration leaves the file public or stored until its owner schedules it again   |
 | Failed email/webhook deliveries       | A running web service can still fail external delivery                                    |
 | A periodic upload/download check      | Tests the database-and-storage path together                                              |
 | Backup age and restore result         | Confirms recovery is practical                                                            |

@@ -1,6 +1,6 @@
 'use client'
 
-import { useAppearance } from '@/components/customization/appearance-provider'
+import { useAppearance } from '@/components/providers/appearance-context'
 
 export function DynamicBackground() {
   const { theme } = useAppearance()

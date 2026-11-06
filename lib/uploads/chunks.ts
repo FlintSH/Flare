@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   mkdir,
@@ -13,9 +12,11 @@ import { join } from 'node:path'
 import { z } from 'zod'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { getConfig, readConfig } from '@/lib/config'
+import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { hasPermission } from '@/lib/permissions/catalog'
+import { hashFilePassword } from '@/lib/files/password-hash'
+import { parseInput, readJson } from '@/lib/http/request'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import {
@@ -25,6 +26,7 @@ import {
 } from '@/lib/storage/targets'
 import type { StorageTarget } from '@/lib/storage/targets'
 
+import { assertFits, uploadCapacity } from './capacity'
 import { uploadDisplayName } from './display-name'
 import {
   cleanupUncommittedUpload,
@@ -41,8 +43,8 @@ import {
 } from './options'
 import {
   type ResolvedUploadOptions,
-  discardLegacyCopyFormat,
-  uploadRequestOptionsSchema,
+  requestFields,
+  uploadRequestOptionFields,
 } from './schema'
 
 const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
@@ -82,7 +84,7 @@ export interface UploadMetadata {
   storageTarget?: StorageTarget
 }
 
-/** A multipart ID belongs to the backend which initialized it, including fallback. */
+/** A multipart ID belongs to the backend that started it, so a storage change ends the upload. */
 export async function getUploadStorage(metadata: UploadMetadata) {
   const target = parseStorageTarget(metadata.storageTarget)
   const storage = await getStorageProvider()
@@ -95,14 +97,7 @@ export async function getUploadStorage(metadata: UploadMetadata) {
 }
 
 async function fingerprint(tx?: Prisma.TransactionClient) {
-  const row = tx
-    ? await tx.config.findUnique({ where: { key: 'flare_config' } })
-    : null
-  const config = tx
-    ? row
-      ? configSchema.parse(row.value)
-      : DEFAULT_CONFIG
-    : await getConfig()
+  const config = tx ? await readConfig(tx) : await getConfig()
   const { provider, s3 } = config.settings.general.storage
   return createHash('sha256')
     .update(JSON.stringify({ provider, s3 }))
@@ -161,13 +156,12 @@ export async function requireUploadMetadata(
   return metadata
 }
 
-const initSchema = uploadRequestOptionsSchema.out
-  .extend({
-    filename: z.string().min(1).max(255),
-    mimeType: z.string().min(1).max(255),
-    size: z.number().int().positive(),
-  })
-  .strict()
+const initSchema = requestFields({
+  ...uploadRequestOptionFields,
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(255),
+  size: z.number().int().positive(),
+})
 
 export async function initializeChunkUpload(
   req: Request,
@@ -178,7 +172,7 @@ export async function initializeChunkUpload(
     mimeType,
     size,
     ...bodyOptions
-  } = initSchema.parse(discardLegacyCopyFormat(await req.json()))
+  } = await readJson(req, initSchema)
   // A path in `filename` names the file, never a storage location.
   const filename = uploadDisplayName(requestedName)
   if (!filename) throw new UploadError('Invalid filename.')
@@ -199,22 +193,7 @@ export async function initializeChunkUpload(
     ...bodyOptions,
     ...selection,
   })
-  const config = await getConfig()
-  const storageConfig = config.settings.general.storage
-  const maxBytes =
-    storageConfig.maxUploadSize.value *
-    (storageConfig.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-  if (size > maxBytes)
-    throw new UploadError('The file exceeds the upload size limit.', 413)
-  const quotaMB =
-    storageConfig.quotas.default.value *
-    (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
-  if (
-    storageConfig.quotas.enabled &&
-    !hasPermission(user, 'quotas.bypass') &&
-    user.storageUsed + size / 1024 ** 2 > quotaMB
-  )
-    throw new UploadError('The file would exceed your storage quota.', 413)
+  assertFits(uploadCapacity(await getConfig(), user, user.storageUsed), size)
   const destination = await prepareUploadDestination(user, filename, options)
   const storage = await getStorageProvider()
   const s3UploadId = await storage.initializeMultipartUpload(
@@ -222,9 +201,7 @@ export async function initializeChunkUpload(
     mimeType
   )
   const uploadId = randomUUID().replace(/-/g, '')
-  const passwordHash = options.password
-    ? await hash(options.password, 10)
-    : null
+  const passwordHash = await hashFilePassword(options.password)
   await saveUploadMetadata(uploadId, {
     fileKey: destination.filePath,
     filename: destination.displayName,
@@ -244,22 +221,21 @@ export async function initializeChunkUpload(
   return { uploadId, fileKey: destination.filePath }
 }
 
-const completeSchema = uploadRequestOptionsSchema.out
-  .extend({
-    uploadId: z.string().optional(),
-    parts: z
-      .array(
-        z
-          .object({
-            ETag: z.string().min(1).max(512),
-            PartNumber: z.number().int().min(1).max(10000),
-          })
-          .strict()
-      )
-      .min(1)
-      .max(10000),
-  })
-  .strict()
+const completeSchema = requestFields({
+  ...uploadRequestOptionFields,
+  uploadId: z.string().optional(),
+  parts: z
+    .array(
+      z
+        .object({
+          ETag: z.string().min(1).max(512),
+          PartNumber: z.number().int().min(1).max(10000),
+        })
+        .strict()
+    )
+    .min(1)
+    .max(10000),
+})
 
 /** Serialize assembly across both completion routes and all application processes. */
 export async function withUploadLock<T>(
@@ -268,7 +244,7 @@ export async function withUploadLock<T>(
 ): Promise<T> {
   return prisma.$transaction(
     async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`flare-upload:${id}`}, 0))`
+      await lockUploadSession(tx, id)
       return action(tx)
     },
     { timeout: 120000, maxWait: 10000 }
@@ -284,7 +260,7 @@ export async function completeChunkUpload(
     parts,
     uploadId: _uploadId,
     ...overrides
-  } = completeSchema.parse(discardLegacyCopyFormat(body))
+  } = parseInput(completeSchema, body)
   if (new Set(parts.map((part) => part.PartNumber)).size !== parts.length)
     throw new UploadError('Duplicate upload part.')
   const metadata = await requireUploadMetadata(user, id)

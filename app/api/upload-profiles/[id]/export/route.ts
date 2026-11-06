@@ -1,31 +1,17 @@
-import { withAuditRoute } from '@/lib/audit'
-import { prisma } from '@/lib/database/prisma'
-import { requirePermission } from '@/lib/permissions/server'
-import { profileView } from '@/lib/uploads/profiles'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
+import { uploadProfileRoutes } from '@/lib/uploads/http'
+import { profileRecipe } from '@/lib/uploads/profiles'
 
-async function handleGET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { user, response } = await requirePermission('uploadProfiles.manage')
-  if (response) return response
+type Context = { params: Promise<{ id: string }> }
+
+const api = routes('/api/upload-profiles/[id]/export', uploadProfileRoutes)
+
+export const GET = api(async (request, { params }: Context) => {
+  const { user } = await requireSession(request, 'uploadProfiles.manage')
   const { id } = await params
-  const profile = await prisma.uploadProfile.findFirst({
-    where: { id, userId: user.id },
-  })
-  if (!profile)
-    return Response.json({ error: 'Profile not found.' }, { status: 404 })
-  const { name, options } = profileView(profile)
   return new Response(
-    JSON.stringify(
-      {
-        format: 'flare-upload-profile',
-        version: 1,
-        profile: { name, options },
-      },
-      null,
-      2
-    ),
+    JSON.stringify(await profileRecipe(user.id, id), null, 2),
     {
       headers: {
         'Content-Type': 'application/json',
@@ -35,13 +21,4 @@ async function handleGET(
       },
     }
   )
-}
-
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(_req, { params }), {
-    route: '/api/upload-profiles/[id]/export',
-  })(_req)
-}
+})

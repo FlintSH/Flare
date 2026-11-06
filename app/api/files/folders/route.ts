@@ -1,25 +1,15 @@
-import { apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
-import { folderErrorResponse, folderMutationGuard } from '@/lib/folders/http'
+import { folderRoutes } from '@/lib/folders/http'
 import { fileFoldersInputSchema } from '@/lib/folders/schema'
 import { moveFilesToFolder } from '@/lib/folders/service'
+import { requireAccount } from '@/lib/http/access'
+import { readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const guarded = folderMutationGuard(request)
-    if (guarded) return guarded
-    const input = fileFoldersInputSchema.parse(await request.json())
-    return apiResponse({ count: await moveFilesToFolder(user.id, input) })
-  } catch (error) {
-    return folderErrorResponse(error)
-  }
-}
+const api = routes('/api/files/folders', folderRoutes)
 
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/files/folders',
-  })(request)
-}
+export const POST = api(async (request) => {
+  const user = await requireAccount(request)
+  const input = await readJson(request, fileFoldersInputSchema)
+  return apiResponse({ count: await moveFilesToFolder(user.id, input) })
+})

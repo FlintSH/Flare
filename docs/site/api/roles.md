@@ -53,7 +53,7 @@ A role has this shape; this example is demonstration data:
 | `position`    | `1` by default; integer from 1 through 1,000,000. Higher is above. |
 | `permissions` | Empty array by default; unique keys from the permission catalog.   |
 
-PATCH accepts a nonempty subset of these fields and leaves omitted fields unchanged; the defaults above apply only when creating a role. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`.
+PATCH accepts a nonempty subset of these fields and leaves omitted fields unchanged; the defaults above apply only when creating a role. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`. Sending Everyone's current `name` or `position: 0` is accepted, because neither value changes.
 
 `systemKey` identifies the built-in roles and is server-owned. The initial Admin role can be renamed, recolored, reordered, edited, or deleted subject to the administrator recovery safeguard. Permission checks use its grants, not its system key or name.
 
@@ -62,6 +62,22 @@ PATCH accepts a nonempty subset of these fields and leaves omitted fields unchan
 A non-administrator can change only roles below their own highest role and grant only permissions they currently hold. Both a role’s current and proposed position and full permission set are checked. A delegated manager cannot rename or delete a lower role that currently contains a permission the manager lacks, even when the proposed edit would remove that permission. Assigning/removing a role also checks the affected role's grants; removing an assignment is not an escape from the delegation boundary.
 
 Errors use an `error` string; validation errors may additionally include `details`. A missing session returns `401`; insufficient permission/hierarchy returns `403`; an unknown role returns `404`. A mutation that would remove the last accessible administrator returns `409` and rolls back. Invalid Everyone changes and the total role limit return `400`; cross-origin writes return `403`, oversized JSON `413`, and an unsupported content type `415`.
+
+The role rules answer with these `error` strings:
+
+| Status | `error`                                                                             | When                                                                                         |
+| ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `400`  | `Invalid role`                                                                      | The body breaks a field rule above; `details` lists what failed.                             |
+| `400`  | `Everyone must keep its name and position and cannot grant Administrator`           | A new name or a position other than `0` for Everyone, or `administrator` in its permissions. |
+| `400`  | `Only Everyone may use position zero`                                               | `position: 0` for any other role.                                                            |
+| `400`  | `Everyone cannot be deleted`                                                        | `DELETE` for Everyone.                                                                       |
+| `400`  | `This instance has reached the limit of 100 roles`                                  | Creating a role when 100 exist.                                                              |
+| `403`  | `You can only manage roles below your highest role`                                 | The role is at or above your highest role, or holds `administrator`.                         |
+| `403`  | `You can only grant permissions you already have`                                   | The role's current or proposed permissions include one you lack.                             |
+| `404`  | `Role not found`                                                                    | No role has that ID.                                                                         |
+| `409`  | `Keep at least one administrator who can sign in and meets the email access policy` | The change would leave no accessible administrator.                                          |
+
+A missing session answers `401` with `Authentication required`, and a session without `roles.manage` `403` with `Permission denied`. Each write then rechecks your account under a lock: losing `roles.manage` since the session was read answers `403` with `You no longer have permission for this action`, and an email policy that now requires you to verify your address answers `403` with `Your account no longer has access`.
 
 Role edits/deletion apply to all members, including accounts with other, higher roles; authorization checks the edited role itself. Direct account writes and assignments instead check the target account’s full hierarchy and grants. Deleting a role removes its assignments. It does not delete accounts or files. Everyone and other roles continue granting their own permissions, so deleting one role is not a guarantee that all its former members lose each permission.
 
@@ -80,6 +96,8 @@ The former scalar `role: "USER" | "ADMIN"` no longer exists. Use:
 A non-administrator also cannot manage an account whose effective permissions include grants the actor lacks, even when its role position is lower. This prevents credential-reset escalation. Account actions obey the [individual permission matrix](/admin/users#roles-and-permissions), target-account hierarchy, and last-accessible-administrator protection. A successful role-only update does not grant identity-edit authority. Assignments change server authorization on the next request, even if a browser's old session display has not refreshed.
 
 An administrator email/password change revokes the target's existing browser sessions even when account email features are disabled. It preserves authenticator enrollment, registered passkeys, both recovery-code sets, and `passkeyRequired`. User administration cannot turn off that requirement; its owner must use the [security session controls](./security) with fresh passkey or dedicated recovery proof.
+
+File links look an account up by URL ID first and by vanity ID second, so `PUT /api/users` and `PUT /api/profile` treat both as one set of names. A new `urlId` or `vanityId` that another account uses as either kind of ID answers `400` with one of `URL ID is already in use`, `This URL ID conflicts with an existing vanity URL`, `This vanity URL is already taken`, or `This vanity URL conflicts with an existing URL ID`; so does making an account's URL ID and vanity ID the same. Earlier builds checked new vanity IDs only, so a changed URL ID could take over another account's vanity links. A `urlId` that is one of the reserved application paths, `admin` or `setup` in any letter case, answers `400` with `This URL path is reserved and cannot be used`, as a reserved `vanityId` does; earlier builds saved it. With account email disabled, `PUT /api/users` refuses an address another account uses as written with `400` and `Email already exists`, where earlier builds answered `500`. Each edit checks these in the transaction that saves it.
 
 ## Run a request against a disposable instance
 
@@ -143,9 +161,11 @@ Revoking browser sessions does not revoke named API tokens or rotate the legacy 
 
 ## Avatar publication and removal
 
-`POST /api/profile/avatar` requires a browser session with `profile.update` and a multipart `file` containing an image. Success remains `200` with `{ "success": true, "url": "…" }`. Use that returned URL: new avatars have a unique key per upload, not a predictable account-ID filename.
+`POST /api/profile/avatar` requires a browser session with `profile.update` and a same-origin `multipart/form-data` request whose `file` is a PNG, JPEG, GIF, or WebP image of at most 2 MB. Success remains `200` with `{ "success": true, "url": "…" }`. Use that returned URL: new avatars have a unique key per upload, not a predictable account-ID filename. This route is the only way to set an avatar: `PUT /api/profile` ignores an `image` field, which earlier versions saved as given, without any of these checks.
 
-The server records a durable write intent before storage I/O, then rechecks the account, current permission, and quota before publishing the image. A failed publication leaves the previous avatar in place and retains cleanup work for the new bytes. Invalid image input returns `400`; missing authentication `401`; lost permission `403`; a deleted account `404`; a cancelled write intent `409`; an exceeded quota `413`; and a storage failure `500`.
+Nothing is stored for a rejected request. A request from another origin returns `403`, another content type `415`, and a body over 2 MB plus 64 KB of form framing `413`, without the body being read in full. The form then needs a `file` (`400`) of at most 2 MB (`413`) declared as one of the four types (`415`) whose content really is that format (`400`). Earlier versions checked neither the origin nor the size, accepted any declared `image/*` type, and accepted content whose format they couldn't detect.
+
+An accepted image gets a durable write intent before storage I/O; the server then rechecks the account, current permission, and quota before publishing it. A failed publication leaves the previous avatar in place and retains cleanup work for the new bytes. Missing authentication returns `401`; lost permission `403`; a deleted account `404`; a cancelled write intent `409`; an exceeded quota `413`; and a storage failure `500`.
 
 `DELETE /api/users/{id}/avatar` requires a same-origin browser session with `users.update` and target-account delegation authority. It clears the image and stored avatar metadata while queuing the old owned object's cleanup in the same transaction. Success is `204 No Content`; byte removal happens later through the worker.
 
@@ -157,7 +177,7 @@ The [operator recovery guide](/hosting/maintenance#recover-an-interrupted-avatar
 
 `DELETE /api/users/{id}` requires a browser session with `users.delete`, a same-origin request, and the target-account delegation checks. `DELETE /api/profile` deletes the caller's own account with `profile.update`; it uses the [shared session/legacy-credential authentication rules](/api/endpoint-inventory#dashboard-routes-using-the-shared-account-helper) and is not available to named API tokens. Neither operation requires a separate session-revocation or file-deletion grant.
 
-Both return **204 No Content** after per-file deletion audit records, account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. The audit insert is part of this transaction; if it fails, account deletion and queued cleanup roll back together. File jobs are queued in bulk, with a 120-second transaction budget for account deletion. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
+Both return **204 No Content** after per-file deletion audit records, account removal, database cascades, and durable storage-cleanup jobs commit in one transaction. The audit records are one `file.delete` event per file and one `invite.delete` event per invite link the account created, with `details.reason` `Account deleted`. Like every event recorded while handling a request, they carry its `requestId`, `method`, and `route`; earlier builds left `method` and `route` null on them. The audit insert is part of this transaction; if it fails, account deletion and queued cleanup roll back together. File jobs are queued in bulk, with a 120-second transaction budget for account deletion. Do not parse the successful body as JSON. Authorization or last-accessible-administrator rejection rolls back the deletion and queued work; stored objects are never deleted before that commit. Deleted accounts and their credentials then fail subsequent authentication.
 
 The response does not promise that object bytes have already been erased. An application worker deletes recorded files and app-owned avatars asynchronously against their recorded storage targets, preserving failed jobs for retry. Historical files without reliable storage provenance create unknown-target jobs that retain their paths for operator reconciliation; they do not authorize deletion against the current backend. Already-issued object-storage links can remain usable until cleanup or link expiry. The [operator cleanup guide](/hosting/maintenance#account-storage-cleanup) covers retries, backend identity changes, and recovery. The same durable queue also handles avatar cleanup; individual file and moderation deletion behavior is unchanged.
 
@@ -167,7 +187,7 @@ The response does not promise that object bytes have already been erased. An app
 
 ## Delegated settings writes
 
-`GET /api/settings` returns private settings only for an interactive session with `settings.read`; named tokens receive the public projection. Storage and OIDC secrets are masked in that response.
+`GET /api/settings` returns private settings only for an interactive session with `settings.read`; named tokens receive the public projection. Storage and OIDC secrets are masked in that response as empty strings. When you write settings back, an empty `general.oidc.clientSecret`, `general.storage.s3.accessKeyId`, or `general.storage.s3.secretAccessKey` keeps the saved value, in `PATCH` and in the legacy `POST` alike, so a client can return what it read without erasing credentials.
 
 For `PATCH /api/settings`, send a partial `{ "settings": { ... } }` body. Every supplied section is checked before any changes are accepted:
 

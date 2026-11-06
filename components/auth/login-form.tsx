@@ -11,15 +11,25 @@ import { signIn } from 'next-auth/react'
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
 import { passkeyError } from '@/components/auth/security-api'
-import { EmailCapabilities, emailRequest } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
-import { getSetupResumePath } from '@/lib/setup/navigation'
+import {
+  RECOVERY_CODE_INPUT_LENGTH,
+  SECURITY_CODE_MAX_LENGTH,
+  TOTP_CODE_PATTERN,
+  TOTP_DIGITS,
+  TOTP_PLACEHOLDER,
+} from '@/lib/auth/security/policy'
+import {
+  SignInError,
+  TOO_MANY_SIGN_IN_ATTEMPTS,
+  getOidcErrorMessage,
+} from '@/lib/auth/sign-in'
+import { getSetupResumePathAfterSignIn } from '@/lib/setup/navigation'
 import { cn } from '@/lib/utils'
 
 const disabledLink = 'disabled:cursor-not-allowed disabled:opacity-50'
@@ -29,6 +39,8 @@ interface LoginFormProps {
   disabledMessage: string
   oidcEnabled?: boolean
   oidcButtonText?: string
+  /** Link to password recovery by email. */
+  recoveryEnabled: boolean
 }
 
 export function LoginForm({
@@ -36,6 +48,7 @@ export function LoginForm({
   disabledMessage,
   oidcEnabled = false,
   oidcButtonText = 'Sign in with SSO',
+  recoveryEnabled,
 }: Readonly<LoginFormProps>) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -43,7 +56,6 @@ export function LoginForm({
     'password' | 'passkey' | 'oidc' | null
   >(null)
   const [error, setError] = useState<string | null>(null)
-  const [recoveryEnabled, setRecoveryEnabled] = useState(false)
   const [passkeysSupported, setPasskeysSupported] = useState(false)
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [useRecoveryCode, setUseRecoveryCode] = useState(false)
@@ -56,11 +68,6 @@ export function LoginForm({
 
   useEffect(() => {
     setPasskeysSupported(window.isSecureContext && !!window.PublicKeyCredential)
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
-      .then((email) =>
-        setRecoveryEnabled(email.enabled && email.recoveryEnabled)
-      )
-      .catch(() => {})
     return () => {
       pendingCredentials.current = null
     }
@@ -74,11 +81,7 @@ export function LoginForm({
   function finishSignIn() {
     pendingCredentials.current = null
     // Only allow these fixed callbacks on the current origin.
-    router.push(
-      searchParams.get('setupEmail') === '1'
-        ? getSetupResumePath(searchParams.get('setupStep'))
-        : '/dashboard'
-    )
+    router.push(getSetupResumePathAfterSignIn(searchParams) ?? '/dashboard')
     router.refresh()
   }
 
@@ -122,8 +125,8 @@ export function LoginForm({
         })
         if (!result?.ok || result.error) {
           setError(
-            result?.error === 'TooManyAttempts'
-              ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
+            result?.error === SignInError.TooManyAttempts
+              ? TOO_MANY_SIGN_IN_ATTEMPTS
               : 'Unable to sign in. Check your email address and use an unused passkey recovery code from your latest set.'
           )
           return
@@ -155,12 +158,12 @@ export function LoginForm({
         redirect: false,
         callbackUrl: '/dashboard',
       })
-      if (result?.error === 'TwoFactorRequired') {
+      if (result?.error === SignInError.TwoFactorRequired) {
         pendingCredentials.current = credentials
         setTwoFactorRequired(true)
         return
       }
-      if (result?.error === 'PasskeyRequired') {
+      if (result?.error === SignInError.PasskeyRequired) {
         pendingCredentials.current = null
         setTwoFactorRequired(false)
         setError(
@@ -170,8 +173,8 @@ export function LoginForm({
       }
       if (!result || result.error) {
         setError(
-          result?.error === 'TooManyAttempts'
-            ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
+          result?.error === SignInError.TooManyAttempts
+            ? TOO_MANY_SIGN_IN_ATTEMPTS
             : twoFactorRequired
               ? 'Unable to verify this code. Use a fresh authenticator code or an unused recovery code, or go back and check your password.'
               : 'Invalid email or password'
@@ -222,7 +225,7 @@ export function LoginForm({
                 autoComplete="one-time-code"
                 autoCapitalize="none"
                 spellCheck={false}
-                maxLength={80}
+                maxLength={SECURITY_CODE_MAX_LENGTH}
                 required
                 disabled={busy}
                 data-sensitive="true"
@@ -255,13 +258,17 @@ export function LoginForm({
                 name="code"
                 inputMode={useRecoveryCode ? 'text' : 'numeric'}
                 placeholder={
-                  useRecoveryCode ? 'Enter your recovery code' : '000000'
+                  useRecoveryCode
+                    ? 'Enter your recovery code'
+                    : TOTP_PLACEHOLDER
                 }
                 autoComplete="one-time-code"
                 autoCapitalize="none"
                 spellCheck={false}
-                pattern={useRecoveryCode ? undefined : '[0-9]{6}'}
-                maxLength={useRecoveryCode ? 32 : 6}
+                pattern={useRecoveryCode ? undefined : TOTP_CODE_PATTERN}
+                maxLength={
+                  useRecoveryCode ? RECOVERY_CODE_INPUT_LENGTH : TOTP_DIGITS
+                }
                 required
                 disabled={busy}
                 autoFocus

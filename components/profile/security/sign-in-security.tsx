@@ -1,18 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
 import { Check, KeyRound, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
-import { signOut, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 
 import {
   type AccountPasskey,
   hasRecentSecurityProof,
   passkeyError,
-  securityRequest,
 } from '@/components/auth/security-api'
-import { MetaLine } from '@/components/profile/meta-line'
+import { MetaLine } from '@/components/shared/meta-line'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,7 +32,18 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import {
+  MAX_PASSKEYS,
+  SECURITY_CHALLENGE_MINUTES,
+  TOTP_CODE_PATTERN,
+  TOTP_DIGITS,
+  TOTP_PLACEHOLDER,
+} from '@/lib/auth/security/policy'
+import { apiRequest } from '@/lib/client/request'
+
+import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useSecurityStatus } from '@/hooks/use-security-status'
+import { useSignOut } from '@/hooks/use-sign-out'
 
 import { checkManagementProof } from './management-proof'
 import { RecoveryCodes } from './recovery-codes'
@@ -93,19 +103,14 @@ function AccountSignInSecurity() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const lifecycle = useRef<AbortController | null>(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    lifecycle.current = controller
-    return () => {
-      controller.abort()
-      if (lifecycle.current === controller) lifecycle.current = null
-    }
-  }, [])
-  const isActive = (controller: AbortController | null) =>
-    !!controller &&
-    lifecycle.current === controller &&
-    !controller.signal.aborted
+  const lifetime = useRequestLifetime()
+  const signOut = useSignOut({
+    onError: () => {
+      if (lifetime.current.signal.aborted) return
+      setError('Unable to open sign-in. Open the login page to sign in again.')
+      setBusy(false)
+    },
+  })
 
   useEffect(() => {
     setSupported(window.isSecureContext && !!window.PublicKeyCredential)
@@ -122,8 +127,8 @@ function AccountSignInSecurity() {
   }, [codes])
 
   async function openAction(next: Action, passkey?: AccountPasskey) {
-    const controller = lifecycle.current
-    if (!isActive(controller)) return
+    const { signal } = lifetime.current
+    if (signal.aborted) return
     setAction(next)
     setSelectedPasskey(passkey ?? null)
     setSetup(null)
@@ -135,13 +140,13 @@ function AccountSignInSecurity() {
     setBusy(true)
     try {
       const result = await refetch()
-      if (!isActive(controller)) return
+      if (signal.aborted) return
       if (result.error)
         setError(
           'Unable to refresh your security settings. Try again or sign in again.'
         )
     } finally {
-      if (isActive(controller)) setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
 
@@ -153,34 +158,15 @@ function AccountSignInSecurity() {
   }
 
   async function signInAgain() {
-    const controller = lifecycle.current
-    if (!isActive(controller)) return
+    if (lifetime.current.signal.aborted) return
     setBusy(true)
-    try {
-      await signOut({ callbackUrl: '/auth/login?local=1' })
-    } catch {
-      if (!isActive(controller)) return
-      setError('Unable to open sign-in. Open the login page to sign in again.')
-      setBusy(false)
-    }
+    await signOut()
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const controller = lifecycle.current
-    if (!action || busy || !controller || !isActive(controller)) return
-    const active = () => isActive(controller)
-    const signal = controller.signal
-    async function accountRequest<T>(
-      path: string,
-      body?: unknown,
-      method?: string
-    ) {
-      if (!active()) throw new DOMException('Aborted', 'AbortError')
-      const result = await securityRequest<T>(path, body, method, signal)
-      if (!active()) throw new DOMException('Aborted', 'AbortError')
-      return result
-    }
+    const { signal } = lifetime.current
+    if (!action || busy || signal.aborted) return
     const form = event.currentTarget
     const proof = readSecurityProof(form)
     const data = new FormData(form)
@@ -194,7 +180,7 @@ function AccountSignInSecurity() {
           proof,
           action === 'require-passkey'
         )
-        if (!active()) return
+        if (signal.aborted) return
         if (requirement) {
           setError(requirement)
           return
@@ -202,78 +188,93 @@ function AccountSignInSecurity() {
       }
       if (action === 'setup') {
         if (!setup) {
-          const next = await accountRequest<Setup>(
+          const next = await apiRequest<Setup>(
             '/api/auth/security/totp/setup',
-            proof
+            { body: proof, signal }
           )
           // Generate the QR locally: the provisioning secret never goes to a third-party image service.
           const QRCode = await import('qrcode').catch(() => undefined)
-          if (!active()) return
+          if (signal.aborted) return
           const qr = QRCode
             ? await QRCode.toDataURL(next.uri, { width: 224, margin: 2 }).catch(
                 () => undefined
               )
             : undefined
-          if (!active()) return
+          if (signal.aborted) return
           setSetup({ ...next, qr })
         } else {
-          const result = await accountRequest<{ recoveryCodes: string[] }>(
+          const result = await apiRequest<{ recoveryCodes: string[] }>(
             '/api/auth/security/totp/enable',
-            { code: data.get('setup-code'), challengeId: setup.challengeId }
+            {
+              body: {
+                code: data.get('setup-code'),
+                challengeId: setup.challengeId,
+              },
+              signal,
+            }
           )
           setSetup(null)
           setCodes(result.recoveryCodes)
         }
       } else if (action === 'codes') {
-        const result = await accountRequest<{ recoveryCodes: string[] }>(
+        const result = await apiRequest<{ recoveryCodes: string[] }>(
           '/api/auth/security/recovery-codes',
-          proof
+          { body: proof, signal }
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'disable') {
-        await accountRequest('/api/auth/security/totp/disable', proof)
+        await apiRequest('/api/auth/security/totp/disable', {
+          body: proof,
+          signal,
+        })
         setComplete(true)
       } else if (action === 'require-passkey' || action === 'passkey-codes') {
-        const result = await accountRequest<{ recoveryCodes: string[] }>(
+        const result = await apiRequest<{ recoveryCodes: string[] }>(
           action === 'require-passkey'
             ? '/api/auth/security/passkeys/require'
             : '/api/auth/security/passkeys/recovery-codes',
-          action === 'require-passkey' ? { required: true } : {}
+          {
+            body: action === 'require-passkey' ? { required: true } : {},
+            signal,
+          }
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'allow-other-methods') {
-        await accountRequest('/api/auth/security/passkeys/require', {
-          required: false,
+        await apiRequest('/api/auth/security/passkeys/require', {
+          body: { required: false },
+          signal,
         })
         setComplete(true)
       } else if (action === 'add-passkey') {
         const { startRegistration } = await import('@simplewebauthn/browser')
-        const result = await accountRequest<{
+        const result = await apiRequest<{
           options: PublicKeyCredentialCreationOptionsJSON
           challengeId: string
         }>('/api/auth/security/passkeys/options', {
-          ...proof,
-          name: data.get('passkey-name'),
+          body: { ...proof, name: data.get('passkey-name') },
+          signal,
         })
-        if (!active()) return
         const response = await startRegistration({
           optionsJSON: result.options,
         })
-        await accountRequest('/api/auth/security/passkeys/verify', {
-          challengeId: result.challengeId,
-          response,
+        await apiRequest('/api/auth/security/passkeys/verify', {
+          body: { challengeId: result.challengeId, response },
+          signal,
         })
         setComplete(true)
       } else if (selectedPasskey) {
-        await accountRequest(
+        await apiRequest(
           `/api/auth/security/passkeys/${encodeURIComponent(selectedPasskey.id)}`,
           {
-            ...proof,
-            ...(action === 'rename-passkey'
-              ? { name: data.get('passkey-name') }
-              : {}),
-          },
-          action === 'rename-passkey' ? 'PATCH' : 'DELETE'
+            method: action === 'rename-passkey' ? 'PATCH' : 'DELETE',
+            body: {
+              ...proof,
+              ...(action === 'rename-passkey'
+                ? { name: data.get('passkey-name') }
+                : {}),
+            },
+            signal,
+          }
         )
         if (action === 'rename-passkey') {
           setAction(null)
@@ -284,12 +285,12 @@ function AccountSignInSecurity() {
         }
       }
     } catch (cause) {
-      if (!active()) return
+      if (signal.aborted) return
       setError(passkeyError(cause))
       // A recent passkey/SSO proof may have expired while this dialog was open.
       void refetch()
     } finally {
-      if (active()) setBusy(false)
+      if (!signal.aborted) setBusy(false)
     }
   }
 
@@ -505,7 +506,7 @@ function AccountSignInSecurity() {
                 disabled={
                   !supported ||
                   !status.passkeysAvailable ||
-                  status.passkeys.length >= 10
+                  status.passkeys.length >= MAX_PASSKEYS
                 }
                 onClick={() => openAction('add-passkey')}
               >
@@ -518,10 +519,10 @@ function AccountSignInSecurity() {
                   configured HTTPS address, or localhost for development.
                 </p>
               )}
-              {status.passkeys.length >= 10 && (
+              {status.passkeys.length >= MAX_PASSKEYS && (
                 <p className="text-xs text-muted-foreground">
-                  You can keep up to 10 passkeys. Remove one before adding
-                  another.
+                  You can keep up to {MAX_PASSKEYS} passkeys. Remove one before
+                  adding another.
                 </p>
               )}
               {status.passkeyRequired && status.passkeys.length === 1 && (
@@ -723,8 +724,9 @@ function AccountSignInSecurity() {
                         </code>
                       </div>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Keep this key private. Setup expires after 5 minutes;
-                        cancel and start again if needed.
+                        Keep this key private. Setup expires after{' '}
+                        {SECURITY_CHALLENGE_MINUTES} minutes; cancel and start
+                        again if needed.
                       </p>
                     </div>
                     <div className="space-y-2">
@@ -733,11 +735,11 @@ function AccountSignInSecurity() {
                         data-sensitive="true"
                         id="setup-code"
                         name="setup-code"
-                        placeholder="000000"
+                        placeholder={TOTP_PLACEHOLDER}
                         inputMode="numeric"
                         autoComplete="one-time-code"
-                        pattern="[0-9]{6}"
-                        maxLength={6}
+                        pattern={TOTP_CODE_PATTERN}
+                        maxLength={TOTP_DIGITS}
                         required
                         disabled={busy}
                         autoFocus
@@ -769,10 +771,10 @@ function AccountSignInSecurity() {
                       showHint={action !== 'setup'}
                       onBusyChange={setBusy}
                       onConfirmed={async () => {
-                        const controller = lifecycle.current
-                        if (!isActive(controller)) return
+                        const { signal } = lifetime.current
+                        if (signal.aborted) return
                         const result = await refetch()
-                        if (!isActive(controller)) return
+                        if (signal.aborted) return
                         if (result.error) throw result.error
                         setError(null)
                       }}

@@ -1,6 +1,19 @@
 import { Prisma } from '@prisma/client'
 
-export class FileListInputError extends Error {}
+import { HttpError } from '@/lib/http/errors'
+import {
+  BATCH_LIMIT,
+  UNFILED,
+  UNTAGGED,
+  VISIBILITY_FILTERS,
+} from '@/lib/library/contract'
+
+export class FileListInputError extends HttpError {
+  constructor(message: string) {
+    super(400, message)
+    this.name = 'FileListInputError'
+  }
+}
 
 function dateValue(value: string, name: string): Date {
   const date = new Date(value)
@@ -23,19 +36,19 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
     const ids = idFilters[0].split(',')
     if (
       idFilters.length !== 1 ||
-      ids.length > 100 ||
+      ids.length > BATCH_LIMIT ||
       new Set(ids).size !== ids.length ||
       ids.some((id) => !id || id.length > 128 || /[\s\x00-\x1f\x7f]/.test(id))
     )
       throw new FileListInputError(
-        'ids must contain 1 to 100 distinct file IDs, each at most 128 characters without whitespace or control characters'
+        `ids must contain 1 to ${BATCH_LIMIT} distinct file IDs, each at most 128 characters without whitespace or control characters`
       )
     add({ id: { in: ids } }, Prisma.sql`f.id IN (${Prisma.join(ids)})`)
   }
 
   const folder = params.get('folder')
   if (folder) {
-    if (folder === 'unfiled')
+    if (folder === UNFILED)
       add({ folderId: null }, Prisma.sql`f."vaultFolderId" IS NULL`)
     else
       add(
@@ -49,7 +62,7 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
 
   const tag = params.get('tag')
   if (tag) {
-    if (tag === 'untagged')
+    if (tag === UNTAGGED)
       add(
         { tags: { none: { excluded: false } } },
         Prisma.sql`NOT EXISTS (SELECT 1 FROM "VaultFileTag" ft
@@ -108,20 +121,25 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
   if (visibility.length) {
     const alternatives: Prisma.FileWhereInput[] = []
     const sqlAlternatives: Prisma.Sql[] = []
-    for (const filter of visibility) {
-      if (filter === 'hasPassword') {
+    for (const value of visibility) {
+      // Visibility names match in any letter case, as they always have.
+      const filter = VISIBILITY_FILTERS.find((option) =>
+        'visibility' in option
+          ? option.visibility === value.toUpperCase()
+          : option.value === value
+      )
+      if (!filter)
+        throw new FileListInputError(
+          'visibility must be public, private, or hasPassword'
+        )
+      if ('visibility' in filter) {
+        alternatives.push({ visibility: filter.visibility })
+        sqlAlternatives.push(
+          Prisma.sql`f.visibility = ${filter.visibility}::"FileVisibility"`
+        )
+      } else {
         alternatives.push({ password: { not: null } })
         sqlAlternatives.push(Prisma.sql`f.password IS NOT NULL`)
-      } else {
-        const value = filter.toUpperCase()
-        if (value !== 'PUBLIC' && value !== 'PRIVATE')
-          throw new FileListInputError(
-            'visibility must be public, private, or hasPassword'
-          )
-        alternatives.push({ visibility: value })
-        sqlAlternatives.push(
-          Prisma.sql`f.visibility = ${value}::"FileVisibility"`
-        )
       }
     }
     add(

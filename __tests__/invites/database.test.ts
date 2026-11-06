@@ -25,6 +25,9 @@ vi.mock('@/lib/auth', () => ({
 const databaseUrl = process.env.FLARE_INVITES_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite.sequential('invites against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let service: typeof import('@/lib/permissions/server')
@@ -324,7 +327,9 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     ).toHaveLength(1)
 
     authentication.userId = 'admin'
-    const read = await policy.GET()
+    const read = await policy.GET(
+      new Request('http://localhost/api/settings/invites')
+    )
     expect(await read.json()).toEqual({
       everyoneCanInvite: true,
       limits: { activeInvites: 5, usesPerInvite: 1, lifetimeDays: 30 },
@@ -456,6 +461,30 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     })
     expect((await setEveryone(true, 'security')).status).toBe(200)
     expect((await setEveryone(true, 'member')).status).toBe(403)
+  })
+
+  it('shows an invite as paused whenever registration would refuse it', async () => {
+    const invite = (await create()).body.invite
+    const everyone = await prisma.role.findUniqueOrThrow({
+      where: { systemKey: 'everyone' },
+    })
+    // Only a direct database edit can attach Everyone; the API refuses it.
+    await prisma.invite.update({
+      where: { id: invite.id },
+      data: { roles: { connect: { id: everyone.id } } },
+    })
+    expect((await list('scope=mine')).body.invites).toEqual([
+      expect.objectContaining({ id: invite.id, status: 'paused' }),
+    ])
+    expect(await invites.inspectInvite(invite.token)).toEqual({
+      status: 'paused',
+    })
+    expect((await join(invite.token, 'Everyone Person')).body.code).toBe(
+      'invite_paused'
+    )
+    expect(
+      await prisma.invite.findUniqueOrThrow({ where: { id: invite.id } })
+    ).toMatchObject({ uses: 0 })
   })
 
   it('rechecks delegated role grants when the invite is used', async () => {
@@ -602,7 +631,9 @@ suite.sequential('invites against disposable PostgreSQL', () => {
         },
       })
     )
-    const read = await (await policy.GET()).json()
+    const read = await (
+      await policy.GET(new Request('http://localhost/api/settings/invites'))
+    ).json()
     expect(read.limits).toEqual({
       activeInvites: 2,
       usesPerInvite: 3,
@@ -635,9 +666,8 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     const invite = (await create({ note: 'Neighbor' }, 'inviter')).body.invite
     const joined = await join(invite.token, 'Kept Person')
     expect(joined.status).toBe(200)
-    const { deleteAccountWithStorageCleanup } =
-      await import('@/lib/storage/deletion')
-    await deleteAccountWithStorageCleanup('admin', 'inviter', 'users.delete')
+    const { deleteAccount } = await import('@/lib/users/delete-account')
+    await deleteAccount('admin', 'inviter', 'users.delete')
     expect(await prisma.invite.count()).toBe(0)
     expect(
       await prisma.auditEvent.findFirst({

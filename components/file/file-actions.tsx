@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 
-import DOMPurify from 'dompurify'
 import {
   Check,
   Copy,
@@ -13,71 +12,45 @@ import {
   ScanText,
 } from 'lucide-react'
 
-import {
-  OcrDialog,
-  type OcrDialogState,
-  ocrDialogState,
-  requestOcr,
-} from '@/components/shared/ocr-dialog'
+import type { FileViewerFile } from '@/components/file/viewer/types'
+import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
+import { type FileUrls, fileUrls } from '@/lib/files/urls'
 import { cn } from '@/lib/utils'
 
-import { useFileActions } from '@/hooks/use-file-actions'
+import { useOcr } from '@/hooks/use-ocr'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileActionsProps {
-  urlPath: string
-  name: string
+  file: Pick<FileViewerFile, 'id' | 'name' | 'urlPath'>
   verifiedPassword?: string
   showOcr?: boolean
   isTextBased?: boolean
-  content?: string
-  fileId?: string
 }
 
 export function FileActions({
-  urlPath,
-  name,
+  file,
   verifiedPassword,
   showOcr = false,
   isTextBased = false,
-  content,
-  fileId,
 }: FileActionsProps) {
   const { toast } = useToast()
-  const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
-  const [ocrText, setOcrText] = useState<string | null>(null)
-  const [ocrError, setOcrError] = useState<string | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
-  const [canRetryOcr, setCanRetryOcr] = useState(false)
-  const [isLoadingOcr, setIsLoadingOcr] = useState(false)
-  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
-  const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
+  const [urls, setUrls] = useState<FileUrls>()
+  const ocr = useOcr(urls?.ocr)
 
   const [copied, setCopied] = useState(false)
   const [isCopyingText, setIsCopyingText] = useState(false)
 
-  const { download, openRaw } = useFileActions({
-    urlPath,
-    name,
-    fileId,
-    verifiedPassword,
-  })
-
-  const sanitizeUrl = (url: string): string => {
-    return DOMPurify.sanitize(url)
-  }
-
+  // Set once hydrated, so the actions stay disabled until they can run.
   useEffect(() => {
-    const passwordParam = verifiedPassword
-      ? `?password=${encodeURIComponent(verifiedPassword)}`
-      : ''
-    const sanitizedUrlPath = DOMPurify.sanitize(urlPath)
-    const fileUrl = `/api/files${sanitizedUrlPath}${passwordParam}`
-    const rawUrl = `${sanitizedUrlPath}/raw${passwordParam}`
-    setUrls({ fileUrl, rawUrl })
-  }, [urlPath, verifiedPassword])
+    setUrls(
+      fileUrls(
+        { id: file.id, urlPath: file.urlPath },
+        { password: verifiedPassword }
+      )
+    )
+  }, [file.id, file.urlPath, verifiedPassword])
 
   useEffect(() => {
     if (!copied) return
@@ -85,9 +58,25 @@ export function FileActions({
     return () => window.clearTimeout(timeout)
   }, [copied])
 
+  const download = () => {
+    if (!urls) return
+    const link = document.createElement('a')
+    link.href = urls.download
+    link.download = file.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const openRaw = () => {
+    if (urls) window.open(urls.raw, '_blank')
+  }
+
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}${urlPath}`)
+      await navigator.clipboard.writeText(
+        fileUrls(file, { origin: window.location.origin }).page
+      )
       setCopied(true)
     } catch {
       toast({
@@ -102,13 +91,9 @@ export function FileActions({
     if (!urls) return
     setIsCopyingText(true)
     try {
-      let text = content
-      if (text === undefined) {
-        const response = await fetch(sanitizeUrl(urls.fileUrl))
-        if (!response.ok) throw new Error('Could not load file content')
-        text = await response.text()
-      }
-      await navigator.clipboard.writeText(text)
+      const response = await fetch(urls.content)
+      if (!response.ok) throw new Error('Could not load file content')
+      await navigator.clipboard.writeText(await response.text())
       toast({
         title: 'Text copied',
         description: 'File content is ready to paste.',
@@ -121,43 +106,6 @@ export function FileActions({
       })
     } finally {
       setIsCopyingText(false)
-    }
-  }
-
-  const applyOcrState = (state: OcrDialogState) => {
-    setOcrText(state.text)
-    setOcrConfidence(state.confidence)
-    setOcrNotice(state.notice)
-    setOcrError(state.error)
-    setCanRetryOcr(state.canRetry)
-  }
-
-  const handleOcr = async () => {
-    if (!fileId) {
-      toast({
-        title: 'Error',
-        description: 'File ID is required for OCR',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    try {
-      setIsLoadingOcr(true)
-      setOcrError(null)
-      setOcrNotice(null)
-      setIsOcrDialogOpen(true)
-      const sanitizedFileId = DOMPurify.sanitize(fileId)
-      const passwordParam = verifiedPassword
-        ? `?password=${encodeURIComponent(verifiedPassword)}`
-        : ''
-      const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
-
-      applyOcrState(ocrDialogState(await requestOcr(sanitizeUrl(ocrUrl))))
-    } catch {
-      applyOcrState(ocrDialogState(null))
-    } finally {
-      setIsLoadingOcr(false)
     }
   }
 
@@ -214,16 +162,16 @@ export function FileActions({
         <Button
           variant="outline"
           size="sm"
-          onClick={handleOcr}
-          disabled={!urls || isLoadingOcr}
+          onClick={() => void ocr.extract()}
+          disabled={!urls || ocr.loading}
           className={buttonClassName}
         >
-          {isLoadingOcr ? (
+          {ocr.loading ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <ScanText className="h-4 w-4" aria-hidden="true" />
           )}
-          {isLoadingOcr ? 'Reading image…' : 'Extract text'}
+          {ocr.loading ? 'Reading image…' : 'Extract text'}
         </Button>
       )}
       <Button
@@ -236,16 +184,7 @@ export function FileActions({
         <ExternalLink className="h-4 w-4" aria-hidden="true" />
         Open original<span className="sr-only"> in a new tab</span>
       </Button>
-      <OcrDialog
-        isOpen={isOcrDialogOpen}
-        onOpenChange={setIsOcrDialogOpen}
-        isLoading={isLoadingOcr}
-        error={ocrError}
-        notice={ocrNotice}
-        onRetry={canRetryOcr ? () => void handleOcr() : undefined}
-        text={ocrText}
-        confidence={ocrConfidence}
-      />
+      <OcrDialog {...ocr.dialog} />
     </div>
   )
 }

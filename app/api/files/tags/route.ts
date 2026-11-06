@@ -1,55 +1,33 @@
-import { apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
-import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
+import { requireAccount } from '@/lib/http/access'
+import { parseInput, readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
+import { BATCH_LIMIT } from '@/lib/library/contract'
+import { tagRoutes } from '@/lib/tags/http'
 import { fileTagMembership } from '@/lib/tags/membership'
 import { fileTagsInputSchema } from '@/lib/tags/schema'
 import { TagError, changeFileTags } from '@/lib/tags/service'
 
-async function handleGET(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const params = new URL(request.url).searchParams
-    if (params.getAll('fileIds').length !== 1)
-      throw new TagError('Choose between 1 and 100 files.')
-    const fileIds = fileTagsInputSchema.shape.fileIds.parse(
-      params
-        .get('fileIds')!
-        .split(',')
-        .map((id) => id.trim())
-    )
-    const files = await fileTagMembership(user.id, fileIds)
-    const result = apiResponse({ files })
-    result.headers.set('Cache-Control', 'private, no-store')
-    return result
-  } catch (error) {
-    return tagErrorResponse(error)
-  }
-}
+const api = routes('/api/files/tags', tagRoutes)
 
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/files/tags',
-  })(request)
-}
+export const GET = api(async (request) => {
+  const user = await requireAccount(request)
+  const params = new URL(request.url).searchParams
+  if (params.getAll('fileIds').length !== 1)
+    throw new TagError(`Choose between 1 and ${BATCH_LIMIT} files.`)
+  const fileIds = parseInput(
+    fileTagsInputSchema.shape.fileIds,
+    params
+      .get('fileIds')!
+      .split(',')
+      .map((id) => id.trim())
+  )
+  return apiResponse({ files: await fileTagMembership(user.id, fileIds) })
+})
 
-async function handlePATCH(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const guarded = tagMutationGuard(request)
-    if (guarded) return guarded
-    const input = fileTagsInputSchema.parse(await request.json())
-    const count = await changeFileTags(user.id, input)
-    return apiResponse({ count })
-  } catch (error) {
-    return tagErrorResponse(error)
-  }
-}
-
-export async function PATCH(request: Request) {
-  return withAuditRoute(async () => handlePATCH(request), {
-    route: '/api/files/tags',
-  })(request)
-}
+export const PATCH = api(async (request) => {
+  const user = await requireAccount(request)
+  const input = await readJson(request, fileTagsInputSchema)
+  const count = await changeFileTags(user.id, input)
+  return apiResponse({ count })
+})

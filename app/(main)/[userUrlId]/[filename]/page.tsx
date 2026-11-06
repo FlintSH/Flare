@@ -1,6 +1,10 @@
+import { cache } from 'react'
+
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
+
+import type { Prisma } from '@prisma/client'
 
 import {
   FILE_PASSWORD_DESCRIPTION,
@@ -13,17 +17,16 @@ import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
 import { Footer } from '@/components/layout/footer'
 
-import { detectArchiveFormat } from '@/lib/archives/shared'
 import { recordAudit } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
 import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
-import { shareMetadataText } from '@/lib/customization/sharing'
-import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess } from '@/lib/files/access'
-import { resolveFileUrlPath } from '@/lib/files/resolve'
-import { languageFromFilename } from '@/lib/files/text-language'
+import {
+  shareMetadataText,
+  showsShareFooter,
+} from '@/lib/customization/sharing'
+import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
+import { fileKind } from '@/lib/files/file-kind'
+import { fileUrls } from '@/lib/files/urls'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -35,59 +38,30 @@ interface FilePageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-interface PrismaFile {
-  id: string
-  name: string
-  urlPath: string
-  visibility: 'PUBLIC' | 'PRIVATE'
-  password: string | null
-  userId: string
-  mimeType: string
-  size: number
-  uploadedAt: Date
-  path: string
-  user?: {
-    name: string | null
-    image: string | null
-    urlId: string
-  } | null
+async function passwordParam(searchParams: FilePageProps['searchParams']) {
+  const { password } = await searchParams
+  return Array.isArray(password) ? password[0] : password
 }
 
-function prepareFileProps(file: PrismaFile) {
-  const plainFile = JSON.parse(
-    JSON.stringify({
-      id: file.id,
-      name: file.name,
-      urlPath: file.urlPath,
-      visibility: file.visibility,
-      password: file.password,
-      userId: file.userId,
-      mimeType: file.mimeType,
-      size: file.size,
-      uploadedAt: file.uploadedAt,
-      path: file.path,
-      user: {
-        name: file.user?.name || '',
-        image: file.user?.image || undefined,
-        urlId: file.user?.urlId || '',
-      },
-    })
-  )
+const sharedFileFields = {
+  id: true,
+  name: true,
+  urlPath: true,
+  path: true,
+  mimeType: true,
+  size: true,
+  visibility: true,
+  password: true,
+  userId: true,
+  uploadOptions: true,
+  folderId: true,
+  user: { select: { name: true, image: true } },
+} satisfies Prisma.FileSelect
 
-  return {
-    id: plainFile.id,
-    name: plainFile.name,
-    urlPath: plainFile.urlPath,
-    visibility: plainFile.visibility,
-    password: plainFile.password,
-    userId: plainFile.userId,
-    mimeType: plainFile.mimeType,
-    size: plainFile.size,
-    uploadedAt: plainFile.uploadedAt,
-    path: plainFile.path,
-    user: plainFile.user,
-  }
-}
+// The metadata and the page read the file once per request.
+const findSharedFile = cache((userUrlId: string, filename: string) =>
+  findFile({ userUrlId, filename }, sharedFileFields)
+)
 
 export async function generateMetadata({
   params,
@@ -96,32 +70,15 @@ export async function generateMetadata({
   const { userUrlId, filename } = await params
   const appearance = (await getConfig()).settings.customization.published
   const headersList = await headers()
-  const session = await getAccessSession()
-  const providedPassword = (await searchParams).password as string | undefined
+  const providedPassword = await passwordParam(searchParams)
 
-  const path = headersList.get('x-invoke-path') || ''
-  if (path.endsWith('/raw')) {
+  const file = await findSharedFile(userUrlId, filename)
+
+  if (!file) {
     return {}
   }
 
-  const urlPath = await resolveFileUrlPath(userUrlId, filename)
-
-  if (!urlPath) {
-    return {}
-  }
-
-  const file = await prisma.file.findUnique({
-    where: { urlPath },
-    include: { user: true },
-  })
-
-  if (!file || !file.user) {
-    return {}
-  }
-
-  const access = await checkFileAccess(file, session, providedPassword, {
-    requester: requestIp(headersList),
-  })
+  const { access } = await checkPageAccess(file, providedPassword)
   if (!access.allowed) {
     return {
       title: `Protected file - ${appearance.brand.name}`,
@@ -140,10 +97,10 @@ export async function generateMetadata({
     name: file.user.name || 'Anonymous',
   }
 
-  const isImage = cleanFile.mimeType.startsWith('image/')
-  const isVideo = cleanFile.mimeType.startsWith('video/')
-  const isAudio = cleanFile.mimeType.startsWith('audio/')
-  const isMediaFile = isImage || isVideo || isAudio
+  const { kind } = fileKind(file)
+  const isImage = kind === 'image'
+  const isVideo = kind === 'video'
+  const isMediaFile = isImage || isVideo || kind === 'audio'
   const formattedSize = formatFileSize(cleanFile.size)
 
   const {
@@ -160,13 +117,13 @@ export async function generateMetadata({
   const host = headersList.get('host') || 'localhost:3000'
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
   const baseUrl = `${protocol}://${host}`
-  const rawUrl = `${baseUrl}${urlPath}/raw`
+  const rawUrl = fileUrls(file, { origin: baseUrl }).raw
 
   let videoUrl = rawUrl
   if (isVideo) {
     const storageProvider = await getStorageProvider()
     const publicUrl = await storageProvider.getPublicUrl(file.path)
-    videoUrl = publicUrl ?? `${baseUrl}${urlPath}/raw`
+    videoUrl = publicUrl ?? rawUrl
   }
 
   const metadata: Metadata = {
@@ -219,41 +176,22 @@ export default async function FilePage({
   params,
   searchParams,
 }: FilePageProps) {
-  const session = await getAccessSession()
   const config = await getConfig()
   const appearance = config.settings.customization.published
-  const showFooter =
-    appearance.sharing.showFooter ?? config.settings.general.credits.showFooter
+  const showFooter = showsShareFooter(
+    appearance,
+    config.settings.general.credits.showFooter
+  )
   const { userUrlId, filename } = await params
-  const providedPassword = (await searchParams).password as string | undefined
+  const providedPassword = await passwordParam(searchParams)
 
-  const urlPath = await resolveFileUrlPath(userUrlId, filename)
-
-  if (!urlPath) {
-    notFound()
-  }
-
-  const file = await prisma.file.findUnique({
-    where: { urlPath },
-    include: { user: true },
-  })
+  const file = await findSharedFile(userUrlId, filename)
 
   if (!file) {
     notFound()
   }
 
-  await prisma.file.update({
-    where: { id: file.id },
-    data: { views: { increment: 1 } },
-  })
-
-  const serializedFile = prepareFileProps(file)
-
-  // Check the database record itself; the serialized copy is for rendering.
-  const requestHeaders = await headers()
-  const access = await checkFileAccess(file, session, providedPassword, {
-    requester: requestIp(requestHeaders),
-  })
+  const { session, access } = await checkPageAccess(file, providedPassword)
 
   await recordAudit({
     action: 'file.view',
@@ -281,17 +219,19 @@ export default async function FilePage({
         footer={showFooter ? <Footer /> : undefined}
       >
         <FilePasswordForm
-          action={urlPath}
+          action={fileUrls(file).page}
           problem={filePasswordProblem(access)}
         />
       </PublicState>
     )
   }
 
-  const isImage = serializedFile.mimeType.startsWith('image/')
-  const isVideo = serializedFile.mimeType.startsWith('video/')
-  const isPdf = serializedFile.mimeType === 'application/pdf'
-  const isMediaFile = isImage || isVideo || isPdf
+  // Only a visitor who may see the file adds a view; refusals never count.
+  await countView(file.id)
+
+  // From the real name, which the page may hide.
+  const type = fileKind(file)
+  const isMediaFile = ['image', 'video', 'pdf'].includes(type.kind)
 
   // Send only viewer fields to the client. In particular, never serialize the
   // uploader profile or the stored password hash into a public page.
@@ -300,20 +240,13 @@ export default async function FilePage({
     name: appearance.sharing.showFilename ? file.name : 'Shared file',
     urlPath: file.urlPath,
     visibility: file.visibility,
-    password:
-      file.password && !access.isOwner && !access.canModerate
-        ? 'protected'
-        : null,
-    userId: access.isOwner ? file.userId : '',
     mimeType: file.mimeType,
-    // Detect using the real name while keeping the filename presentation setting.
-    archiveFormat: detectArchiveFormat(file.name, file.mimeType),
-    textLanguage: languageFromFilename(file.name),
+    ...type,
   }
 
   const backLink = await sharedFolderBackLink(
     file,
-    requestHeaders.get('referer')
+    (await headers()).get('referer')
   )
 
   return (

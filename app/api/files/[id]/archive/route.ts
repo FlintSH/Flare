@@ -1,36 +1,30 @@
 import {
   archiveActor,
-  archiveRoute,
+  archiveRoutes,
   parseListingQuery,
 } from '@/lib/archives/http'
 import { listArchive } from '@/lib/archives/service'
-import { setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditTarget } from '@/lib/audit'
+import { routes } from '@/lib/http/route'
+import { actionPermissions } from '@/lib/permissions/actions'
 
-export const runtime = 'nodejs'
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(
-    async () => {
-      const { id } = await params
-      setAuditTarget({ type: 'file', id })
-      return archiveRoute(async () => {
-        const actor = await archiveActor(request, ['files.read'])
-        const query = new URL(request.url).searchParams
-        return listArchive(actor, id, {
-          ...parseListingQuery({
-            progress: query.get('progress') ?? undefined,
-            after: query.get('after') ?? undefined,
-          }),
-          signal: request.signal,
-        })
-      })
-    },
-    {
-      action: 'archive.browse',
-      category: 'archives',
-      route: '/api/files/[id]/archive',
-    }
-  )(request)
-}
+type Context = { params: Promise<{ id: string }> }
+
+const api = routes('/api/files/[id]/archive', archiveRoutes)
+
+export const GET = api(
+  async (request, { params }: Context) => {
+    const { id } = await params
+    setAuditTarget({ type: 'file', id })
+    const actor = await archiveActor(request, actionPermissions('viewFiles'))
+    const query = new URL(request.url).searchParams
+    return listArchive(actor, id, {
+      ...parseListingQuery({
+        progress: query.get('progress') ?? undefined,
+        after: query.get('after') ?? undefined,
+      }),
+      signal: request.signal,
+    })
+  },
+  { audit: { action: 'archive.browse', category: 'archives' } }
+)

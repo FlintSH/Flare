@@ -2,17 +2,19 @@ import { redirect } from 'next/navigation'
 
 import { ProfileClient } from '@/components/profile'
 
-import { getPageSession } from '@/lib/auth/page-session'
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
-import { hasPermission } from '@/lib/permissions/catalog'
 import {
   PROFILE_SECTIONS,
   PROFILE_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
-import { formatFileSize } from '@/lib/utils'
+import { storageQuotaBytes } from '@/lib/uploads/capacity'
+import { bytesToMB, formatFileSize } from '@/lib/utils'
+
+import { requireDashboardPage } from '../page-access'
 
 export default async function ProfilePage({
   searchParams,
@@ -26,11 +28,7 @@ export default async function ProfilePage({
     'account',
     PROFILE_SECTION_ALIASES
   )
-  const session = await getPageSession()
-
-  if (!session?.user) {
-    redirect('/auth/login')
-  }
+  const session = await requireDashboardPage('/dashboard/profile')
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -53,16 +51,12 @@ export default async function ProfilePage({
   })
 
   if (!user) {
-    redirect('/auth/login')
+    redirect(SIGN_IN_PATH)
   }
 
-  const config = await getConfig()
-  const quotasEnabled =
-    config.settings.general.storage.quotas.enabled &&
-    !hasPermission(session.user, 'quotas.bypass')
-  const defaultQuota = config.settings.general.storage.quotas.default
-  const quotaMB =
-    defaultQuota.unit === 'GB' ? defaultQuota.value * 1024 : defaultQuota.value
+  const quota = storageQuotaBytes(await getConfig(), session.user)
+  const quotasEnabled = quota !== null
+  const quotaMB = bytesToMB(quota ?? 0)
   const formattedQuota = formatFileSize(quotaMB)
   const formattedUsed = formatFileSize(user.storageUsed)
   const usagePercentage =

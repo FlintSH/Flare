@@ -3,7 +3,6 @@
 import { useRef, useState } from 'react'
 
 import { ProfileSecurityProps } from '@/types/components/profile'
-import { signOut } from 'next-auth/react'
 
 import {
   hasRecentSecurityProof,
@@ -13,7 +12,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
+import { updateProfile } from '@/lib/client/profile'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+
 import { useSecurityStatus } from '@/hooks/use-security-status'
+import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
 
 import { PasskeyConfirmation } from './passkey-confirmation'
@@ -33,6 +37,17 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const newPasswordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
   const securityCodeRef = useRef<HTMLInputElement>(null)
+
+  const changeFailed = (error: unknown, mutationStarted: boolean) => {
+    if (mutationStarted) void refreshSecurity()
+    toast({
+      title: 'Error',
+      description:
+        error instanceof Error ? error.message : 'Failed to update password',
+      variant: 'destructive',
+    })
+  }
+  const signOut = useSignOut({ onError: (error) => changeFailed(error, true) })
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,21 +78,10 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         return
       }
       mutationStarted = true
-      const response = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...proof,
-          newPassword: newPasswordRef.current?.value,
-        }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to update password')
-      }
+      await updateProfile(
+        { ...proof, newPassword: newPasswordRef.current?.value },
+        'Failed to update password'
+      )
 
       onUpdate()
 
@@ -93,15 +97,9 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
       if (confirmPasswordRef.current) confirmPasswordRef.current.value = ''
       if (securityCodeRef.current) securityCodeRef.current.value = ''
       setHasInput(false)
-      await signOut({ callbackUrl: '/auth/login?local=1' })
+      await signOut()
     } catch (error) {
-      if (mutationStarted) void refreshSecurity()
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to update password',
-        variant: 'destructive',
-      })
+      changeFailed(error, mutationStarted)
     } finally {
       setIsLoading(false)
     }
@@ -147,7 +145,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               ref={newPasswordRef}
               placeholder="Enter your new password"
               autoComplete="new-password"
-              minLength={8}
+              minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
               required
               disabled={isLoading}
             />
@@ -161,7 +159,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               ref={confirmPasswordRef}
               placeholder="Confirm your new password"
               autoComplete="new-password"
-              minLength={8}
+              minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
               required
               disabled={isLoading}
             />
@@ -197,7 +195,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
                   autoComplete="one-time-code"
                   autoCapitalize="none"
                   spellCheck={false}
-                  maxLength={32}
+                  maxLength={RECOVERY_CODE_INPUT_LENGTH}
                   placeholder="Enter an authenticator or recovery code"
                   required
                   disabled={isLoading}

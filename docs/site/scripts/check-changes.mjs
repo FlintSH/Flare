@@ -34,7 +34,7 @@ const rules = [
   },
   {
     name: 'API/integration reference',
-    code: /^(app\/api\/|lib\/integrations\/|lib\/permissions\/requests\.ts$|types\/dto\/)/,
+    code: /^(app\/api\/|lib\/integrations\/|types\/dto\/)/,
     docs: /^docs\/site\/api\/.*\.md$/,
   },
 ]

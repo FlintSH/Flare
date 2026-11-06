@@ -2,23 +2,27 @@ import { useState } from 'react'
 
 import { flushSync } from 'react-dom'
 
-import { useAppearance } from '@/components/customization/appearance-provider'
 import {
   type CheckerTone,
   checkerClassName,
   checkerToneFor,
 } from '@/components/file/checker-tone'
 import { ImageLightbox } from '@/components/file/image-lightbox'
+import { useAppearance } from '@/components/providers/appearance-context'
 
 import { cn } from '@/lib/utils'
 
 import { ErrorState } from '../components/error-state'
 import { ExpandImageButton } from '../components/expand-image-button'
 import { LoadingState } from '../components/loading-state'
-import { useFileViewer } from '../context'
 
-export function ImageViewer() {
-  const { file, state } = useFileViewer()
+export function ImageViewer({
+  file,
+  src,
+}: {
+  file: { id: string; name: string }
+  src?: string
+}) {
   const { sharing } = useAppearance()
   const [failedUrl, setFailedUrl] = useState<string>()
   const [expanded, setExpanded] = useState(false)
@@ -29,8 +33,8 @@ export function ImageViewer() {
     tone: CheckerTone
   }>()
 
-  if (!state.urls) return <LoadingState message="Loading image…" />
-  if (failedUrl === state.urls.fileUrl) {
+  if (!src) return <LoadingState message="Loading image…" />
+  if (failedUrl === src) {
     return (
       <ErrorState error="This image couldn’t be displayed in your browser." />
     )
@@ -50,7 +54,7 @@ export function ImageViewer() {
     >
       <div className={cover ? 'w-full' : 'max-w-full'}>
         <img
-          src={state.urls.fileUrl}
+          src={src}
           alt={file.name}
           onLoad={({ currentTarget: image }) => {
             const stage = image.parentElement?.parentElement
@@ -66,7 +70,7 @@ export function ImageViewer() {
               })
             )
           }}
-          onError={() => setFailedUrl(state.urls?.fileUrl)}
+          onError={() => setFailedUrl(src)}
           className={cn(
             checkerClassName(loaded?.tone ?? null),
             'block',
@@ -92,7 +96,7 @@ export function ImageViewer() {
       </div>
       {expanded && (
         <ImageLightbox
-          images={[{ id: file.id, name: file.name, src: state.urls.fileUrl }]}
+          images={[{ id: file.id, name: file.name, src }]}
           index={0}
           onIndexChange={() => {}}
           onClose={() => setExpanded(false)}

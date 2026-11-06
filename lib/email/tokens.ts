@@ -1,8 +1,11 @@
 import type { Prisma } from '@prisma/client'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
-export type EmailTokenPurpose =
-  'verify' | 'reset' | 'change' | 'change_approval'
+import { lockUserRow } from '@/lib/database/locks'
+import { isLinkToken, newLinkToken } from '@/lib/security/link-token'
+
+import { EmailHttpError } from './errors'
+import type { EmailTokenPurpose } from './links'
 
 export function hashEmailToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
@@ -17,7 +20,7 @@ export async function issueEmailToken(
     expiresAt: Date
   }
 ) {
-  const token = randomBytes(32).toString('base64url')
+  const token = newLinkToken()
   await tx.emailToken.updateMany({
     where: { userId: input.userId, purpose: input.purpose, consumedAt: null },
     data: { consumedAt: new Date() },
@@ -33,8 +36,8 @@ export async function consumeEmailToken(
   token: string,
   purposes: EmailTokenPurpose[]
 ) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token))
-    throw new Error('This email link is invalid or expired.')
+  if (!isLinkToken(token))
+    throw new EmailHttpError('This email link is invalid or expired.')
   const record = await tx.emailToken.findUnique({
     where: { tokenHash: hashEmailToken(token) },
   })
@@ -44,16 +47,16 @@ export async function consumeEmailToken(
     record.expiresAt <= new Date() ||
     !purposes.includes(record.purpose as EmailTokenPurpose)
   ) {
-    throw new Error('This email link is invalid or expired.')
+    throw new EmailHttpError('This email link is invalid or expired.')
   }
   // Account mutations and issuance take the same lock before touching tokens.
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${record.userId} FOR UPDATE`
+  await lockUserRow(tx, record.userId)
   const consumed = await tx.emailToken.updateMany({
     where: { id: record.id, consumedAt: null, expiresAt: { gt: new Date() } },
     data: { consumedAt: new Date() },
   })
   if (consumed.count !== 1)
-    throw new Error('This email link is invalid or expired.')
+    throw new EmailHttpError('This email link is invalid or expired.')
   return record
 }
 

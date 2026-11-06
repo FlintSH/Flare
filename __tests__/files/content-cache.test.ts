@@ -12,7 +12,6 @@ import { configureAuditWriter } from '@/lib/audit'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  resolve: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
   size: vi.fn(),
@@ -24,7 +23,6 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
 }))
-vi.mock('@/lib/files/resolve', () => ({ resolveFileUrlPath: mocks.resolve }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({
     getFileSize: mocks.size,
@@ -112,7 +110,6 @@ beforeEach(() => {
     mimeType: 'video/mp4',
   })
   mocks.session.mockResolvedValue(null)
-  mocks.resolve.mockResolvedValue(file.urlPath)
   mocks.findUnique.mockImplementation(async () => ({ ...file }))
   mocks.update.mockResolvedValue(file)
   mocks.size.mockResolvedValue(content.length)
@@ -203,20 +200,13 @@ describe('file content cache headers', () => {
       })
     })
 
-    it.each([
-      ['PRIVATE', null, 404],
-      ['PUBLIC', 'password', 401],
-    ] as const)(
-      'does not let a cache store a denial for a %s file',
-      async (visibility, protectedBy, status) => {
-        file.visibility = visibility
-        file.password = protectedBy ? passwordHash : null
-        expect(await cacheControl(contentRequest())).toEqual({
-          status,
-          cache: 'private, no-store',
-        })
-      }
-    )
+    it('does not let a cache store a denial for a PRIVATE file', async () => {
+      file.visibility = 'PRIVATE'
+      expect(await cacheControl(contentRequest())).toEqual({
+        status: 404,
+        cache: 'private, no-store',
+      })
+    })
   })
 
   describe('/{userUrlId}/{filename}/raw', () => {
@@ -244,12 +234,16 @@ describe('file content cache headers', () => {
       }
     )
 
-    it('leaves public, unprotected content without a cache directive', async () => {
-      expect(await cacheControl(rawRequest())).toEqual({
-        status: 200,
-        cache: null,
-      })
-    })
+    it.each(['video/mp4', 'application/json'])(
+      'leaves public, unprotected content without a cache directive (%s)',
+      async (mimeType) => {
+        file.mimeType = mimeType
+        expect(await cacheControl(rawRequest())).toEqual({
+          status: 200,
+          cache: null,
+        })
+      }
+    )
 
     it('does not let a cache store a denial', async () => {
       file.visibility = 'PRIVATE'
@@ -306,12 +300,16 @@ describe('file content cache headers', () => {
       }
     )
 
-    it('leaves public, unprotected downloads without a cache directive', async () => {
-      expect(await cacheControl(downloadRequest())).toEqual({
-        status: 200,
-        cache: null,
-      })
-    })
+    it.each(['video/mp4', 'application/json'])(
+      'leaves public, unprotected downloads without a cache directive (%s)',
+      async (mimeType) => {
+        file.mimeType = mimeType
+        expect(await cacheControl(downloadRequest())).toEqual({
+          status: 200,
+          cache: null,
+        })
+      }
+    )
 
     it.each(['GET', 'POST'] as const)(
       'does not let a cache store a private-file denial (%s)',

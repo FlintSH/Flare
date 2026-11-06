@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { isOidcProviderConfigured } from '@/lib/auth'
-import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
+import { getOidcErrorMessage } from '@/lib/auth/sign-in'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { isOidcProviderConfigured } from '@/lib/config/oidc'
 
 const complete = {
   enabled: true,
@@ -31,7 +31,8 @@ describe('isOidcProviderConfigured', () => {
 
 describe('OIDC configuration migration', () => {
   it('defaults to SSO disabled when an older configuration has no OIDC settings', () => {
-    const { oidc, ...generalWithoutOidc } = DEFAULT_CONFIG.settings.general
+    const { oidc: _oidc, ...generalWithoutOidc } =
+      DEFAULT_CONFIG.settings.general
     const parsed = configSchema.parse({
       ...DEFAULT_CONFIG,
       settings: {
@@ -43,7 +44,6 @@ describe('OIDC configuration migration', () => {
       },
     })
 
-    expect(parsed.settings.general.oidc).toEqual(oidc)
     expect(parsed.settings.general.oidc).toMatchObject({
       enabled: false,
       autoProvision: true,

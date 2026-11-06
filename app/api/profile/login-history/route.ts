@@ -1,21 +1,17 @@
-import { withAuditRoute } from '@/lib/audit'
-import { securityRoute, securitySession } from '@/lib/auth/security/http'
+import { securityRoutes, securitySession } from '@/lib/auth/security/http'
 import { listLoginHistory } from '@/lib/auth/sessions'
+import { routes } from '@/lib/http/route'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request) {
-  return withAuditRoute(
-    async () =>
-      securityRoute(async () => {
-        const { session } = await securitySession(req, false)
-        const params = new URL(req.url).searchParams
-        return listLoginHistory(
-          session.user.id,
-          params.get('outcome') || 'all',
-          params.get('cursor') || undefined
-        )
-      }),
-    { route: '/api/profile/login-history' }
-  )(req)
-}
+const api = routes('/api/profile/login-history', securityRoutes)
+
+export const GET = api(async (request) => {
+  const { session } = await securitySession(request)
+  const params = new URL(request.url).searchParams
+  return listLoginHistory(
+    session.user.id,
+    params.get('outcome') || 'all',
+    params.get('cursor') || undefined
+  )
+})

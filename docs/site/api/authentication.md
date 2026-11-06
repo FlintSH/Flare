@@ -10,12 +10,12 @@ With `tokens.manage`, create one named API token for each script or service in *
 ## Create a token
 
 1. Choose a name of 1–80 characters. Use the name to identify the machine, service, or purpose.
-2. Select one or more scopes from the table below.
+2. Select one or more scopes from the table below. The form offers a scope only while your role allows at least one of its operations, as listed in [Scopes and account roles](#scopes-and-account-roles). For example, `urls:write` appears with either `links.create` or `links.delete`.
 3. Optionally select an expiration in the future. Without an expiration, the token remains active until revoked.
 4. If it uploads files, optionally bind it to one of your saved upload profiles.
 5. Create the token and save the displayed `flr_…` secret in your tool's secret store.
 
-The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes.
+The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. Token and webhook changes for one account run one at a time, so concurrent requests cannot exceed it. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes.
 
 ## Send a token
 
@@ -33,6 +33,17 @@ For that listing request, the token needs `files:read`. Authentication schemes a
 
 A named `flr_` bearer token uses its own authority even if browser cookies accompany the request. A signed-in administrator's cookie does not add permissions to a named token on these routes. Use a server-side process or command-line client for custom automation; the docs builder does not act as an authenticated proxy to your instance.
 
+## Browser-session writes
+
+Flare's own pages call these routes with the browser's session cookie. A browser also attaches that cookie to requests other pages send, so a request the cookie authenticates that changes something, with any method except `GET`, `HEAD` and `OPTIONS`, must come from Flare's pages:
+
+- Its `Origin` header must be the origin of `NEXTAUTH_URL`, or the address the app itself serves, such as `http://localhost:3000` in development. A request without an `Origin` header, such as one a script sends, passes. A browser request marked `Sec-Fetch-Site: cross-site` doesn't. Otherwise the answer is `403` with `Cross-origin requests are not allowed.`
+- A JSON body must be sent as `Content-Type: application/json`, and an image upload as `multipart/form-data`. Another type answers `415`, such as `Use application/json.`
+
+Named tokens and the legacy upload token are never checked this way, because a browser doesn't attach them on its own. Send their JSON as `application/json` all the same, as the examples here do.
+
+Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/chunks`, `POST /api/files/chunks/{uploadId}/complete`, `POST /api/files/{id}/expiry`, `POST /api/urls` and `POST /api/profile/upload-token`, and read their JSON whatever type it was sent as. A page on another subdomain of the same site could therefore upload files, create short links, schedule expirations or replace the upload token in a signed-in visitor's account. They also checked the origin and type of legacy-token requests to the folder and tag routes, which now accept those like other token requests.
+
 ## Scope reference
 
 | Scope          | Allowed methods and paths                                                                                                                                            |
@@ -43,6 +54,8 @@ A named `flr_` bearer token uses its own authority even if browser cookies accom
 | `urls:write`   | `POST /api/urls`; `DELETE /api/urls/{id}`                                                                                                                            |
 
 Scopes are independent. `files:upload` does not include listing, and `urls:write` does not include listing. Select both relevant scopes when a service needs both capabilities.
+
+The `{uploadId}` and `{id}` path segments in these routes accept letters, digits, `_`, and `-`, which covers every ID Flare returns. A path whose ID contains any other character is outside the allowlist: a named token gets `401`, and a browser session or the legacy upload token gets `403`.
 
 `files:read` returns your file metadata, including private files. It does **not** authorize private file downloads, thumbnails, or OCR routes. Those use the file's sharing rules and browser session. `files:upload` does not provide a chunk cancellation or uploaded-parts listing endpoint.
 
@@ -94,6 +107,8 @@ New uploads use the profile's current settings. Chunked uploads keep the option 
 ## Named tokens and the account upload token
 
 Flare also has an older account upload token. Generated ShareX, iTake, Flameshot, Spectacle, and Bash configurations use it for compatibility. Regenerating it invalidates existing generated configurations, so download them again afterward.
+
+`GET /api/profile/upload-token` returns `{ "uploadToken": "…" }`, and `POST` replaces the token and returns the new one. Both answer with `Cache-Control: private, no-store`, like the generated configurations, so browsers and shared caches don't keep the credential; earlier versions sent no caching header. A password reset replaces the token too when the administrator turned on **Rotate upload tokens after a password reset**.
 
 The legacy credential is accepted by the shared account authentication helper and does not have the named-token scope allowlist. Its supported route surface is therefore broader than `files:upload` on routes that use that helper, but current role permissions still restrict each request. It still does not satisfy routes that explicitly require a browser session or an administrator session. Prefer scoped named tokens for new custom integrations.
 

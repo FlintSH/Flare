@@ -1,33 +1,33 @@
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { filePasswordIssue } from '@/lib/files/password-policy'
-import { FolderError, validateOwnedFolderId } from '@/lib/folders/service'
-import { loggers } from '@/lib/logger'
+import { validateOwnedFolderId } from '@/lib/folders/service'
+import { HttpError } from '@/lib/http/errors'
+import { parseInput } from '@/lib/http/request'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { TagError, validateOwnedTagIds } from '@/lib/tags/service'
+import { validateOwnedTagIds } from '@/lib/tags/service'
 
 import {
   accountUploadOptions,
   effectiveUploadRevision,
 } from './effective-settings'
+import { findOwnedProfile, missingUploadProfile } from './profiles'
 import {
   type ResolvedUploadOptions,
   type UploadRequestOptions,
   mergeUploadOptions,
   uploadProfileOptionsSchema,
+  uploadRequestOptionFields,
   uploadRequestOptionsSchema,
 } from './schema'
 
 export { uploadProfileOptionsSchema } from './schema'
 export type { UploadProfileOptions, ResolvedUploadOptions } from './schema'
 
-export class UploadError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class UploadError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
+    this.name = 'UploadError'
   }
 }
 
@@ -44,7 +44,7 @@ export function requestUploadOptions(req: Request): UploadRequestOptions {
   if (folderHeader && folderQuery && folderHeader !== folderQuery)
     throw new UploadError('Conflicting upload folder selections.')
   const folder = folderHeader ?? folderQuery
-  return uploadRequestOptionsSchema.parse({
+  return parseInput(uploadRequestOptionsSchema, {
     ...(value ? { profileId: value === 'none' ? null : value } : {}),
     ...(folder ? { folderId: folder === 'none' ? null : folder } : {}),
   })
@@ -55,7 +55,7 @@ export function parseUploadFields(
   fields: Record<string, string>
 ): UploadRequestOptions {
   const values: Record<string, unknown> = {}
-  for (const key of Object.keys(uploadRequestOptionsSchema.out.shape)) {
+  for (const key of Object.keys(uploadRequestOptionFields)) {
     if (fields[key] === undefined) continue
     if (key === 'tagIds') {
       try {
@@ -77,7 +77,7 @@ export function parseUploadFields(
           ? null
           : fields[key]
   }
-  return uploadRequestOptionsSchema.parse(values)
+  return parseInput(uploadRequestOptionsSchema, values)
 }
 
 function sameOption(left: unknown, right: unknown) {
@@ -96,7 +96,7 @@ export async function resolveUploadOptions(
   input: UploadRequestOptions = {},
   now = new Date()
 ): Promise<ResolvedUploadOptions> {
-  const request = uploadRequestOptionsSchema.parse(input)
+  const request = parseInput(uploadRequestOptionsSchema, input)
   const account = await prisma.user.findUnique({
     where: { id: user.id },
     select: {
@@ -123,12 +123,8 @@ export async function resolveUploadOptions(
       ? request.profileId
       : account.defaultUploadProfileId)
   const profile = profileId
-    ? await prisma.uploadProfile.findFirst({
-        where: { id: profileId, userId: user.id },
-      })
+    ? await findOwnedProfile(prisma, user.id, profileId, missingUploadProfile)
     : null
-  if (profileId && !profile)
-    throw new UploadError('Upload profile not found.', 404)
   const profileOptions = profile
     ? uploadProfileOptionsSchema.parse(profile.options)
     : {}
@@ -137,7 +133,7 @@ export async function resolveUploadOptions(
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.out.shape
+      uploadProfileOptionsSchema.shape
     ) as (keyof typeof profileOptions)[]) {
       if (request[key] !== undefined && !sameOption(request[key], bound[key]))
         throw new UploadError(
@@ -151,14 +147,7 @@ export async function resolveUploadOptions(
         403
       )
   }
-  let resolved: ResolvedUploadOptions
-  try {
-    resolved = mergeUploadOptions(defaults, profileOptions, request, now)
-  } catch (error) {
-    throw new UploadError(
-      error instanceof Error ? error.message : 'Invalid upload options.'
-    )
-  }
+  const resolved = mergeUploadOptions(defaults, profileOptions, request, now)
   return {
     ...resolved,
     folderId: await validateOwnedFolderId(user.id, request.folderId ?? null),
@@ -182,7 +171,7 @@ export function applyUploadOverrides(
   resolved: ResolvedUploadOptions,
   input: UploadRequestOptions
 ): ResolvedUploadOptions {
-  const request = uploadRequestOptionsSchema.parse(input)
+  const request = parseInput(uploadRequestOptionsSchema, input)
   if (
     request.folderId !== undefined &&
     request.folderId !== (resolved.folderId ?? null)
@@ -207,7 +196,7 @@ export function applyUploadOverrides(
     )
   if (user.apiToken?.profileId) {
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.out.shape
+      uploadProfileOptionsSchema.shape
     ) as (keyof typeof resolved)[]) {
       if (
         key in request &&
@@ -224,22 +213,15 @@ export function applyUploadOverrides(
         403
       )
   }
-  let merged: ResolvedUploadOptions
-  try {
-    merged = mergeUploadOptions({}, resolved, {
-      ...request,
-      expiresAt:
-        request.expiresAt !== undefined
-          ? request.expiresAt
-          : request.expiration !== undefined
-            ? undefined
-            : resolved.expiresAt,
-    })
-  } catch (error) {
-    throw new UploadError(
-      error instanceof Error ? error.message : 'Invalid upload options.'
-    )
-  }
+  const merged = mergeUploadOptions({}, resolved, {
+    ...request,
+    expiresAt:
+      request.expiresAt !== undefined
+        ? request.expiresAt
+        : request.expiration !== undefined
+          ? undefined
+          : resolved.expiresAt,
+  })
   return {
     ...merged,
     folderId: resolved.folderId ?? null,
@@ -248,26 +230,4 @@ export function applyUploadOverrides(
     password:
       request.password !== undefined ? request.password : resolved.password,
   }
-}
-
-export function uploadErrorResponse(error: unknown): Response {
-  if (
-    error instanceof UploadError ||
-    error instanceof TagError ||
-    error instanceof FolderError
-  )
-    return Response.json({ error: error.message }, { status: error.status })
-  if (error && typeof error === 'object' && 'issues' in error)
-    return Response.json(
-      { error: filePasswordIssue(error) ?? 'Invalid upload options.' },
-      { status: 400 }
-    )
-  loggers.files.error(
-    'Upload request failed',
-    error instanceof Error ? error : new Error('Unknown upload error')
-  )
-  return Response.json(
-    { error: 'Upload could not be completed.' },
-    { status: 500 }
-  )
 }

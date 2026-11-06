@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 
 import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
@@ -9,16 +9,10 @@ import {
   TOKEN_PREFIX,
   hashApiToken,
   tokenAllowsRequest,
+  tokenUsable,
 } from '@/lib/integrations/tokens'
-import {
-  type Permission,
-  type RoleSummary,
-  hasPermission,
-} from '@/lib/permissions/catalog'
-import { requestPermissions } from '@/lib/permissions/requests'
+import type { RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
-
-export { requirePermission } from '@/lib/permissions/server'
 
 export type AuthenticatedUser = {
   id: string
@@ -28,6 +22,8 @@ export type AuthenticatedUser = {
   permissions: string[]
   roles: RoleSummary[]
   randomizeFileUrls: boolean
+  /** The browser session cookie, a named token or the legacy upload token. */
+  credential: 'session' | 'token' | 'upload-token'
   apiToken?: { id: string; scopes: string[]; profileId: string | null }
 }
 
@@ -46,8 +42,7 @@ export async function getAuthenticatedUser(
     })
     if (
       !token ||
-      token.revokedAt ||
-      (token.expiresAt && token.expiresAt <= new Date()) ||
+      !tokenUsable(token) ||
       !tokenAllowsRequest(token.scopes, req) ||
       requiresEmailVerification(token.user, await getEmailConfig())
     )
@@ -69,6 +64,7 @@ export async function getAuthenticatedUser(
       vanityId,
       ...(await getUserAccess(id)),
       randomizeFileUrls,
+      credential: 'token',
       apiToken: {
         id: token.id,
         scopes: token.scopes,
@@ -77,78 +73,36 @@ export async function getAuthenticatedUser(
     }
   }
   const session = await getAccessSession()
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        randomizeFileUrls: true,
-        email: true,
-        emailVerified: true,
-        emailVerifiedFor: true,
-        emailVerificationSource: true,
-        emailExempt: true,
-        createdAt: true,
-      },
-    })
-    if (!user || requiresEmailVerification(user, await getEmailConfig()))
-      return null
-    setAuditActor({ id: user.id, name: user.name })
-    return { ...user, ...(await getUserAccess(user.id)) }
-  }
-
-  if (suppliedToken) {
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: suppliedToken },
-      select: {
-        id: true,
-        name: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        randomizeFileUrls: true,
-        email: true,
-        emailVerified: true,
-        emailVerifiedFor: true,
-        emailVerificationSource: true,
-        emailExempt: true,
-        createdAt: true,
-      },
-    })
-    if (!user || requiresEmailVerification(user, await getEmailConfig()))
-      return null
-    setAuditActor({ id: user.id, name: user.name })
-    return { ...user, ...(await getUserAccess(user.id)) }
-  }
-
+  if (session?.user) return accountUser({ id: session.user.id }, 'session')
+  if (suppliedToken)
+    return accountUser({ uploadToken: suppliedToken }, 'upload-token')
   return null
 }
 
-export async function requireAuth(req: Request, permissions?: Permission[]) {
-  const user = await getAuthenticatedUser(req)
-  if (!user) {
-    return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-      user: null,
-    }
-  }
-  const required =
-    permissions ?? requestPermissions(req.method, new URL(req.url).pathname)
-  if (
-    !required ||
-    required.some((permission) => !hasPermission(user, permission))
-  ) {
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: 'You do not have permission to perform this action.' },
-        { status: 403 }
-      ),
-    }
-  }
-  return { user, response: null }
+/** The account behind a browser session or the legacy upload token, unless it must verify its email first. */
+async function accountUser(
+  where: Prisma.UserWhereUniqueInput,
+  credential: 'session' | 'upload-token'
+): Promise<AuthenticatedUser | null> {
+  const user = await prisma.user.findUnique({
+    where,
+    select: {
+      id: true,
+      name: true,
+      storageUsed: true,
+      urlId: true,
+      vanityId: true,
+      randomizeFileUrls: true,
+      email: true,
+      emailVerified: true,
+      emailVerifiedFor: true,
+      emailVerificationSource: true,
+      emailExempt: true,
+      createdAt: true,
+    },
+  })
+  if (!user || requiresEmailVerification(user, await getEmailConfig()))
+    return null
+  setAuditActor({ id: user.id, name: user.name })
+  return { ...user, ...(await getUserAccess(user.id)), credential }
 }

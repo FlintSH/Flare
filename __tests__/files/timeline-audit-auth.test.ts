@@ -68,7 +68,7 @@ function request(token?: string) {
 }
 
 function namedToken(scopes: string[]) {
-  mocks.apiToken.findUnique.mockResolvedValue({
+  const token = {
     id: 'named-read-token-id',
     hash: hashApiToken(secret),
     scopes,
@@ -76,7 +76,12 @@ function namedToken(scopes: string[]) {
     profileId: null,
     revokedAt: null,
     expiresAt: null,
-  })
+  }
+  // Like the database, a lookup finds the token only by its stored hash.
+  mocks.apiToken.findUnique.mockImplementation(
+    async ({ where }: { where: { hash: string } }) =>
+      where.hash === token.hash ? token : null
+  )
 }
 
 function auditResult(status: number, outcome: 'success' | 'denied') {
@@ -175,10 +180,6 @@ describe('timeline authentication and audit integration', () => {
     const response = await GET(request(secret))
     expect(response.status).toBe(200)
     expect(mocks.session).not.toHaveBeenCalled()
-    expect(mocks.apiToken.findUnique).toHaveBeenCalledWith({
-      where: { hash: hashApiToken(secret) },
-      include: { user: true },
-    })
     expect(mocks.apiToken.update).toHaveBeenCalledWith({
       where: { id: 'named-read-token-id' },
       data: { lastUsedAt: expect.any(Date) },

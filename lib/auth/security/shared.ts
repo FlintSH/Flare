@@ -1,85 +1,65 @@
 import { Prisma } from '@prisma/client'
 
-import { prisma } from '@/lib/database/prisma'
-import { clientIp } from '@/lib/security/client-ip'
+import { lockUserRow } from '@/lib/database/locks'
+import { HttpError } from '@/lib/http/errors'
+import { consumeLimit } from '@/lib/security/database-limit'
+import { publicOrigin } from '@/lib/security/public-origin'
 
-import { securityHash } from './crypto'
+import { SECURITY_LIMIT_MINUTES } from './policy'
 
-export class SecurityError extends Error {
+export class SecurityError extends HttpError {
   constructor(
     message: string,
-    public status = 400
+    status = 400,
+    options: { headers?: Record<string, string> } = {}
   ) {
-    super(message)
+    super(status, message, options)
+    this.name = 'SecurityError'
   }
 }
 
 export function relyingParty() {
-  let url: URL
-  try {
-    url = new URL(process.env.NEXTAUTH_URL || '')
-  } catch {
+  const url = publicOrigin()
+  if (!url)
     throw new SecurityError(
       'Configure NEXTAUTH_URL with the public HTTPS origin before using passkeys.',
       503
     )
-  }
-  if (
-    url.username ||
-    url.password ||
-    (url.protocol !== 'https:' &&
-      !(url.protocol === 'http:' && url.hostname === 'localhost'))
-  ) {
+  if (url.protocol !== 'https:' && url.hostname !== 'localhost')
     throw new SecurityError(
       'Passkeys require HTTPS, or HTTP on localhost.',
       503
     )
-  }
   return { rpID: url.hostname, origin: url.origin, rpName: 'Flare' }
 }
 
-export function validateSecurityOrigin(req: Request) {
-  let origin: string
-  try {
-    origin = new URL(process.env.NEXTAUTH_URL || '').origin
-  } catch {
-    throw new SecurityError(
-      'Configure NEXTAUTH_URL before changing account security.',
-      503
-    )
-  }
-  if (req.headers.get('origin') !== origin)
-    throw new SecurityError('Invalid request origin.', 403)
-  if (req.headers.has('authorization'))
-    throw new SecurityError('Use a browser session for account security.', 401)
-}
+const SECURITY_LIMIT_SECONDS = SECURITY_LIMIT_MINUTES * 60
 
-export async function securityLimit(key: string, limit = 20, seconds = 900) {
-  const digest = securityHash(`auth:${key}`)
-  const rows = await prisma.$queryRaw<Array<{ count: number }>>`
-    INSERT INTO "AuthRateLimit" ("key", "count", "resetAt")
-    VALUES (${digest}, 1, NOW() + ${seconds} * INTERVAL '1 second')
-    ON CONFLICT ("key") DO UPDATE SET
-      "count" = CASE WHEN "AuthRateLimit"."resetAt" <= NOW() THEN 1 ELSE "AuthRateLimit"."count" + 1 END,
-      "resetAt" = CASE WHEN "AuthRateLimit"."resetAt" <= NOW() THEN NOW() + ${seconds} * INTERVAL '1 second' ELSE "AuthRateLimit"."resetAt" END
-    RETURNING "count"
-  `
-  if (rows[0].count > limit)
+/**
+ * Counts one security attempt under `key`, such as an account or a client
+ * address, and refuses it once `limit` attempts fall in one window.
+ */
+export async function securityLimit(key: string, limit = 20) {
+  const { allowed } = await consumeLimit(
+    'AuthRateLimit',
+    `auth:${key}`,
+    limit,
+    SECURITY_LIMIT_SECONDS
+  )
+  if (!allowed)
     throw new SecurityError(
-      'Too many security attempts. Try again in 15 minutes.',
-      429
+      `Too many security attempts. Try again in ${SECURITY_LIMIT_MINUTES} minutes.`,
+      429,
+      // The whole window, as the message says, not the time left in it.
+      { headers: { 'Retry-After': String(SECURITY_LIMIT_SECONDS) } }
     )
-}
-
-export function requestIp(headers: { get(name: string): string | null }) {
-  return clientIp(headers) ?? 'unknown'
 }
 
 export async function lockSecurityUser(
   tx: Prisma.TransactionClient,
   id: string
 ) {
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`
+  await lockUserRow(tx, id)
   const user = await tx.user.findUnique({ where: { id } })
   if (!user) throw new SecurityError('Sign in again to continue.', 401)
   return user

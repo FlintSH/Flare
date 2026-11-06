@@ -10,7 +10,7 @@ Choose **Setup guide** in the header on any step to open the guide in a new tab,
 
 ## 1. Create the administrator
 
-Enter a username, email address, and password of at least eight characters. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
+Enter a username, email address, and password of at least eight characters and at most 72 UTF-8 bytes; emoji and many accented letters use more than one byte. These are the rules every account follows, so a one-character username still saves later in **Users** or **Profile**. Setup removes spaces around the username and address, never from the password. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
 
 <Screenshot src="/screenshots/documentation-links/setup-desktop.webp" alt="First-run account form with a Setup guide link in the header" caption="Keep the setup guide alongside the form as you create the first administrator." />
 
@@ -29,6 +29,8 @@ Choose **Local storage** if you mounted persistent storage at `/app/uploads`. Ch
 <Screenshot src="/screenshots/documentation-links/setup-storage.webp" alt="Setup storage step with empty S3 bucket and connection fields and the Setup guide link above" caption="S3 lets file storage live separately from the application server." />
 
 Setup validates required fields and URL syntax. It does **not** connect to the bucket or verify object permissions. Upload, preview, download, avatar, and delete tests after setup confirm the actual integration. See [storage behavior](/hosting/storage) before choosing a backend, especially if the bucket disables ACLs.
+
+**Settings → Storage** applies the same checks when you change storage later and saves nothing that fails them. There, a key field left blank keeps the key you saved here.
 
 ## 3. Choose who can join
 
@@ -60,6 +62,6 @@ The ready step links to the workspace, a first upload, and the appearance studio
 
 Before account creation, form values live only in memory. Refreshing starts over; passwords and storage credentials are not put in browser storage or URLs.
 
-After creation, refreshing resumes the optional step identified in the URL. If automatic sign-in fails, the account has still been created; use the offered sign-in link and resume. A signed-out administrator can sign in to continue, but accounts without Administrator cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
+After creation, the address names the current step: `/setup?step=appearance`, `email`, or `ready`. Refreshing returns to that step; any other value opens the appearance step. If automatic sign-in fails, the account has still been created; use the offered sign-in link, and signing in returns you to the same step. A signed-out administrator can sign in to continue, but accounts without Administrator cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
 
-Existing instances are not forced through setup after upgrading. If an established installation suddenly presents a fresh setup form, first check the database connection and persistent volumes; you may be looking at an empty database.
+Existing instances are not forced through setup after upgrading. Flare shows the setup form only when its database answers and holds no accounts. While Flare can't read its database, the home page and `/setup` show **Something went wrong**, and other pages no longer send you to setup; earlier versions showed the first-run form during a database outage. See [Pages show Something went wrong](/hosting/troubleshooting#pages-show-something-went-wrong). If an established installation presents a fresh setup form while its database is reachable, Flare is connected to a database with no accounts. Check the database connection and persistent volumes before completing setup again; you may be looking at an empty database.

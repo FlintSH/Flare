@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 
 import type { ArchiveManifest } from '@/lib/archives/shared'
+import { allows } from '@/lib/permissions/actions'
 import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -26,11 +27,10 @@ export function ArchiveBrowserDialog({
   file: ArchiveFileRef
   onClose: () => void
 }) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const [extracting, setExtracting] = useState<ArchiveManifest | null>(null)
   const [busy, setBusy] = useState(false)
-  const canExtract =
-    can('files.read') && can('files.upload') && can('folders.manage')
+  const canExtract = allows(user, 'extractArchive')
   return (
     <Dialog
       open

@@ -1,11 +1,15 @@
 import { POST as changeEmail } from '@/app/api/auth/email/change/route'
 import { POST as enroll } from '@/app/api/auth/email/enroll/route'
 import { POST as resend } from '@/app/api/auth/email/resend/route'
+import { GET as emailStatus } from '@/app/api/auth/email/status/route'
 import { POST as register } from '@/app/api/auth/register/route'
-import { POST as adminEmail } from '@/app/api/users/[id]/email/route'
+import {
+  POST as adminEmail,
+  GET as adminEmailStatus,
+} from '@/app/api/users/[id]/email/route'
 import { Prisma, type User } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import {
   afterAll,
   afterEach,
@@ -25,9 +29,10 @@ import {
   requestPasswordReset,
   resetPassword,
 } from '@/lib/email/account'
-import { decryptSecret } from '@/lib/email/crypto'
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
 import { issueEmailToken } from '@/lib/email/tokens'
+import { decryptSecret } from '@/lib/security/secret-box'
+import { updateAccount } from '@/lib/users/update-account'
 
 /** A different documentation-range address per request keeps per-IP email limits apart. */
 function uniqueAddress() {
@@ -45,12 +50,16 @@ vi.mock('next-auth', async (original) => ({
 }))
 vi.mock('@/lib/database/prisma', async () => {
   const { PrismaClient } = await import('@prisma/client')
+  const { withPrismaAudit } = await import('@/lib/audit/prisma')
+  // Audited as in production, so a test can count the events a change records.
   return {
-    prisma: new PrismaClient({
-      datasourceUrl:
-        process.env.FLARE_EMAIL_AUTH_DATABASE_URL ||
-        'postgresql://unused@127.0.0.1/unused',
-    }),
+    prisma: withPrismaAudit(
+      new PrismaClient({
+        datasourceUrl:
+          process.env.FLARE_EMAIL_AUTH_DATABASE_URL ||
+          'postgresql://unused@127.0.0.1/unused',
+      })
+    ),
   }
 })
 vi.mock('@/lib/email/config', async (original) => ({
@@ -69,6 +78,9 @@ vi.mock('@/lib/config', async (original) => ({
   }),
 }))
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 // Deliberately opt in to a disposable migrated database; never use DATABASE_URL.
 describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
   'email account transactions (PostgreSQL)',
@@ -79,6 +91,15 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
     let savedSecret: string | undefined
 
     beforeAll(async () => {
+      // The suite deletes the settings row and users.
+      const url = new URL(process.env.FLARE_EMAIL_AUTH_DATABASE_URL!)
+      if (
+        !['localhost', '127.0.0.1'].includes(url.hostname) ||
+        url.pathname !== '/flare_email_test'
+      )
+        throw new Error(
+          'Use a disposable local database named flare_email_test for these tests.'
+        )
       savedSecret = process.env.NEXTAUTH_SECRET
       process.env.NEXTAUTH_SECRET =
         'email-account-integration-test-secret-0123456789'
@@ -228,6 +249,14 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       })
     }
 
+    /** Ends every open request-limit window; the daily sending budget is kept. */
+    async function expireRequestLimits() {
+      await prisma.emailRateLimit.updateMany({
+        where: { NOT: { key: { startsWith: 'mail:daily:' } } },
+        data: { resetAt: new Date(0) },
+      })
+    }
+
     it('requires account authentication before enrolling a legacy setup timestamp as recovery proof', async () => {
       const account = await user({
         emailVerifiedFor: null,
@@ -243,23 +272,16 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         `Bearer ${account.uploadToken}`
       )
       expect((await enroll(bearerRequest)).status).toBe(401)
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       expect((await resend(request({}))).status).toBe(400)
       // Expire this account's cooldown between intentional negative attempts.
-      const cooldownKey = createHash('sha256')
-        .update(`email:cooldown:${account.email}`)
-        .digest('hex')
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       expect(
         (await enroll(request({ password: 'wrong-password' }))).status
       ).toBe(400)
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       const response = await enroll(request({ password: 'old-password' }))
       expect(
         response.status,
@@ -311,6 +333,57 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           where: { userId: account.id, consumedAt: null },
         })
       ).toBe(0)
+    })
+
+    it('saves each credential change in one account update, recording one audit event', async () => {
+      const account = await user()
+      const updates = async (change: () => Promise<unknown>) => {
+        const count = () =>
+          prisma.auditEvent.count({
+            where: { action: 'user.update', targetId: account.id },
+          })
+        const before = await count()
+        await change()
+        return (await count()) - before
+      }
+      // Profile and Users edits.
+      const edited = await hash('edited-password', 4)
+      expect(
+        await updates(() =>
+          prisma.$transaction(async (tx) =>
+            updateAccount(
+              tx,
+              await tx.user.findUniqueOrThrow({ where: { id: account.id } }),
+              { name: 'Renamed', password: edited },
+              { kind: 'self', emailEnabled: true },
+              { id: true }
+            )
+          )
+        )
+      ).toBe(1)
+      const reset = await token(account)
+      expect(
+        await updates(() => resetPassword(reset.token, 'new-password', config))
+      ).toBe(1)
+      const newEmail = `${randomUUID()}@new.example`
+      await prisma.user.update({
+        where: { id: account.id },
+        data: { pendingEmail: newEmail },
+      })
+      const change = await token(account, 'change', newEmail)
+      expect(await updates(() => confirmEmailToken(change.token, config))).toBe(
+        1
+      )
+      const updated = await prisma.user.findUniqueOrThrow({
+        where: { id: account.id },
+      })
+      expect(updated).toMatchObject({
+        name: 'Renamed',
+        email: newEmail,
+        pendingEmail: null,
+        sessionVersion: account.sessionVersion + 3,
+      })
+      expect(await compare('new-password', updated.password!)).toBe(true)
     })
 
     it('rejects expired, wrong-purpose and changed-address tokens without consuming them', async () => {
@@ -432,9 +505,82 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(1)
     })
 
+    it('reads underscores and percent signs in an address literally, not as wildcards', async () => {
+      const id = randomUUID()
+      const holder = await user({
+        email: `axb-${id}@example.com`,
+        emailVerifiedFor: `axb-${id}@example.com`,
+      })
+      for (const lookalike of [`a_b-${id}@example.com`, `a%-${id}@example.com`])
+        await requestPasswordReset(lookalike, config)
+      expect(
+        await prisma.emailToken.count({ where: { userId: holder.id } })
+      ).toBe(0)
+
+      const address = `a_b-${id}@example.com`
+      const registered = await register(
+        request({ email: address, name: 'L', password: 'signup-password' })
+      )
+      expect(
+        registered.status,
+        JSON.stringify(await registered.clone().json())
+      ).toBe(200)
+      ids.push((await registered.json()).user.id)
+      // Letter case still names the same mailbox. Expire the address's mail
+      // cooldown so the attempt reaches the claim.
+      await expireRequestLimits()
+      const duplicate = await register(
+        request({
+          email: address.toUpperCase(),
+          name: 'L',
+          password: 'signup-password',
+        })
+      )
+      expect(duplicate.status).toBe(400)
+      expect(await duplicate.json()).toEqual({ error: 'User already exists' })
+
+      const changer = await user()
+      await user({ email: `abc-${id}@example.com` })
+      state.session = {
+        user: { id: changer.id, sessionVersion: changer.sessionVersion },
+      }
+      const change = await changeEmail(
+        request({ email: `a_c-${id}@example.com`, password: 'old-password' })
+      )
+      expect(change.status, JSON.stringify(await change.clone().json())).toBe(
+        200
+      )
+    })
+
+    it('applies the 72-byte password limit and the one-character name rule with email disabled', async () => {
+      state.config = { ...config, enabled: false }
+      const address = `${randomUUID()}@signup.example`
+      const long = await register(
+        request({ email: address, name: 'J', password: '🔒'.repeat(19) })
+      )
+      expect(long.status).toBe(400)
+      expect(await long.json()).toEqual({
+        error: 'Password must use at most 72 bytes.',
+      })
+      const created = await register(
+        request({ email: address, name: 'J', password: 'signup-password' })
+      )
+      expect(created.status, JSON.stringify(await created.clone().json())).toBe(
+        200
+      )
+      const body = await created.json()
+      ids.push(body.user.id)
+      expect(body).toMatchObject({
+        user: { name: 'J', email: address },
+        nextAction: 'sign_in',
+      })
+    })
+
     it('does not fabricate old-address approval when the policy makes it optional', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       const response = await changeEmail(
         request({ email, password: 'old-password' })
@@ -458,7 +604,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('requires real old-address approval when an administrator tightens policy during a pending change', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
@@ -483,13 +631,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(1)
 
       // Restart under the new policy; the endpoint now sends both confirmations.
-      const cooldownKey = createHash('sha256')
-        .update(`email:cooldown:${email}`)
-        .digest('hex')
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
       ).toBe(200)
@@ -514,7 +656,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('waits for a concurrent settings transaction before deciding whether old-address approval is required', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
@@ -650,7 +794,12 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           password: 'signup-password',
         })
       )
-      expect(response.status).toBe(500)
+      // A full daily mail cap answers with its own message.
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error:
+          'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.',
+      })
       expect(
         await prisma.user.findUnique({ where: { email: address } })
       ).toBeNull()
@@ -694,7 +843,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       })
       await persistConfig(config)
       state.session = {
-        user: { id: account.id, permissions: ['administrator'] },
+        user: {
+          id: account.id,
+          permissions: ['administrator'],
+          sessionVersion: account.sessionVersion,
+        },
       }
       const response = await adminEmail(request({ action: 'require' }), {
         params: Promise.resolve({ id: account.id }),
@@ -704,6 +857,50 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
           .emailExempt
       ).toBe(true)
+    })
+
+    it('answers the account and its administrators with the same resend and change rules', async () => {
+      config.changes.requireOldEmail = true
+      const account = await user({
+        emailVerifiedFor: null,
+        emailVerificationSource: 'pending_local',
+      })
+      state.session = {
+        user: {
+          id: account.id,
+          permissions: ['administrator'],
+          sessionVersion: account.sessionVersion,
+        },
+      }
+      const status = await emailStatus(
+        new Request('https://flare.example/api/auth/email/status')
+      )
+      expect(await status.json()).toMatchObject({
+        recoveryEnabled: true,
+        verified: false,
+        canChangeEmail: true,
+        canRequestChange: false,
+        canResend: true,
+        hasPassword: true,
+        requiresPassword: true,
+        verifyBy: null,
+      })
+      const administered = await adminEmailStatus(
+        new Request(`https://flare.example/api/users/${account.id}/email`),
+        { params: Promise.resolve({ id: account.id }) }
+      )
+      expect(await administered.json()).toEqual({
+        verified: false,
+        exempt: false,
+        required: false,
+        pendingEmail: null,
+        canResend: true,
+      })
+      state.enforceSso = true
+      const enforced = await emailStatus(
+        new Request('https://flare.example/api/auth/email/status')
+      )
+      expect((await enforced.json()).recoveryEnabled).toBe(false)
     })
 
     it('does not issue or consume reset tokens using a stale enabled policy', async () => {
@@ -744,28 +941,32 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).not.toBe(account.uploadToken)
     })
 
-    it('accepts the configured external origin behind a proxy and rejects an unrelated origin', async () => {
+    it('accepts the public origin behind a proxy and no other, not even the email link address', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
-      const good = new Request('http://internal:3000/api/auth/email/enroll', {
-        method: 'POST',
-        headers: {
-          origin: 'https://flare.example',
-          'Content-Type': 'application/json',
-          'x-real-ip': uniqueAddress(),
-        },
-        body: JSON.stringify({ password: 'old-password' }),
-      })
-      expect((await enroll(good)).status).toBe(200)
-      const bad = new Request('http://internal:3000/api/auth/email/enroll', {
-        method: 'POST',
-        headers: {
-          origin: 'https://unrelated.example',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password: 'old-password' }),
-      })
-      expect((await enroll(bad)).status).toBe(403)
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
+      const enrollFrom = (origin: string) =>
+        enroll(
+          new Request('http://internal:3000/api/auth/email/enroll', {
+            method: 'POST',
+            headers: {
+              origin,
+              'Content-Type': 'application/json',
+              'x-real-ip': uniqueAddress(),
+            },
+            body: JSON.stringify({ password: 'old-password' }),
+          })
+        )
+      // The email settings' public URL only builds the links in messages.
+      expect((await enrollFrom('https://flare.example')).status).toBe(403)
+      vi.stubEnv('NEXTAUTH_URL', 'https://flare.example')
+      try {
+        expect((await enrollFrom('https://unrelated.example')).status).toBe(403)
+        expect((await enrollFrom('https://flare.example')).status).toBe(200)
+      } finally {
+        vi.unstubAllEnvs()
+      }
     })
   }
 )

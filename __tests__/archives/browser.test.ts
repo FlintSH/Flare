@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   archiveEntriesAt,
   archiveEntryHref,
-  archiveFetch,
   archiveFolderCount,
   archiveListingRequest,
   archiveOutputName,
@@ -13,10 +12,11 @@ import {
   buildArchiveTree,
   isArchiveCandidate,
   loadArchiveListing,
-  readPreviewBytes,
 } from '@/components/archives/archive-utils'
 
 import type { ArchiveEntry } from '@/lib/archives/shared'
+import { readPreviewBytes } from '@/lib/client/preview-bytes'
+import { sendRequest } from '@/lib/client/request'
 
 const entries: ArchiveEntry[] = [
   { path: 'project/docs/Read me.txt', type: 'file', size: 17 },
@@ -90,6 +90,8 @@ describe('archive browser navigation', () => {
       true
     )
     expect(isArchiveCandidate('photo.png', 'image/png')).toBe(false)
+    // An image type wins over a name that ends like an archive.
+    expect(isArchiveCandidate('photo.zip', 'image/png')).toBe(false)
   })
 })
 
@@ -105,7 +107,10 @@ describe('archive listing transport', () => {
         progress: true,
         after: 12,
       })
-      await archiveFetch(request.url, request.body, controller.signal)
+      await sendRequest(request.url, {
+        body: request.body,
+        signal: controller.signal,
+      })
       const [url, options] = fetchSpy.mock.calls.at(-1)!
       expect(url).toBe('/api/files/id%2F1/archive/share')
       expect(options?.method).toBe('POST')
@@ -194,6 +199,44 @@ describe('archive listing transport', () => {
         '/api/files/id/archive?progress=1',
         '/api/files/id/archive?progress=1&after=1',
       ])
+    } finally {
+      fetchSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('waits as long as a busy server asks, then refuses with its reason and status', async () => {
+    const responses = [
+      Response.json(
+        { error: 'Flare is reading other archives.' },
+        { status: 429, headers: { 'Retry-After': '2' } }
+      ),
+      Response.json({ error: 'This archive is damaged.' }, { status: 422 }),
+    ]
+    vi.useFakeTimers()
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => responses.shift()!)
+    try {
+      const updates: string[] = []
+      const loading = loadArchiveListing(
+        'id',
+        { kind: 'owner' },
+        {
+          signal: new AbortController().signal,
+          onUpdate: (update) => updates.push(update.status),
+        }
+      )
+      const refused = expect(loading).rejects.toMatchObject({
+        message: 'This archive is damaged.',
+        status: 422,
+      })
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      await refused
+      expect(updates).toEqual(['busy'])
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
     } finally {
       fetchSpy.mockRestore()
       vi.useRealTimers()

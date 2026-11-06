@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { ChevronDown } from 'lucide-react'
 
-import { colorSwatchClassName } from '@/components/settings/form-styles'
+import { colorSwatchClassName } from '@/components/shared/form-styles'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,

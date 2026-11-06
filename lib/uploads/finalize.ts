@@ -1,25 +1,36 @@
 import { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { basename, extname } from 'node:path'
 
-import { recordAudit, setAuditTarget } from '@/lib/audit'
+import { setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
+import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import {
+  fileExpiry,
+  queueFileExpiration,
+  storedExpiry,
+} from '@/lib/files/expiry'
 import { urlSafeFilename } from '@/lib/files/filename'
+import { hashFilePassword } from '@/lib/files/password-hash'
 import { validateOwnedFolderId } from '@/lib/folders/service'
+import { tokenUsable } from '@/lib/integrations/tokens'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { getUserAccess, lockRoleChanges } from '@/lib/permissions/server'
+import { getUserAccess } from '@/lib/permissions/server'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
+import { bytesToMB } from '@/lib/utils/size'
 
+import { assertFits, uploadCapacity } from './capacity'
 import { UploadError } from './options'
+import { findOwnedProfile } from './profiles'
 import type { ResolvedUploadOptions } from './schema'
 
 export async function prepareUploadDestination(
@@ -54,7 +65,7 @@ type UploadInput = {
   passwordHash?: string | null
   isPaste?: boolean
   signal?: AbortSignal
-  /** Chunk assembly already holds an upload lock on this transaction. */
+  /** Publish in the caller's transaction; the caller enqueues processing after it commits. */
   transaction?: Prisma.TransactionClient
 }
 
@@ -89,29 +100,22 @@ export async function prepareUpload(
   const passwordHash =
     input.passwordHash !== undefined
       ? input.passwordHash
-      : options.password
-        ? await hash(options.password, 10)
-        : null
+      : await hashFilePassword(options.password)
   return { ...input, passwordHash, [validatedUpload]: true }
 }
 
-/** Prepared bytes are published under the same policy/quota locks as ordinary uploads. */
 export async function publishPreparedUpload(input: PreparedUpload) {
   if (!input[validatedUpload]) throw new UploadError('Upload is not validated.')
   const { user, storage, filePath, displayName, mimeType, size, options } =
     input
   const storageTarget = captureStorageTarget(storage)
   const passwordHash = input.passwordHash
+  const expiry = fileExpiry(options.expiresAt, options.expiryAction)
   const persist = async (tx: Prisma.TransactionClient) => {
     // Same order as settings/account policy updates: policy lock, then user lock.
     await lockRoleChanges(tx)
-    const configRow = await tx.config.findUnique({
-      where: { key: 'flare_config' },
-    })
-    const config = configRow
-      ? configSchema.parse(configRow.value)
-      : DEFAULT_CONFIG
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`
+    const config = await readConfig(tx)
+    await lockUserRow(tx, user.id)
     const fresh = await tx.user.findUnique({ where: { id: user.id } })
     if (!fresh) throw new UploadError('Account no longer exists.', 401)
     const access = await getUserAccess(user.id, tx)
@@ -120,20 +124,14 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       (input.isPaste && !hasPermission(access, 'pastes.create'))
     )
       throw new UploadError('Your role no longer allows this upload.', 403)
-    if (options.folderId && !hasPermission(access, 'folders.manage'))
+    if (options.folderId && !allows(access, 'fileIntoFolder'))
       throw new UploadError(
         'Your role cannot organize uploads into folders.',
         403
       )
     if (options.tagIds?.length && !hasPermission(access, 'tags.manage'))
       throw new UploadError('Your role cannot apply tags.', 403)
-    if (
-      options.expiresAt &&
-      !hasPermission(
-        access,
-        options.expiryAction === 'DELETE' ? 'files.delete' : 'files.share'
-      )
-    )
+    if (expiry && !allows(access, EXPIRY_EFFECTS[expiry.action]))
       throw new UploadError(
         'Your role does not allow the selected expiration action. Disable expiration or ask for the required permission.',
         403
@@ -153,47 +151,24 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       const token = await tx.apiToken.findUnique({
         where: { id: user.apiToken.id },
       })
-      if (
-        !token ||
-        token.revokedAt ||
-        (token.expiresAt && token.expiresAt <= new Date())
-      )
+      if (!token || !tokenUsable(token))
         throw new UploadError('Upload token has expired or been revoked.', 403)
-      if (token.userId !== user.id || !token.scopes.includes('files:upload'))
-        throw new UploadError('This token cannot upload files.', 403)
       if (token.profileId && options.profileId !== token.profileId)
         throw new UploadError(
           'This token is restricted to its upload profile.',
           403
         )
-      if (
-        token.profileId &&
-        !(await tx.uploadProfile.findFirst({
-          where: { id: token.profileId, userId: user.id },
-        }))
-      )
-        throw new UploadError('The token upload profile was removed.', 403)
+      if (token.profileId)
+        await findOwnedProfile(
+          tx,
+          user.id,
+          token.profileId,
+          () => new UploadError('The token upload profile was removed.', 403)
+        )
     }
-    const storageConfig = config.settings.general.storage
-    const maxBytes =
-      storageConfig.maxUploadSize.value *
-      (storageConfig.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-    if (size > maxBytes)
-      throw new UploadError(
-        'The file exceeds the current upload size limit.',
-        413
-      )
-    const sizeMB = size / 1024 ** 2
-    const quota =
-      storageConfig.quotas.default.value *
-      (storageConfig.quotas.default.unit === 'GB' ? 1024 : 1)
-    if (
-      storageConfig.quotas.enabled &&
-      !hasPermission(access, 'quotas.bypass') &&
-      fresh.storageUsed + sizeMB > quota
-    )
-      throw new UploadError('The file would exceed your storage quota.', 413)
-    if (options.expiresAt && new Date(options.expiresAt) <= new Date())
+    assertFits(uploadCapacity(config, access, fresh.storageUsed), size)
+    const sizeMB = bytesToMB(size)
+    if (expiry && expiry.expiresAt <= new Date())
       throw new UploadError(
         'The selected expiration passed before upload finished.'
       )
@@ -226,7 +201,10 @@ export async function publishPreparedUpload(input: PreparedUpload) {
         password: passwordHash,
         userId: user.id,
         folderId,
-        uploadOptions: persistedOptions as Prisma.InputJsonValue,
+        uploadOptions: {
+          ...persistedOptions,
+          ...storedExpiry(expiry),
+        } as Prisma.InputJsonValue,
       },
     })
     await applyProfileTags(tx, file, options.tagIds ?? [])
@@ -235,33 +213,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },
     })
-    if (options.expiresAt) {
-      await tx.event.create({
-        data: {
-          type: 'file.schedule-expiration',
-          status: 'SCHEDULED',
-          scheduledAt: new Date(options.expiresAt),
-          payload: {
-            fileId: file.id,
-            userId: user.id,
-            fileName: file.name,
-            expiresAt: options.expiresAt,
-            action: options.expiryAction,
-          },
-        },
-      })
-      await recordAudit({
-        action: 'file.expiration.scheduled',
-        category: 'files',
-        targetType: 'file',
-        targetId: file.id,
-        targetName: file.name,
-        details: {
-          expiresAt: options.expiresAt,
-          expiryAction: options.expiryAction,
-        },
-      })
-    }
+    if (expiry) await queueFileExpiration(tx, file, expiry)
     await enqueueFileReady(tx, file)
     return { file, created: true }
   }

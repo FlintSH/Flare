@@ -2,6 +2,7 @@ import { DashboardWrapper } from '@/components/dashboard/dashboard-wrapper'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
+import { maxUploadBytes } from '@/lib/config/limits'
 
 export default async function DashboardLayout({
   children,
@@ -10,9 +11,7 @@ export default async function DashboardLayout({
 }) {
   await getPageSession()
   const config = await getConfig()
-  const { value, unit } = config.settings.general.storage.maxUploadSize
-  const maxSizeBytes =
-    value * (unit === 'GB' ? 1024 * 1024 * 1024 : 1024 * 1024)
+  const maxSizeBytes = maxUploadBytes(config)
 
   return (
     <DashboardWrapper

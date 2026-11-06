@@ -21,12 +21,6 @@ export interface ContractContext {
   cleanup: () => Promise<void>
 }
 
-export interface ContractOptions {
-  // S3's createWriteStream uploads via a presigned URL over real HTTP, which
-  // the in-memory backend cannot serve. Disable it there.
-  testWriteStream?: boolean
-}
-
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = []
   for await (const chunk of stream) {
@@ -48,11 +42,8 @@ function uniqueName(prefix: string, name: string): string {
  */
 export function runStorageProviderContract(
   label: string,
-  setup: () => Promise<ContractContext>,
-  options: ContractOptions = {}
+  setup: () => Promise<ContractContext>
 ) {
-  const { testWriteStream = true } = options
-
   describe(`StorageProvider contract: ${label}`, () => {
     let ctx: ContractContext
 
@@ -248,62 +239,6 @@ export function runStorageProviderContract(
       }
     })
 
-    it('renameFolder moves all objects under a prefix', async () => {
-      const { provider, prefix } = await makeProvider()
-      try {
-        const base = uniqueName(prefix, 'folder')
-        const oldDir = `${base}/old`
-        const newDir = `${base}/new`
-        const a = Buffer.from('file-a')
-        const b = Buffer.from('file-b')
-
-        await provider.uploadFile(
-          a,
-          `${oldDir}/a.bin`,
-          'application/octet-stream'
-        )
-        await provider.uploadFile(
-          b,
-          `${oldDir}/sub/b.bin`,
-          'application/octet-stream'
-        )
-
-        await provider.renameFolder(oldDir, newDir)
-
-        const readA = await streamToBuffer(
-          await provider.getFileStream(`${newDir}/a.bin`)
-        )
-        const readB = await streamToBuffer(
-          await provider.getFileStream(`${newDir}/sub/b.bin`)
-        )
-        expect(readA.equals(a)).toBe(true)
-        expect(readB.equals(b)).toBe(true)
-
-        await expect(
-          provider.getFileSize(`${oldDir}/a.bin`)
-        ).rejects.toBeDefined()
-      } finally {
-        await ctx.cleanup()
-      }
-    })
-
-    it('getFileUrl returns a non-empty string', async () => {
-      const { provider, prefix } = await makeProvider()
-      try {
-        const path = uniqueName(prefix, 'url.bin')
-        await provider.uploadFile(
-          Buffer.from('x'),
-          path,
-          'application/octet-stream'
-        )
-        const url = await provider.getFileUrl(path)
-        expect(typeof url).toBe('string')
-        expect(url.length).toBeGreaterThan(0)
-      } finally {
-        await ctx.cleanup()
-      }
-    })
-
     it('getPublicUrl returns a redirect URL or null (then a non-empty string)', async () => {
       const { provider, prefix } = await makeProvider()
       try {
@@ -340,31 +275,5 @@ export function runStorageProviderContract(
         await ctx.cleanup()
       }
     })
-
-    if (testWriteStream) {
-      it('createWriteStream writes data that can be read back', async () => {
-        const { provider, prefix } = await makeProvider()
-        try {
-          const path = uniqueName(prefix, 'writestream.bin')
-          const data = Buffer.from('written via stream')
-
-          const writeStream = await provider.createWriteStream(
-            path,
-            'application/octet-stream'
-          )
-          await new Promise<void>((resolve, reject) => {
-            writeStream.on('error', reject)
-            writeStream.on('finish', () => resolve())
-            writeStream.on('close', () => resolve())
-            writeStream.end(data)
-          })
-
-          const read = await streamToBuffer(await provider.getFileStream(path))
-          expect(read.equals(data)).toBe(true)
-        } finally {
-          await ctx.cleanup()
-        }
-      })
-    }
   })
 }

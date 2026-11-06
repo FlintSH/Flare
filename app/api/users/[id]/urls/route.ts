@@ -1,91 +1,22 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
+import { listAccountShortLinks } from '@/lib/links/service'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
 
-const logger = loggers.users
+type Context = { params: Promise<{ id: string }> }
 
-async function handleGET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('content.read')
-    if (permissionDenied) return permissionDenied
-    const { id } = await params
+const api = routes('/api/users/[id]/urls', {
+  failure: { message: 'Internal Server Error' },
+  logger: loggers.users,
+})
 
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
-
-    const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
-    const search = searchParams.get('search') || ''
-
-    const skip = (page - 1) * limit
-
-    const where = {
-      userId: id,
-      ...(search
-        ? {
-            OR: [
-              {
-                shortCode: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-              {
-                targetUrl: {
-                  contains: search,
-                  mode: 'insensitive' as const,
-                },
-              },
-            ],
-          }
-        : {}),
-    }
-
-    const total = await prisma.shortenedUrl.count({ where })
-
-    const urls = await prisma.shortenedUrl.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        shortCode: true,
-        targetUrl: true,
-        clicks: true,
-        createdAt: true,
-      },
-    })
-
-    return NextResponse.json({
-      urls,
-      pagination: {
-        total,
-        pages: Math.ceil(total / limit),
-        page,
-        limit,
-      },
-    })
-  } catch (error) {
-    logger.error('Error fetching user URLs:', error as Error)
-    return new NextResponse('Internal Server Error', { status: 500 })
-  }
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, { params }), {
-    route: '/api/users/[id]/urls',
-  })(req)
-}
+export const GET = api(async (request, { params }: Context) => {
+  await requireSession(request, 'content.read')
+  const { id } = await params
+  const query = new URL(request.url).searchParams
+  return listAccountShortLinks(id, {
+    page: Number(query.get('page')),
+    limit: Number(query.get('limit')),
+    search: query.get('search') || '',
+  })
+})

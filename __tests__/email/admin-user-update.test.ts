@@ -2,7 +2,9 @@ import { GET, POST, PUT } from '@/app/api/users/route'
 import type { User } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { MailLimitError } from '@/lib/email/outbox'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
+import { AccessError } from '@/lib/http/errors'
 
 const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
@@ -11,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   lockEmailUser: vi.fn(),
   lockEmailAddress: vi.fn(),
   sendAccountToken: vi.fn(),
-  createUser: vi.fn(),
+  createAccount: vi.fn(),
   invalidateEmailTokens: vi.fn(),
   db: {
     user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
@@ -21,15 +23,15 @@ const mocks = vi.hoisted(() => ({
   tx: {
     $executeRaw: vi.fn(),
     user: { update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    authChallenge: { deleteMany: vi.fn() },
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requirePermission: mocks.requirePermission,
+vi.mock('@/lib/http/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/http/access')>()),
+  requireSession: mocks.requirePermission,
 }))
 vi.mock('@/lib/permissions/server', () => ({
-  PermissionError: class PermissionError extends Error {},
-  lockRoleChanges: vi.fn(),
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),
@@ -37,13 +39,16 @@ vi.mock('@/lib/permissions/server', () => ({
   getUserAccess: async () => ({ roles: [], permissions: [] }),
 }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks.db }))
+vi.mock('@/lib/database/locks', () => ({
+  lockRoleChanges: vi.fn(),
+  lockEmailAddress: mocks.lockEmailAddress,
+}))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfig: mocks.getEmailConfig,
   getEmailConfigForUpdate: mocks.getEmailConfigForUpdate,
 }))
 vi.mock('@/lib/email/account', () => ({
   lockEmailUser: mocks.lockEmailUser,
-  lockEmailAddress: mocks.lockEmailAddress,
   sendAccountToken: mocks.sendAccountToken,
 }))
 vi.mock('@/lib/email/tokens', () => ({
@@ -51,7 +56,9 @@ vi.mock('@/lib/email/tokens', () => ({
 }))
 vi.mock('@/lib/logger', () => ({ loggers: { users: { error: vi.fn() } } }))
 vi.mock('@/lib/storage', () => ({ getStorageProvider: vi.fn() }))
-vi.mock('@/lib/users/create-user', () => ({ createUser: mocks.createUser }))
+vi.mock('@/lib/users/create-account', () => ({
+  createAccount: mocks.createAccount,
+}))
 
 const initial: User = {
   passkeyRequired: false,
@@ -117,7 +124,7 @@ beforeEach(() => {
   })
   mocks.tx.user.findFirst.mockResolvedValue(null)
   mocks.tx.user.findMany.mockResolvedValue([])
-  mocks.createUser.mockImplementation(async (_tx, data) => ({
+  mocks.createAccount.mockImplementation(async (_tx, data) => ({
     ...initial,
     ...data,
   }))
@@ -143,23 +150,58 @@ describe('administrator account update serialization', () => {
     mocks.getEmailConfigForUpdate.mockResolvedValue(currentConfig)
     const response = await POST(request({}, 'POST'))
     expect(response.status).toBe(200)
-    expect(
-      mocks.getEmailConfigForUpdate.mock.invocationCallOrder[0]
-    ).toBeLessThan(mocks.lockEmailAddress.mock.invocationCallOrder[0])
-    expect(mocks.createUser).toHaveBeenCalledWith(
+    // createAccount decides on the verification link from these settings.
+    expect(mocks.createAccount).toHaveBeenCalledWith(
       mocks.tx,
-      expect.objectContaining({
-        emailExempt: false,
-        emailVerificationSource: 'pending_local',
-      })
-    )
-    expect(mocks.sendAccountToken).toHaveBeenCalledWith(
-      mocks.tx,
-      expect.objectContaining({ email: initial.email }),
-      'verify',
-      currentConfig
+      expect.objectContaining({ email: initial.email, emailExempt: false }),
+      { verifyWith: currentConfig }
     )
   })
+
+  it('refuses an address another account already uses', async () => {
+    mocks.db.user.findUnique.mockResolvedValue(null)
+    mocks.createAccount.mockResolvedValue(null)
+    const response = await POST(request({}, 'POST'))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+  })
+
+  it('answers a full daily mail cap with its own message', async () => {
+    mocks.db.user.findUnique.mockResolvedValue(null)
+    mocks.createAccount.mockRejectedValue(new MailLimitError())
+    const response = await POST(request({}, 'POST'))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error:
+        'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.',
+    })
+  })
+
+  it.each([false, true])(
+    'refuses a new password over 72 bytes (email enabled: %s)',
+    async (enabled) => {
+      mocks.getEmailConfigForUpdate.mockResolvedValue({
+        ...structuredClone(DEFAULT_EMAIL_CONFIG),
+        enabled,
+      })
+      for (const response of [
+        await POST(request({ password: '🔒'.repeat(19) }, 'POST')),
+        await PUT(request({ password: 'a'.repeat(73) })),
+      ]) {
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+          success: false,
+          error: 'Password must use at most 72 bytes.',
+        })
+      }
+      expect(mocks.createAccount).not.toHaveBeenCalled()
+      expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    }
+  )
   it('preserves a concurrently verified address and its proof during an unrelated name edit', async () => {
     const verified = {
       ...initial,
@@ -205,7 +247,10 @@ describe('administrator account update serialization', () => {
     expect(
       mocks.getEmailConfigForUpdate.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.lockEmailUser.mock.invocationCallOrder[0])
+    // One update, so the change records one audit event.
+    expect(mocks.tx.user.update).toHaveBeenCalledOnce()
     expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
+      name: 'Edited name',
       email: 'requested@example.com',
       emailVerified: null,
       emailVerifiedFor: null,
@@ -213,6 +258,9 @@ describe('administrator account update serialization', () => {
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
       sessionVersion: { increment: 1 },
+    })
+    expect(mocks.tx.authChallenge.deleteMany).toHaveBeenCalledWith({
+      where: { userId: initial.id },
     })
     expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(
       mocks.tx,
@@ -225,10 +273,7 @@ describe('administrator account update serialization', () => {
   })
 
   it('uses the newly enabled policy when checking case-insensitive mailbox conflicts', async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({
-      id: 'another-account',
-      email: 'REQUESTED@example.com',
-    })
+    mocks.tx.user.findFirst.mockResolvedValue({ id: 'another-account' })
     const response = await PUT(request({ email: 'requested@example.com' }))
     expect(response.status).toBe(400)
     expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
@@ -236,8 +281,45 @@ describe('administrator account update serialization', () => {
         id: { not: initial.id },
         email: { equals: 'requested@example.com', mode: 'insensitive' },
       },
+      select: { id: true },
     })
     expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
+
+  // Without account email, addresses are unique only as written, which the
+  // database enforces too: the duplicate was a server error before.
+  it('refuses an address another account uses as written while email is disabled', async () => {
+    mocks.getEmailConfigForUpdate.mockResolvedValue(
+      structuredClone(DEFAULT_EMAIL_CONFIG)
+    )
+    mocks.tx.user.findFirst.mockResolvedValue({ id: 'another-account' })
+    const response = await PUT(request({ email: 'Requested@example.com' }))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+    expect(mocks.lockEmailAddress).toHaveBeenCalledWith(
+      mocks.tx,
+      'Requested@example.com'
+    )
+    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
+      where: { id: { not: initial.id }, email: 'Requested@example.com' },
+      select: { id: true },
+    })
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
+
+  it('matches an address with an underscore literally, not as a wildcard', async () => {
+    const response = await PUT(request({ email: 'requested_x@example.com' }))
+    expect(response.status).toBe(200)
+    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: { not: initial.id },
+        email: { equals: 'requested\\_x@example.com', mode: 'insensitive' },
+      },
+      select: { id: true },
+    })
   })
 
   it('preserves assigned roles when an identity update omits roleIds', async () => {
@@ -252,24 +334,26 @@ describe('administrator account update serialization', () => {
     )
   })
 
-  it('revokes sessions for password changes even when email is disabled', async () => {
+  it('revokes sessions and cancels a pending email change for password changes even when email is disabled', async () => {
     mocks.getEmailConfigForUpdate.mockResolvedValue(
       structuredClone(DEFAULT_EMAIL_CONFIG)
     )
-    const response = await PUT(request({ password: 'a'.repeat(73) }))
+    const response = await PUT(request({ password: 'a-new-password' }))
     expect(response.status).toBe(200)
-    expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
+    expect(mocks.tx.user.update).toHaveBeenCalledOnce()
+    const saved = mocks.tx.user.update.mock.calls[0][0].data
+    expect(saved).toMatchObject({
+      password: expect.any(String),
+      pendingEmail: null,
+      pendingEmailOldConfirmed: false,
       sessionVersion: { increment: 1 },
     })
-    expect(mocks.tx.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'passkeyRequired'
+    expect(saved).not.toHaveProperty('email')
+    expect(saved).not.toHaveProperty('passkeyRequired')
+    expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(
+      mocks.tx,
+      initial.id
     )
-  })
-
-  it('enforces the enabled-instance password limit after the policy changes', async () => {
-    const response = await PUT(request({ password: 'a'.repeat(73) }))
-    expect(response.status).toBe(400)
-    expect(mocks.tx.user.update).not.toHaveBeenCalled()
   })
 })
 
@@ -295,8 +379,6 @@ describe('optional administrator vanity URLs', () => {
       expect(await response.json()).toMatchObject({
         data: { name: 'Edited name', vanityId: null },
       })
-      // Empty values should skip both vanity and URL ID collision queries.
-      expect(mocks.db.user.findUnique).toHaveBeenCalledTimes(1)
     }
   )
 
@@ -324,11 +406,15 @@ describe('optional administrator vanity URLs', () => {
     expect(mocks.tx.user.update.mock.calls[0][0].data.vanityId).toBe(
       'custom-url'
     )
-    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
-      where: { vanityId: 'custom-url' },
-    })
-    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
-      where: { urlId: 'custom-url' },
+    // Both columns, in the transaction that saves the edit.
+    expect(mocks.tx.user.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { urlId: { in: ['custom-url'] } },
+          { vanityId: { in: ['custom-url'] } },
+        ],
+      },
+      select: { id: true, urlId: true, vanityId: true },
     })
   })
 
@@ -342,27 +428,46 @@ describe('optional administrator vanity URLs', () => {
     }
   )
 
-  it.each(['vanityId', 'urlId'])(
+  it.each([
+    ['vanityId', 'This vanity URL is already taken'],
+    ['urlId', 'This vanity URL conflicts with an existing URL ID'],
+  ])(
     'rejects a vanity URL that conflicts with another user’s %s',
-    async (field) => {
-      mocks.db.user.findUnique.mockImplementation(async ({ where }) => {
-        if (where.id === initial.id) return initial
-        return where[field] === 'custom-url' ? { id: 'another-user' } : null
-      })
+    async (field, error) => {
+      mocks.tx.user.findMany.mockResolvedValue([
+        {
+          id: 'another-user',
+          urlId: 'other',
+          vanityId: null,
+          [field]: 'custom-url',
+        },
+      ])
 
       const response = await PUT(request({ vanityId: 'custom-url' }))
 
       expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ success: false, error })
       expect(mocks.tx.user.update).not.toHaveBeenCalled()
     }
   )
+
+  it('rejects a vanity URL that is the account’s own URL ID', async () => {
+    const response = await PUT(request({ vanityId: initial.urlId }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'This vanity URL conflicts with an existing URL ID',
+    })
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('user directory', () => {
   it('keeps directory search behind the administrator guard', async () => {
-    mocks.requirePermission.mockResolvedValue({
-      response: new Response(null, { status: 403 }),
-    })
+    mocks.requirePermission.mockRejectedValue(
+      new AccessError(403, 'Permission denied')
+    )
     const response = await GET(
       new Request('https://flare.example/api/users?search=person')
     )

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { appearanceMutationGuard } from '@/lib/customization/http'
+import { HttpError } from '@/lib/http/errors'
+import { assertBrowserWrite, readForm, readJson } from '@/lib/http/request'
+import { publicOrigin as configuredOrigin } from '@/lib/security/public-origin'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 const publicOrigin = 'https://preview-flare.up.railway.app'
@@ -12,6 +14,16 @@ const request = (headers: Record<string, string> = {}) =>
     body: '{}',
   })
 
+/** The refusal's status, or null when the request may proceed. */
+function refusal(check: () => void) {
+  try {
+    check()
+    return null
+  } catch (error) {
+    return (error as HttpError).status
+  }
+}
+
 afterEach(() => vi.unstubAllEnvs())
 
 describe('proxied browser request origins', () => {
@@ -22,7 +34,7 @@ describe('proxied browser request origins', () => {
       'Sec-Fetch-Site': 'same-origin',
     })
     expect(isSameOriginRequest(proxied)).toBe(true)
-    expect(appearanceMutationGuard(proxied)).toBeNull()
+    expect(refusal(() => assertBrowserWrite(proxied))).toBeNull()
   })
 
   it('normalizes the configured origin without trusting an arbitrary path in Origin', () => {
@@ -49,7 +61,7 @@ describe('proxied browser request origins', () => {
     'null',
   ])('rejects an unrelated origin: %s', (origin) => {
     vi.stubEnv('NEXTAUTH_URL', publicOrigin)
-    expect(appearanceMutationGuard(request({ Origin: origin }))?.status).toBe(
+    expect(refusal(() => assertBrowserWrite(request({ Origin: origin })))).toBe(
       403
     )
   })
@@ -97,21 +109,90 @@ describe('proxied browser request origins', () => {
     ).toBe(true)
   })
 
-  it('retains JSON and image content-type checks for allowed proxy requests', () => {
+  it('checks writes only: reads from other origins are not refused', () => {
     vi.stubEnv('NEXTAUTH_URL', publicOrigin)
-    expect(
-      appearanceMutationGuard(
-        request({ Origin: publicOrigin, 'Content-Type': 'text/plain' })
-      )?.status
-    ).toBe(415)
-    expect(
-      appearanceMutationGuard(
-        request({
-          Origin: publicOrigin,
-          'Content-Type': 'multipart/form-data; boundary=fixture',
-        }),
-        'image'
-      )
-    ).toBeNull()
+    for (const method of ['GET', 'HEAD', 'OPTIONS'])
+      expect(
+        refusal(() =>
+          assertBrowserWrite(
+            new Request(internalUrl, {
+              method,
+              headers: { Origin: 'https://attacker.example' },
+            })
+          )
+        )
+      ).toBeNull()
+  })
+
+  it('makes a browser write send JSON or a multipart form, as its reader expects', async () => {
+    vi.stubEnv('NEXTAUTH_URL', publicOrigin)
+    const write = (contentType: string, body: BodyInit = '{}') => {
+      const write = new Request(internalUrl, {
+        method: 'POST',
+        headers: { Origin: publicOrigin, 'Content-Type': contentType },
+        body,
+      })
+      assertBrowserWrite(write)
+      return write
+    }
+    for (const type of [
+      'text/plain',
+      'application/x-www-form-urlencoded',
+      'multipart/form-data; boundary=fixture',
+    ])
+      await expect(readJson(write(type))).rejects.toMatchObject({
+        status: 415,
+        message: 'Use application/json.',
+      })
+    expect(await readJson(write('application/json; charset=utf-8'))).toEqual({})
+    await expect(
+      readForm(write('application/x-www-form-urlencoded', 'a=b'), {
+        limit: 1024,
+      })
+    ).rejects.toMatchObject({
+      status: 415,
+      message: 'Use multipart/form-data.',
+    })
+    const form = new FormData()
+    form.set('name', 'value')
+    const upload = new Request(internalUrl, {
+      method: 'POST',
+      headers: { Origin: publicOrigin },
+      body: form,
+    })
+    assertBrowserWrite(upload)
+    expect((await readForm(upload, { limit: 1024 })).get('name')).toBe('value')
+  })
+
+  it('leaves the body type of requests no session authenticated to the route', async () => {
+    const tokenRequest = new Request(internalUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer flr_token',
+        'Content-Type': 'text/plain',
+      },
+      body: '{"url":"https://example.com"}',
+    })
+    expect(await readJson(tokenRequest)).toEqual({ url: 'https://example.com' })
+  })
+})
+
+describe('the public origin', () => {
+  it.each([
+    ['https://files.example.com', 'https://files.example.com'],
+    ['https://files.example.com/base/', 'https://files.example.com'],
+    ['http://localhost:3000', 'http://localhost:3000'],
+  ])('reads %s as an http(s) URL', (configured, origin) => {
+    expect(configuredOrigin({ NEXTAUTH_URL: configured })?.origin).toBe(origin)
+  })
+
+  it.each([
+    undefined,
+    '',
+    'files.example.com',
+    'ftp://files.example.com',
+    'https://user:secret@files.example.com',
+  ])('has none when NEXTAUTH_URL is %s', (configured) => {
+    expect(configuredOrigin({ NEXTAUTH_URL: configured })).toBeNull()
   })
 })

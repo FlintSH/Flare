@@ -15,6 +15,9 @@ import { securityTestDatabaseUrl } from './security-database-guard'
 const databaseUrl = process.env.FLARE_SECURITY_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('account security against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let service: typeof import('@/lib/auth/security/service')
@@ -602,26 +605,92 @@ suite('account security against disposable PostgreSQL', () => {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: 'security-owner' },
     })
-    const { assertRecentIdentity } = await import('@/lib/email/account')
+    // Email changes prove identity without a second factor.
+    const emailProof = (signedIn: Session) =>
+      service.assertFreshIdentity(user, {}, signedIn, { secondFactor: false })
+    await expect(emailProof(session(2, 'passkey'))).resolves.toBeUndefined()
     await expect(
-      assertRecentIdentity(user, undefined, session(2, 'passkey'))
+      emailProof(session(2, 'passkey-recovery'))
     ).resolves.toBeUndefined()
+    await expect(emailProof(session(2, 'oidc'))).rejects.toThrow(
+      'Sign in again with a passkey'
+    )
     await expect(
-      assertRecentIdentity(user, undefined, session(2, 'passkey-recovery'))
-    ).resolves.toBeUndefined()
-    await expect(
-      assertRecentIdentity(user, undefined, session(2, 'oidc'))
-    ).rejects.toThrow('Sign in again with a passkey')
-    await expect(
-      assertRecentIdentity(
-        user,
-        undefined,
-        session(2, 'passkey', Date.now() - 301000)
-      )
+      emailProof(session(2, 'passkey', Date.now() - 301000))
     ).rejects.toThrow('Sign in again')
+    await expect(emailProof(session(1, 'passkey'))).rejects.toThrow(
+      'Account security changed'
+    )
+  })
+
+  it('asks email changes for the password and security changes for every factor', async () => {
+    // Enabling the authenticator signed the account out: version 2.
+    await enroll()
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: 'security-owner' },
+    })
+    const signedIn = session(2)
+    const proof = { password: 'correct test password' }
+    // The password alone proves an email change, even with an authenticator.
     await expect(
-      assertRecentIdentity(user, undefined, session(1, 'passkey'))
-    ).rejects.toThrow('Account security changed')
+      service.assertFreshIdentity(user, proof, signedIn, {
+        secondFactor: false,
+      })
+    ).resolves.toBeUndefined()
+    await expect(
+      prisma.$transaction((tx) =>
+        service.assertFreshIdentity(user, proof, signedIn, {
+          secondFactor: true,
+          tx,
+        })
+      )
+    ).rejects.toThrow('Invalid or already used authentication code.')
+    // A recent passkey sign-in stands in for both factors only in security changes.
+    await expect(
+      service.assertFreshIdentity(user, {}, session(2, 'passkey'), {
+        secondFactor: false,
+      })
+    ).rejects.toThrow('Confirm your current password to continue.')
+    await expect(
+      prisma.$transaction((tx) =>
+        service.assertFreshIdentity(user, {}, session(2, 'passkey'), {
+          secondFactor: true,
+          tx,
+        })
+      )
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses an SSO sign-in timed in the future or more than five minutes ago', async () => {
+    await prisma.user.update({
+      where: { id: 'security-owner' },
+      data: { password: null, oidcSubject: 'issuer|sso-only' },
+    })
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: 'security-owner' },
+    })
+    const email = (authTime: number) =>
+      service.assertFreshIdentity(user, {}, session(1, 'oidc', authTime), {
+        secondFactor: false,
+      })
+    const security = (authTime: number) =>
+      prisma.$transaction((tx) =>
+        service.assertFreshIdentity(user, {}, session(1, 'oidc', authTime), {
+          secondFactor: true,
+          tx,
+        })
+      )
+    await expect(email(Date.now() - 60_000)).resolves.toBeUndefined()
+    await expect(security(Date.now() - 60_000)).resolves.toBeUndefined()
+    // Email changes used to accept a sign-in time ahead of the server's clock.
+    for (const authTime of [Date.now() + 60_000, Date.now() - 301_000]) {
+      await expect(email(authTime)).rejects.toThrow(
+        'Sign in again with SSO, then try again within five minutes.'
+      )
+      await expect(security(authTime)).rejects.toThrow(
+        'Sign in again with SSO or a passkey, then retry within five minutes.'
+      )
+    }
   })
 
   it('does not disable protection or remove the last key without a configured fallback', async () => {
@@ -1082,6 +1151,19 @@ suite('account security against disposable PostgreSQL', () => {
       residentKey: 'required',
       userVerification: 'required',
     })
+    // A response the WebAuthn library refuses is the browser's to retry.
+    await expect(
+      passkeys.registerPasskey(session(1, 'oidc'), options.challengeId, {
+        id: 'not-a-credential',
+        rawId: 'not-a-credential',
+        type: 'public-key',
+        response: { clientDataJSON: 'e30', attestationObject: 'e30' },
+        clientExtensionResults: {},
+      } as never)
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Unable to complete this security request. Please try again.',
+    })
   })
   it('binds passwordless challenges to the initiating browser and consumes successful claims once', async () => {
     const options = await passkeys.authenticationOptions()
@@ -1399,5 +1481,38 @@ suite('account security against disposable PostgreSQL', () => {
     ).rejects.toMatchObject({ status: 400 })
     await browserSessions.cleanupSessionHistory()
     expect(await prisma.loginAttempt.count()).toBe(31)
+  })
+
+  it('keeps sign-in attempts, and sessions after they expire, for the history window', async () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000)
+    await prisma.loginAttempt.createMany({
+      data: [89, 91].map((days) => ({
+        id: `aged-${days}`,
+        userId: 'security-owner',
+        authMethod: 'credentials',
+        outcome: 'success',
+        createdAt: daysAgo(days),
+      })),
+    })
+    await prisma.browserSession.createMany({
+      data: [89, 91].map((days) => ({
+        id: `expired-${days}`,
+        userId: 'security-owner',
+        sessionVersion: 1,
+        authMethod: 'credentials',
+        expiresAt: daysAgo(days),
+      })),
+    })
+    await browserSessions.cleanupSessionHistory()
+    expect(
+      (await prisma.loginAttempt.findMany({ select: { id: true } })).map(
+        (row) => row.id
+      )
+    ).toEqual(['aged-89'])
+    expect(
+      (await prisma.browserSession.findMany({ select: { id: true } })).map(
+        (row) => row.id
+      )
+    ).toEqual(['expired-89'])
   })
 })

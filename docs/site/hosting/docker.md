@@ -77,7 +77,7 @@ volumes:
   uploads:
 ```
 
-Compose waits for the database health check before starting Flare. Flare's entrypoint also waits for the database, applies Prisma migrations, initializes configuration, migrates legacy file passwords, and starts the application. Do not replace its startup command with `next start` in a container deployment. [Docker documents the dependency behavior](https://docs.docker.com/compose/how-tos/startup-order/).
+Compose waits for the database health check before starting Flare. Flare's entrypoint also waits for the database, applies Prisma migrations, initializes configuration, migrates legacy file passwords, and starts the application. It uses the dependencies and Prisma client built into the image and installs or generates nothing. It retries only the connection, 30 times at 2-second intervals; the migration step creates the database named in `DATABASE_URL` if the server doesn't have it yet. If any step fails, the container exits before starting Flare, and its log ends with that step's error. One file password that can't be hashed doesn't stop the start: the log names the file, and its password won't open it until a later start hashes it or its owner sets a new one. Earlier images retried a failing migration as if the database were unreachable, started Flare after a failed configuration or password migration, and regenerated the Prisma client at every start (`Ensuring Prisma Client is generated...` in the log). Do not replace its startup command with `next start` in a container deployment. [Docker documents the dependency behavior](https://docs.docker.com/compose/how-tos/startup-order/).
 
 ## 3. Start Flare
 
@@ -168,7 +168,7 @@ pnpm build
 pnpm start
 ```
 
-`pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories; `pnpm start` reads both from there. Builds leave `uploads` out of `.next/standalone`, so building next to existing uploads doesn't copy them. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
+Each command exits with a non-zero status when it fails, so stop there and fix the reported error before running the next one. `pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories; `pnpm start` reads both from there. Builds leave `uploads` out of `.next/standalone`, so building next to existing uploads doesn't copy them. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
 
 ### Use the repository's Compose file
 

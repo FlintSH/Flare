@@ -42,7 +42,7 @@ Opening an active link shows **You’re invited** with the name of the person wh
 <Screenshot src="/screenshots/invites/register-invite-mobile.webp" alt="You're invited page on a 390-pixel phone screen with the registration form" caption="The same invite page on a phone." />
 </div>
 
-The usual registration rules still apply: a username of at least two characters, a valid email address that no other account uses, and a password of at least eight characters (at most 72 UTF-8 bytes when account email is enabled). If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
+The usual registration rules still apply: a username of at least one character, a valid email address that no other account uses, and a password of at least eight characters and at most 72 UTF-8 bytes. If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
 
 If the link cannot be used, the page explains why, such as **This invite link has already been used.** On an instance with closed registration, the page is titled **Invite unavailable** and offers **Go to sign in**. If public registration is open, the ordinary sign-up form appears with a note that the invite cannot be used; an account created that way does not receive the invite's roles.
 
@@ -52,13 +52,13 @@ If the link cannot be used, the page explains why, such as **This invite link ha
 
 Your list shows each link's note, status, uses, and expiry. When someone joins, their name appears after **Joined**. Use **Show** to switch between **Active invites**, **Ended invites**, and **All invites**.
 
-| Status      | Meaning                                                                                                                                                                                                                          |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Active**  | The link works now.                                                                                                                                                                                                              |
-| **Paused**  | Its creator can no longer create invites or grant the link's roles. It resumes automatically if that access returns before the link expires. An administrator turning **Let everyone create invites** off pauses members' links. |
-| **Used up** | It created as many accounts as its **Uses** allowed.                                                                                                                                                                             |
-| **Expired** | Its expiry time has passed.                                                                                                                                                                                                      |
-| **Revoked** | Someone revoked it.                                                                                                                                                                                                              |
+| Status      | Meaning                                                                                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Active**  | The link works now.                                                                                                                                                                                                                                                                  |
+| **Paused**  | Its creator can no longer create invites or grant the link's roles, or must verify an email address before using Flare. It resumes automatically if that access returns before the link expires. An administrator turning **Let everyone create invites** off pauses members' links. |
+| **Used up** | It created as many accounts as its **Uses** allowed.                                                                                                                                                                                                                                 |
+| **Expired** | Its expiry time has passed.                                                                                                                                                                                                                                                          |
+| **Revoked** | Someone revoked it.                                                                                                                                                                                                                                                                  |
 
 Used-up, expired, and revoked links have **ended**: they never work again, even if settings change. Create a new link instead.
 
@@ -82,13 +82,13 @@ An invite counts toward your active limit until it is used up, expires, or is re
 
 ## Troubleshooting
 
-| Symptom                                     | What to check                                                                                                                                   |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Profile → Invites** is missing            | Your roles do not include Create invites. Ask an administrator.                                                                                 |
-| **Create invite** is disabled               | You reached your active-invite limit. Revoke an invite or wait for one to be used or expire.                                                    |
-| A choice such as **Never** is unavailable   | Member limits cap uses and expiry. Ask an administrator if you need a longer-lived or multi-use link.                                           |
-| One of your links shows **Paused**          | You can no longer grant a role it includes. Revoke it and create a link without that role, or ask an administrator to restore your role access. |
-| Someone says the link is unavailable        | Check the link's status. Create a new link if it ended.                                                                                         |
-| **Copy link** is missing for an active link | It belongs to someone else, or the server's encryption key changed. Create a new invite.                                                        |
+| Symptom                                     | What to check                                                                                                                                                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Profile → Invites** is missing            | Your roles do not include Create invites. Ask an administrator.                                                                                                                                                                              |
+| **Create invite** is disabled               | You reached your active-invite limit. Revoke an invite or wait for one to be used or expire.                                                                                                                                                 |
+| A choice such as **Never** is unavailable   | Member limits cap uses and expiry. Ask an administrator if you need a longer-lived or multi-use link.                                                                                                                                        |
+| One of your links shows **Paused**          | You can no longer create invites or grant a role it includes, or Flare is asking you to verify your email address. Verify your address, or revoke the link and create one without that role, or ask an administrator to restore your access. |
+| Someone says the link is unavailable        | Check the link's status. Create a new link if it ended.                                                                                                                                                                                      |
+| **Copy link** is missing for an active link | It belongs to someone else, or the server's encryption key changed. Create a new invite.                                                                                                                                                     |
 
 Administrators can [manage every invite and set member limits](/admin/users#invite-links). Developers can use the [invite API contracts](/api/invites). [Watch the recorded walkthroughs](/demos#invite-someone-with-a-role).

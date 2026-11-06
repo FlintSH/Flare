@@ -41,6 +41,9 @@ vi.mock('@/lib/storage', () => ({
 const databaseUrl = process.env.FLARE_AUDIT_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite.sequential('audit against disposable PostgreSQL', () => {
   let base: PrismaClient
   let prisma: PrismaClient
@@ -382,7 +385,113 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         where: { action: 'file.deleteMany', targetId: 'file-1004' },
       })
     ).toMatchObject({ targetName: 'invoice-1004.pdf' })
-  }, 30000)
+  })
+
+  it('records rows a cascade will delete in the caller’s transaction, with the request’s context', async () => {
+    const { recordCascadedDeletes } = await import('@/lib/audit')
+    const long = `${'x'.repeat(520)}.pdf`
+    await base.file.create({
+      data: {
+        id: 'cascaded-file',
+        name: long,
+        userId: 'audit-actor',
+        urlPath: 'cascaded-file',
+        path: 'fixture/cascaded-file',
+        mimeType: 'application/pdf',
+        size: 12,
+      },
+    })
+    await base.invite.create({
+      data: {
+        id: 'cascaded-invite',
+        creatorId: 'audit-actor',
+        tokenHash: 'cascaded-invite-digest',
+        token: 'encrypted-fixture',
+        uses: 2,
+      },
+    })
+    const deletion = {
+      actorId: 'operator',
+      actorName: 'Olive',
+      reason: 'Account deleted',
+    }
+    async function write(tx: Prisma.TransactionClient) {
+      await recordCascadedDeletes(tx, 'File', {
+        ...deletion,
+        where: { userId: 'audit-actor' },
+        name: 'name',
+        copy: { ownerId: 'userId' },
+      })
+      await recordCascadedDeletes(tx, 'Invite', {
+        ...deletion,
+        where: { creatorId: 'audit-actor' },
+        name: 'note',
+        copy: { creatorId: 'creatorId', uses: 'uses' },
+      })
+    }
+    // A rolled-back deletion leaves no events behind.
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await write(tx)
+        throw new Error('deletion refused')
+      })
+    ).rejects.toThrow('deletion refused')
+    expect(await base.auditEvent.count()).toBe(0)
+    await auditContext.run(
+      {
+        requestId: 'request-1',
+        method: 'DELETE',
+        route: '/api/users/[id]',
+        tokenId: 'token-1',
+      },
+      () => prisma.$transaction(write)
+    )
+    expect(
+      await base.auditEvent.findFirstOrThrow({
+        where: { targetId: 'cascaded-file' },
+      })
+    ).toMatchObject({
+      action: 'file.delete',
+      category: 'files',
+      outcome: 'success',
+      actorId: 'operator',
+      actorName: 'Olive',
+      targetType: 'file',
+      targetName: long.slice(0, 500),
+      requestId: 'request-1',
+      method: 'DELETE',
+      route: '/api/users/[id]',
+      status: null,
+      details: {
+        reason: 'Account deleted',
+        ownerId: 'audit-actor',
+        tokenId: 'token-1',
+      },
+    })
+    expect(
+      await base.auditEvent.findFirstOrThrow({
+        where: { targetId: 'cascaded-invite' },
+      })
+    ).toMatchObject({
+      action: 'invite.delete',
+      category: 'invites',
+      targetType: 'invite',
+      // An invite without a note names nothing.
+      targetName: null,
+      details: { creatorId: 'audit-actor', uses: 2 },
+    })
+    // Only the model's audited fields can be copied into an event.
+    await expect(
+      prisma.$transaction((tx) =>
+        recordCascadedDeletes(tx, 'Invite', {
+          ...deletion,
+          where: { creatorId: 'audit-actor' },
+          name: 'note',
+          copy: { token: 'token' },
+        })
+      )
+    ).rejects.toThrow('Invite.token is not an audited field')
+  })
 
   async function fixtureFile(
     id: string,
@@ -665,6 +774,8 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     expect(invite).toMatchObject({
       targetId: 'invite-uses',
+      // An invite is known by its note, and this one has none.
+      targetName: null,
       details: {
         changedFields: ['uses'],
         before: { uses: 0 },
@@ -1028,8 +1139,11 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       /old-secret|new-secret|password-secret|token-secret|fixture-secret/
     )
     expect(
-      events.find((event) => event.action === 'setting.update')?.details
-    ).toMatchObject({ settingsKeys: ['settings.email.password'] })
+      events.find((event) => event.action === 'setting.update')
+    ).toMatchObject({
+      targetName: 'flare_config',
+      details: { settingsKeys: ['settings.email.password'] },
+    })
     expect(
       events.find((event) => event.action === 'user.update')?.details
     ).toMatchObject({ changedFields: ['password', 'uploadToken'] })
@@ -1213,5 +1327,96 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     await prisma.auditEvent.findMany()
     expect(await base.auditEvent.count()).toBe(1)
+  })
+
+  it("moderates a file only through its owner's account and keeps the deletion evidence", async () => {
+    const { deleteFile, updateFileSettings } =
+      await import('@/lib/files/manage')
+    const { loggers } = await import('@/lib/logger')
+    const logged = vi.spyOn(loggers.files, 'error').mockImplementation(() => {})
+    await base.user.create({
+      data: {
+        id: 'file-owner',
+        name: 'Sam',
+        urlId: 'file-owner',
+        uploadToken: 'owner-fixture-secret',
+        storageUsed: 5,
+      },
+    })
+    await base.file.create({
+      data: {
+        id: 'moderated-file',
+        name: 'notes.txt',
+        userId: 'file-owner',
+        urlPath: 'moderated-file',
+        path: 'fixture/moderated-file',
+        mimeType: 'text/plain',
+        size: 2,
+      },
+    })
+    const moderating = (accountId: string) =>
+      ({ as: 'moderator', accountId }) as const
+
+    // Through another account the file is missing: no update is attempted,
+    // so no failed mutation is recorded either.
+    await expect(
+      updateFileSettings(moderating('audit-actor'), 'moderated-file', {
+        visibility: 'PRIVATE',
+      })
+    ).rejects.toMatchObject({ status: 404, message: 'File not found' })
+    await expect(
+      deleteFile(moderating('audit-actor'), 'moderated-file')
+    ).rejects.toMatchObject({ status: 404 })
+    expect(await base.auditEvent.count()).toBe(0)
+
+    const changed = await updateFileSettings(
+      moderating('file-owner'),
+      'moderated-file',
+      { visibility: 'PRIVATE', password: 'correct horse battery' }
+    )
+    expect(changed).toMatchObject({ visibility: 'PRIVATE', hasPassword: true })
+    expect(changed).not.toHaveProperty('password')
+
+    // This suite's storage stub cannot delete, so the record goes anyway.
+    await deleteFile(moderating('file-owner'), 'moderated-file')
+    expect(await base.file.count()).toBe(0)
+    expect(
+      await base.user.findUniqueOrThrow({
+        where: { id: 'file-owner' },
+        select: { storageUsed: true },
+      })
+    ).toEqual({ storageUsed: 3 })
+    expect(logged).toHaveBeenCalledWith(
+      'Error deleting file from storage',
+      expect.any(Error),
+      { fileId: 'moderated-file', filePath: 'fixture/moderated-file' }
+    )
+    const events = await base.auditEvent.findMany({
+      select: { action: true, outcome: true, targetId: true, details: true },
+    })
+    expect(events).toHaveLength(3)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'file.update',
+          outcome: 'success',
+          targetId: 'moderated-file',
+          details: expect.objectContaining({
+            changedFields: ['visibility', 'password'],
+          }),
+        }),
+        expect.objectContaining({
+          action: 'storage.delete_failed',
+          outcome: 'failure',
+          targetId: 'moderated-file',
+          details: expect.objectContaining({ ownerId: 'file-owner' }),
+        }),
+        expect.objectContaining({
+          action: 'file.delete',
+          outcome: 'success',
+          targetId: 'moderated-file',
+        }),
+      ])
+    )
   })
 })

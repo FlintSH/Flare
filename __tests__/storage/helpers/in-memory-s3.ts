@@ -43,7 +43,6 @@ async function toBuffer(
   if (Buffer.isBuffer(body)) return body
   if (typeof body === 'string') return Buffer.from(body)
   if (body instanceof Uint8Array) return Buffer.from(body)
-  // Readable stream
   const chunks: Buffer[] = []
   for await (const chunk of body as Readable) {
     chunks.push(Buffer.from(chunk))

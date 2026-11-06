@@ -67,8 +67,9 @@ function request(base, path = '/', options = {}) {
 
 test('production configuration accepts only the fixed private target and Railway HTTPS origin', () => {
   const gateway = createGateway(env())
-  assert.equal(gateway.maxConnections, 128)
-  assert.equal(gateway.maxRequestsPerSocket, 100)
+  // Node leaves both unlimited by default; a public gateway must cap them.
+  for (const limit of ['maxConnections', 'maxRequestsPerSocket'])
+    assert.ok(Number.isSafeInteger(gateway[limit]) && gateway[limit] > 0, limit)
   for (const invalid of [
     { PREVIEW_UPSTREAM: 'http://169.254.169.254' },
     { PREVIEW_UPSTREAM: 'http://other.railway.internal:3000' },

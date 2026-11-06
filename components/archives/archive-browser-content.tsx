@@ -31,12 +31,15 @@ import { Progress } from '@/components/ui/progress'
 
 import {
   ARCHIVE_BROWSE_LIMITS,
+  ARCHIVE_UNLOCK_SECONDS,
   type ArchiveEntry,
   type ArchiveFormat,
   type ArchiveListing,
   type ArchiveManifest,
   detectArchiveFormat,
 } from '@/lib/archives/shared'
+import { retryable, sendRequest } from '@/lib/client/request'
+import { fileIdUrls } from '@/lib/files/urls'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { ArchiveEntryPreview } from './archive-entry-preview'
@@ -49,7 +52,6 @@ import {
   archiveEntryHref,
   archiveEntryName,
   archiveErrorMessage,
-  archiveFetch,
   archiveFolderRows,
   archiveListingRequest,
   archivePreviewKind,
@@ -59,7 +61,7 @@ import {
 } from './archive-utils'
 
 const ROW_HEIGHT = 44
-const UNLOCK_RENEW_MS = 45 * 60_000
+const UNLOCK_RENEW_MS = (ARCHIVE_UNLOCK_SECONDS * 1000 * 3) / 4
 const count = (value: number, noun: string) =>
   `${value.toLocaleString()} ${noun}${value === 1 ? '' : 's'}`
 
@@ -180,13 +182,11 @@ export function ArchiveBrowserContent({
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
-        const status = (cause as { status?: number }).status
         setState({
           status: 'error',
           message: archiveErrorMessage(cause),
           // Damaged or unsupported archives fail the same way every time.
-          retryable:
-            !status || status === 408 || status === 429 || status >= 500,
+          retryable: retryable(cause),
         })
       })
     return () => controller.abort()
@@ -195,14 +195,14 @@ export function ArchiveBrowserContent({
   const listed = state.status === 'ready' ? state.listing.entries.length : null
   useEffect(() => {
     if (sourceKind !== 'share' || !password || listed === null) return
-    // Protected previews use a one-hour unlock cookie; renew it while open.
+    // Protected previews use a short-lived unlock cookie; renew it while open.
     const timer = setInterval(() => {
       const request = archiveListingRequest(
         file.id,
         { kind: 'share', password },
         { after: listed }
       )
-      void archiveFetch(request.url, request.body).catch(() => {})
+      void sendRequest(request.url, { body: request.body }).catch(() => {})
     }, UNLOCK_RENEW_MS)
     return () => clearInterval(timer)
   }, [file.id, sourceKind, password, listed])
@@ -336,10 +336,7 @@ export function ArchiveBrowserContent({
         <div className="flex flex-wrap gap-2">
           {source.kind === 'owner' && (
             <Button variant="outline" size="sm" asChild>
-              <a
-                href={`/api/files/${encodeURIComponent(file.id)}/download`}
-                download={file.name}
-              >
+              <a href={fileIdUrls(file.id).download} download={file.name}>
                 <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
                 Download archive
               </a>
@@ -602,8 +599,6 @@ export function ArchiveBrowserContent({
                   }}
                 />
               ) : (
-                // On phones the preview opens under the list once a file is
-                // chosen, so the empty prompt would only push the actions down.
                 <PreviewPlaceholder
                   icon={File}
                   title="Choose a file to preview or download it"

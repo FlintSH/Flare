@@ -1,66 +1,60 @@
 'use client'
 
-import { isArchiveCandidate } from '@/components/archives/archive-utils'
+import { fileUrls } from '@/lib/files/urls'
 
-import {
-  AUDIO_FILE_TYPES,
-  CODE_FILE_TYPES,
-  TEXT_FILE_TYPES,
-  VIDEO_FILE_TYPES,
-} from '../protected/mime-types'
-import { ErrorState } from './components/error-state'
+import { TextContent } from './components/text-content'
 import { UnsupportedState } from './components/unsupported-state'
-import { useFileViewer } from './context'
+import type { FileViewerFile } from './types'
 import { ArchiveViewer } from './viewers/archive-viewer'
 import { AudioViewer } from './viewers/audio-viewer'
-import { CodeViewer } from './viewers/code-viewer'
 import { CsvViewer } from './viewers/csv-viewer'
 import { ImageViewer } from './viewers/image-viewer'
 import { PdfViewer } from './viewers/pdf-viewer'
-import { TextViewer } from './viewers/text-viewer'
 import { VideoViewer } from './viewers/video-viewer'
 
-export function FileViewerContent() {
-  const { file, state } = useFileViewer()
+export function FileViewerContent({
+  file,
+  password,
+  hydrated,
+}: {
+  file: FileViewerFile
+  password?: string
+  hydrated: boolean
+}) {
+  const urls = fileUrls(file, { password })
+  const src = hydrated ? urls.content : undefined
 
-  if (state.error) {
-    return <ErrorState error={state.error} />
+  switch (file.kind) {
+    case 'archive':
+      return (
+        <ArchiveViewer
+          file={file}
+          format={file.archiveFormat}
+          password={password}
+        />
+      )
+    case 'unsupported-archive':
+      return <ArchiveViewer file={file} format={null} password={password} />
+    case 'image':
+      return <ImageViewer file={file} src={src} />
+    case 'pdf':
+      return <PdfViewer name={file.name} src={src} />
+    case 'video':
+      return <VideoViewer file={file} lookupUrl={urls.direct} />
+    case 'audio':
+      return <AudioViewer file={file} src={src} />
+    case 'csv':
+      return <CsvViewer url={urls.content} />
+    case 'code':
+    case 'text':
+      return (
+        <TextContent
+          name={file.name}
+          url={urls.content}
+          language={file.language}
+        />
+      )
+    default:
+      return <UnsupportedState mimeType={file.mimeType} />
   }
-
-  if (file.archiveFormat || isArchiveCandidate(file.name, file.mimeType)) {
-    return <ArchiveViewer />
-  }
-
-  if (file.mimeType.startsWith('image/')) {
-    return <ImageViewer />
-  }
-
-  if (file.mimeType === 'application/pdf') {
-    return <PdfViewer />
-  }
-
-  if (VIDEO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
-    return <VideoViewer />
-  }
-
-  if (AUDIO_FILE_TYPES.some((type) => file.mimeType.startsWith(type))) {
-    return <AudioViewer />
-  }
-
-  if (
-    file.mimeType.includes('csv') ||
-    file.name.toLowerCase().endsWith('.csv')
-  ) {
-    return <CsvViewer />
-  }
-
-  if (CODE_FILE_TYPES[file.mimeType]) {
-    return <CodeViewer />
-  }
-
-  if (TEXT_FILE_TYPES.includes(file.mimeType)) {
-    return <TextViewer />
-  }
-
-  return <UnsupportedState mimeType={file.mimeType} />
 }

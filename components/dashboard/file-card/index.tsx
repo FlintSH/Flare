@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,34 +9,29 @@ import { FileType } from '@/types/components/file'
 import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
-  Archive,
-  ArrowUpRight,
   Clock,
   Download,
   Eye,
   Folder,
-  FolderInput,
   Globe,
   KeyRound,
-  Link as LinkIcon,
   Loader2,
   Lock,
   MoreHorizontal,
-  ScanText,
   Tag,
   Timer,
-  Trash2,
 } from 'lucide-react'
 
-import { getFileIcon } from '@/components/dashboard/file-card/utils'
-import { PermissionGate } from '@/components/roles/permission-gate'
-import { ExpiryModal } from '@/components/shared/expiry-modal'
 import {
-  OcrDialog,
-  type OcrDialogState,
-  ocrDialogState,
-  requestOcr,
-} from '@/components/shared/ocr-dialog'
+  CARD_BUTTONS,
+  CARD_MENU,
+  FILE_ACTIONS,
+  type FileActionId,
+  fileActionAllowed,
+} from '@/components/dashboard/file-card/actions'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
+import { ExpiryModal } from '@/components/shared/expiry-modal'
+import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -59,11 +54,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { filePasswordHint } from '@/lib/files/password-policy'
+import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
-import { sanitizeUrl } from '@/lib/utils/url'
 
+import { useOcr } from '@/hooks/use-ocr'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
@@ -75,6 +72,10 @@ import { useToast } from '@/hooks/use-toast'
 const labelClassName =
   'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
+
+const TRY_AGAIN = 'Please try again.'
+const failure = (error: unknown) =>
+  error instanceof RefusedRequest ? error.message : TRY_AGAIN
 
 interface FileCardProps {
   file: FileType
@@ -91,8 +92,12 @@ interface FileCardProps {
   onSelect?: () => void
 }
 
+/**
+ * One file in the library. It shows the file it is given; each action ends
+ * by asking the library to reload, which brings the changed file.
+ */
 export function FileCard({
-  file: initialFile,
+  file,
   onDelete,
   onUpdate,
   onPreview,
@@ -105,7 +110,7 @@ export function FileCard({
   selected,
   onSelect,
 }: FileCardProps) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const { toast } = useToast()
   const lifetime = useRequestLifetime()
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
@@ -113,27 +118,14 @@ export function FileCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [password, setPassword] = useState('')
   const passwordHint = password ? filePasswordHint(password) : null
-  const [file, setFile] = useState(() => {
-    const { password: legacyPassword, ...metadata } = initialFile
-    return {
-      ...metadata,
-      hasPassword: initialFile.hasPassword ?? Boolean(legacyPassword),
-    }
-  })
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
     file.visibility
   )
-  const [isDeleted, setIsDeleted] = useState(false)
   const [mutation, setMutation] = useState<
     'delete' | 'password' | 'visibility' | null
   >(null)
-  const [isLoadingOcr, setIsLoadingOcr] = useState(false)
-  const [ocrText, setOcrText] = useState<string | null>(null)
-  const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
-  const [ocrError, setOcrError] = useState<string | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
-  const [canRetryOcr, setCanRetryOcr] = useState(false)
-  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const urls = fileUrls(file)
+  const ocr = useOcr(urls.ocr)
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
 
@@ -148,7 +140,7 @@ export function FileCard({
     if (signal.aborted) return
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}${sanitizeUrl(file.urlPath)}`
+        fileUrls(file, { origin: window.location.origin }).page
       )
       if (signal.aborted) return
       toast({
@@ -170,24 +162,23 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('delete')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'DELETE',
         signal,
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       setIsDeleteDialogOpen(false)
-      setIsDeleted(true)
       onDelete?.(file.id)
       toast({
         title: 'File deleted',
         description: 'The file has been permanently deleted.',
       })
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t delete this file',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
@@ -200,14 +191,13 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('password')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'PATCH',
+        body: { password: password || null },
         signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password || null }),
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       toast({
         title: password
           ? 'Password protection enabled'
@@ -216,15 +206,14 @@ export function FileCard({
           ? 'Visitors need your password to open this file.'
           : 'The file no longer requires a password.',
       })
-      setFile((previous) => ({ ...previous, hasPassword: Boolean(password) }))
       setPassword('')
       setIsPasswordDialogOpen(false)
       onUpdate?.()
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update the password',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
@@ -237,58 +226,28 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('visibility')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'PATCH',
+        body: { visibility },
         signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visibility }),
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       toast({
         title: 'Visibility updated',
         description: `This file is now ${visibility.toLowerCase()}.`,
       })
       setIsVisibilityDialogOpen(false)
-      setFile((previous) => ({ ...previous, visibility }))
       onUpdate?.()
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update visibility',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
       if (!signal.aborted) setMutation(null)
-    }
-  }
-
-  const handleFetchOcr = async () => {
-    const { signal } = lifetime.current
-    if (signal.aborted) return
-    setIsLoadingOcr(true)
-    setOcrError(null)
-    setOcrNotice(null)
-    // Busy, limited, still-running and failed requests are all shown in the
-    // dialog with a way to ask again, including a retry that never arrived.
-    const show = (state: OcrDialogState) => {
-      setOcrText(state.text)
-      setOcrConfidence(state.confidence)
-      setOcrNotice(state.notice)
-      setOcrError(state.error)
-      setCanRetryOcr(state.canRetry)
-      setIsOcrDialogOpen(true)
-    }
-    try {
-      const outcome = await requestOcr(`/api/files/${file.id}/ocr`, signal)
-      if (signal.aborted) return
-      show(ocrDialogState(outcome))
-    } catch {
-      if (signal.aborted) return
-      show(ocrDialogState(null))
-    } finally {
-      if (!signal.aborted) setIsLoadingOcr(false)
     }
   }
 
@@ -299,39 +258,32 @@ export function FileCard({
     const { signal } = lifetime.current
     if (signal.aborted) return
     try {
-      const response = await fetch(
-        `/api/files/${file.id}/expiry`,
-        expiresAt
+      await apiRequest(`/api/files/${file.id}/expiry`, {
+        ...(expiresAt
           ? {
-              method: 'POST',
-              signal,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+              body: {
                 expiresAt: expiresAt.toISOString(),
                 action: action || ExpiryAction.DELETE,
-              }),
+              },
             }
-          : { method: 'DELETE', signal }
-      )
+          : { method: 'DELETE' }),
+        signal,
+        fallback: TRY_AGAIN,
+      })
       if (signal.aborted) return
-      if (!response.ok) throw new Error('Failed to update expiration')
       toast({
         title: expiresAt ? 'Expiration scheduled' : 'Expiration removed',
         description: expiresAt
           ? 'Your file’s expiration has been updated.'
           : 'This file will no longer expire.',
       })
-      setFile((previous) => ({
-        ...previous,
-        expiresAt: expiresAt?.toISOString() || null,
-      }))
       setIsExpiryModalOpen(false)
       onUpdate?.()
     } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update expiration',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
       // ExpiryModal keeps the form open when saving fails.
@@ -339,14 +291,43 @@ export function FileCard({
     }
   }
 
-  if (isDeleted) return null
-
   const isImage = file.mimeType.startsWith('image/')
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
-  const safeUrl = sanitizeUrl(file.urlPath)
-  const tags = initialFile.tags ?? []
+  const tags = file.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
+  const permitted = (id: FileActionId) => fileActionAllowed(user, id)
+  const browseArchive = permitted('browseArchive') ? onBrowseArchive : undefined
+  // What each action does on this card; one without an entry isn't offered.
+  const handlers: Partial<
+    Record<
+      FileActionId,
+      { run?: () => void; href?: string; download?: string; disabled?: boolean }
+    >
+  > = {
+    ...(browseArchive && { browseArchive: { run: browseArchive } }),
+    open: { href: urls.page },
+    copyLink: { run: () => void handleCopyLink() },
+    download: { href: urls.download, download: file.name },
+    ...(onEditTags && { editTags: { run: onEditTags } }),
+    ...(onMove && { move: { run: onMove } }),
+    visibility: {
+      run: () => {
+        setVisibility(file.visibility)
+        setIsVisibilityDialogOpen(true)
+      },
+    },
+    password: { run: () => handlePasswordDialogOpenChange(true) },
+    expiration: { run: () => setIsExpiryModalOpen(true) },
+    ...(isImage && {
+      ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
+    }),
+    delete: { run: () => setIsDeleteDialogOpen(true) },
+  }
+  const offered = (id: FileActionId) =>
+    permitted(id) ? handlers[id] : undefined
+  // The tag count opens the editor only where the menu offers it.
+  const editTags = offered('editTags')
 
   return (
     <Card
@@ -364,21 +345,21 @@ export function FileCard({
       <div className="relative">
         <Link
           prefetch={false}
-          href={safeUrl}
+          href={urls.page}
           aria-label={`Open ${file.name}`}
           aria-haspopup={
-            onBrowseArchive || (isImage && onPreview) ? 'dialog' : undefined
+            browseArchive || (isImage && onPreview) ? 'dialog' : undefined
           }
           onClick={(event) => {
             if (
-              (onBrowseArchive || (isImage && onPreview)) &&
+              (browseArchive || (isImage && onPreview)) &&
               !event.metaKey &&
               !event.ctrlKey &&
               !event.shiftKey &&
               !event.altKey
             ) {
               event.preventDefault()
-              if (onBrowseArchive) onBrowseArchive()
+              if (browseArchive) browseArchive()
               else onPreview?.(file)
             }
           }}
@@ -386,24 +367,23 @@ export function FileCard({
         >
           {isImage && !previewFailed ? (
             <Image
-              src={`/api/files/${file.id}/thumbnail`}
+              src={urls.thumbnail}
               alt={file.name}
               fill
               className="object-cover"
               sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
               loading="lazy"
               onError={() => setPreviewFailed(true)}
-              unoptimized={
-                file.visibility === 'PRIVATE' ||
-                file.hasPassword ||
-                file.mimeType === 'image/gif'
-              }
+              unoptimized={!canOptimizeThumbnail(file)}
             />
           ) : (
             // The icon steps aside for the hover and focus controls, so it
             // doesn't show through between them.
             <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
-              {getFileIcon(file.mimeType, 'h-16 w-16 text-muted-foreground')}
+              <FileTypeIcon
+                file={file}
+                className="h-16 w-16 text-muted-foreground"
+              />
             </div>
           )}
         </Link>
@@ -411,12 +391,12 @@ export function FileCard({
             colour, in both themes, with solid buttons on top. Only keyboard
             focus counts, so a tap on a phone doesn't leave the card veiled. */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/50 opacity-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
-          {onBrowseArchive ? (
+          {browseArchive ? (
             <Button
               variant="outline"
               size="sm"
               className="bg-background"
-              onClick={onBrowseArchive}
+              onClick={browseArchive}
             >
               Browse archive
             </Button>
@@ -436,103 +416,52 @@ export function FileCard({
               className="bg-background"
               asChild
             >
-              <Link prefetch={false} href={safeUrl}>
+              <Link prefetch={false} href={urls.page}>
                 View
               </Link>
             </Button>
           )}
           <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={handleCopyLink}
-                aria-label={`Copy link to ${file.name}`}
-                title="Copy link"
-              >
-                <LinkIcon className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 bg-background"
-              asChild
-            >
-              <a
-                href={`/api/files/${file.id}/download`}
-                download={file.name}
-                aria-label={`Download ${file.name}`}
-                title="Download"
-              >
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => {
-                  setVisibility(file.visibility)
-                  setIsVisibilityDialogOpen(true)
-                }}
-                aria-label={`Change visibility of ${file.name}`}
-                title="Change visibility"
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="files.share">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => handlePasswordDialogOpenChange(true)}
-                aria-label={`Password protection for ${file.name}`}
-                title="Password protection"
-              >
-                <KeyRound className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            {isImage && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                disabled={isLoadingOcr}
-                onClick={() => void handleFetchOcr()}
-                aria-label={`Extract text from ${file.name}`}
-                title="Extract text (OCR)"
-              >
-                <ScanText className="h-4 w-4" />
-              </Button>
-            )}
-            <PermissionGate permission="files.update">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background"
-                onClick={() => setIsExpiryModalOpen(true)}
-                aria-label={`Manage expiration of ${file.name}`}
-                title="Manage expiration"
-              >
-                <Timer className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="files.delete">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive"
-                onClick={() => setIsDeleteDialogOpen(true)}
-                aria-label={`Delete ${file.name}`}
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </PermissionGate>
+            {CARD_BUTTONS.map((id) => {
+              const handler = offered(id)
+              if (!handler) return null
+              const { icon: Icon, button } = FILE_ACTIONS[id]
+              const className =
+                id === 'delete'
+                  ? 'h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive'
+                  : 'h-8 w-8 bg-background'
+              return handler.href ? (
+                <Button
+                  key={id}
+                  variant="outline"
+                  size="icon"
+                  className={className}
+                  asChild
+                >
+                  <a
+                    href={handler.href}
+                    download={handler.download}
+                    aria-label={button.label(file.name)}
+                    title={button.title}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                </Button>
+              ) : (
+                <Button
+                  key={id}
+                  variant="outline"
+                  size="icon"
+                  className={className}
+                  disabled={handler.disabled}
+                  onClick={handler.run}
+                  aria-label={button.label(file.name)}
+                  title={button.title}
+                >
+                  <Icon className="h-4 w-4" />
+                </Button>
+              )
+            })}
           </div>
         </div>
         {onSelect && (
@@ -562,87 +491,52 @@ export function FileCard({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {onBrowseArchive && (
-                <DropdownMenuItem onSelect={onBrowseArchive}>
-                  <Archive />
-                  Browse archive
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem asChild>
-                <Link prefetch={false} href={safeUrl}>
-                  <ArrowUpRight />
-                  Open file
-                </Link>
-              </DropdownMenuItem>
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem onSelect={() => void handleCopyLink()}>
-                  <LinkIcon />
-                  Copy link
-                </DropdownMenuItem>
-              </PermissionGate>
-              <DropdownMenuItem asChild>
-                <a href={`/api/files/${file.id}/download`} download={file.name}>
-                  <Download />
-                  Download file
-                </a>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {onEditTags && can('tags.manage') && can('files.update') && (
-                <DropdownMenuItem onSelect={onEditTags}>
-                  <Tag />
-                  Edit tags
-                </DropdownMenuItem>
-              )}
-              {onMove && can('folders.manage') && can('files.update') && (
-                <DropdownMenuItem onSelect={onMove}>
-                  <FolderInput />
-                  Move to folder
-                </DropdownMenuItem>
-              )}
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setVisibility(file.visibility)
-                    setIsVisibilityDialogOpen(true)
-                  }}
-                >
-                  <Eye />
-                  Change visibility
-                </DropdownMenuItem>
-              </PermissionGate>
-              <PermissionGate permission="files.share">
-                <DropdownMenuItem
-                  onSelect={() => handlePasswordDialogOpenChange(true)}
-                >
-                  <KeyRound />
-                  {file.hasPassword ? 'Manage password' : 'Add password'}
-                </DropdownMenuItem>
-              </PermissionGate>
-              <PermissionGate permission="files.update">
-                <DropdownMenuItem onSelect={() => setIsExpiryModalOpen(true)}>
-                  <Timer />
-                  Manage expiration
-                </DropdownMenuItem>
-              </PermissionGate>
-              {isImage && (
-                <DropdownMenuItem
-                  disabled={isLoadingOcr}
-                  onSelect={() => void handleFetchOcr()}
-                >
-                  <ScanText />
-                  {isLoadingOcr ? 'Extracting text…' : 'Extract text (OCR)'}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <PermissionGate permission="files.delete">
-                <DropdownMenuItem
-                  className="text-destructive focus:bg-danger/10 focus:text-destructive"
-                  onSelect={() => setIsDeleteDialogOpen(true)}
-                >
-                  <Trash2 />
-                  Delete file
-                </DropdownMenuItem>
-              </PermissionGate>
+              {CARD_MENU.map((group, index) => (
+                <Fragment key={index}>
+                  {index > 0 && <DropdownMenuSeparator />}
+                  {group.map((id) => {
+                    const handler = offered(id)
+                    if (!handler) return null
+                    const { icon: Icon, menu } = FILE_ACTIONS[id]
+                    const content = (
+                      <>
+                        <Icon />
+                        {typeof menu === 'function'
+                          ? menu({
+                              hasPassword: file.hasPassword,
+                              busy: ocr.loading,
+                            })
+                          : menu}
+                      </>
+                    )
+                    return (
+                      <DropdownMenuItem
+                        key={id}
+                        asChild={!!handler.href}
+                        disabled={handler.disabled}
+                        onSelect={handler.run}
+                        className={
+                          id === 'delete'
+                            ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
+                            : undefined
+                        }
+                      >
+                        {!handler.href ? (
+                          content
+                        ) : handler.download ? (
+                          <a href={handler.href} download={handler.download}>
+                            {content}
+                          </a>
+                        ) : (
+                          <Link prefetch={false} href={handler.href}>
+                            {content}
+                          </Link>
+                        )}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </Fragment>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -663,7 +557,7 @@ export function FileCard({
             {getRelativeTime(new Date(file.uploadedAt))}
           </span>
         </div>
-        {file.expiresAt && !onSelect && can('files.update') && (
+        {file.expiresAt && !onSelect && permitted('expiration') && (
           <button
             type="button"
             onClick={() => setIsExpiryModalOpen(true)}
@@ -678,7 +572,7 @@ export function FileCard({
             </span>
           </button>
         )}
-        {isLoadingOcr && (
+        {ocr.loading && (
           <div
             role="status"
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
@@ -692,7 +586,7 @@ export function FileCard({
         <div className="flex items-center justify-between gap-2">
           <Link
             prefetch={false}
-            href={safeUrl}
+            href={urls.page}
             title={file.name}
             className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -731,16 +625,24 @@ export function FileCard({
                 <span className="max-w-20 truncate">{tag.name}</span>
               </button>
             ))}
-            {tags.length > visibleTags.length && (
-              <button
-                type="button"
-                onClick={onEditTags}
-                aria-label={`View all ${tags.length} tags`}
-                className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                +{tags.length - visibleTags.length}
-              </button>
-            )}
+            {tags.length > visibleTags.length &&
+              (editTags ? (
+                <button
+                  type="button"
+                  onClick={editTags.run}
+                  aria-label={`View all ${tags.length} tags`}
+                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  +{tags.length - visibleTags.length}
+                </button>
+              ) : (
+                <span
+                  title={`${tags.length} tags`}
+                  className="shrink-0 px-1 text-[11px] text-muted-foreground"
+                >
+                  +{tags.length - visibleTags.length}
+                </span>
+              ))}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3">
             <span
@@ -966,22 +868,13 @@ export function FileCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <OcrDialog
-        isOpen={isOcrDialogOpen}
-        onOpenChange={setIsOcrDialogOpen}
-        isLoading={isLoadingOcr}
-        text={ocrText}
-        error={ocrError}
-        notice={ocrNotice}
-        onRetry={canRetryOcr ? () => void handleFetchOcr() : undefined}
-        confidence={ocrConfidence}
-        filename={file.name}
-      />
+      <OcrDialog {...ocr.dialog} filename={file.name} />
       <ExpiryModal
         isOpen={isExpiryModalOpen}
         onOpenChange={setIsExpiryModalOpen}
         onConfirm={handleExpiryUpdate}
         initialDate={file.expiresAt ? new Date(file.expiresAt) : null}
+        initialAction={file.expiryAction ?? undefined}
         title="Manage expiration"
         description="Choose when this file is deleted or made private."
       />

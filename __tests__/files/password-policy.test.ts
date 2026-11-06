@@ -3,12 +3,12 @@ import { PATCH as moderatePATCH } from '@/app/api/users/[id]/files/[fileId]/rout
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  FILE_PASSWORD_MAX_BYTES,
-  FILE_PASSWORD_MIN_LENGTH,
   filePasswordHint,
   newFilePasswordSchema,
 } from '@/lib/files/password-policy'
-import { parseUploadFields, uploadErrorResponse } from '@/lib/uploads/options'
+import { errorResponse } from '@/lib/http/route'
+import { uploadRoutes } from '@/lib/uploads/http'
+import { parseUploadFields } from '@/lib/uploads/options'
 import { uploadRequestOptionsSchema } from '@/lib/uploads/schema'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn() }))
@@ -16,10 +16,10 @@ const mocks = vi.hoisted(() => ({ update: vi.fn() }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: vi.fn(), update: mocks.update } },
 }))
-vi.mock('@/lib/permissions/server', () => ({
-  requirePermission: async () => ({
+vi.mock('@/lib/http/access', () => ({
+  requireSession: async () => ({
     session: { user: { id: 'moderator' } },
-    response: null,
+    user: { id: 'moderator' },
   }),
 }))
 vi.mock('@/lib/security/request-origin', () => ({
@@ -28,8 +28,6 @@ vi.mock('@/lib/security/request-origin', () => ({
 
 describe('new file password rules', () => {
   it('requires 8 characters and at most 72 UTF-8 bytes', () => {
-    expect(FILE_PASSWORD_MIN_LENGTH).toBe(8)
-    expect(FILE_PASSWORD_MAX_BYTES).toBe(72)
     expect(newFilePasswordSchema.safeParse('1234567').success).toBe(false)
     expect(newFilePasswordSchema.safeParse('12345678').success).toBe(true)
     expect(newFilePasswordSchema.safeParse('a'.repeat(72)).success).toBe(true)
@@ -61,7 +59,7 @@ describe('new file password rules', () => {
     } catch (error) {
       failure = error
     }
-    const response = uploadErrorResponse(failure)
+    const response = errorResponse(failure, uploadRoutes)
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       error: 'File passwords must be at least 8 characters.',

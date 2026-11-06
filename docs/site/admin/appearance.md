@@ -31,6 +31,8 @@ These actions are in the bar under the studio, which also shows whether you have
 
 Logos are embedded into the appearance document, making exported designs portable. SVG and external logo URLs are not accepted for these studio assets. Email branding has its own settings, including an optional external logo URL; publishing an appearance is not an email-template rollout.
 
+Choose **Light logo** or **Dark logo** and select a PNG, JPEG, or WebP image of at most 256 KB. A larger file shows **Please upload a logo of at most 256 KB.** and a file your browser reports as another format **Please upload a PNG, JPEG, or WebP image.**; nothing is uploaded. The server applies the same rules and reads the file's content, so a file that isn't really one of those images is refused with **File content is not a PNG, JPEG, or WebP image.** An image with the wrong extension, such as a PNG named `logo.jpg`, is saved as the format it really is. A refused upload answers as a favicon upload does: `413`, `415` or `400`, with `Invalid form data.` for a body that isn't a form and `Request body is too large.` for one over 320 KB, the image plus room for the form. Earlier versions said **Choose a logo smaller than 256 KB.** or **Only PNG, JPEG, and WebP images are supported.**, accepted any reported type, and refused bodies over 300,000 bytes with **Logos must be smaller than 256 KB.**
+
 ## Theme
 
 Enable **Use studio theme** to apply the studio palettes. Leaving it off keeps the original/legacy theme behavior while allowing identity and sharing choices to be saved. With it off, light mode uses Flare's original light palette too; light colors you changed in the studio, including a preset you tried, apply only once the studio theme is on. Earlier builds kept applying a saved studio light palette to light mode after the studio theme was switched off.
@@ -66,7 +68,7 @@ Choose a default share-page layout:
 
 <Screenshot src="/screenshots/customization/share-delivery.png" alt="A real Flare public share page using the Delivery layout" caption="The Delivery layout gives a shared file a spacious presentation." />
 
-Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
+Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. The preview follows it too, using the saved **Show credits footer** setting from **General**; earlier versions previewed an inherited footer even when that setting was off. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
 
 Upload profiles can select a share style for new files. A file with no stored style inherits the current instance default, so changing the default can change how those older files appear too.
 
@@ -92,7 +94,7 @@ Hidden details are omitted from generated social text as well. These are present
 
 ## Appearance packs
 
-Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, export the design currently being previewed. The file includes identity, embedded logos, paired palettes, surfaces, typography, and sharing choices.
+Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, choose **Export appearance** to download the design currently being previewed. The file is named after the instance name in lowercase, with characters other than letters, digits, and hyphens replaced by hyphens, such as `flare-appearance.json`. It includes identity, embedded logos, paired palettes, surfaces, typography, and sharing choices.
 
 Import a supported `flare.appearance` version 1 pack of at most **1 MB**. Importing creates a saved draft. Review it in both modes and publish explicitly; importing alone does not replace the live design.
 
@@ -114,13 +116,25 @@ These colors are written into every page, including the sign-in page, so Flare a
 - Colors chosen with the picker in earlier builds were saved as hex, which the theme could not use, so the affected elements lost their color; a primary button could turn transparent. They now display as the colors that were picked. Review **Classic color controls** if your palette changes unexpectedly.
 - If you delegated `appearance.manage` to people you don't fully trust, filter [Audit log](/admin/audit) to the `settings` category and review events whose `settingsKeys` include `settings.appearance`, then check the classic colors.
 
-The favicon control accepts a **PNG up to 1 MB** in the dashboard. Save your changes to apply the pending favicon. It is stored through the active storage provider, so it belongs in file backups as well as the database configuration.
+Under **Favicon**, choose **Upload favicon** and select a **PNG up to 1 MB**, then choose **Save settings** to apply it. The server applies the same limits and also checks the file's content, so an image that isn't really a PNG, such as a JPEG renamed to `.png`, is refused: **Settings could not be saved** appears with _File content is not a PNG image._ and the current favicon stays. After a successful save, **Current favicon** shows the new icon.
+
+Flare accepts the upload only from its own pages, as a `multipart/form-data` request with the image in its `file` field: a request from another origin answers `403`, any other content type `415`, and a body that isn't the form its content type names `400` with `Invalid form data.` Earlier versions checked neither and answered a body that wasn't a multipart form with `500`.
+
+Each upload gets its own address, `/api/favicon?v=` followed by a hash of the image. Browsers may cache that address for a year because its content never changes, and they load a replaced favicon from its new address on the next page view. Earlier versions served every favicon from `/api/favicon` with the same one-year caching, so a replaced favicon could stay stale for up to a year in returning visitors' browsers and in the **Current favicon** preview. A favicon uploaded with an earlier version keeps working but isn't cached long-term until you upload it again. Without an uploaded favicon, pages link only Flare's own icon and `/api/favicon` answers `404`.
+
+The favicon is stored through the active storage provider as `uploads/favicon.png`, so it belongs in file backups as well as the database configuration.
 
 ## Custom CSS and head HTML
 
-With the **Administrator** permission, open **Settings → Appearance → Custom CSS and HTML** for the advanced editors. The delegated `appearance.manage` permission covers the studio, branding, and favicon; it does not authorize custom CSS/head HTML. They are saved separately from studio drafts and are not included in appearance packs. Custom CSS is applied to the live app; custom head content is inserted into the page as administrator-provided HTML.
+With the **Administrator** permission, open **Settings → Appearance → Custom CSS and HTML** for the advanced editors. The delegated `appearance.manage` permission covers the studio, branding, and favicon; it does not authorize custom CSS/head HTML. They are saved separately from studio drafts and are not included in appearance packs: a dot beside **Custom CSS** or **Custom HTML** marks an edit that isn't saved yet, and **Save settings** in the bar at the bottom of the screen applies it. Custom CSS is applied to the live app; custom head content is inserted into the page as administrator-provided HTML.
+
+Flare marks every declaration of your style rules `!important`, including those inside `@media`, `@supports`, `@container`, and `@layer` blocks, so they win over Flare's own styles whatever their selectors. Everything else arrives as you wrote it: strings, comments, `url()` values, `@import` and `@font-face` rules, and `@keyframes`. Flare's interface font stays in place, and a `font-family` rule changes only the elements it selects; set it on `body` to change the interface text. While your CSS contains `font-family` anywhere, the rest of the interface uses the studio theme's **Typeface**, or Inter while **Use studio theme** is off. Earlier versions split declarations at every `;`, which broke data URLs such as `url(data:image/png;base64,…)`, font imports such as `wght@400;700`, and quoted values containing `;`. They also marked declarations inside `@font-face` and `@keyframes`, where browsers ignore marked declarations, and dropped Inter whenever the CSS mentioned `font-family`, so even `code { font-family: monospace }` switched the rest of the interface to the browser's default font.
+
+Head HTML goes into the page head, before the custom CSS, as its own elements: `base`, `link`, `meta`, `noscript`, `script`, `style`, `template`, and `title`. Anything else, such as text or a `div`, would end the head, so Flare leaves it out; head elements inside it are kept. An `iframe`, `math`, `noembed`, `noframes`, `svg`, `textarea`, or `xmp` element is left out with everything inside it, because what it holds isn't the page's own head content: a `script` in an `iframe` or a `title` in an `svg` doesn't reach the head. Inline event handlers such as `onload` and `style` attributes are left out too; put scripts in a `script` element. Earlier versions wrapped the HTML in a `div`, which made browsers move it into the page body, where services that read `meta` tags, such as site verification, don't look for them.
 
 Use these controls for an intentional site-wide change and test the login, dashboard, share, and mobile layouts after saving. Prefer studio fields for colors and identity when they provide the behavior you need. CSS selectors tied to internal components may need adjustment after upgrades. Treat head HTML as code with access to your site's browser context; only add content you understand and control.
+
+Saving custom CSS removes blank space before and after it and keeps at most one empty line in a row, whether you save it from **Settings** or through the older whole-settings form. Earlier versions tidied it only from the older form, so CSS saved from **Settings** kept every blank line.
 
 ## Recover an unusable appearance
 
@@ -130,7 +144,7 @@ Sign in as an administrator and open:
 /dashboard/settings?section=appearance&recovery=1
 ```
 
-This view uses the original Flare theme and suppresses custom CSS/head HTML for the recovery page without changing the saved settings. Restore the previous studio appearance or repair custom styles at:
+This view uses the original Flare theme and suppresses custom CSS/head HTML for the recovery page without changing the saved settings. Restore the previous studio appearance there. With the **Administrator** permission, repair custom styles at the address below. **Custom CSS and HTML** appears only with that permission, so for a delegated designer the studio's recovery notice and its **Identity** section don't link to it; ask an administrator to repair custom styles.
 
 ```text
 /dashboard/settings?section=appearance&recovery=1#advanced-styles

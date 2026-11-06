@@ -1,63 +1,49 @@
 import { Prisma, type User } from '@prisma/client'
-import { compare, hash } from 'bcryptjs'
 import type { Session } from 'next-auth'
-import { randomUUID } from 'node:crypto'
 
-import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
-import { DEFAULT_CONFIG, configSchema, getConfig } from '@/lib/config'
+import { assertFreshIdentity } from '@/lib/auth/security/service'
+import { getConfig, readConfig } from '@/lib/config'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
+import { claimEmail, findAccountByEmail } from '@/lib/users/email-claim'
 
 import { getEmailConfigForUpdate } from './config'
+import {
+  canResendVerification,
+  currentAddressMustVerify,
+  emailChangesEnabled,
+  passwordRecoveryAvailable,
+} from './eligibility'
+import { EmailHttpError } from './errors'
+import {
+  EMAIL_CHANGE_PURPOSES,
+  EMAIL_LINKS,
+  type EmailTokenPurpose,
+  emailLinkAvailable,
+} from './links'
 import { MailLimitError, enqueueMail } from './outbox'
 import { canRecoverPassword, hasVerifiedEmail } from './policy'
 import type { EmailConfig } from './schema'
 import { renderAccountEmail } from './templates'
 import {
-  type EmailTokenPurpose,
   consumeEmailToken,
   invalidateEmailTokens,
   issueEmailToken,
 } from './tokens'
 
-/** Serialize mailbox claims without rewriting or merging legacy addresses. */
-export async function lockEmailAddress(
-  tx: Prisma.TransactionClient,
-  email: string
-) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${email.trim()}), 71041))`
+/** A signed-in account asking for an email action, as `emailSession` reads it. */
+export interface EmailAccount {
+  user: User
+  session: Session
+  config: EmailConfig
 }
 
 export async function lockEmailUser(tx: Prisma.TransactionClient, id: string) {
-  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`
+  await lockUserRow(tx, id)
   const user = await tx.user.findUnique({ where: { id } })
-  if (!user) throw new Error('Account not found.')
+  if (!user) throw new EmailHttpError('Account not found.')
   return user
-}
-
-export async function assertRecentIdentity(
-  user: User,
-  password: string | undefined,
-  session: Session
-) {
-  if (user.passkeyRequired) {
-    assertRecentPasskeyProof(user, session)
-    return
-  }
-  if (user.password) {
-    if (!password || !(await compare(password, user.password)))
-      throw new Error('Confirm your current password to continue.')
-    return
-  }
-  if (
-    !user.oidcSubject ||
-    session.user.authMethod !== 'oidc' ||
-    !session.user.authTime ||
-    Date.now() - session.user.authTime > 5 * 60 * 1000
-  ) {
-    throw new Error(
-      'Sign in again with SSO, then try again within five minutes.'
-    )
-  }
 }
 
 export async function sendAccountToken(
@@ -67,21 +53,17 @@ export async function sendAccountToken(
   config: EmailConfig,
   email = user.email
 ) {
-  if (!config.enabled || !email) throw new Error('Email is unavailable.')
-  const lifetime =
-    purpose === 'reset'
-      ? config.recovery.tokenMinutes * 60000
-      : config.verification.tokenHours * 3600000
-  const expiresAt = new Date(Date.now() + lifetime)
+  if (!config.enabled || !email)
+    throw new EmailHttpError('Email is unavailable.')
+  const link = EMAIL_LINKS[purpose]
+  const expiresAt = new Date(Date.now() + link.lifetime(config))
   const { token, record } = await issueEmailToken(tx, {
     userId: user.id,
     email,
     purpose,
     expiresAt,
   })
-  const path =
-    purpose === 'reset' ? '/auth/reset-password' : '/auth/verify-email'
-  const url = new URL(path, config.publicUrl)
+  const url = new URL(link.page, config.publicUrl)
   url.searchParams.set('token', token)
   const message = renderAccountEmail(config, {
     kind: purpose,
@@ -108,15 +90,21 @@ export async function sendAccountToken(
 export async function requestPasswordReset(email: string, config: EmailConfig) {
   if (!(await isPasswordRecoveryAvailable(config))) return
   // Case-insensitive collisions are ambiguous; never merge or choose one legacy account.
-  const matches = await prisma.user.findMany({
-    where: { email: { equals: email.trim(), mode: 'insensitive' } },
-    take: 2,
+  const match = await findAccountByEmail(prisma, email, {
+    id: true,
+    password: true,
+    email: true,
+    emailVerified: true,
+    emailVerifiedFor: true,
+    emailVerificationSource: true,
+    emailExempt: true,
+    createdAt: true,
   })
-  if (matches.length !== 1 || !canRecoverPassword(matches[0], config)) return
+  if (!match || !canRecoverPassword(match, config)) return
   await prisma.$transaction(async (tx) => {
     config = await getEmailConfigForUpdate(tx)
     if (!(await isPasswordRecoveryAvailable(config, tx))) return
-    const user = await lockEmailUser(tx, matches[0].id)
+    const user = await lockEmailUser(tx, match.id)
     if (!canRecoverPassword(user, config)) return
     await sendAccountToken(tx, user, 'reset', config)
   })
@@ -128,29 +116,23 @@ export async function resetPassword(
   config: EmailConfig
 ) {
   if (!(await isPasswordRecoveryAvailable(config)))
-    throw new Error('Password recovery is disabled.')
-  const passwordHash = await hash(password, 10)
+    throw new EmailHttpError('Password recovery is disabled.')
+  const passwordHash = await hashAccountPassword(password)
   await prisma.$transaction(async (tx) => {
     config = await getEmailConfigForUpdate(tx)
     if (!(await isPasswordRecoveryAvailable(config, tx)))
-      throw new Error('Password recovery is disabled.')
+      throw new EmailHttpError('Password recovery is disabled.')
     const record = await consumeEmailToken(tx, token, ['reset'])
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
-      throw new Error('This email link is invalid or expired.')
+      throw new EmailHttpError('This email link is invalid or expired.')
     await tx.user.update({
       where: { id: user.id },
-      data: {
+      data: await changeCredentials(tx, user.id, {
         password: passwordHash,
-        sessionVersion: { increment: 1 },
-        pendingEmail: null,
-        pendingEmailOldConfirmed: false,
-        ...(config.recovery.rotateUploadToken
-          ? { uploadToken: randomUUID() }
-          : {}),
-      },
+        rotateUploadToken: config.recovery.rotateUploadToken,
+      }),
     })
-    await invalidateEmailTokens(tx, user.id)
     const message = renderAccountEmail(config, {
       kind: 'password_changed',
       recipient: record.email,
@@ -177,34 +159,27 @@ export async function isPasswordRecoveryAvailable(
   config: EmailConfig,
   tx?: Prisma.TransactionClient
 ) {
-  if (!config.enabled || !config.recovery.enabled) return false
+  if (!emailLinkAvailable(config, 'reset')) return false
   // When changing account state, read SSO policy under the same settings lock.
-  const fullConfig = tx
-    ? configSchema.parse(
-        (await tx.config.findUnique({ where: { key: 'flare_config' } }))
-          ?.value ?? DEFAULT_CONFIG
-      )
-    : await getConfig()
-  const oidc = fullConfig.settings.general.oidc
-  return !(oidc?.enabled && oidc.enforceSso)
+  const fullConfig = tx ? await readConfig(tx) : await getConfig()
+  return passwordRecoveryAvailable(config, fullConfig.settings.general.oidc)
 }
 
 export async function confirmEmailToken(token: string, config: EmailConfig) {
-  if (!config.enabled) throw new Error('Email is disabled.')
+  if (!config.enabled) throw new EmailHttpError('Email is disabled.')
   return prisma.$transaction(async (tx) => {
     // Policy changes and account mutations share a lock; never approve against
     // a request snapshot captured before an administrator tightened the policy.
     config = await getEmailConfigForUpdate(tx)
-    if (!config.enabled) throw new Error('Email is disabled.')
+    if (!config.enabled) throw new EmailHttpError('Email is disabled.')
     const record = await consumeEmailToken(tx, token, [
       'verify',
-      'change',
-      'change_approval',
+      ...EMAIL_CHANGE_PURPOSES,
     ])
     const user = await lockEmailUser(tx, record.userId)
     if (record.purpose === 'verify') {
       if (user.email !== record.email)
-        throw new Error('This email link is invalid or expired.')
+        throw new EmailHttpError('This email link is invalid or expired.')
       await tx.user.update({
         where: { id: user.id },
         data: {
@@ -215,11 +190,11 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
       })
       return 'Your email address is verified.'
     }
-    if (!config.changes.enabled || !user.pendingEmail)
-      throw new Error('This email change is no longer available.')
+    if (!emailChangesEnabled(config) || !user.pendingEmail)
+      throw new EmailHttpError('This email change is no longer available.')
     if (record.purpose === 'change_approval') {
       if (record.email !== user.email)
-        throw new Error('This email link is invalid or expired.')
+        throw new EmailHttpError('This email link is invalid or expired.')
       await tx.user.update({
         where: { id: user.id },
         data: { pendingEmailOldConfirmed: true },
@@ -227,7 +202,7 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
       return 'Email change approved. Confirm the link sent to your new address to finish.'
     }
     if (record.email !== user.pendingEmail)
-      throw new Error('This email link is invalid or expired.')
+      throw new EmailHttpError('This email link is invalid or expired.')
     if (config.changes.requireOldEmail && !user.pendingEmailOldConfirmed) {
       const approval = await tx.emailToken.findFirst({
         where: {
@@ -240,35 +215,27 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
         },
       })
       if (!approval)
-        throw new Error(
+        throw new EmailHttpError(
           'This email change requires approval from your current address. Start the email change again to request an approval link.'
         )
-      throw new Error(
+      throw new EmailHttpError(
         'Approve the change using the link sent to your current address first.'
       )
     }
-    await lockEmailAddress(tx, record.email)
-    const conflict = await tx.user.findFirst({
-      where: {
-        id: { not: user.id },
-        email: { equals: record.email, mode: 'insensitive' },
-      },
-    })
-    if (conflict) throw new Error('This email address is unavailable.')
+    if (
+      !(await claimEmail(tx, record.email, {
+        accountId: user.id,
+        anyCase: true,
+      }))
+    )
+      throw new EmailHttpError('This email address is unavailable.')
     const oldEmail = user.email
     await tx.user.update({
       where: { id: user.id },
-      data: {
-        email: record.email,
-        emailVerified: new Date(),
-        emailVerifiedFor: record.email,
-        emailVerificationSource: 'email',
-        pendingEmail: null,
-        pendingEmailOldConfirmed: false,
-        sessionVersion: { increment: 1 },
-      },
+      data: await changeCredentials(tx, user.id, {
+        email: { address: record.email, verified: true },
+      }),
     })
-    await invalidateEmailTokens(tx, user.id)
     if (oldEmail && hasVerifiedEmail(user, config)) {
       const message = renderAccountEmail(config, {
         kind: 'email_changed',
@@ -293,4 +260,138 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
     }
     return 'Your email address was changed. Sign in with your new address.'
   })
+}
+
+export function requireEmailAddress(user: User, config: EmailConfig) {
+  if (!config.enabled || !user.email)
+    throw new EmailHttpError('Email is disabled.')
+  return user.email
+}
+
+export function assertEmailChangesEnabled(config: EmailConfig) {
+  if (!emailChangesEnabled(config))
+    throw new EmailHttpError('Email changes are disabled.')
+}
+
+async function lockConfirmedUser(
+  tx: Prisma.TransactionClient,
+  { user, session }: EmailAccount,
+  password: string | undefined
+) {
+  const fresh = await lockEmailUser(tx, user.id)
+  if (fresh.passkeyRequired)
+    await assertFreshIdentity(fresh, { password }, session, {
+      secondFactor: false,
+    })
+  return fresh
+}
+
+function assertAccountUnchanged(fresh: User, user: User) {
+  if (
+    fresh.email !== user.email ||
+    fresh.password !== user.password ||
+    fresh.sessionVersion !== user.sessionVersion
+  )
+    throw new EmailHttpError('Account changed. Sign in and try again.')
+}
+
+/** Starts verifying the account's current address, after it proves its identity. */
+export async function enrollEmail(
+  account: EmailAccount,
+  password: string | undefined
+) {
+  const { user, session, config } = account
+  await assertFreshIdentity(user, { password }, session, {
+    secondFactor: false,
+  })
+  await prisma.$transaction(async (tx) => {
+    const fresh = await lockConfirmedUser(tx, account, password)
+    if (hasVerifiedEmail(fresh, config)) return
+    assertAccountUnchanged(fresh, user)
+    await tx.user.update({
+      where: { id: user.id },
+      data: { emailVerificationSource: 'pending_local' },
+    })
+    await sendAccountToken(tx, fresh, 'verify', config)
+  })
+  return 'A verification link was sent to your email address.'
+}
+
+export async function resendVerification({ user, config }: EmailAccount) {
+  await prisma.$transaction(async (tx) => {
+    const fresh = await lockEmailUser(tx, user.id)
+    if (hasVerifiedEmail(fresh, config)) return
+    if (!canResendVerification(fresh, config))
+      throw new EmailHttpError(
+        'Confirm your current password to enroll your recovery email first.'
+      )
+    await sendAccountToken(tx, fresh, 'verify', config)
+  })
+  return 'A verification link was sent to your email address.'
+}
+
+/**
+ * Asks to replace the account's address with `email`, after it proves its
+ * identity: the new address confirms the change and, when the settings ask
+ * for it, the current address approves it.
+ */
+export async function requestEmailChange(
+  account: EmailAccount,
+  email: string,
+  password: string | undefined
+) {
+  const { user, session } = account
+  await assertFreshIdentity(user, { password }, session, {
+    secondFactor: false,
+  })
+  const requiresOldEmail = await prisma.$transaction(async (tx) => {
+    const config = await getEmailConfigForUpdate(tx)
+    assertEmailChangesEnabled(config)
+    const fresh = await lockConfirmedUser(tx, account, password)
+    assertAccountUnchanged(fresh, user)
+    if (email === fresh.email)
+      throw new EmailHttpError('Choose a different email address.')
+    if (currentAddressMustVerify(fresh, config))
+      throw new EmailHttpError(
+        'Your current email must be verified before changing it.'
+      )
+    if (!(await claimEmail(tx, email, { accountId: user.id, anyCase: true })))
+      throw new EmailHttpError('This email address is unavailable.')
+    await invalidateEmailTokens(tx, user.id)
+    const pending = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        pendingEmail: email,
+        // This records actual approval, independently of the current policy.
+        pendingEmailOldConfirmed: false,
+      },
+    })
+    await sendAccountToken(tx, pending, 'change', config, email)
+    if (config.changes.requireOldEmail)
+      await sendAccountToken(tx, pending, 'change_approval', config)
+    return config.changes.requireOldEmail
+  })
+  return requiresOldEmail
+    ? 'Approve the change from your current address, then confirm your new address.'
+    : 'Confirm the link sent to your new address to finish.'
+}
+
+/** Drops a pending address change and voids its links. */
+export async function cancelEmailChange(userId: string) {
+  await prisma.$transaction(async (tx) => {
+    await lockEmailUser(tx, userId)
+    await tx.user.update({
+      where: { id: userId },
+      data: { pendingEmail: null, pendingEmailOldConfirmed: false },
+    })
+    await tx.emailToken.updateMany({
+      where: {
+        userId,
+        purpose: { in: [...EMAIL_CHANGE_PURPOSES] },
+        consumedAt: null,
+      },
+      data: { consumedAt: new Date() },
+    })
+  })
+  return 'The pending email change was canceled.'
 }

@@ -15,6 +15,8 @@ docker compose logs --tail=100 db
 docker compose exec -T db pg_isready -U flare -d flare
 ```
 
+The image's health check requests `/api/health` inside the container. Failed checks in the first 150 seconds don't count, which leaves time for the database wait, up to 30 tries that take about 4 seconds each, and migrations: `docker compose ps` shows `health: starting` until a check succeeds, then `healthy`. After those 150 seconds, three failed checks 10 seconds apart mark the container `unhealthy`. Earlier images allowed 10 seconds, so a start that waited for the database or applied migrations could show `unhealthy` until Flare answered.
+
 The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example, `postgres` in the repository's `docker-compose.yml`), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
 
 Changing `POSTGRES_PASSWORD` in Compose does not change a password inside an already initialized PostgreSQL volume. Update the actual database account deliberately or restore the original correct environment value. Do not delete the volume to fix a password mismatch on a real instance.
@@ -26,6 +28,23 @@ If migrations failed, preserve the logs and take a database backup before correc
 Check that `NEXTAUTH_URL` exactly matches the public scheme, hostname, and port you use. Recreate the container after changing it. Your proxy must preserve the public host and protocol.
 
 All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make authenticator, SMTP, and webhook secrets unreadable. Authenticator encryption always depends on `NEXTAUTH_SECRET`, even when email/webhooks use a dedicated key. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
+
+## Pages show Something went wrong
+
+While Flare can't read its database, for example because PostgreSQL is stopped, unreachable, or rejecting the configured account, pages show **Something went wrong**, API requests that read the instance settings answer `500`, and `GET /api/setup/check` answers `503`. No page sends visitors to setup. Earlier versions treated an unreadable database as a new instance and showed the first-run setup form instead, and a request that couldn't read the settings used the defaults: open registration, local storage, and the stock appearance.
+
+Check the database the same way as for a container that never becomes healthy:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 db
+docker compose exec -T db pg_isready -U flare -d flare
+docker compose logs --tail=150 flare
+```
+
+Flare logs the database error under `GET /api/setup/check failed` when a browser checks setup, under each failing API route, and as `Could not read settings; page shell uses defaults` when it draws the frame around the error message with the default appearance. Once the database answers again, choose **Try again** or reload the page; nothing in Flare needs repairing. In earlier versions, **Try again** showed the error again until the page was reloaded. If the setup form appears while the database is reachable, Flare is connected to a database with no accounts: read [Files disappear after redeploying](#files-disappear-after-redeploying) before you complete setup again.
+
+Pages and requests fail the same way while the saved settings document doesn't pass Flare's checks, for example after an edit made directly in the database, and the logged error names the value that failed. Correct that value, or restore it from your [database backup](./maintenance); the next request uses it without a restart. Earlier versions quietly used the default settings until the document was corrected.
 
 ## Startup logs warn about NEXTAUTH_SECRET
 
@@ -56,9 +75,9 @@ If accounts and settings also disappeared, inspect the PostgreSQL volume and dat
 
 ## Raw links return 500
 
-`GET /{userUrlId}/{filename}/raw` checks access, opens the stored content, and saves one view before serving the response. A local file can disappear between the size check and opening it; this returns `500` without counting a view. A failed database counter write also returns `500` without serving the content. Both full and range responses close acquired streams on these failures so repeated requests do not retain file descriptors.
+`GET /{userUrlId}/{filename}/raw` checks access, opens the stored content, and saves one view before serving the response. A stored object that is gone, including a local file removed between the size check and opening it, returns `404` without counting a view and logs **File serve error**. A failed database counter write returns `500` without serving the content and logs `GET /[userUrlId]/[filename]/raw failed`. Both full and range responses close acquired streams on these failures so repeated requests do not retain file descriptors.
 
-Inspect the application's **File serve error** logs, confirm that the original storage object exists and is readable, and check PostgreSQL availability and write permissions. Restore the missing object from your backup or resolve the storage/database problem, then retry the raw request and refresh the library. A failed counter write does not add a view. No re-upload or database migration is required for files whose bytes and metadata are intact.
+Inspect those log entries, confirm that the original storage object exists and is readable, and check PostgreSQL availability and write permissions. Restore the missing object from your backup or resolve the storage/database problem, then retry the raw request and refresh the library. A failed counter write does not add a view. No re-upload or database migration is required for files whose bytes and metadata are intact.
 
 An unknown file URL or a private file requested by an unauthorized visitor returns `404`; a public file with a missing or incorrect password returns `401`. Check [sharing and privacy](/guide/sharing#view-counts) before treating an access denial as a storage failure.
 
@@ -81,6 +100,7 @@ If the direct request also fails, check that the session is still valid and has 
 | Browser cannot reach a preview/download URL           | The configured S3 endpoint is only reachable from the container or private network                                |
 | Ordinary uploads work but avatars fail                | Provider rejects the avatar `public-read` ACL; [see compatibility details](/hosting/storage#avatar-compatibility) |
 | Files fail immediately after changing provider/bucket | The bytes were not migrated; changing settings does not move objects                                              |
+| Every upload and download fails after an upgrade      | Saved S3 settings are incomplete; [complete them](/hosting/storage#s3-compatible-storage) in Settings             |
 | Expired signed link                                   | Open the original Flare share link again to obtain an authorized fresh URL                                        |
 
 Use the endpoint your provider documents for its S3 API, not its web console or a bucket browsing URL. Test path-style access if required by that provider. Do not change a bucket to public as a blanket fix for access errors.
@@ -95,7 +115,7 @@ If no job exists, confirm whether the deletion happened before the durable-clean
 
 ## An avatar upload failed or cleanup remains blocked
 
-A new avatar is published only after the storage write succeeds and the account's current permission and quota pass a second check. A deleted account or revoked `profile.update` permission can reject an upload that was already in progress. The old avatar stays in place if publication fails.
+A new avatar is published only after the storage write succeeds and the account's current permission and quota pass a second check. A deleted account or revoked `profile.update` permission can reject an upload that was already in progress. The old avatar stays in place if publication fails. An image over 2 MB, of a type other than PNG, JPEG, GIF, or WebP, or whose content isn't one of those is refused before anything is written, so it leaves no cleanup row.
 
 Inspect the [cleanup queue](/hosting/maintenance#inspect-pending-cleanup). A `writePending = true` row protects an active or interrupted avatar write from premature deletion. A restart deliberately does not clear that flag. If a writer crashed, follow [interrupted-write recovery](/hosting/maintenance#recover-an-interrupted-avatar-write): stop every possible old writer before releasing the one verified record.
 

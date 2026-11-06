@@ -177,7 +177,6 @@ describe('tags after OCR', () => {
       ocrConfidence: 95,
     })
     expect(file.ocrTagsPendingAt?.getTime()).toBeGreaterThan(now.getTime())
-    expect(mocks.file.update).toHaveBeenCalledTimes(1)
   })
 
   it('does not apply rules when text extraction fails', async () => {

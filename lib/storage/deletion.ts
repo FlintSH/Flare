@@ -2,12 +2,11 @@ import type { Prisma, StorageDeletion } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
 import { recordAudit } from '@/lib/audit'
-import { auditContext } from '@/lib/audit/context'
+import { lockStorageDeletionClaims } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { mutateAccount } from '@/lib/permissions/account-mutations'
-import { PermissionError } from '@/lib/permissions/server'
-import { sanitizeFilename, validateStoragePath } from '@/lib/security/paths'
+import { validateStoragePath } from '@/lib/security/paths'
 
+import { isMissingObject } from './missing'
 import {
   StorageTargetChangedError,
   getStorageProviderForTarget,
@@ -21,7 +20,6 @@ export const STORAGE_DELETION_LEASE_MS = 120_000
 export const STORAGE_DELETION_HEARTBEAT_MS = 30_000
 export const STORAGE_DELETION_RETRY_MS = 30_000
 export const STORAGE_DELETION_MAX_RETRY_MS = 3_600_000
-export const ACCOUNT_DELETION_TRANSACTION_MS = 120_000
 
 /** The caller establishes ownership and commits this with the record mutation. */
 export async function queueStorageDeletion(
@@ -40,24 +38,14 @@ export async function queueStorageDeletion(
   })
 }
 
-/** Call only inside the account mutation transaction, after authorization locks. */
-async function queueAccountStorageDeletion(
+/**
+ * Queues the bytes of every file an account owns, in the transaction that
+ * deletes the account; the caller holds the account's row lock.
+ */
+export async function queueAccountFileDeletions(
   tx: Prisma.TransactionClient,
   userId: string
 ) {
-  // File publication and account mutation share this row lock. Read the paths
-  // now, rather than keeping a snapshot from before access was serialized.
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      image: true,
-      avatarStoragePath: true,
-      avatarStorageTarget: true,
-    },
-  })
-  if (!user) throw new PermissionError('Account not found', 404)
   // Copy directly in PostgreSQL: materializing a large library in JavaScript
   // and issuing hundreds of createMany calls makes account deletion time out.
   // Historical rows have no trustworthy target; retain their paths for recovery.
@@ -70,96 +58,12 @@ async function queueAccountStorageDeletion(
       COALESCE("storageTarget", '{}'::jsonb), NOW()
     FROM "File" WHERE "userId" = ${userId}
   `
-  await queueAvatarStorageDeletion(tx, user)
-}
-
-export async function queueAvatarStorageDeletion(
-  tx: Prisma.TransactionClient,
-  user: {
-    id: string
-    image: string | null
-    avatarStoragePath: string | null
-    avatarStorageTarget: unknown
-  }
-): Promise<void> {
-  // New avatars retain their exact versioned key, independent of editable image
-  // URLs. Legacy app-owned image paths can be retained without guessing S3.
-  const ownAvatar = sanitizeFilename(`${user.id}.jpg`)
-  const legacyLocal = user.image === `/avatars/${ownAvatar}`
-  const legacyCurrent =
-    user.image === `/api/avatars/${ownAvatar}` ||
-    ((user.image?.startsWith('https://') ||
-      user.image?.startsWith('http://')) &&
-      URL.canParse(user.image) &&
-      new URL(user.image).pathname.endsWith(`/avatars/${ownAvatar}`))
-  const avatarPath =
-    user.avatarStoragePath ??
-    (legacyLocal
-      ? `public/avatars/${ownAvatar}`
-      : legacyCurrent
-        ? `uploads/avatars/${ownAvatar}`
-        : null)
-  if (avatarPath) {
-    const target =
-      parseStorageTarget(user.avatarStorageTarget) ??
-      (legacyLocal ? { provider: 'local' as const } : null)
-    await queueStorageDeletion(tx, user.id, avatarPath, target)
-  }
-}
-
-/** The queue and cascades commit together; recovery rejection rolls both back. */
-export async function deleteAccountWithStorageCleanup(
-  actorId: string,
-  targetId: string,
-  permission: 'profile.update' | 'users.delete',
-  self = false
-) {
-  await mutateAccount(
-    actorId,
-    targetId,
-    permission,
-    async (tx) => {
-      await queueAccountStorageDeletion(tx, targetId)
-      // PostgreSQL cascades bypass Prisma query hooks. Preserve every filename
-      // in the same transaction, without materializing a whole library in JS.
-      const context = auditContext.getStore()
-      const actor = await tx.user.findUnique({
-        where: { id: actorId },
-        select: { name: true },
-      })
-      await tx.$executeRaw`
-        INSERT INTO "AuditEvent"
-          (id, action, category, outcome, "actorId", "actorName",
-           "targetType", "targetId", "targetName", "requestId", details)
-        SELECT gen_random_uuid()::text, 'file.delete', 'files', 'success',
-          ${actorId}, ${actor?.name ?? actorId}, 'file', id, LEFT(name, 500),
-          ${context?.requestId ?? null},
-          jsonb_build_object('reason', 'Account deleted', 'ownerId', "userId")
-        FROM "File" WHERE "userId" = ${targetId}
-      `
-      // The account's invite links cascade too; accounts that joined remain.
-      await tx.$executeRaw`
-        INSERT INTO "AuditEvent"
-          (id, action, category, outcome, "actorId", "actorName",
-           "targetType", "targetId", "targetName", "requestId", details)
-        SELECT gen_random_uuid()::text, 'invite.delete', 'invites', 'success',
-          ${actorId}, ${actor?.name ?? actorId}, 'invite', id,
-          NULLIF(LEFT(note, 500), ''), ${context?.requestId ?? null},
-          jsonb_build_object('reason', 'Account deleted', 'creatorId',
-            "creatorId", 'uses', uses)
-        FROM "Invite" WHERE "creatorId" = ${targetId}
-      `
-      await tx.user.delete({ where: { id: targetId } })
-    },
-    self,
-    { timeout: ACCOUNT_DELETION_TRANSACTION_MS }
-  )
 }
 
 /** Global slots and atomic leases allow every app process to run the worker. */
 export async function claimStorageDeletions(): Promise<StorageDeletion[]> {
   return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347205)`
+    await lockStorageDeletionClaims(tx)
     const now = new Date()
     const active = await tx.storageDeletion.count({
       where: { status: 'processing', leaseUntil: { gt: now } },
@@ -194,8 +98,8 @@ async function deletionProvider(
   job: StorageDeletion
 ): Promise<StorageProvider> {
   if (job.provider === 'unknown') throw new StorageTargetUnknown()
-  // Read credentials fresh. Never use the cached provider or its local fallback:
-  // a configuration change must not delete an identical key in another bucket.
+  // The job's recorded target, never whatever storage is active now: after a
+  // storage change, an identical key in another bucket must not be deleted.
   const target = parseStorageTarget(job.target)
   if (!target || target.provider !== job.provider)
     throw new StorageTargetUnknown()
@@ -218,14 +122,6 @@ async function renewLease(job: StorageDeletion): Promise<boolean> {
     data: { leaseUntil: new Date(Date.now() + STORAGE_DELETION_LEASE_MS) },
   })
   return renewed.count === 1
-}
-
-function missingObject(error: unknown): boolean {
-  const code =
-    (error as { code?: string; name?: string } | null)?.code ||
-    (error as Error | null)?.name
-  // NoSuchBucket and an arbitrary HTTP 404 are intentionally not success.
-  return ['ENOENT', 'NoSuchKey', 'NotFound'].includes(code ?? '')
 }
 
 /** Storage I/O runs outside transactions; only the current lease may acknowledge. */
@@ -251,7 +147,7 @@ export async function processStorageDeletion(
     try {
       await storage.deleteFile(job.path)
     } catch (error) {
-      if (!missingObject(error)) throw error
+      if (!isMissingObject(error)) throw error
     }
     const completed = await prisma.storageDeletion.deleteMany({
       where: leaseWhere(job),

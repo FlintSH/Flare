@@ -1,21 +1,23 @@
-import { afterAll, describe, it } from 'vitest'
+import { afterAll, beforeAll, describe } from 'vitest'
 
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
 
 import { createInMemoryS3 } from './helpers/in-memory-s3'
 import { runStorageProviderContract } from './provider-contract'
 
-// A single in-memory S3 backend services the whole suite. Handlers are
-// registered once; unique per-test paths keep tests isolated.
-const s3 = createInMemoryS3()
+// The in-memory backend replaces every S3Client's requests, so it must be gone
+// before the real-endpoint run below starts. Unique per-test paths keep tests
+// isolated.
+describe('in-memory S3 backend', () => {
+  let s3: ReturnType<typeof createInMemoryS3>
+  beforeAll(() => {
+    s3 = createInMemoryS3()
+  })
+  afterAll(() => {
+    s3.restore()
+  })
 
-afterAll(() => {
-  s3.restore()
-})
-
-runStorageProviderContract(
-  's3 (in-memory)',
-  async () => {
+  runStorageProviderContract('s3 (in-memory)', async () => {
     const provider = new S3StorageProvider({
       bucket: 'test-bucket',
       region: 'us-east-1',
@@ -33,15 +35,12 @@ runStorageProviderContract(
         // to tear down between cases.
       },
     }
-  },
-  // createWriteStream uploads via a presigned URL over real HTTP, which the
-  // in-memory backend cannot serve. It is covered by the real-S3 gated run.
-  { testWriteStream: false }
-)
+  })
+})
 
 // Opt-in run against a real S3-compatible endpoint (AWS, MinIO, etc.). Set the
 // TEST_S3_* env vars to enable; this validates the full path including
-// presigned-URL streaming (createWriteStream / multipart). Example:
+// multipart uploads. Example:
 //   TEST_S3_ENDPOINT=http://localhost:9000 TEST_S3_BUCKET=flare-test \
 //   TEST_S3_REGION=us-east-1 TEST_S3_ACCESS_KEY=... TEST_S3_SECRET_KEY=... \
 //   TEST_S3_FORCE_PATH_STYLE=true pnpm test
@@ -71,9 +70,5 @@ if (realS3Configured) {
         // bucket; no teardown required between cases.
       },
     }
-  })
-} else {
-  describe.skip('StorageProvider contract: s3 (real endpoint) [set TEST_S3_* to enable]', () => {
-    it('skipped', () => {})
   })
 }

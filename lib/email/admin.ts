@@ -1,48 +1,36 @@
-import { NextResponse } from 'next/server'
-
 import { z } from 'zod'
 
-import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
+import { parseInput, readJson } from '@/lib/http/request'
+import type { RouteContract } from '@/lib/http/route'
 
-export async function emailAdminAccess(request: Request) {
-  const auth = await requirePermission('settings.email')
-  if (auth.response) return auth.response
-  const origin = request.headers.get('origin')
-  const allowed = [new URL(request.url).origin]
-  if (process.env.NEXTAUTH_URL)
-    allowed.push(new URL(process.env.NEXTAUTH_URL).origin)
-  if (
-    !['GET', 'HEAD'].includes(request.method) &&
-    origin &&
-    !allowed.includes(origin)
-  ) {
-    return NextResponse.json(
-      { error: 'Invalid request origin' },
-      { status: 403 }
-    )
-  }
-  return null
+import { emailConfigSchema } from './schema'
+
+export const emailSettingsRoutes: RouteContract = {
+  invalid: (error) =>
+    new HttpError(
+      400,
+      error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ')
+    ),
+  failure: { message: 'Could not update email settings' },
 }
 
-export function emailSettingsError(error: unknown) {
-  if (error instanceof z.ZodError) {
-    return NextResponse.json(
-      {
-        error: error.issues
-          .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-          .join('; '),
-      },
-      { status: 400 }
-    )
+const draftBody = z.object({
+  config: z.unknown().optional(),
+  clearPassword: z.unknown().optional(),
+  applyToExisting: z.unknown().optional(),
+})
+
+export async function readEmailDraft(request: Request) {
+  const body = await readJson(request, draftBody)
+  return {
+    config: parseInput(emailConfigSchema, body.config),
+    clearPassword: body.clearPassword === true,
+    applyToExisting: body.applyToExisting === true,
   }
-  // SMTP and crypto wrappers expose only sanitized error messages. Prisma
-  // errors may include queries, so do not serialize arbitrary exceptions.
-  const message =
-    error instanceof Error && !('clientVersion' in error)
-      ? error.message
-      : 'Could not update email settings'
-  return NextResponse.json({ error: message }, { status: 400 })
 }
 
 export async function emailDiagnostics(enabled: boolean) {

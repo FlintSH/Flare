@@ -1,92 +1,30 @@
-import { NextResponse } from 'next/server'
-
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
-import { prisma } from '@/lib/database/prisma'
-import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
+import { authorizeFile, serveFile } from '@/lib/files/delivery'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { getStorageProvider } from '@/lib/storage'
 
-const logger = loggers.files
+type Context = { params: Promise<{ id: string }> }
 
-async function handleGET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const [session, { id }] = await Promise.all([getAccessSession(), params])
+const api = routes('/api/files/[id]/thumbnail', {
+  failure: { message: 'Error serving thumbnail' },
+  logger: loggers.files,
+})
 
-    const url = new URL(request.url)
-    const providedPassword = url.searchParams.get('password')
+export const GET = api(
+  async (request, { params }: Context) => {
+    const { id } = await params
+    const grant = await authorizeFile(request, { id }, 'thumbnail')
+    if (grant instanceof Response) return grant
+    // Checked after access, so a file the requester can't read stays hidden.
+    if (!grant.file.mimeType.startsWith('image/'))
+      return new Response('Not an image', { status: 400 })
 
-    const file = await prisma.file.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        mimeType: true,
-        path: true,
-        visibility: true,
-        userId: true,
-        password: true,
-      },
+    // The original image, sized by the browser. Its stored type is
+    // client-supplied and can be SVG, which the sandbox keeps from running.
+    return serveFile(request, grant.file, {
+      sandbox: true,
+      publicCache: 'public, max-age=31536000, immutable',
+      whole: true,
     })
-
-    if (!file) {
-      return new NextResponse('File not found', { status: 404 })
-    }
-
-    if (!file.mimeType.startsWith('image/')) {
-      return new NextResponse('Not an image', { status: 400 })
-    }
-
-    setAuditTarget({ type: 'file', id: file.id, name: file.name })
-
-    const access = await checkFileAccess(file, session, providedPassword, {
-      requester: requestIp(request.headers),
-    })
-    if (!access.allowed) {
-      setAuditOutcome('denied')
-      return new NextResponse(null, {
-        status: access.status,
-        headers: {
-          'Cache-Control': 'private, no-store',
-          ...fileAccessDeniedHeaders(access),
-        },
-      })
-    }
-
-    const storageProvider = await getStorageProvider()
-    const fileStream = await storageProvider.getFileStream(file.path)
-
-    // Just serve the original image - let the browser/CSS handle sizing.
-    // The stored type is client-supplied and can be an active document such
-    // as SVG, so a direct visit must not run script on the Flare origin.
-    return new NextResponse(fileStream as unknown as BodyInit, {
-      headers: {
-        'Content-Type': file.mimeType,
-        'Content-Security-Policy': 'sandbox',
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control':
-          file.visibility === 'PRIVATE' || file.password
-            ? 'private, no-store'
-            : 'public, max-age=31536000, immutable',
-      },
-    })
-  } catch (error) {
-    logger.error('Error serving thumbnail:', error as Error)
-    return new NextResponse('Error serving thumbnail', { status: 500 })
-  }
-}
-
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(request, { params }), {
-    action: 'file.thumbnail',
-    category: 'files',
-    route: '/api/files/[id]/thumbnail',
-  })(request)
-}
+  },
+  { audit: { action: 'file.thumbnail', category: 'files' } }
+)

@@ -14,14 +14,14 @@ import {
 import {
   colorSwatchClassName,
   numberFieldClassName,
-} from '@/components/settings/form-styles'
-import { SaveBar } from '@/components/settings/save-bar'
+} from '@/components/shared/form-styles'
+import { SaveBar } from '@/components/shared/save-bar'
 import {
   SetupActions,
   setupPrimaryActionClassName,
   setupSecondaryActionClassName,
-} from '@/components/setup/setup-actions'
-import { SetupOption } from '@/components/setup/setup-option'
+} from '@/components/shared/setup-actions'
+import { SetupOption } from '@/components/shared/setup-option'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,10 +38,9 @@ import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
+import { apiRequest } from '@/lib/client/request'
 import type { EmailConfig } from '@/lib/email/schema'
 import { cn } from '@/lib/utils'
-
-import { emailPost, emailRequest } from './api'
 
 interface SettingsResponse {
   config: EmailConfig
@@ -109,7 +108,7 @@ export function EmailSettings({
 
   const load = useCallback(async () => {
     try {
-      const result = await emailRequest<SettingsResponse>('/api/settings/email')
+      const result = await apiRequest<SettingsResponse>('/api/settings/email')
       setSettings(result)
       setConfig(result.config)
       setError('')
@@ -136,9 +135,9 @@ export function EmailSettings({
     setImpact(null)
     setApplyToExisting(false)
     const timer = setTimeout(() => {
-      emailPost<{ unverifiedUsers: number; affectedUsers: number }>(
+      apiRequest<{ unverifiedUsers: number; affectedUsers: number }>(
         '/api/settings/email/impact',
-        { config, clearPassword }
+        { body: { config, clearPassword } }
       )
         .then((result) => {
           if (active) setImpact(result)
@@ -313,7 +312,6 @@ export function EmailSettings({
     if (!managed('verification.mode'))
       change('verification.mode', verification ? 'new_users' : 'off')
   }
-  // The preset the current settings match, if any.
   const activePreset =
     config.enabled && config.recovery.enabled
       ? config.verification.mode === 'off'
@@ -331,14 +329,10 @@ export function EmailSettings({
     setError('')
     setMessage('')
     try {
-      const result = await emailRequest<SettingsResponse>(
-        '/api/settings/email',
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ config, clearPassword, applyToExisting }),
-        }
-      )
+      const result = await apiRequest<SettingsResponse>('/api/settings/email', {
+        method: 'PUT',
+        body: { config, clearPassword, applyToExisting },
+      })
       setSettings(result)
       setConfig(result.config)
       setClearPassword(false)
@@ -366,13 +360,15 @@ export function EmailSettings({
     setError('')
     setMessage('')
     try {
-      const result = await emailPost<{ message?: string }>(
+      const result = await apiRequest<{ message?: string }>(
         '/api/settings/email/test',
         {
-          config,
-          clearPassword,
-          action,
-          ...(action === 'send' ? { recipient: recipient.trim() } : {}),
+          body: {
+            config,
+            clearPassword,
+            action,
+            ...(action === 'send' ? { recipient: recipient.trim() } : {}),
+          },
         }
       )
       setMessage(
@@ -652,9 +648,8 @@ export function EmailSettings({
                   onClick={async () => {
                     try {
                       setImpact(
-                        await emailPost('/api/settings/email/impact', {
-                          config,
-                          clearPassword,
+                        await apiRequest('/api/settings/email/impact', {
+                          body: { config, clearPassword },
                         })
                       )
                     } catch {
@@ -884,8 +879,6 @@ export function EmailSettings({
         </div>
       )}
       {setup ? (
-        // The footer every setup step shares: skip at the start, the
-        // primary action at the end.
         <SetupActions>
           {onSkip && (
             <Button
@@ -961,7 +954,7 @@ export function EmailSettings({
             <DeliveryStatus
               diagnostics={settings.diagnostics}
               onRefresh={async () => {
-                const result = await emailRequest<SettingsResponse>(
+                const result = await apiRequest<SettingsResponse>(
                   '/api/settings/email'
                 )
                 setSettings((current) =>
@@ -994,9 +987,9 @@ function DeliveryStatus({
     setMessage('')
     try {
       if (retryId) {
-        const result = await emailPost<{ message: string }>(
+        const result = await apiRequest<{ message: string }>(
           '/api/settings/email/retry',
-          { id: retryId }
+          { body: { id: retryId } }
         )
         setMessage(result.message)
       }

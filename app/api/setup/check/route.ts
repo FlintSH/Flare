@@ -1,23 +1,18 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { checkSetupCompletion } from '@/lib/database/setup'
+import { unavailable } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
+import { isSetupComplete } from '@/lib/setup/status'
 
-const logger = loggers.startup
+const message = 'Setup status is temporarily unavailable'
 
-async function handleGET() {
-  try {
-    const completed = await checkSetupCompletion()
-    return NextResponse.json({ completed })
-  } catch (error) {
-    logger.error('Setup check error:', error as Error)
-    return NextResponse.json({ completed: false })
-  }
-}
+const api = routes('/api/setup/check', {
+  failure: { message },
+  logger: loggers.startup,
+})
 
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/setup/check',
-  })()
-}
+export const GET = api(async () => ({
+  // Reading the accounts is all this route does, so a failure means the
+  // database is unavailable. Answering "not set up" would send visitors to
+  // the first-run wizard.
+  completed: await isSetupComplete().catch(unavailable(message)),
+}))

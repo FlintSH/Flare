@@ -5,7 +5,7 @@ description: Set up ShareX, iTake, Flameshot, Spectacle, or a Bash uploader with
 
 # Screenshot tools and scripts
 
-The screenshot tools in Profile require both `tokens.manage` and `files.upload`. Managing or downloading credentials uses `tokens.manage`; performing an upload also requires `files.upload`. Your account’s [roles](/admin/roles) apply even to previously downloaded configurations. Removing upload permission stops their authenticated uploads without changing the credential.
+The screenshot tools in Profile require both `tokens.manage` and `files.upload`. Managing or downloading credentials uses `tokens.manage`; performing an upload also requires `files.upload`. Your account’s [roles](/admin/roles) apply even to previously downloaded configurations. Removing upload permission stops their authenticated uploads without changing the credential. The **Use this profile in your tools** buttons on a saved [upload profile](./upload-profiles) follow the same rule.
 
 Capture, upload, and copy a link without opening your browser. **Profile → Uploads → Screenshot tools and scripts** provides ready-to-use downloads for common capture tools and a general Bash uploader.
 
@@ -23,10 +23,12 @@ You do not need to create or manually paste an API key for these downloads. Flar
 | Screenshots and recordings on KDE       | Spectacle Bash script.        |
 | Upload an existing file from a terminal | General Bash script.          |
 
-For a particular sharing workflow, download the client from a saved [upload profile](./upload-profiles) instead of the general tools section. General downloads follow account defaults; profile downloads explicitly select that profile.
+Each download is named after your account name, for example `alex-morgan-sharex.sxcu`, `alex-morgan-flameshot.sh`, or `alex-morgan-spectacle-recording.sh`.
+
+For a particular sharing workflow, download the client from a saved [upload profile](./upload-profiles) instead of the general tools section. General downloads follow account defaults; profile downloads explicitly select that profile. Flameshot, Spectacle, and iTake open the same setup dialog there.
 
 ::: warning Downloads contain a credential
-Keep these configurations and scripts private. Do not commit them to a public repository or attach them to a support issue without removing the token. Anyone with a working credential may be able to use the access it grants.
+Keep these configurations and scripts private. Do not commit them to a public repository or attach them to a support issue without removing the token. Anyone with a working credential may be able to use the access it grants. Flare sends every download with `Cache-Control: private, no-store`, so browsers and proxies don't cache a copy. Delete downloaded files you no longer use.
 :::
 
 ## ShareX on Windows
@@ -56,9 +58,12 @@ Both images and recordings still follow your Flare upload limits, visibility, an
 
 ## Flameshot on Linux
 
-Choose the Flameshot **Download script** action, review the options, and download the generated Bash script. It can adjust capture behavior and includes switches for Wayland clipboard support and Hyprland compatibility.
+Choose the Flameshot **Download script** action, set its two switches, and download the generated Bash script:
 
-The generated script expects `flameshot`, `curl`, `jq`, and `xsel`. When Wayland support is selected, it also checks for `wl-copy`. Follow the installation notes at the top of the file, then run it with Bash:
+- **Wayland clipboard support** copies the link with `wl-copy` instead of `xsel`.
+- **Hyprland compatibility** sets `XDG_CURRENT_DESKTOP=sway` before capturing. Flameshot doesn't detect Hyprland, and this is the usual workaround.
+
+The generated script checks for `flameshot`, `curl`, `jq`, and its clipboard tool: `xsel`, or `wl-copy` with Wayland clipboard support. The dialog lists the same commands for the options you choose. Follow the installation notes at the top of the file, then run it with Bash:
 
 ```sh
 bash ./your-flameshot-script.sh
@@ -72,9 +77,9 @@ Flare's generated Flameshot script supports Linux only. Use the iTake integratio
 
 Open Spectacle's **Download script** action and select **Screenshot** or **Screen recording**.
 
-Screenshot choices include full desktop, current monitor, active window, or selected region. Recording choices include full desktop, current monitor, or selected region. The form also offers Wayland clipboard support and an option to include the mouse pointer.
+Screenshot choices are full desktop, current monitor, active window, or a selected region. A recording covers a selected region or, with **Current monitor recording**, the whole screen under the pointer. Earlier versions also offered **Full desktop recording**, which made the same recording; scripts downloaded with it keep working. A Profile page opened before the upgrade may still offer it and refuse the download; reload the page and choose **Current monitor recording**. The form also offers Wayland clipboard support and an option to include the mouse pointer. **Reset options** returns every choice to its default, the script type and modes included. Earlier versions reset what the script would use but kept showing the previous script type and mode.
 
-The generated script checks for `spectacle`, `curl`, `jq`, and `xsel`, plus `wl-copy` when Wayland support is selected. Read the script's setup notes, then run it with Bash. The available capture and recording behavior also depends on your installed Spectacle version and desktop session.
+The generated script checks for `spectacle`, `curl`, `jq`, and its clipboard tool: `xsel`, or `wl-copy` with Wayland clipboard support. Read the script's setup notes, then run it with Bash. The available capture and recording behavior also depends on your installed Spectacle version and desktop session.
 
 <Screenshot src="/screenshots/preferences/profile-spectacle-options.png" alt="Spectacle script configuration with screenshot and recording modes" caption="Choose the capture mode and desktop environment before downloading the Spectacle script." />
 
@@ -99,16 +104,21 @@ The account upload token is created for you and included in generated downloads.
 
 Replacing it disconnects every tool using that account token. Download and import fresh configurations afterward. Existing named API tokens are unaffected.
 
+If Flare can't load or replace the token, the error shows the server's reason when it gives one. For example, **Too many requests** means requests from your address replaced the token, or created or revoked invites, more than 60 times within a minute; wait a minute and try again. Otherwise the error reads **Failed to fetch upload token** or **Failed to refresh upload token**, which earlier versions showed for every failure.
+
 Use [named API tokens](../api/authentication) when a custom connection needs its own permissions, expiration, profile binding, or revocation. Downloading a standard screenshot-tool configuration does not create a separate named token for that tool.
 
 ## Troubleshooting
 
-| Symptom                                         | Check                                                                                                                 |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Capture succeeds but upload fails               | Test a browser upload; check the instance URL, token, quota, and file-size/type limits.                               |
-| Tools stopped after replacing the token         | Download and import new configurations or update the token in each script.                                            |
-| Link was created but clipboard is empty         | Check ShareX/iTake's copy action, or install the clipboard utility required by the script and desktop session.        |
-| Correct credential, profile error               | Confirm the selected profile still exists. A deleted profile or profile-bound token requires reconfiguration.         |
-| The generated URL uses an old host              | Ask the administrator to correct the instance's public URL, then download the configuration again.                    |
-| Upload succeeds but recipients cannot open it   | Review visibility, password, and expiration. The copied link does not grant access to a private file.                 |
-| Linux script exits with a missing-command error | Install the listed dependency. Wayland scripts currently also check for `xsel`; follow the generated script's checks. |
+| Symptom                                                       | Check                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Capture succeeds but upload fails                             | Test a browser upload; check the instance URL, token, quota, and file-size/type limits.                                                                                                                                                                  |
+| Tools stopped after replacing the token                       | Download and import new configurations or update the token in each script.                                                                                                                                                                               |
+| Link was created but clipboard is empty                       | Check ShareX/iTake's copy action, or install the clipboard utility required by the script and desktop session.                                                                                                                                           |
+| Correct credential, profile error                             | Confirm the selected profile still exists. A deleted profile or profile-bound token requires reconfiguration.                                                                                                                                            |
+| The generated URL uses an old host                            | Ask the administrator to correct the instance's public URL, then download the configuration again.                                                                                                                                                       |
+| Upload succeeds but recipients cannot open it                 | Review visibility, password, and expiration. The copied link does not grant access to a private file.                                                                                                                                                    |
+| Linux script exits with a missing-command error               | Install the command it names. Scripts check for `xsel`, or for `wl-copy` when Wayland clipboard support was selected.                                                                                                                                    |
+| A script prints `Upload failed: Network error or invalid URL` | curl could not reach Flare. Check your connection, any TLS certificate error, and the address on the script's `API_URL` line.                                                                                                                            |
+| A download fails with `Invalid server URL configuration`      | The instance has no usable public address. Ask the administrator to set `NEXTAUTH_URL` to its public `http` or `https` origin, without a username, password, query, or fragment. Earlier builds answered `Server configuration error` when it was unset. |
+| A download fails with `Upload profile not found.`             | The profile was deleted, perhaps in another tab. Reload the page and pick another profile.                                                                                                                                                               |

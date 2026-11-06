@@ -4,11 +4,20 @@ import { Archive } from 'lucide-react'
 
 import { ArchiveBrowserContent } from '@/components/archives/archive-browser-content'
 
-import { useFileViewer } from '../context'
+import type { ArchiveFormat } from '@/lib/archives/shared'
 
-export function ArchiveViewer() {
-  const { file, verifiedPassword } = useFileViewer()
+import type { FileViewerFile } from '../types'
 
+/** `format` is null for an archive Flare can't open. */
+export function ArchiveViewer({
+  file,
+  format,
+  password,
+}: {
+  file: FileViewerFile
+  format: ArchiveFormat | null
+  password?: string
+}) {
   return (
     <section
       aria-labelledby="archive-contents-title"
@@ -26,8 +35,8 @@ export function ArchiveViewer() {
       <ArchiveBrowserContent
         key={file.id}
         file={file}
-        format={file.archiveFormat}
-        source={{ kind: 'share', password: verifiedPassword }}
+        format={format}
+        source={{ kind: 'share', password }}
       />
     </section>
   )

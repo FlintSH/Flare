@@ -1,33 +1,13 @@
-import { withAuditRoute } from '@/lib/audit'
-import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
-import { EmailHttpError, emailRoute, emailSession } from '@/lib/email/http'
-import { hasVerifiedEmail } from '@/lib/email/policy'
+import { requireEmailAddress, resendVerification } from '@/lib/email/account'
+import { emailRoutes, emailSession } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return emailRoute(async () => {
-    const { user, config } = await emailSession(req)
-    if (!config.enabled || !user.email)
-      throw new EmailHttpError('Email is disabled.')
-    await limitEmailRequest(req, config, user.email)
-    await prisma.$transaction(async (tx) => {
-      const fresh = await lockEmailUser(tx, user.id)
-      if (hasVerifiedEmail(fresh, config)) return
-      if (fresh.emailVerificationSource !== 'pending_local')
-        throw new EmailHttpError(
-          'Confirm your current password to enroll your recovery email first.'
-        )
-      await sendAccountToken(tx, fresh, 'verify', config)
-    })
-    return {
-      message: 'A verification link was sent to your email address.',
-    }
-  })
-}
+const api = routes('/api/auth/email/resend', emailRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/email/resend',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const account = await emailSession(request)
+  const address = requireEmailAddress(account.user, account.config)
+  await limitEmailRequest(request, account.config, address)
+  return { message: await resendVerification(account) }
+})

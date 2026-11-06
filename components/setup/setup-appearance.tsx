@@ -15,6 +15,12 @@ import Link from 'next/link'
 import { ArrowRight, Check, ImageIcon, InfoIcon, Loader2 } from 'lucide-react'
 
 import { Icons } from '@/components/shared/icons'
+import {
+  SetupActions,
+  setupPrimaryActionClassName,
+  setupSecondaryActionClassName,
+} from '@/components/shared/setup-actions'
+import { SetupOption } from '@/components/shared/setup-option'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,13 +46,6 @@ import {
   type SetupAppearancePreset,
   createSetupAppearance,
 } from '@/lib/setup/appearance'
-
-import {
-  SetupActions,
-  setupPrimaryActionClassName,
-  setupSecondaryActionClassName,
-} from './setup-actions'
-import { SetupOption } from './setup-option'
 
 export function SetupAppearance({
   onComplete,
@@ -272,7 +271,6 @@ export function SetupAppearance({
                     aria-labelledby={`${id}-presets`}
                     className="grid-cols-2 gap-3"
                   >
-                    {/* The option cards every setup step uses. */}
                     {settings.published.theme.enabled && (
                       <SetupOption
                         id={`${id}-current`}

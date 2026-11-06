@@ -62,6 +62,8 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 
 The **Admin** menu lists only the pages your roles allow. If they allow just one, that page sits in the bar by itself instead of in a menu, for example **Audit log** for an account whose only administration permission is `audit.read`. Without any of these permissions there is no **Admin** menu. While you are on one of its pages, the **Admin** button is highlighted and the menu marks the current page. On **Profile**, a ring around your avatar shows where you are.
 
+The instance name and logo at the start of the bar open **Files**, or **Profile** if your roles don't include `files.read`. A bookmark or link to a page your roles don't allow opens **Profile** instead.
+
 <Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Your avatar opens the account menu. Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
 
 When the window is too narrow for the bar, choose the menu button next to your avatar. It lists your places, then the administration pages under an **Admin** heading, then **Profile** and **Sign out** under **Account**. Your avatar still opens the account menu too. With four places or fewer, the full bar shows from 768 pixels wide; with more, including the **Admin** menu, it shows from 900 pixels.
@@ -105,6 +107,8 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 **Defaults affect future uploads.** Changing a profile, default expiration, or URL-naming choice does not rewrite files already uploaded.
 
 **Deletion is permanent in Flare.** Download or export anything you need before deleting a file or account. There is no user-facing trash or undo flow.
+
+**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.**; earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Ask the operator if such messages keep appearing.
 
 ## Where to go next
 

@@ -60,4 +60,28 @@ describe('stored object provenance', () => {
       expect(sameStorageTarget(target, { ...target, ...change })).toBe(false)
     expect(sameStorageTarget(target, { provider: 'local' })).toBe(false)
   })
+
+  it('ignores spaces around the values, which older records and saves kept', () => {
+    const trimmed = {
+      provider: 's3',
+      bucket: 'bucket',
+      region: 'us-east-1',
+      endpoint: 'https://objects.example.test',
+      forcePathStyle: true,
+    } as const
+    const spaced = {
+      ...trimmed,
+      bucket: ' bucket',
+      region: 'us-east-1 ',
+      endpoint: ' https://objects.example.test ',
+    }
+    expect(sameStorageTarget(trimmed, spaced)).toBe(true)
+    expect(sameStorageTarget(spaced, trimmed)).toBe(true)
+    expect(
+      sameStorageTarget(
+        { ...trimmed, endpoint: '' },
+        { ...trimmed, endpoint: ' ' }
+      )
+    ).toBe(true)
+  })
 })

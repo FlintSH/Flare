@@ -1,130 +1,26 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { prisma } from '@/lib/database/prisma'
-import { readRoleJson, roleMutationGuard } from '@/lib/permissions/http'
-import { roleUpdateSchema } from '@/lib/permissions/schema'
-import {
-  PermissionError,
-  assertAccessibleAdministrator,
-  assertCanGrantPermissions,
-  assertCanManageRole,
-  lockRoleChanges,
-  requireActorPermission,
-  requirePermission,
-  roleSelect,
-} from '@/lib/permissions/server'
+import { requireSession } from '@/lib/http/access'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { deleteRole, updateRole } from '@/lib/permissions/roles'
 
 type Context = { params: Promise<{ id: string }> }
 
-async function handlePATCH(request: Request, context: Context) {
-  const { user, response } = await requirePermission('roles.manage')
-  if (response) return response
-  const { id } = await context.params
-  const rejected = roleMutationGuard(request)
-  if (rejected) return rejected
-  const body = await readRoleJson(request)
-  if (body.response) return body.response
-  const parsed = roleUpdateSchema.safeParse(body.data)
-  if (!parsed.success)
-    return NextResponse.json(
-      { error: 'Invalid role', details: parsed.error.flatten() },
-      { status: 400 }
-    )
-  try {
-    const role = await prisma.$transaction(async (tx) => {
-      await lockRoleChanges(tx)
-      const actor = await requireActorPermission(tx, user.id, 'roles.manage')
-      const current = await tx.role.findUnique({
-        where: { id },
-        select: roleSelect,
-      })
-      if (!current) throw new PermissionError('Role not found', 404)
-      assertCanManageRole(actor, current)
-      assertCanGrantPermissions(actor, current.permissions)
-      const next = { ...current, ...parsed.data }
-      if (current.systemKey === 'everyone') {
-        if (
-          next.name !== current.name ||
-          next.position !== 0 ||
-          next.permissions.includes('administrator')
-        )
-          throw new PermissionError(
-            'Everyone must keep its name and position and cannot grant Administrator',
-            400
-          )
-      } else if (next.position === 0)
-        throw new PermissionError('Only Everyone may use position zero', 400)
-      assertCanManageRole(actor, next)
-      assertCanGrantPermissions(actor, next.permissions)
-      const updated = await tx.role.update({
-        where: { id },
-        data: parsed.data,
-        select: roleSelect,
-      })
-      await assertAccessibleAdministrator(tx)
-      return updated
-    })
-    return NextResponse.json(role)
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
-    console.error('Failed to update role:', error)
-    return NextResponse.json(
-      { error: 'Failed to update role' },
-      { status: 500 }
-    )
-  }
-}
+const api = routes('/api/roles/[id]', {
+  failure: { message: 'Failed to update role' },
+})
 
-async function handleDELETE(request: Request, context: Context) {
-  const { user, response } = await requirePermission('roles.manage')
-  if (response) return response
-  const rejected = roleMutationGuard(request)
-  if (rejected) return rejected
-  const { id } = await context.params
-  try {
-    await prisma.$transaction(async (tx) => {
-      await lockRoleChanges(tx)
-      const actor = await requireActorPermission(tx, user.id, 'roles.manage')
-      const role = await tx.role.findUnique({
-        where: { id },
-        select: roleSelect,
-      })
-      if (!role) throw new PermissionError('Role not found', 404)
-      if (role.systemKey === 'everyone')
-        throw new PermissionError('Everyone cannot be deleted', 400)
-      assertCanManageRole(actor, role)
-      assertCanGrantPermissions(actor, role.permissions)
-      await tx.role.delete({ where: { id } })
-      await assertAccessibleAdministrator(tx)
-    })
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
-    console.error('Failed to delete role:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete role' },
-      { status: 500 }
-    )
-  }
-}
+export const PATCH = api(async (request, { params }: Context) => {
+  const { user } = await requireSession(request, 'roles.manage')
+  const { id } = await params
+  return updateRole(user.id, id, await readJson(request, { limit: 32 * 1024 }))
+})
 
-export async function PATCH(request: Request, context: Context) {
-  return withAuditRoute(async () => handlePATCH(request, context), {
-    route: '/api/roles/[id]',
-  })(request)
-}
-
-export async function DELETE(request: Request, context: Context) {
-  return withAuditRoute(async () => handleDELETE(request, context), {
-    route: '/api/roles/[id]',
-  })(request)
-}
+export const DELETE = api(
+  async (request, { params }: Context) => {
+    const { user } = await requireSession(request, 'roles.manage')
+    const { id } = await params
+    await deleteRole(user.id, id)
+    return { success: true }
+  },
+  { failure: { message: 'Failed to delete role' } }
+)

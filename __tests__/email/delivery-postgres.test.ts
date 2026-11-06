@@ -52,13 +52,20 @@ const message = {
   html: '<p>test</p>',
 }
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 describe.skipIf(!databaseUrl)(
   'PostgreSQL outbox concurrency and restart recovery',
   () => {
     beforeAll(async () => {
-      if (new URL(databaseUrl!).pathname !== '/flare_email_delivery')
+      const url = new URL(databaseUrl!)
+      if (
+        !['localhost', '127.0.0.1'].includes(url.hostname) ||
+        url.pathname !== '/flare_email_delivery'
+      )
         throw new Error(
-          'Use a disposable database named flare_email_delivery for these tests.'
+          'Use a disposable local database named flare_email_delivery for these tests.'
         )
       vi.stubEnv(
         'FLARE_EMAIL_ENCRYPTION_KEY',

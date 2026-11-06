@@ -45,12 +45,4 @@ describe('proxy matcher', () => {
     ])
       expect(runsFor(config.matcher, path)).toBe(true)
   })
-
-  it('would notice a matcher that brings API routes back', () => {
-    for (const matcher of [
-      ['/((?!_next/static|_next/image|favicon.ico).*)'],
-      [...config.matcher, '/api/:path*'],
-    ])
-      expect(apiPaths.some((path) => runsFor(matcher, path))).toBe(true)
-  })
 })

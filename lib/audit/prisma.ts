@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client'
 
 import { auditContext } from './context'
 import { configureAuditWriter, recordAudit, recordAuditMany } from './index'
+import { auditedModels } from './models'
 import type { AuditInput } from './types'
 
 type Row = Record<string, unknown>
@@ -10,117 +11,6 @@ type Delegate = {
   findMany(args: { where: unknown; select: Row }): Promise<Row[]>
   createManyAndReturn(args: Row): Promise<Row[]>
   updateManyAndReturn(args: Row): Promise<Row[]>
-}
-const models: Record<
-  string,
-  {
-    category: string
-    target: string
-    fields: string[]
-    /**
-     * Request counters. Each view, download, or click already records its
-     * request outcome, so an update that only increments these is not a
-     * separate change event.
-     */
-    counters?: string[]
-  }
-> = {
-  File: {
-    category: 'files',
-    target: 'file',
-    fields: [
-      'id',
-      'name',
-      'userId',
-      'mimeType',
-      'size',
-      'visibility',
-      'folderId',
-      'isPaste',
-      'isOcrProcessed',
-      'ocrConfidence',
-      'views',
-      'downloads',
-    ],
-    counters: ['views', 'downloads'],
-  },
-  VaultFolder: {
-    category: 'folders',
-    target: 'folder',
-    fields: ['id', 'name', 'userId', 'parentId'],
-  },
-  VaultTag: {
-    category: 'tags',
-    target: 'tag',
-    fields: ['id', 'name', 'userId'],
-  },
-  VaultFileTag: {
-    category: 'tags',
-    target: 'file_tag',
-    fields: ['fileId', 'tagId', 'excluded'],
-  },
-  User: { category: 'accounts', target: 'user', fields: ['id', 'name'] },
-  Role: {
-    category: 'roles',
-    target: 'role',
-    fields: ['id', 'name', 'permissions', 'position', 'systemKey'],
-  },
-  Config: { category: 'settings', target: 'setting', fields: ['id', 'key'] },
-  // Token values and their digests never enter audit details.
-  Invite: {
-    category: 'invites',
-    target: 'invite',
-    fields: [
-      'id',
-      'note',
-      'creatorId',
-      'maxUses',
-      'uses',
-      'expiresAt',
-      'revokedAt',
-    ],
-  },
-  ApiToken: {
-    category: 'tokens',
-    target: 'token',
-    fields: ['id', 'name', 'userId', 'scopes', 'expiresAt', 'revokedAt'],
-  },
-  UploadProfile: {
-    category: 'profiles',
-    target: 'upload_profile',
-    fields: ['id', 'name', 'userId'],
-  },
-  Webhook: {
-    category: 'webhooks',
-    target: 'webhook',
-    fields: ['id', 'name', 'userId', 'enabled'],
-  },
-  WebhookDelivery: {
-    category: 'webhooks',
-    target: 'delivery',
-    fields: ['id', 'eventId', 'status', 'attempts'],
-  },
-  MailOutbox: {
-    category: 'email',
-    target: 'mail',
-    fields: ['id', 'userId', 'purpose', 'status', 'attempts'],
-  },
-  ShortenedUrl: {
-    category: 'links',
-    target: 'link',
-    fields: ['id', 'userId', 'clicks'],
-    counters: ['clicks'],
-  },
-  Passkey: {
-    category: 'authentication',
-    target: 'passkey',
-    fields: ['id', 'name', 'userId'],
-  },
-  EventHandler: {
-    category: 'system',
-    target: 'event_handler',
-    fields: ['id', 'enabled'],
-  },
 }
 const writes = new Set([
   'create',
@@ -141,7 +31,7 @@ const noisyFields = new Set([
   'counter',
 ])
 
-function snapshot(row: Row | null | undefined, fields: string[]): Row {
+function snapshot(row: Row | null | undefined, fields: readonly string[]): Row {
   if (!row) return {}
   const output: Row = {}
   for (const field of fields)
@@ -149,30 +39,6 @@ function snapshot(row: Row | null | undefined, fields: string[]): Row {
   if (Array.isArray(row.roles))
     output.roleIds = row.roles.map((role) => (role as Row).id)
   return output
-}
-
-/** Values are compared only in memory; configuration values never enter the log. */
-function changedSettings(
-  before: unknown,
-  after: unknown,
-  prefix = '',
-  depth = 0
-): string[] {
-  if (JSON.stringify(before) === JSON.stringify(after)) return []
-  if (!after || typeof after !== 'object' || Array.isArray(after) || depth >= 5)
-    return prefix ? [prefix] : []
-  const previous = before && typeof before === 'object' ? (before as Row) : {}
-  return Array.from(
-    new Set([...Object.keys(previous), ...Object.keys(after)])
-  ).flatMap((key) => {
-    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,70}$/.test(key)) return []
-    return changedSettings(
-      previous[key],
-      (after as Row)[key],
-      prefix ? `${prefix}.${key}` : key,
-      depth + 1
-    )
-  })
 }
 
 /** Add audit fields to the mutation itself, so a later reader cannot replace its result. */
@@ -247,6 +113,7 @@ function callerProjection(value: unknown, input: Row, required: Row): unknown {
 async function deleteWithSnapshots(
   client: Prisma.TransactionClient,
   model: string,
+  keys: readonly string[],
   input: Row,
   select: Row,
   candidates: Row[]
@@ -254,7 +121,6 @@ async function deleteWithSnapshots(
   const delegate = (client as unknown as Record<string, Delegate>)[
     model[0].toLowerCase() + model.slice(1)
   ]
-  const keys = model === 'VaultFileTag' ? ['fileId', 'tagId'] : ['id']
   const sorted = [...candidates].sort((left, right) => {
     for (const key of keys) {
       const order = Buffer.compare(
@@ -311,7 +177,10 @@ async function deleteWithSnapshots(
   return removed
 }
 
-/** Instrument supported model writes; infrastructure leases/rate limits are omitted. */
+/**
+ * Records writes to the models in `auditedModels`. Audit events themselves
+ * are written through `base`, so this extension never sees them.
+ */
 export function withPrismaAudit(base: PrismaClient): PrismaClient {
   configureAuditWriter(
     (data) => base.auditEvent.create({ data }),
@@ -323,7 +192,7 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
       query: {
         $allModels: {
           async $allOperations({ model, operation, args, query }) {
-            const definition = models[model]
+            const definition = auditedModels[model]
             if (
               !definition ||
               !writes.has(operation) ||
@@ -342,9 +211,6 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 )
               ),
             ].filter((field) => !noisyFields.has(field))
-            // Counter-only updates run as one statement, without a snapshot
-            // read or change event. Other changes keep counters in their
-            // snapshots and changedFields.
             if (
               operation.startsWith('update') &&
               changedFields.every((field) =>
@@ -363,17 +229,17 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
             const canSnapshot =
               !auditContext.getStore()?.pending ||
               Boolean(auditContext.getStore()?.transactionClient)
-            const select: Row = Object.fromEntries(
-              definition.fields.map((field) => [field, true])
-            )
-            if (model === 'User' && !operation.includes('Many'))
-              select.roles = { select: { id: true } }
-            if (model === 'VaultFileTag') {
-              select.file = { select: { name: true } }
-              select.tag = { select: { name: true } }
+            const select: Row = {
+              ...Object.fromEntries(
+                definition.fields.map((field) => [field, true])
+              ),
+              ...definition.select,
             }
-            // Used only to identify changed key paths, never serialized into details.
-            if (model === 'Config') select.value = true
+            if (definition.roles && !operation.includes('Many'))
+              select.roles = { select: { id: true } }
+            const keys = definition.keys ?? ['id']
+            const identity = (row: Row) =>
+              keys.map((key) => String(row[key])).join(':')
             let before: Row[] = []
             let beforeLookupFailed = false
             if (!operation.startsWith('create') && canSnapshot) {
@@ -437,6 +303,7 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                       await deleteWithSnapshots(
                         tx,
                         model,
+                        keys,
                         input,
                         select,
                         before
@@ -507,7 +374,7 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 ? result.count
                 : records.length
             const previousByIdentity = new Map(
-              before.map((row) => [row.id ?? `${row.fileId}:${row.tagId}`, row])
+              before.map((row) => [identity(row), row])
             )
             const events: AuditInput[] = []
             for (const row of records.length ? records : [{}]) {
@@ -515,15 +382,13 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 ? row
                 : operation.startsWith('create')
                   ? undefined
-                  : previousByIdentity.get(
-                      row.id ?? `${row.fileId}:${row.tagId}`
-                    )
+                  : previousByIdentity.get(identity(row))
               const current = { ...row }
               const requestedRoles = (
                 (input.select ?? input.include) as Row | undefined
               )?.roles
               if (
-                model === 'User' &&
+                definition.roles &&
                 requestedRoles &&
                 typeof requestedRoles === 'object' &&
                 ['where', 'cursor', 'skip', 'take', 'distinct'].some(
@@ -542,12 +407,10 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                   ? { beforeObserved: true }
                   : {}),
               }
-              if (typeof (current.tag as Row | undefined)?.name === 'string')
-                details.tagName = (current.tag as Row).name
               if (!operation.startsWith('delete')) {
                 details.after = snapshot(current, definition.fields)
                 if (
-                  model === 'User' &&
+                  definition.roles &&
                   data.roles &&
                   typeof data.roles === 'object'
                 ) {
@@ -557,39 +420,26 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                   if (Array.isArray(assigned))
                     details.roleIds = assigned.map((role) => (role as Row).id)
                 }
-                if (model === 'Config')
-                  details.settingsKeys = changedSettings(old?.value, row.value)
               }
+              Object.assign(
+                details,
+                definition.details?.(current, old, operation)
+              )
+              const name = definition.name
+                ? definition.name(current)
+                : current.name
               events.push({
                 action: `${definition.target}.${operation}`,
                 category: definition.category,
-                outcome:
-                  ['WebhookDelivery', 'MailOutbox'].includes(model) &&
-                  (data.status === 'failed' ||
-                    (data.status !== 'cancelled' &&
-                      typeof data.lastError === 'string' &&
-                      data.lastError.length > 0))
-                    ? 'failure'
-                    : 'success',
+                outcome: definition.failed?.(data) ? 'failure' : 'success',
                 targetType: definition.target,
                 targetId:
                   String(
-                    current.id ??
-                      current.fileId ??
+                    current[keys[0]] ??
                       (input.where as Row | undefined)?.id ??
                       ''
                   ) || undefined,
-                targetName:
-                  typeof current.name === 'string'
-                    ? current.name
-                    : model === 'Invite'
-                      ? (current.note as string) || undefined
-                      : typeof current.key === 'string'
-                        ? current.key
-                        : typeof (current.file as Row | undefined)?.name ===
-                            'string'
-                          ? ((current.file as Row).name as string)
-                          : undefined,
+                targetName: typeof name === 'string' ? name : undefined,
                 details,
               })
             }

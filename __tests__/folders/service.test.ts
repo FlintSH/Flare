@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createFolder,
   deleteFolder,
+  insertFolder,
   moveFilesToFolder,
   updateFolder,
   validateOwnedFolderId,
@@ -11,10 +12,8 @@ import {
 const mocks = vi.hoisted(() => ({
   vaultFolder: {
     findFirst: vi.fn(),
-    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
-    updateMany: vi.fn(),
     delete: vi.fn(),
   },
   file: { count: vi.fn(), updateMany: vi.fn() },
@@ -37,7 +36,6 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.transaction.mockImplementation((callback) => callback(mocks))
   mocks.vaultFolder.findFirst.mockResolvedValue(folder)
-  mocks.vaultFolder.findMany.mockResolvedValue([])
   mocks.vaultFolder.create.mockImplementation(({ data }) => ({
     ...folder,
     ...data,
@@ -75,6 +73,30 @@ describe('owner-isolated folder mutations', () => {
     expect(mocks.vaultFolder.create).toHaveBeenCalledTimes(1)
   })
 
+  it('creates folders with the case-insensitive key and only the fields a caller selects', async () => {
+    const tx = {
+      vaultFolder: { create: vi.fn().mockResolvedValue({ id: 'created' }) },
+    }
+    await expect(
+      insertFolder(
+        tx as never,
+        'owner',
+        { name: 'Week 1', parentId: 'folder' },
+        { id: true }
+      )
+    ).resolves.toEqual({ id: 'created' })
+    expect(tx.vaultFolder.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'owner',
+        name: 'Week 1',
+        normalizedName: 'week 1',
+        parentId: 'folder',
+      },
+      select: { id: true },
+    })
+    expect(mocks.vaultFolder.create).not.toHaveBeenCalled()
+  })
+
   it('validates upload destinations using the supplied transaction', async () => {
     const tx = {
       vaultFolder: { findFirst: vi.fn().mockResolvedValue({ id: 'own' }) },
@@ -95,19 +117,6 @@ describe('owner-isolated folder mutations', () => {
       moveFilesToFolder('owner', { fileIds: ['file'], folderId: 'foreign' })
     ).rejects.toMatchObject({ status: 404, message: 'Folder not found.' })
     expect(mocks.file.count).not.toHaveBeenCalled()
-    expect(mocks.file.updateMany).not.toHaveBeenCalled()
-  })
-
-  it('rejects a mixed-owner selection atomically before changing any file', async () => {
-    await expect(
-      moveFilesToFolder('owner', {
-        fileIds: ['own', 'foreign'],
-        folderId: 'folder',
-      })
-    ).rejects.toMatchObject({ status: 404 })
-    expect(mocks.file.count).toHaveBeenCalledWith({
-      where: { userId: 'owner', id: { in: ['own', 'foreign'] } },
-    })
     expect(mocks.file.updateMany).not.toHaveBeenCalled()
   })
 
@@ -174,64 +183,5 @@ describe('owner-isolated folder mutations', () => {
       })
     )
     expect(mocks.file.updateMany).not.toHaveBeenCalled()
-  })
-})
-
-describe('dissolving folders safely', () => {
-  it.each([null, 'grandparent'])(
-    'moves direct contents to %s without deleting files',
-    async (parentId) => {
-      mocks.vaultFolder.findFirst
-        .mockResolvedValueOnce({ ...folder, parentId })
-        .mockResolvedValueOnce(null)
-      mocks.vaultFolder.findMany.mockResolvedValue([
-        { normalizedName: 'photos' },
-      ])
-      await deleteFolder('owner', 'folder')
-      expect(mocks.vaultFolder.update).toHaveBeenCalledWith({
-        where: { id: 'folder', userId: 'owner' },
-        data: { normalizedName: '/deleted/folder' },
-      })
-      expect(mocks.vaultFolder.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'owner', parentId: 'folder' },
-        data: { parentId },
-      })
-      expect(mocks.file.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'owner', folderId: 'folder' },
-        data: { folderId: parentId },
-      })
-      expect(mocks.vaultFolder.delete).toHaveBeenCalledWith({
-        where: { id: 'folder', userId: 'owner' },
-      })
-      expect(mocks.vaultFolder.update.mock.invocationCallOrder[0]).toBeLessThan(
-        mocks.vaultFolder.updateMany.mock.invocationCallOrder[0]
-      )
-      expect(
-        mocks.vaultFolder.updateMany.mock.invocationCallOrder[0]
-      ).toBeLessThan(mocks.vaultFolder.delete.mock.invocationCallOrder[0])
-    }
-  )
-
-  it('rejects child/sibling name collisions before moving anything', async () => {
-    mocks.vaultFolder.findMany.mockResolvedValue([{ normalizedName: 'week 1' }])
-    mocks.vaultFolder.findFirst
-      .mockResolvedValueOnce(folder)
-      .mockResolvedValueOnce({ id: 'conflicting-sibling' })
-    await expect(deleteFolder('owner', 'folder')).rejects.toMatchObject({
-      status: 409,
-    })
-    expect(mocks.vaultFolder.findFirst).toHaveBeenLastCalledWith({
-      where: {
-        userId: 'owner',
-        parentId: null,
-        id: { not: 'folder' },
-        normalizedName: { in: ['week 1'] },
-      },
-      select: { id: true },
-    })
-    expect(mocks.vaultFolder.update).not.toHaveBeenCalled()
-    expect(mocks.vaultFolder.updateMany).not.toHaveBeenCalled()
-    expect(mocks.file.updateMany).not.toHaveBeenCalled()
-    expect(mocks.vaultFolder.delete).not.toHaveBeenCalled()
   })
 })

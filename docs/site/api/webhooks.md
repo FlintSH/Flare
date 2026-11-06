@@ -20,7 +20,7 @@ Webhooks belong to individual accounts. A destination receives events for its ow
 5. Send a test from Flare. Check both your receiver's logs and Flare's delivery history.
 6. Upload a small file and confirm that a real `file.ready` event reaches the receiver.
 
-There can be **10 webhooks per account**. Names are 1–80 characters; URLs can be at most 2,048 characters and cannot contain embedded credentials or fragments. Destinations are checked when created and again on delivery.
+There can be **10 webhooks per account**. Names are 1–80 characters; URLs can be at most 2,048 characters and cannot contain embedded credentials or fragments. The webhook fields and the token name field in **Profile → Integrations** stop at these lengths. Destinations are checked when created and again on delivery.
 
 Webhook management uses your signed-in dashboard session. A named API token cannot create destinations, read secrets, send tests, or retry deliveries.
 
@@ -66,9 +66,9 @@ The payload does not contain file contents, storage paths, share URLs, passwords
 
 ### Test events
 
-A test has the same version/type and data fields, adds **`"test": true`**, and uses an ID beginning with `test:`. Its sample file is `example.png` with ID `example-file`. It does not create a file or consume your file quota. Branch on `test === true` when production side effects would be inappropriate.
+A test has the same version/type and data fields, adds **`"test": true`**, and uses an ID beginning with `test:`. Its sample file is `example.png` with ID `example-file`: a public 1,024-byte PNG without a password, with `occurredAt` set to when you sent the test. It does not create a file or consume your file quota. Branch on `test === true` when production side effects would be inappropriate.
 
-Tests use the normal delivery queue and signature protocol. Each destination can receive **10 test sends per hour**. A paused webhook must be enabled before testing.
+Tests use the normal delivery queue and signature protocol. Each destination can receive **10 test sends per hour**. A paused webhook must be enabled before testing. The [queue limits](#queue-and-network-limits) apply too, but unlike upload events, which are skipped at capacity, a test or a manual retry is refused with `Webhook queue is full` while the destination has 1,000 pending or processing deliveries or the account has 5,000.
 
 ## Verify each delivery
 
@@ -120,7 +120,7 @@ Do not assume global event ordering. Several deliveries can run concurrently, an
 
 ## Retries and delivery states
 
-The application worker checks for deliveries every **five seconds**. Database leases coordinate a global maximum of **four concurrent deliveries** across application replicas. Normal scheduling can be later than a nominal retry time if the worker is busy or the application is offline.
+The application worker in each process checks for deliveries every **five seconds**, starting when the process starts, and never starts a check while its previous one is still running. Database leases coordinate a global maximum of **four concurrent deliveries** across application replicas. Normal scheduling can be later than a nominal retry time if the worker is busy or the application is offline.
 
 | Receiver result                          | What Flare does                                      |
 | ---------------------------------------- | ---------------------------------------------------- |
@@ -141,7 +141,7 @@ There are **five total attempts**, with delays after failures of **1 minute, 5 m
 | `failed`     | A permanent failure or the attempt limit was reached.                                           |
 | `cancelled`  | Paused destination or an invalidated source-file event.                                         |
 
-In **Profile → Integrations**, **Delivery history** shows the **latest 50 deliveries**: each one's webhook, event (**Test event** or **File ready**), status, attempts out of five, creation time, and sanitized last error. Failed deliveries offer **Retry**. The list reloads every five seconds while the page is open; **Refresh** in the card's header reloads it immediately. Terminal history (`delivered`, `failed`, `cancelled`) is removed after **30 days**, with cleanup checked hourly by the worker.
+In **Profile → Integrations**, **Delivery history** shows the **latest 50 deliveries**: each one's webhook, event (**Test event** or **File ready**), status, attempts out of five, creation time, and sanitized last error. Failed deliveries offer **Retry**. The list reloads every five seconds while **Integrations** is the open Profile section and the browser tab is visible; **Refresh** in the card's header reloads it immediately. Terminal history (`delivered`, `failed`, `cancelled`) is removed after **30 days**, with cleanup checked hourly by the worker.
 
 ### Retry, pause, or remove a destination
 
@@ -183,7 +183,7 @@ This also permits `http://` destinations. It applies to the whole deployment and
 
 Signing secrets are encrypted in the database. The effective key comes from `FLARE_EMAIL_ENCRYPTION_KEY`, or the file named by `FLARE_EMAIL_ENCRYPTION_KEY_FILE`; set only one. Without a dedicated key, Flare uses `NEXTAUTH_SECRET`. The effective secret must have at least 32 characters.
 
-SMTP and webhook secrets use separate encryption purposes, but share this key configuration. Preserve the key with your database backups and across application replicas. Changing it without migrating encrypted data makes existing signing secrets unreadable; recreate affected webhook destinations and configure their new secrets at the receivers.
+SMTP passwords, queued mail, webhook signing secrets, and copies of invite links each use their own encryption purpose, so a value encrypted for one can't be decrypted as another, but they share this key configuration. Preserve the key with your database backups and across application replicas. Changing it without migrating encrypted data makes existing signing secrets unreadable; recreate affected webhook destinations and configure their new secrets at the receivers.
 
 The durable queue lives in PostgreSQL and the worker runs inside the application. A deployment must keep a Node.js application process running for background deliveries; a static export or scale-to-zero host cannot independently process pending events.
 

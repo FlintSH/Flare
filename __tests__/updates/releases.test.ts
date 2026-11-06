@@ -256,7 +256,9 @@ describe('update API', () => {
     'requires an administrator before making external requests',
     async (session) => {
       mocks.getAccessSession.mockResolvedValue(session)
-      const response = await GET()
+      const response = await GET(
+        new Request('http://localhost/api/updates/check')
+      )
       expect(response.status).toBe(session ? 403 : 401)
       expect(fetchMock).not.toHaveBeenCalled()
     }
@@ -266,7 +268,9 @@ describe('update API', () => {
     vi.stubEnv('FLARE_RELEASE_CHANNEL', 'rolling')
     vi.stubEnv('FLARE_COMMIT_SHA', currentCommit)
     respond(release({ body: `<!-- flare-commit-sha: ${currentCommit} -->` }))
-    const response = await GET()
+    const response = await GET(
+      new Request('http://localhost/api/updates/check')
+    )
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       channel: 'rolling',
@@ -278,7 +282,9 @@ describe('update API', () => {
     'reports GitHub HTTP %s failures without claiming the build is current',
     async (status) => {
       respond({ message: 'Unavailable' }, status)
-      const response = await GET()
+      const response = await GET(
+        new Request('http://localhost/api/updates/check')
+      )
       expect(response.status).toBe(500)
       expect(await response.json()).toEqual({
         error: 'Failed to check for updates',
@@ -289,13 +295,17 @@ describe('update API', () => {
 
   it('reports malformed GitHub responses as errors', async () => {
     respond([{ tag_name: 'v3.0.0' }])
-    const response = await GET()
+    const response = await GET(
+      new Request('http://localhost/api/updates/check')
+    )
     expect(response.status).toBe(500)
   })
 
   it('reports a network failure as an error', async () => {
     fetchMock.mockRejectedValueOnce(new Error('Network unavailable'))
-    const response = await GET()
+    const response = await GET(
+      new Request('http://localhost/api/updates/check')
+    )
     expect(response.status).toBe(500)
   })
 })

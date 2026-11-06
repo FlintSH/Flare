@@ -120,12 +120,13 @@ async function migrateConfig() {
     }
 
     console.log('Config migrations completed successfully')
-  } catch (error) {
-    console.error('Failed to migrate config:', error)
-    throw error
   } finally {
     await prisma.$disconnect()
   }
 }
 
-migrateConfig().catch(console.error)
+// The start scripts stop on a non-zero exit instead of starting the server.
+migrateConfig().catch((error) => {
+  console.error('Failed to migrate config:', error)
+  process.exitCode = 1
+})

@@ -26,6 +26,8 @@ https://files.example.com/u/aB3xY9
 
 The dashboard does not offer a custom short code. Your account's vanity URL setting affects uploaded-file URLs, not the generated `/u/…` path.
 
+If two links created at the same moment draw the same code, Flare gives the second one another code instead of failing. Earlier versions showed **Internal server error** in that case; choosing **Shorten** again worked.
+
 <Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created short link with copy and open controls" caption="Copy the new link directly, or open it to check the destination." />
 
 ## Manage existing links
@@ -34,7 +36,7 @@ The table shows each link's original destination, short link, clicks, creation d
 
 Use the row's copy action to share an existing link, or open it to confirm where it leads. If clipboard access fails, select the link and copy it manually.
 
-To stop a redirect, choose its delete action and confirm. The generated short URL then stops resolving through Flare. Deleting the short link does not remove the original webpage or prevent someone using its full address.
+To stop a redirect, choose its delete action and confirm. The generated short URL then stops resolving through Flare. If deleting fails, **Could not delete link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link is still available and to try again, which earlier versions said for every failure. Deleting the short link does not remove the original webpage or prevent someone using its full address.
 
 There is no destination editor or scheduled expiration in this interface. Create a new short link for a changed destination and remove the old link if it should no longer work.
 

@@ -51,10 +51,24 @@ const token = {
     password: 'never-return',
   },
 }
+// Like the database, a lookup finds a row only by its exact stored key.
+const storedTokens = new Map([
+  [hashApiToken('flr_test'), token],
+  [hashApiToken('flr_MixedCaseToken'), token],
+])
+const legacyToken = 'legacy-MixedCaseToken'
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.token.mockResolvedValue(token)
-  mocks.user.mockResolvedValue(token.user)
+  mocks.token.mockImplementation(
+    async ({ where }: { where: { hash: string } }) =>
+      storedTokens.get(where.hash) ?? null
+  )
+  mocks.user.mockImplementation(
+    async ({ where }: { where: { id?: string; uploadToken?: string } }) =>
+      where.id === token.user.id || where.uploadToken === legacyToken
+        ? token.user
+        : null
+  )
   mocks.update.mockResolvedValue({})
   mocks.policy.mockReturnValue(false)
   mocks.session.mockResolvedValue(null)
@@ -78,10 +92,8 @@ describe('named bearer authentication', () => {
       profileId: 'profile-1',
     })
     expect(user).not.toHaveProperty('password')
-    expect(mocks.user).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      select: { roles: { select: expect.any(Object) } },
-    })
+    // The token owner's access, not an empty one for an unknown account.
+    expect(user?.roles.map((role) => role.id)).toEqual(['everyone'])
   })
   it.each(['Bearer', 'bearer', 'BEARER', 'bEaReR', 'Bearer  '])(
     'accepts the %s scheme without changing the named token value',
@@ -90,10 +102,6 @@ describe('named bearer authentication', () => {
         request('/api/files', 'POST', `${scheme} flr_MixedCaseToken`)
       )
       expect(user?.id).toBe('user-1')
-      expect(mocks.token).toHaveBeenCalledWith({
-        where: { hash: hashApiToken('flr_MixedCaseToken') },
-        include: { user: true },
-      })
       expect(mocks.session).not.toHaveBeenCalled()
     }
   )
@@ -136,16 +144,10 @@ describe('named bearer authentication', () => {
   it.each(['Bearer', 'bearer', 'BEARER', 'bEaReR', 'Bearer  '])(
     'preserves legacy token authentication with the %s scheme',
     async (scheme) => {
-      mocks.user.mockResolvedValue(token.user)
       const result = await getAuthenticatedUser(
-        request('/api/files', 'POST', `${scheme} legacy-MixedCaseToken`)
+        request('/api/files', 'POST', `${scheme} ${legacyToken}`)
       )
       expect(result?.id).toBe('user-1')
-      expect(mocks.user).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { uploadToken: 'legacy-MixedCaseToken' },
-        })
-      )
       expect(mocks.token).not.toHaveBeenCalled()
     }
   )

@@ -235,9 +235,9 @@ describe('file password attempt limits', () => {
       expect(
         await checkFileAccess(file, null, `unknown-${attempt}`, visitor(null))
       ).toMatchObject({ reason: 'password_invalid' })
-    expect(
-      await checkFileAccess(file, null, password, { requester: 'unknown' })
-    ).toMatchObject({ allowed: true })
+    expect(await checkFileAccess(file, null, password, {})).toMatchObject({
+      allowed: true,
+    })
   })
 
   it('accepts passwords again after the window', async () => {

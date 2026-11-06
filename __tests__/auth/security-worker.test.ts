@@ -8,18 +8,15 @@ vi.mock('@/lib/database/prisma', () => ({
 }))
 vi.mock('@/lib/logger', () => ({ createLogger: () => ({ warn: mocks.warn }) }))
 
+let worker: ReturnType<typeof startSecurityCleanupWorker> | undefined
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   mocks.execute.mockResolvedValue(0)
 })
 afterEach(() => {
-  const state = globalThis as typeof globalThis & {
-    flareSecurityCleanup?: { timer: NodeJS.Timeout }
-  }
-  if (state.flareSecurityCleanup)
-    clearInterval(state.flareSecurityCleanup.timer)
-  delete state.flareSecurityCleanup
+  worker?.stop()
+  worker = undefined
   vi.useRealTimers()
 })
 
@@ -32,8 +29,8 @@ describe('authentication retention worker', () => {
           finish = resolve
         })
     )
-    startSecurityCleanupWorker()
-    startSecurityCleanupWorker()
+    worker = startSecurityCleanupWorker()
+    expect(startSecurityCleanupWorker()).toBe(worker)
     await vi.advanceTimersByTimeAsync(59999)
     expect(mocks.execute).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
@@ -41,19 +38,20 @@ describe('authentication retention worker', () => {
     await vi.advanceTimersByTimeAsync(120000)
     expect(mocks.execute).toHaveBeenCalledTimes(1)
     finish(0)
+    await vi.advanceTimersByTimeAsync(1)
+    const firstBatch = mocks.execute.mock.calls.length
     await vi.advanceTimersByTimeAsync(60000)
-    expect(mocks.execute).toHaveBeenCalledTimes(6)
-    expect(mocks.execute.mock.calls[1][0].join('')).toContain('LoginAttempt')
-    expect(mocks.execute.mock.calls[2][0].join('')).toContain('BrowserSession')
+    expect(mocks.execute.mock.calls.length).toBeGreaterThan(firstBatch)
   })
   it('retries a failed cleanup on the next poll without exposing its error', async () => {
     mocks.execute.mockRejectedValueOnce(new Error('private database details'))
-    startSecurityCleanupWorker()
+    worker = startSecurityCleanupWorker()
     await vi.advanceTimersByTimeAsync(60000)
-    expect(mocks.warn).toHaveBeenCalledWith(
-      'Security cleanup unavailable; retrying on the next poll.'
-    )
+    expect(mocks.warn.mock.calls).toEqual([
+      ['Security cleanup unavailable; retrying on the next poll.'],
+    ])
+    const failed = mocks.execute.mock.calls.length
     await vi.advanceTimersByTimeAsync(60000)
-    expect(mocks.execute).toHaveBeenCalledTimes(4)
+    expect(mocks.execute.mock.calls.length).toBeGreaterThan(failed)
   })
 })

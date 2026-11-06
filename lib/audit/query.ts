@@ -3,13 +3,15 @@ import { z } from 'zod'
 
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
+import { AUDIT_OUTCOMES } from './types'
+
 const filter = z.string().trim().max(200).optional()
 export const auditQuerySchema = z
   .object({
     q: filter,
     category: filter,
     action: filter,
-    outcome: z.enum(['success', 'failure', 'denied']).optional(),
+    outcome: z.enum(AUDIT_OUTCOMES).optional(),
     actorId: filter,
     targetId: filter,
     requestId: filter,
@@ -28,9 +30,10 @@ export const auditQuerySchema = z
     }
   )
 
-export function auditWhere(
-  filters: z.infer<typeof auditQuerySchema>
-): Prisma.AuditEventWhereInput {
+/** The filters `GET /api/audit` accepts; it rejects any other query key. */
+export type AuditQuery = z.infer<typeof auditQuerySchema>
+
+export function auditWhere(filters: AuditQuery): Prisma.AuditEventWhereInput {
   return {
     ...(filters.q
       ? {

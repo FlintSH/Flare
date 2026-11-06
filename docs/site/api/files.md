@@ -70,7 +70,7 @@ The URL name is built from the original filename, which is kept unchanged as the
 
 Uploads made before this rule kept their URLs. Earlier builds could put spaces, capitals, `#`, or a leading dot in new URL names, for example `My Report-1.PDF` or `.png`; those links keep working unchanged.
 
-Signed-out visitors can open a public file's share page, `/raw`, and `/direct` whether or not its URL name has an extension. Earlier builds sent them to the sign-in page instead when the name had no extension, such as `/abc12/readme`, or started with a dot, such as `/abc12/.png`; those links now open too. Private files and passwords are checked by the routes as before. A first path segment that belongs to Flare itself (`api`, `auth`, `dashboard`, `admin`, `settings`, `setup`, `raw`, `direct`, `u`, `profile`, `avatars`, or `_next`) is never read as a URL ID, which is also why vanity IDs can't use those words.
+Signed-out visitors can open a public file's share page, `/raw`, and `/direct` whether or not its URL name has an extension. Earlier builds sent them to the sign-in page instead when the name had no extension, such as `/abc12/readme`, or started with a dot, such as `/abc12/.png`; those links now open too. Private files and passwords are checked by the routes as before. A first path segment that belongs to Flare itself (`api`, `auth`, `dashboard`, `admin`, `settings`, `setup`, `raw`, `direct`, `u`, `profile`, `avatars`, or `_next`) is never read as a URL ID, which is also why vanity IDs can't use those words and new accounts never get one as their URL ID. A first segment longer than 32 characters can't be a URL ID or vanity ID, so signed-out visitors are sent to sign in, as for any other page; earlier builds passed 33-character segments on to the share page.
 
 ### Select a profile and folder before sending bytes
 
@@ -92,7 +92,7 @@ curl --fail-with-body \
   "$FLARE_URL/api/files"
 ```
 
-For ordinary multipart uploads, a `profileId` or `folderId` form field cannot change a selection after the upload starts. Choose them in the header/query instead. Likewise, choose URL randomization in a saved profile or your account defaults before sending the file; a differing multipart `randomizeFileUrls` value is rejected.
+For ordinary multipart uploads, a `profileId` or `folderId` form field cannot change a selection after the upload starts. Choose them in the header/query instead. Likewise, choose URL randomization in a saved profile or your account defaults before sending the file; a differing multipart `randomizeFileUrls` value is rejected. These refusals are the same as when [completing a chunked upload](#chunked-uploads): a different `profileId` answers `403` with `The upload profile cannot change after upload starts.`, and a different `randomizeFileUrls` `400` with `The naming strategy cannot change after upload starts.` Earlier versions answered both with `400` on direct uploads, with `Select the profile using X-Upload-Profile before uploading.` and `Select a naming strategy in your upload profile.`
 
 ### Upload options
 
@@ -113,6 +113,9 @@ Omitting an option inherits the selected profile or account/default value. Suppl
 
 Multipart fields are strings: use `true`/`false` for booleans, and an empty string or `null` string for nullable `password`, `expiresAt`, `profileId`, and `folderId`. In JSON bodies use actual booleans, arrays, and `null`.
 
+Flare records `expiresAt` as a UTC instant: `2026-11-06T12:00+0200` is saved as `2026-11-06T10:00:00.000Z` and expires at that moment. Earlier versions saved the value exactly as sent, and an upload whose `expiresAt` used any other form, including `Z` without milliseconds, never expired: the file kept its visibility and storage, and the library stopped showing its expiration. Uploads from the web app always sent the `.000Z` form and were not affected. Files still waiting for their time now expire on schedule. For a file whose time already passed, set the expiration again from **Files → file menu → Manage expiration**, or with `POST /api/files/{id}/expiry` using a browser session or the legacy upload token ([endpoint inventory](./endpoint-inventory#dashboard-routes-using-the-shared-account-helper)).
+
+`POST /api/files/{id}/expiry` takes JSON with `expiresAt`, a future time in the same form as an upload's `expiresAt`, and `action`, `DELETE` (the default) or `SET_PRIVATE`, which needs the same permission as on an upload; `DELETE` on that address removes the schedule. Both answer `404` with `File not found` for a file that isn't yours, including one deleted while the request was waiting. Earlier versions also accepted any date JavaScript could read, such as `2026-11-06 12:00` without a timezone, read in the server's time zone; such a value now answers `400` with `Invalid expiration date. Use an ISO 8601 timestamp with a timezone.` They answered `500` when the file was deleted while scheduling, and `200` with `No expiration found` while removing.
 Earlier versions accepted file passwords of any length up to 72 bytes. Clients that send a password shorter than 8 characters now receive `400` with `{"error":"File passwords must be at least 8 characters."}` and no file is created, so update scripts and screenshot-tool configurations that set one. `PATCH /api/files/{id}` applies the same rule when protecting an existing file. Passwords already stored on files keep working.
 
 ```sh
@@ -125,24 +128,25 @@ curl --fail-with-body \
   "$FLARE_URL/api/files"
 ```
 
-Base defaults are public visibility, no expiration, delete on expiration, original-name URLs, no tags, and framed sharing. Account defaults supply naming and expiration settings, and the instance's published sharing configuration supplies the base share style. A selected profile overrides those defaults; permitted request options take final precedence. The retired `copyFormat` option is ignored for compatibility.
+Base defaults are public visibility, no expiration, delete on expiration, original-name URLs, no tags, and framed sharing. Account defaults supply naming and expiration settings, and the instance's published sharing configuration supplies the base share style. A selected profile overrides those defaults; permitted request options take final precedence. The retired `copyFormat` option is ignored for compatibility, in requests and in saved profiles alike. A saved profile option Flare can't read answers `500` with `Upload could not be completed.`; earlier versions answered `400` with `Invalid upload options.` and logged nothing.
 
 ### Upload errors and limits
 
-| Status | Common cause                                                                                                                                                    | Recovery                                                                                                      |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `400`  | Missing file; wrong content type; invalid options; changing profile/folder/naming too late; duplicate chunk part; expiration already passed; file type mismatch | Fix the request. Select profile and folder before upload.                                                     |
-| `401`  | Authentication or scope failure                                                                                                                                 | Check the [authentication guide](./authentication).                                                           |
-| `403`  | Profile binding conflict; token invalidated before finalization                                                                                                 | Use the allowed profile or replace the credential.                                                            |
-| `404`  | Selected profile/folder/tag or chunk session not found                                                                                                          | Verify ownership and IDs. Start a new chunk session if it expired.                                            |
-| `409`  | Storage configuration changed during chunk upload; part sent after completion                                                                                   | Start again after a storage change. Do not upload new parts to a completed session.                           |
-| `413`  | Instance upload limit, remaining quota, or part-size limit exceeded                                                                                             | Check the instance limit, free storage, or send smaller parts.                                                |
-| `429`  | Too many upload starts                                                                                                                                          | Honor `Retry-After: 60`.                                                                                      |
-| `500`  | Upload/storage operation failed                                                                                                                                 | Check instance health and operator logs. Avoid blindly repeating a multipart upload if its response was lost. |
+| Status | Common cause                                                                                                                                                    | Recovery                                                                                                                      |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Missing file; wrong content type; invalid options; changing the folder or naming too late; duplicate chunk part; expiration already passed; file type mismatch  | Fix the request. Select profile and folder before upload.                                                                     |
+| `401`  | Authentication or scope failure                                                                                                                                 | Check the [authentication guide](./authentication).                                                                           |
+| `403`  | Profile binding conflict; changing the profile once the upload has started; token invalidated before finalization; a browser-session upload from another origin | Use the allowed profile or replace the credential.                                                                            |
+| `404`  | Selected profile/folder/tag or chunk session not found                                                                                                          | Verify ownership and IDs. Start a new chunk session if it expired.                                                            |
+| `409`  | Storage configuration changed during chunk upload; part sent after completion                                                                                   | Start again after a storage change. Do not upload new parts to a completed session.                                           |
+| `413`  | Instance upload limit, remaining quota, or part-size limit exceeded                                                                                             | Check the instance limit, free storage, or send smaller parts.                                                                |
+| `415`  | A browser session sent a chunk step's JSON with another content type                                                                                            | Send `Content-Type: application/json`, as the [browser-session write rule](./authentication#browser-session-writes) requires. |
+| `429`  | Too many upload starts                                                                                                                                          | Honor `Retry-After: 60`.                                                                                                      |
+| `500`  | Upload/storage operation failed, or saved settings or profile options Flare can't read; the server logs the cause                                               | Check instance health and operator logs. Avoid blindly repeating a multipart upload if its response was lost.                 |
 
 `POST /api/files` and `POST /api/files/chunks` share a limit of **30 requests per 60 seconds per client IP per application process**. It runs before authentication. Limits reset on process restart and are not a distributed rate-limit service. Proxies should supply accurate client IP headers. Other file-read and part/completion routes do not use this upload-start limiter.
 
-Direct uploads and chunk parts can use the full limits described here. Earlier builds truncated any API request body over 10 MB, so direct uploads above that failed with `500`, and uploads with larger parts failed at completion with `400`; see [aligning upload limits](/hosting/reverse-proxy#align-all-upload-limits). Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Accounts with `quotas.bypass` or Administrator are exempt from the default quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check.
+Direct uploads and chunk parts can use the full limits described here. Earlier builds truncated any API request body over 10 MB, so direct uploads above that failed with `500`, and uploads with larger parts failed at completion with `400`; see [aligning upload limits](/hosting/reverse-proxy#align-all-upload-limits). Maximum file size and quota are operator settings, not fixed API constants. Flare uses powers of 1024 for its MB/GB limits. Accounts with `quotas.bypass` or Administrator are exempt from the default quota, but still subject to the maximum upload size. Quota and size are checked again when a file is finalized, so concurrent uploads cannot rely only on the earlier quota check. A file over the maximum file size answers `413` with `{"error":"A file exceeds the upload size limit."}`, and one over the remaining quota with `{"error":"This would exceed your storage quota."}`, whether a direct upload, chunk initialization or finalization finds it. Earlier versions worded these four ways, including `You have reached your storage quota.` when no quota was left and `The file exceeds the current upload size limit.` at finalization.
 
 The server checks detected file bytes against the claimed MIME type. A successful file-ready event means the upload was committed; optional OCR may finish later. Ordinary multipart uploads have no idempotency-key parameter: retrying after a lost response can create another file.
 
@@ -178,7 +182,7 @@ curl --fail-with-body --get \
 | `types`            | All types      | Comma-separated exact MIME types, such as `image/png,image/jpeg`.                                                                                                                   |
 | `dateFrom`         | No lower bound | Inclusive upload date/time lower bound. Prefer ISO 8601 timestamps with a timezone.                                                                                                 |
 | `dateTo`           | No upper bound | Inclusive upper bound. A date-only value includes the final day using server-local time; explicit timestamps preserve the supplied instant.                                         |
-| `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together.                                                                                              |
+| `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together. `public` and `private` match in any letter case; `hasPassword` only as written.              |
 | `folder`           | All folders    | Owned folder ID or `unfiled`. A folder filter matches that folder directly, not its descendants.                                                                                    |
 | `tag`              | All tags       | Owned tag ID or `untagged`. Excluded automatic tags do not count as active tags.                                                                                                    |
 | `snapshot`         | No ceiling     | Inclusive upload timestamp ceiling returned by the timeline endpoint; send it unchanged on each window request.                                                                     |
@@ -205,7 +209,8 @@ Different filter categories combine with AND. For example, `types=image/png&visi
       "user": { "urlId": "abc123" },
       "tags": [{ "id": "TAG_ID", "name": "Finance" }],
       "hasPassword": false,
-      "expiresAt": null
+      "expiresAt": null,
+      "expiryAction": null
     }
   ],
   "pagination": { "total": 1, "pageCount": 1, "page": 1, "limit": 24 }
@@ -230,15 +235,15 @@ curl --fail-with-body --get \
 
 Empty IDs, duplicate IDs, whitespace or ASCII control characters, overlong IDs, more than 100 IDs, or repeated `ids` parameters return `400`. The regular page and limit rules still apply; omitting `limit` returns at most 24 records.
 
-The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is a timestamp or `null`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
+The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is when the file's earliest pending expiration runs, or `null`, and `expiryAction` is what that expiration does: `DELETE` or `SET_PRIVATE`, or `null` with no expiration pending. Earlier versions sent only `expiresAt`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
 
 Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
 
 ### Check raw view counts
 
-`views` includes share-page visits and successful `GET /{userUrlId}/{filename}/raw` responses. Each full response or `206` range response increments the total once. Raw access denials, missing files, failures opening storage, and `HEAD` requests do not increment it. This counts requests, including bots and repeated media ranges, rather than unique visitors or completed transfers. Existing totals are preserved after upgrading; earlier raw traffic is not backfilled. See [sharing and privacy](/guide/sharing#view-counts) for caching and direct-storage limits.
+`views` includes share-page visits that show the file and successful `GET /{userUrlId}/{filename}/raw` responses. Each full response or `206` range response increments the total once. Raw access denials, missing files, failures opening storage, and `HEAD` requests do not increment it. This counts requests, including bots and repeated media ranges, rather than unique visitors or completed transfers. Existing totals are preserved after upgrading; earlier raw traffic is not backfilled. See [sharing and privacy](/guide/sharing#view-counts) for caching and direct-storage limits.
 
-The stored file must open successfully before Flare writes the counter. A local file-open failure or failed counter write returns `500` and closes the acquired stream. After resolving the [storage or database failure](/hosting/troubleshooting#raw-links-return-500), retry the request.
+The stored file must open successfully before Flare writes the counter. A stored object that is gone returns `404`; another storage failure or a failed counter write returns `500`, and the acquired stream is closed. After resolving the [storage or database failure](/hosting/troubleshooting#raw-links-return-500), retry the request.
 
 To check a disposable **public file without a password** that you own, set `FLARE_FILE_IDS` to its ID and `FLARE_FILE_PATH` to its URL-encoded `urlPath` from the list response, such as `/abc123/fixture.txt`. The file must contain at least three bytes. Run the metadata read below before and after the raw requests; in an otherwise idle fixture, `views` increases by two. The bearer token needs `files:read` for the metadata read. Raw content uses the file's public access and receives no bearer token.
 
@@ -545,7 +550,7 @@ This endpoint returns the **upload-link object directly**:
 }
 ```
 
-Alternatively, **`PUT /api/files/chunks`** accepts the same body plus `uploadId` and returns **`{ "data": { ...uploadLinks } }`**. Use one completion route consistently in your client.
+Alternatively, **`PUT /api/files/chunks`** accepts the same body plus `uploadId` and returns **`{ "data": { ...uploadLinks } }`**. Use one completion route consistently in your client. A body without a string `uploadId` answers `400` with `Upload ID is required.`, a JSON `null` body included, which earlier builds answered with `500`.
 
 Completion accepts permitted upload-option overrides, but cannot change the profile, folder, or naming strategy chosen at initialization. Bound-token restrictions still apply. Repeating completion after a lost response returns the existing file while the upload session remains available; it does not publish another copy or enqueue another normal file-ready event.
 

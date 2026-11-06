@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { UploadToken } from '@/types/components/profile'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+
 import { useToast } from './use-toast'
+
+const TOKEN_PATH = '/api/profile/upload-token'
 
 export function useUploadToken(): UploadToken {
   const [uploadToken, setUploadToken] = useState<string | null>(null)
@@ -11,17 +15,18 @@ export function useUploadToken(): UploadToken {
   const { toast } = useToast()
 
   const handleLoadToken = useCallback(async () => {
+    const failed = 'Failed to fetch upload token'
     setIsLoadingToken(true)
     try {
-      const response = await fetch('/api/profile/upload-token')
-      if (!response.ok) throw new Error('Failed to fetch upload token')
-      const data = await response.json()
+      const data = await apiRequest<{ uploadToken: string }>(TOKEN_PATH, {
+        fallback: failed,
+      })
       setUploadToken(data.uploadToken)
     } catch (error) {
       console.error('Error fetching upload token:', error)
       toast({
         title: 'Error',
-        description: 'Failed to fetch upload token',
+        description: error instanceof RefusedRequest ? error.message : failed,
         variant: 'destructive',
       })
     } finally {
@@ -34,13 +39,13 @@ export function useUploadToken(): UploadToken {
   }, [handleLoadToken])
 
   const handleRefreshToken = async () => {
+    const failed = 'Failed to refresh upload token'
     setIsLoadingToken(true)
     try {
-      const response = await fetch('/api/profile/upload-token', {
+      const data = await apiRequest<{ uploadToken: string }>(TOKEN_PATH, {
         method: 'POST',
+        fallback: failed,
       })
-      if (!response.ok) throw new Error('Failed to refresh upload token')
-      const data = await response.json()
       setUploadToken(data.uploadToken)
       toast({
         title: 'Success',
@@ -51,7 +56,7 @@ export function useUploadToken(): UploadToken {
       console.error('Error refreshing upload token:', error)
       toast({
         title: 'Error',
-        description: 'Failed to refresh upload token',
+        description: error instanceof RefusedRequest ? error.message : failed,
         variant: 'destructive',
       })
     } finally {

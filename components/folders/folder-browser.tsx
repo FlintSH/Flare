@@ -20,7 +20,6 @@ import {
   type FolderAction,
   FolderDialog,
 } from '@/components/folders/folder-dialog'
-import { PermissionGate } from '@/components/roles/permission-gate'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -33,6 +32,8 @@ import {
 
 import { folderTrail } from '@/lib/folders/navigation'
 import type { FolderView } from '@/lib/folders/schema'
+import { UNFILED, uploadHref } from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
 import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -52,7 +53,9 @@ export function FolderBrowser({
   error: boolean
   onRetry: () => void
 }) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
+  const canManage = allows(user, 'manageFolders')
+  const canShare = allows(user, 'shareFolders')
   const [action, setAction] = useState<FolderAction | null>(null)
   const current = folders.find((folder) => folder.id === value)
   const trail = folderTrail(folders, current?.id ?? null)
@@ -75,40 +78,42 @@ export function FolderBrowser({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Manage folder</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <PermissionGate permission="folders.manage">
+        {canManage && (
           <DropdownMenuItem
             onSelect={() => setAction({ kind: 'rename', folder })}
           >
             <Pencil />
             Rename folder
           </DropdownMenuItem>
-        </PermissionGate>
-        <PermissionGate permission="folders.share">
+        )}
+        {canShare && (
           <DropdownMenuItem
             onSelect={() => setAction({ kind: 'share', folder })}
           >
             <Share2 />
             Share folder
           </DropdownMenuItem>
-        </PermissionGate>
-        <PermissionGate permission="folders.manage">
+        )}
+        {canManage && (
           <DropdownMenuItem
             onSelect={() => setAction({ kind: 'create', parentId: folder.id })}
           >
             <FolderPlus />
             New subfolder
           </DropdownMenuItem>
-        </PermissionGate>
-        <PermissionGate permission="folders.manage">
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:bg-danger/10 focus:text-destructive"
-            onSelect={() => setAction({ kind: 'delete', folder })}
-          >
-            <Trash2 />
-            Remove folder
-          </DropdownMenuItem>
-        </PermissionGate>
+        )}
+        {canManage && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:bg-danger/10 focus:text-destructive"
+              onSelect={() => setAction({ kind: 'delete', folder })}
+            >
+              <Trash2 />
+              Remove folder
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -133,14 +138,14 @@ export function FolderBrowser({
               All files
             </Button>
             <Button
-              variant={value === 'unfiled' ? 'secondary' : 'ghost'}
+              variant={value === UNFILED ? 'secondary' : 'ghost'}
               size="sm"
               className={cn(
                 'text-sm',
-                value !== 'unfiled' && 'text-muted-foreground'
+                value !== UNFILED && 'text-muted-foreground'
               )}
-              aria-current={value === 'unfiled' ? 'page' : undefined}
-              onClick={() => onChange('unfiled')}
+              aria-current={value === UNFILED ? 'page' : undefined}
+              onClick={() => onChange(UNFILED)}
             >
               Unfiled
             </Button>
@@ -151,26 +156,24 @@ export function FolderBrowser({
           </p>
         )}
         <div className="flex items-center gap-1">
-          {current && (
-            <PermissionGate permission="folders.share">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-2"
-                onClick={() => setAction({ kind: 'share', folder: current })}
-              >
-                <Share2 className="h-4 w-4" />
-                Share
-              </Button>
-            </PermissionGate>
+          {current && canShare && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2"
+              onClick={() => setAction({ kind: 'share', folder: current })}
+            >
+              <Share2 className="h-4 w-4" />
+              Share
+            </Button>
           )}
-          <PermissionGate permission="folders.manage">
+          {canManage && (
             <Button
               variant="outline"
               size="sm"
               className="gap-2"
               disabled={
-                loading || error || (!!value && value !== 'unfiled' && !current)
+                loading || error || (!!value && value !== UNFILED && !current)
               }
               onClick={() =>
                 setAction({ kind: 'create', parentId: current?.id ?? null })
@@ -179,10 +182,8 @@ export function FolderBrowser({
               <FolderPlus className="h-4 w-4" />
               New folder
             </Button>
-          </PermissionGate>
-          {current &&
-            (can('folders.manage') || can('folders.share')) &&
-            menu(current)}
+          )}
+          {current && (canManage || canShare) && menu(current)}
         </div>
       </div>
       {error ? (
@@ -196,7 +197,7 @@ export function FolderBrowser({
         <p className="mt-3 text-sm text-muted-foreground" role="status">
           Loading folders…
         </p>
-      ) : value && value !== 'unfiled' && !current ? (
+      ) : value && value !== UNFILED && !current ? (
         <p role="alert" className="mt-3 text-sm text-muted-foreground">
           This folder is no longer available.{' '}
           <button
@@ -253,22 +254,22 @@ export function FolderBrowser({
                   ))}
                 </ol>
               </nav>
-              <PermissionGate permission="files.upload">
+              {allows(user, ['uploadFiles', 'fileIntoFolder']) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="-mr-3 shrink-0 gap-2"
                   asChild
                 >
-                  <Link href={`/dashboard/upload?folder=${current.id}`}>
+                  <Link href={uploadHref(current.id)}>
                     <Upload className="h-4 w-4" />
                     Upload here
                   </Link>
                 </Button>
-              </PermissionGate>
+              )}
             </div>
           )}
-          {value !== 'unfiled' && children.length > 0 && (
+          {value !== UNFILED && children.length > 0 && (
             <section
               aria-label={current ? 'Subfolders' : 'Folders'}
               className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
@@ -309,8 +310,7 @@ export function FolderBrowser({
                       </span>
                     </span>
                   </button>
-                  {(can('folders.manage') || can('folders.share')) &&
-                    menu(folder)}
+                  {(canManage || canShare) && menu(folder)}
                 </div>
               ))}
             </section>

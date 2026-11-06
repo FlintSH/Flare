@@ -6,23 +6,25 @@ import { basename, extname } from 'node:path'
 import type { z } from 'zod'
 
 import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
-import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import { readConfig } from '@/lib/config'
+import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import { folderNameSchema } from '@/lib/folders/schema'
-import { validateOwnedFolderId } from '@/lib/folders/service'
+import { insertFolder, validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
+import { actionPermissions, allows } from '@/lib/permissions/actions'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import {
   PermissionError,
   getUserAccess,
-  lockRoleChanges,
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
 import { queueStorageDeletion } from '@/lib/storage/deletion'
 import { captureStorageTarget } from '@/lib/storage/targets'
+import { assertFits, uploadCapacity } from '@/lib/uploads/capacity'
 import {
   accountUploadOptions,
   effectiveUploadRevision,
@@ -34,6 +36,7 @@ import {
   publishPreparedUpload,
 } from '@/lib/uploads/finalize'
 import { UploadError, resolveUploadOptions } from '@/lib/uploads/options'
+import { ProfileNotFoundError, findOwnedProfile } from '@/lib/uploads/profiles'
 import {
   type ResolvedUploadOptions,
   mergeUploadOptions,
@@ -59,7 +62,7 @@ import type { ArchiveOperation } from './operation'
 import {
   ARCHIVE_LIMITS,
   type ArchiveManifest,
-  getArchiveFormat,
+  detectArchiveFormat,
 } from './shared'
 import {
   type SharedArchiveAccess,
@@ -141,7 +144,7 @@ async function inspectSource(
   operation: ArchiveOperation,
   extract: boolean
 ) {
-  const format = getArchiveFormat(file.name, file.mimeType)
+  const format = detectArchiveFormat(file.name, file.mimeType)
   if (!format)
     throw new ArchiveError('This archive format is not supported.', 415)
   const source = await stageArchiveSource(
@@ -149,7 +152,7 @@ async function inspectSource(
     operation,
     ARCHIVE_LIMITS.archiveBytes
   )
-  const codecName = getArchiveFormat(file.name)
+  const codecName = detectArchiveFormat(file.name)
     ? file.name
     : `${file.name}.${format === 'gzip' ? 'gz' : format}`
   return readArchive(source.diskPath, codecName, {
@@ -240,7 +243,7 @@ async function lockPublication(
   options: ResolvedUploadOptions
 ) {
   await lockRoleChanges(tx)
-  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${actor.user.id} FOR UPDATE`
+  await lockUserRow(tx, actor.user.id)
   const access = await requireActorPermission(tx, actor.user.id, permissions[0])
   if (permissions.some((permission) => !hasPermission(access, permission)))
     throw new ArchiveError(
@@ -259,17 +262,20 @@ async function lockPublication(
   if (!user || user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
   if (options.profileId) {
-    const profile = await tx.uploadProfile.findFirst({
-      where: { id: options.profileId, userId: actor.user.id },
-      select: { updatedAt: true, options: true },
-    })
-    if (!profile || profile.updatedAt.toISOString() !== options.profileRevision)
-      throw new ArchiveError(
+    const changed = () =>
+      new ArchiveError(
         'The selected upload profile changed or was removed. Refresh and try again.',
         409
       )
-    const row = await tx.config.findUnique({ where: { key: 'flare_config' } })
-    const config = configSchema.parse(row?.value ?? DEFAULT_CONFIG)
+    const profile = await findOwnedProfile(
+      tx,
+      actor.user.id,
+      options.profileId,
+      changed
+    )
+    if (profile.updatedAt.toISOString() !== options.profileRevision)
+      throw changed()
+    const config = await readConfig(tx)
     const revision = effectiveUploadRevision(
       actor.user.id,
       options.profileId,
@@ -334,7 +340,13 @@ async function recheckRead(
   signal.throwIfAborted()
   await prisma.$transaction(
     async (tx) => {
-      await lockPublication(tx, actor, [file], ['files.read'], privateOptions())
+      await lockPublication(
+        tx,
+        actor,
+        [file],
+        actionPermissions('viewFiles'),
+        privateOptions()
+      )
       signal.throwIfAborted()
     },
     { timeout: 10_000, maxWait: 10_000 }
@@ -363,7 +375,7 @@ async function confirmRead(
   ])
   if (!user || requiresEmailVerification(user, email))
     throw new PermissionError('Your account no longer has access')
-  if (!hasPermission(access, 'files.read'))
+  if (!allows(access, 'viewFiles'))
     throw new PermissionError('You no longer have permission for this action')
   if (user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
@@ -381,37 +393,15 @@ async function confirmRead(
 
 /** Early resource check; locked finalization still enforces current limits atomically. */
 async function preflightCapacity(actor: ArchiveActor, sizes: number[]) {
-  const [row, user] = await Promise.all([
-    prisma.config.findUnique({ where: { key: 'flare_config' } }),
+  const [config, user] = await Promise.all([
+    readConfig(prisma),
     prisma.user.findUnique({
       where: { id: actor.user.id },
       select: { storageUsed: true },
     }),
   ])
   if (!user) throw new ArchiveError('Account no longer exists.', 401)
-  const storage = configSchema.parse(row?.value ?? DEFAULT_CONFIG).settings
-    .general.storage
-  const max =
-    storage.maxUploadSize.value *
-    (storage.maxUploadSize.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-  if (sizes.some((size) => size > max))
-    throw new ArchiveError(
-      'An output file exceeds the current upload size limit.',
-      413
-    )
-  const quota =
-    storage.quotas.default.value *
-    (storage.quotas.default.unit === 'GB' ? 1024 ** 3 : 1024 ** 2)
-  if (
-    storage.quotas.enabled &&
-    !hasPermission(actor.user, 'quotas.bypass') &&
-    user.storageUsed * 1024 ** 2 + sizes.reduce((sum, size) => sum + size, 0) >
-      quota
-  )
-    throw new ArchiveError(
-      'The output files would exceed your storage quota.',
-      413
-    )
+  assertFits(uploadCapacity(config, actor.user, user.storageUsed), sizes)
 }
 
 async function archiveOptions(
@@ -434,9 +424,7 @@ async function archiveOptions(
   } catch (error) {
     if (
       (input.profileRevision || input.profileEffectiveRevision) &&
-      error instanceof UploadError &&
-      error.status === 404 &&
-      error.message === 'Upload profile not found.'
+      error instanceof ProfileNotFoundError
     )
       throw new ArchiveError(
         'The selected upload profile changed or was removed. Refresh and try again.',
@@ -600,14 +588,19 @@ function plannedDirectories(manifest: ArchiveManifest) {
     const count = entry.type === 'directory' ? parts.length : parts.length - 1
     for (let index = 0; index < count; index++) {
       const path = parts.slice(0, index + 1).join('/')
-      const name = folderNameSchema.parse(parts[index])
-      if (name !== parts[index])
+      const name = folderNameSchema.safeParse(parts[index])
+      if (!name.success)
+        throw new ArchiveError(
+          name.error.issues[0]?.message || 'Invalid archive request.',
+          400
+        )
+      if (name.data !== parts[index])
         throw new ArchiveError(
           'Archive folder names cannot be represented without changing their paths.',
           400
         )
       directories.set(path, {
-        name,
+        name: name.data,
         parentPath: parts.slice(0, index).join('/'),
       })
     }
@@ -664,29 +657,28 @@ export async function extractArchive(
           tx,
           actor,
           [source],
-          ['files.read', 'files.upload', 'folders.manage'],
+          actionPermissions('extractArchive'),
           options
         )
         await validateOwnedFolderId(actor.user.id, input.folderId, tx)
-        const wrapper = await tx.vaultFolder.create({
-          data: {
-            userId: actor.user.id,
-            name: input.name,
-            normalizedName: input.name.toLowerCase(),
-            parentId: input.folderId,
-          },
-        })
+        const wrapper = await insertFolder(
+          tx,
+          actor.user.id,
+          { name: input.name, parentId: input.folderId },
+          { id: true }
+        )
         const folderIds = new Map([['', wrapper.id]])
         for (const [path, directory] of directories) {
           operation.signal.throwIfAborted()
-          const folder = await tx.vaultFolder.create({
-            data: {
-              userId: actor.user.id,
+          const folder = await insertFolder(
+            tx,
+            actor.user.id,
+            {
               name: directory.name,
-              normalizedName: directory.name.toLowerCase(),
               parentId: folderIds.get(directory.parentPath)!,
             },
-          })
+            { id: true }
+          )
           folderIds.set(path, folder.id)
         }
         const files = []
@@ -763,7 +755,7 @@ export async function createAccountArchive(
     ? input.name
     : input.name + suffix
   setAuditTarget({ type: 'file', name })
-  if (input.folderId && !hasPermission(actor.user, 'folders.manage'))
+  if (input.folderId && !allows(actor.user, 'fileIntoFolder'))
     throw new ArchiveError('Your role cannot save archives into folders.', 403)
   await validateOwnedFolderId(actor.user.id, input.folderId)
   const options = await archiveOptions(actor, input)
@@ -812,11 +804,11 @@ export async function createAccountArchive(
           tx,
           actor,
           sources,
-          [
-            'files.read',
-            'files.upload',
-            ...(input.folderId ? ['folders.manage' as const] : []),
-          ],
+          actionPermissions(
+            input.folderId
+              ? ['createArchive', 'fileIntoFolder']
+              : 'createArchive'
+          ),
           options
         )
         operation.signal.throwIfAborted()

@@ -1,32 +1,35 @@
-import { getConfig } from '@/lib/config'
+import { createElement } from 'react'
 
-function addImportantToCSS(css: string): string {
-  if (!css.trim()) return css
+import { getConfigOrDefaults } from '@/lib/config'
+import {
+  type HeadElement,
+  customStylesheet,
+  headElements,
+} from '@/lib/customization/custom-code'
 
-  return css.replace(
-    /([^{};]+):([^{};]+)((?=;|})|$)/g,
-    (match, prop, value) => {
-      const cleanValue = value.replace(/\s*!important\s*/, '').trim()
-      return `${prop.trim()}: ${cleanValue} !important;`
-    }
-  )
+function headNode({ tag, props, content }: HeadElement, key: number) {
+  if (content === undefined) return createElement(tag, { ...props, key })
+  if (tag === 'title') return createElement(tag, { ...props, key }, content)
+  return createElement(tag, {
+    ...props,
+    key,
+    dangerouslySetInnerHTML: { __html: content },
+  })
 }
 
 export async function CustomHead({ recovery = false }: { recovery?: boolean }) {
   if (recovery) return null
-  const config = await getConfig()
+  const config = await getConfigOrDefaults()
   const { customCSS, customHead } = config.settings.advanced
-
-  const processedCSS = addImportantToCSS(customCSS)
+  const css = customStylesheet(customCSS)
 
   return (
     <>
-      {customHead && <div dangerouslySetInnerHTML={{ __html: customHead }} />}
-
-      {processedCSS && (
+      {headElements(customHead).map(headNode)}
+      {css && (
         <style
           id="custom-css"
-          dangerouslySetInnerHTML={{ __html: processedCSS }}
+          dangerouslySetInnerHTML={{ __html: css }}
           data-custom-css="true"
         />
       )}

@@ -1,5 +1,3 @@
-import { FlareConfig } from '@/lib/config'
-
 export interface PublicSettings {
   version: string
   settings: {
@@ -19,13 +17,6 @@ export interface PublicSettings {
       customHead: string
     }
   }
-}
-
-export interface UpdateSettingSectionRequest<
-  T extends keyof FlareConfig['settings'],
-> {
-  section: T
-  data: Partial<FlareConfig['settings'][T]>
 }
 
 export interface SettingsUpdateResponse {

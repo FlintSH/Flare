@@ -8,13 +8,12 @@ import {
 
 import Link from 'next/link'
 
-import type { FileType, PaginationInfo } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
+import { useQueryClient } from '@tanstack/react-query'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
-  Archive,
   CheckSquare,
-  FolderInput,
   FolderOpen,
   RefreshCw,
   SearchX,
@@ -22,7 +21,6 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useSession } from 'next-auth/react'
 import type { DateRange } from 'react-day-picker'
 
 import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
@@ -32,6 +30,12 @@ import {
 } from '@/components/archives/archive-utils'
 import { CreateArchiveDialog } from '@/components/archives/create-archive-dialog'
 import { FileCard } from '@/components/dashboard/file-card'
+import {
+  BATCH_ACTIONS,
+  type BatchAction,
+  FILE_ACTIONS,
+  fileActionAllowed,
+} from '@/components/dashboard/file-card/actions'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
@@ -40,12 +44,32 @@ import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
-import { PermissionGate } from '@/components/roles/permission-gate'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
+import { fileUrls } from '@/lib/files/urls'
+import {
+  LIBRARY_LISTS,
+  libraryChanged,
+  onLibraryChange,
+} from '@/lib/library/changes'
+import {
+  BATCH_LIMIT,
+  DEFAULT_SORT,
+  UNFILED,
+  UNTAGGED,
+  VISIBILITY_FILTERS,
+  folderDestination,
+  isDateOrder,
+  librarySort,
+  uploadHref,
+} from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
+import type { PermissionSubject } from '@/lib/permissions/catalog'
+
+import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 import { useFileTimeline } from '@/hooks/use-file-timeline'
@@ -65,19 +89,28 @@ import { toast } from '@/hooks/use-toast'
 const filterChipClassName =
   'rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs'
 
+function emptyFolderHint(user: PermissionSubject | null | undefined) {
+  const upload = allows(user, ['uploadFiles', 'fileIntoFolder'])
+  const move = allows(user, 'moveFiles')
+  if (upload && move)
+    return 'Upload here, or move existing files from their menu or a selection in All files.'
+  if (upload) return 'Upload here to add files.'
+  if (move)
+    return 'Move existing files here from their menu or a selection in All files.'
+  return 'Your role can’t add files to folders.'
+}
+
 export function FileGrid() {
-  const { data: session, status } = useSession()
-  if (status === 'loading') return <p role="status">Loading files…</p>
-  if (
-    status !== 'authenticated' ||
-    !session?.user?.id ||
-    !session.user.sessionId
-  )
-    return <p role="status">Sign in to view your files.</p>
-  const scope = JSON.stringify([session.user.id, session.user.sessionId])
   // Replacing an account or browser session discards every retained card,
   // selection, dialog, gallery and pending action together before rendering.
-  return <AccountFileGrid key={scope} scope={scope} />
+  return (
+    <SessionScoped
+      loading={<p role="status">Loading files…</p>}
+      signedOut={<p role="status">Sign in to view your files.</p>}
+    >
+      {(scope) => <AccountFileGrid scope={scope.key} />}
+    </SessionScoped>
+  )
 }
 
 function AccountFileGrid({ scope }: { scope: string }) {
@@ -91,13 +124,26 @@ function AccountFileGrid({ scope }: { scope: string }) {
 
 function FileLibrary({ scope }: { scope: string }) {
   const lifetime = useRequestLifetime()
-  const { can } = usePermissions()
+  const client = useQueryClient()
+  const { user } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const selectionBar = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [selectedFiles, setSelectedFiles] = useState<FileType[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
-  const [fileTypes, setFileTypes] = useState<string[]>([])
+  // A library change, made here or anywhere else, reloads these files once;
+  // the same change reloads the tag, folder and file type lists.
+  useEffect(
+    () => onLibraryChange(() => setRefreshKey((value) => value + 1)),
+    []
+  )
+  const refreshFiles = useCallback(() => void libraryChanged(client), [client])
+  const fileTypes = useAccountQuery<{ types?: unknown }>(
+    LIBRARY_LISTS.fileTypes,
+    '/api/files/types',
+    // Suggestions are optional; the library stays searchable without them.
+    { retry: false }
+  ).data?.types
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
   const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
@@ -116,7 +162,7 @@ function FileLibrary({ scope }: { scope: string }) {
   )
   // "Select visible files" shows a dash when only some are selected. Set
   // after every render: a click clears the browser's flag even when the
-  // selection, and so the values here, stay the same (at the 100 cap).
+  // selection, and so the values here, stay the same (at the batch limit).
   const selectVisibleRef = useRef<HTMLInputElement>(null)
   useLayoutEffect(() => {
     if (selectVisibleRef.current)
@@ -124,7 +170,7 @@ function FileLibrary({ scope }: { scope: string }) {
         !allVisibleSelected && someVisibleSelected
   })
   const clearSelection = () => setSelectedFiles([])
-  const { tags, reload: reloadTags } = useTags()
+  const { tags } = useTags()
   const {
     folders,
     loading: foldersLoading,
@@ -146,25 +192,19 @@ function FileLibrary({ scope }: { scope: string }) {
     resetFilters,
   } = useFileFilters()
   const { position: anchorIndex, record: recordPosition } =
-    useFileLibraryPosition(
-      filters,
-      pathname,
-      urlQuery,
-      () => setRefreshKey((value) => value + 1),
-      scope
-    )
+    useFileLibraryPosition(filters, pathname, urlQuery, refreshFiles, scope)
   const library = useFileTimeline(filters, refreshKey, scope)
   const selection = useFreshFileSelection(selectedFiles, [scope, filters])
-  const openSelection = async (action: 'tags' | 'move' | 'archive') => {
+  const openSelection = async (action: BatchAction) => {
     const { signal } = lifetime.current
     if (signal.aborted) return
     try {
       const fresh = await selection.refresh()
       if (!fresh || signal.aborted) return
       setSelectedFiles(fresh)
-      if (action === 'tags') setTaggingFiles(fresh)
+      if (action === 'editTags') setTaggingFiles(fresh)
       if (action === 'move') setMovingFiles(fresh)
-      if (action === 'archive') setCreatingArchive(fresh)
+      if (action === 'createArchive') setCreatingArchive(fresh)
     } catch (error) {
       if (signal.aborted) return
       toast({
@@ -179,12 +219,7 @@ function FileLibrary({ scope }: { scope: string }) {
   useEffect(() => {
     if (!timeline?.total) setFiles((current) => (current.length ? [] : current))
   }, [timeline])
-  const paginationInfo: PaginationInfo = {
-    total: timeline?.total ?? 0,
-    page: 1,
-    pageCount: Math.ceil((timeline?.total ?? 0) / filters.limit),
-    limit: filters.limit,
-  }
+  const total = timeline?.total ?? 0
   const onVisibleFiles = useCallback(
     (visible: FileType[], firstIndex: number) => {
       if (visible.length) recordPosition(firstIndex)
@@ -198,9 +233,9 @@ function FileLibrary({ scope }: { scope: string }) {
     [recordPosition]
   )
   const toggleFile = (file: FileType) => {
-    if (!selectedIds.includes(file.id) && selectedFiles.length >= 100) {
+    if (!selectedIds.includes(file.id) && selectedFiles.length >= BATCH_LIMIT) {
       toast({
-        title: 'Select up to 100 files at a time',
+        title: `Select up to ${BATCH_LIMIT} files at a time`,
         description: 'Finish this action, then select more files.',
       })
       return
@@ -219,11 +254,7 @@ function FileLibrary({ scope }: { scope: string }) {
     setIndex,
     navigationPending,
     navigationStale,
-  } = useImageGallery(filters, files, paginationInfo, refreshKey, true)
-  const refreshFiles = useCallback(
-    () => setRefreshKey((value) => value + 1),
-    []
-  )
+  } = useImageGallery(filters, files, refreshKey)
   const hasActiveFilters = Boolean(
     filters.tag ||
     filters.search ||
@@ -233,7 +264,7 @@ function FileLibrary({ scope }: { scope: string }) {
     filters.dateTo
   )
   const activeTagName =
-    filters.tag === 'untagged'
+    filters.tag === UNTAGGED
       ? 'Untagged'
       : tags.find((tag) => tag.id === filters.tag)?.name || 'Selected tag'
   const onlyTagFilter =
@@ -248,19 +279,6 @@ function FileLibrary({ scope }: { scope: string }) {
     setSelectedFiles([])
   }, [filters])
 
-  useEffect(() => {
-    void reloadTags()
-  }, [refreshKey, reloadTags])
-
-  useEffect(() => {
-    void reloadFolders()
-  }, [refreshKey, reloadFolders])
-
-  useEffect(() => {
-    window.addEventListener('flare:files-changed', refreshFiles)
-    return () => window.removeEventListener('flare:files-changed', refreshFiles)
-  }, [refreshFiles])
-
   const handleDateChange = useCallback(
     (range: DateRange | undefined) => {
       setDateRange(
@@ -270,25 +288,6 @@ function FileLibrary({ scope }: { scope: string }) {
     },
     [setDateRange]
   )
-
-  useEffect(() => {
-    const controller = new AbortController()
-    async function fetchFileTypes() {
-      try {
-        const response = await fetch('/api/files/types', {
-          signal: controller.signal,
-        })
-        if (!response.ok) return
-        const data = await response.json()
-        if (!controller.signal.aborted)
-          setFileTypes(Array.isArray(data.data?.types) ? data.data.types : [])
-      } catch {
-        // File type suggestions are optional; the library remains searchable.
-      }
-    }
-    void fetchFileTypes()
-    return () => controller.abort()
-  }, [refreshKey])
 
   const dateRangeValue =
     filters.dateFrom || filters.dateTo
@@ -318,11 +317,9 @@ function FileLibrary({ scope }: { scope: string }) {
                 className="h-8 gap-1.5 px-2"
                 disabled={
                   (!selecting && !files.length) ||
-                  (!(can('files.read') && can('files.upload')) &&
-                    !(
-                      can('files.update') &&
-                      (can('folders.manage') || can('tags.manage'))
-                    ))
+                  !BATCH_ACTIONS.some((action) =>
+                    fileActionAllowed(user, action)
+                  )
                 }
                 onClick={() => {
                   setSelecting(!selecting)
@@ -347,7 +344,7 @@ function FileLibrary({ scope }: { scope: string }) {
                   ? 'Loading…'
                   : error
                     ? 'Unavailable'
-                    : `${paginationInfo.total.toLocaleString()} ${paginationInfo.total === 1 ? 'file' : 'files'}`}
+                    : `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`}
               </span>
               <Button
                 variant="ghost"
@@ -371,7 +368,7 @@ function FileLibrary({ scope }: { scope: string }) {
             onSortChange={setSortBy}
             selectedTypes={filters.types}
             onTypesChange={setTypes}
-            fileTypes={fileTypes}
+            fileTypes={Array.isArray(fileTypes) ? fileTypes : []}
             date={dateRangeValue}
             onDateChange={handleDateChange}
             groupBy={filters.groupBy}
@@ -388,7 +385,7 @@ function FileLibrary({ scope }: { scope: string }) {
           />
         </div>
         {(hasActiveFilters ||
-          filters.sortBy !== 'newest' ||
+          filters.sortBy !== DEFAULT_SORT ||
           filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {filters.tag && (
@@ -416,11 +413,10 @@ function FileLibrary({ scope }: { scope: string }) {
             )}
             {filters.visibility.map((value) => (
               <span key={value} className={filterChipClassName}>
-                {value === 'hasPassword'
-                  ? 'Password protected'
-                  : value === 'private'
-                    ? 'Private'
-                    : 'Public'}
+                {
+                  VISIBILITY_FILTERS.find((filter) => filter.value === value)
+                    ?.label
+                }
               </span>
             ))}
             {(filters.dateFrom || filters.dateTo) && (
@@ -474,7 +470,7 @@ function FileLibrary({ scope }: { scope: string }) {
                           (file) =>
                             !current.some((entry) => entry.id === file.id)
                         ),
-                      ].slice(0, 100)
+                      ].slice(0, BATCH_LIMIT)
                     : current.filter(
                         (file) => !files.some((entry) => entry.id === file.id)
                       )
@@ -484,53 +480,30 @@ function FileLibrary({ scope }: { scope: string }) {
             Select visible files
           </label>
           <span className="text-xs text-muted-foreground" role="status">
-            {selectedIds.length} selected · up to 100
+            {selectedIds.length} selected · up to {BATCH_LIMIT}
             {selection.loading && ' · Refreshing selection…'}
           </span>
           {/* Phones lay the actions out in two equal columns, so wrapped
               rows share their edges. */}
           <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-            {can('files.read') && can('files.upload') && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!selectedIds.length || isLoading || selection.loading}
-                onClick={() => void openSelection('archive')}
-              >
-                <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
-                Create archive
-              </Button>
-            )}
-            <PermissionGate permission="files.update">
-              <PermissionGate permission="folders.manage">
+            {BATCH_ACTIONS.map((action) => {
+              if (!fileActionAllowed(user, action)) return null
+              const { icon: Icon, batch } = FILE_ACTIONS[action]
+              return (
                 <Button
+                  key={action}
                   size="sm"
                   variant="outline"
                   disabled={
                     !selectedIds.length || isLoading || selection.loading
                   }
-                  onClick={() => void openSelection('move')}
+                  onClick={() => void openSelection(action)}
                 >
-                  <FolderInput className="mr-2 h-4 w-4" />
-                  Move
+                  <Icon className="mr-2 h-4 w-4" />
+                  {batch}
                 </Button>
-              </PermissionGate>
-            </PermissionGate>
-            <PermissionGate permission="files.update">
-              <PermissionGate permission="tags.manage">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={
-                    !selectedIds.length || isLoading || selection.loading
-                  }
-                  onClick={() => void openSelection('tags')}
-                >
-                  <Tag className="mr-2 h-4 w-4" />
-                  Edit tags
-                </Button>
-              </PermissionGate>
-            </PermissionGate>
+              )
+            })}
             {/* The bar stays in view while the header scrolls away. */}
             <Button
               variant="ghost"
@@ -582,12 +555,12 @@ function FileLibrary({ scope }: { scope: string }) {
           </div>
           <h2 className="text-xl font-semibold">
             {onlyTagFilter
-              ? filters.tag === 'untagged'
+              ? filters.tag === UNTAGGED
                 ? 'Every file has a tag'
                 : `No files tagged “${activeTagName}” yet`
               : hasActiveFilters
                 ? 'No files match your search'
-                : filters.folder === 'unfiled'
+                : filters.folder === UNFILED
                   ? 'Everything has a home'
                   : filters.folder
                     ? 'No files in this folder yet'
@@ -595,15 +568,15 @@ function FileLibrary({ scope }: { scope: string }) {
           </h2>
           <p className="mb-6 mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
             {onlyTagFilter
-              ? filters.tag === 'untagged'
+              ? filters.tag === UNTAGGED
                 ? 'All your files are still together in your vault.'
                 : 'Add this tag from a file’s menu, select several files, or give it an automatic rule in Manage tags.'
               : hasActiveFilters
                 ? 'Try another file name or reset your filters to see everything in your library.'
-                : filters.folder === 'unfiled'
+                : filters.folder === UNFILED
                   ? 'All your files are organized into folders. You can always find them in All files.'
                   : filters.folder
-                    ? 'Upload here, or move existing files from their menu or a selection in All files.'
+                    ? emptyFolderHint(user)
                     : 'Upload your first file to get started.'}
           </p>
           {hasActiveFilters ? (
@@ -613,25 +586,22 @@ function FileLibrary({ scope }: { scope: string }) {
             >
               {onlyTagFilter ? 'All files' : 'Reset filters'}
             </Button>
-          ) : filters.folder === 'unfiled' ? (
+          ) : filters.folder === UNFILED ? (
             <Button variant="outline" onClick={() => setFolder(null)}>
               All files
             </Button>
           ) : (
-            <PermissionGate permission="files.upload">
+            allows(
+              user,
+              filters.folder ? ['uploadFiles', 'fileIntoFolder'] : 'uploadFiles'
+            ) && (
               <Button asChild>
-                <Link
-                  href={
-                    filters.folder
-                      ? `/dashboard/upload?folder=${filters.folder}`
-                      : '/dashboard/upload'
-                  }
-                >
+                <Link href={uploadHref(filters.folder)}>
                   <Upload className="mr-2 h-4 w-4" />
                   {filters.folder ? 'Upload here' : 'Upload your first file'}
                 </Link>
               </Button>
-            </PermissionGate>
+            )
           )}
         </div>
       ) : (
@@ -640,9 +610,7 @@ function FileLibrary({ scope }: { scope: string }) {
             library={library}
             selectionBarRef={selectionBar}
             initialIndex={anchorIndex.current}
-            chronological={
-              filters.sortBy === 'newest' || filters.sortBy === 'oldest'
-            }
+            chronological={isDateOrder(librarySort(filters.sortBy))}
             onVisibleFiles={onVisibleFiles}
             onRefresh={refreshFiles}
             renderFile={(file) => (
@@ -658,7 +626,6 @@ function FileLibrary({ scope }: { scope: string }) {
                 onUpdate={refreshFiles}
                 onPreview={open}
                 onBrowseArchive={
-                  can('files.read') &&
                   isArchiveCandidate(file.name, file.mimeType)
                     ? () => setBrowsingArchive(file)
                     : undefined
@@ -706,11 +673,7 @@ function FileLibrary({ scope }: { scope: string }) {
       {creatingArchive && (
         <CreateArchiveDialog
           files={creatingArchive}
-          initialFolderId={
-            filters.folder && filters.folder !== 'unfiled'
-              ? filters.folder
-              : null
-          }
+          initialFolderId={folderDestination(filters.folder)}
           onClose={() => {
             setCreatingArchive(null)
             clearSelection()
@@ -732,19 +695,21 @@ function FileLibrary({ scope }: { scope: string }) {
                 (file) => updated.find((entry) => entry.id === file.id) || file
               )
             )
-            refreshFiles()
           }}
         />
       )}
       {gallery && (
         <ImageLightbox
-          images={gallery.files.map((file) => ({
-            id: file.id,
-            name: file.name,
-            src: `/api/files/${file.id}/thumbnail`,
-            downloadUrl: `/api/files/${file.id}/download`,
-            subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
-          }))}
+          images={gallery.files.map((file) => {
+            const urls = fileUrls(file)
+            return {
+              id: file.id,
+              name: file.name,
+              src: urls.thumbnail,
+              downloadUrl: urls.download,
+              subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
+            }
+          })}
           index={gallery.index}
           onIndexChange={setIndex}
           onClose={close}
@@ -759,8 +724,8 @@ function FileLibrary({ scope }: { scope: string }) {
           }
           navigationPending={navigationPending}
           positionLabel={
-            gallery.pagination.offset !== undefined
-              ? `${(gallery.pagination.offset ?? (gallery.pagination.page - 1) * gallery.pagination.limit) + gallery.index + 1} of ${gallery.pagination.total}`
+            gallery.pagination
+              ? `${gallery.pagination.offset + gallery.index + 1} of ${gallery.pagination.total}`
               : gallery.files[gallery.index].name
           }
         />

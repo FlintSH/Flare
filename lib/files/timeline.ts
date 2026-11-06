@@ -1,23 +1,13 @@
 import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { fileSort } from '@/lib/files/gallery-navigation'
 import { FileListInputError, fileListFilters } from '@/lib/files/list-filters'
-
-export type FileTimelineBucket = {
-  key: string
-  from: string | null
-  to: string | null
-  count: number
-  offset: number
-}
-
-export type FileTimeline = {
-  total: number
-  snapshot: string
-  groupBy: 'month' | 'week' | 'year' | 'none'
-  timezone: string
-  buckets: FileTimelineBucket[]
-}
+import {
+  type FileTimeline,
+  isDateOrder,
+  isGrouping,
+} from '@/lib/library/contract'
 
 /** A database-clock read plus one aggregate; no file metadata or IDs are loaded. */
 export async function fileTimeline(
@@ -25,7 +15,7 @@ export async function fileTimeline(
   params: URLSearchParams
 ): Promise<FileTimeline> {
   const requestedGroup = params.get('groupBy') || 'none'
-  if (!['none', 'month', 'week', 'year'].includes(requestedGroup))
+  if (!isGrouping(requestedGroup))
     throw new FileListInputError('groupBy must be none, month, week, or year')
   const timezone = params.get('timezone') || 'UTC'
   try {
@@ -43,17 +33,8 @@ export async function fileTimeline(
   const filters = new URLSearchParams(params)
   filters.set('snapshot', snapshot)
   const { where, sql } = fileListFilters(userId, filters)
-  const sortBy = params.get('sortBy') || 'newest'
-  const dateOrder = ![
-    'largest',
-    'smallest',
-    'name',
-    'most-viewed',
-    'least-viewed',
-    'most-downloaded',
-    'least-downloaded',
-  ].includes(sortBy)
-  if (!dateOrder) {
+  const sort = fileSort(params.get('sortBy') || 'newest')
+  if (!isDateOrder(sort)) {
     const total = await prisma.file.count({ where })
     return {
       total,
@@ -66,16 +47,13 @@ export async function fileTimeline(
     }
   }
 
-  const groupBy =
-    requestedGroup === 'none'
-      ? 'month'
-      : (requestedGroup as 'month' | 'week' | 'year')
+  const groupBy = requestedGroup === 'none' ? 'month' : requestedGroup
   const interval = {
     month: Prisma.sql`INTERVAL '1 month'`,
     week: Prisma.sql`INTERVAL '1 week'`,
     year: Prisma.sql`INTERVAL '1 year'`,
   }[groupBy]
-  const order = sortBy === 'oldest' ? Prisma.sql`ASC` : Prisma.sql`DESC`
+  const order = sort.direction === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`
   // Prisma stores DateTime as UTC timestamp without time zone. Truncate in the
   // requested local calendar, then convert both boundaries back to UTC. PostgreSQL
   // weeks start Monday; local interval arithmetic keeps DST weeks/months correct.
@@ -107,7 +85,7 @@ export async function fileTimeline(
   return {
     total,
     snapshot,
-    groupBy: requestedGroup as FileTimeline['groupBy'],
+    groupBy: requestedGroup,
     timezone,
     buckets,
   }

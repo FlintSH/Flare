@@ -2,7 +2,10 @@ import { UpdateProfileSchema } from '@/types/dto/profile'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
+import { errorResponse } from '@/lib/http/route'
+import { loggers } from '@/lib/logger'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
+import { uploadRoutes } from '@/lib/uploads/http'
 import { uploadLinks } from '@/lib/uploads/links'
 import {
   applyUploadOverrides,
@@ -10,9 +13,11 @@ import {
   requestUploadOptions,
   resolveUploadOptions,
 } from '@/lib/uploads/options'
+import { ProfileNotFoundError } from '@/lib/uploads/profiles'
 import {
   expirationDate,
   mergeUploadOptions,
+  uploadProfileInputSchema,
   uploadProfileOptionsSchema,
   uploadRecipeSchema,
   uploadRequestOptionsSchema,
@@ -45,6 +50,7 @@ const user: AuthenticatedUser = {
   roles: [],
   permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: false,
+  credential: 'session',
 }
 const now = new Date('2026-09-13T12:00:00.000Z')
 
@@ -88,8 +94,62 @@ describe('portable profile and upload policy contracts', () => {
       resolveUploadOptions(user, { folderId: 'someone-elses-folder' })
     ).rejects.toMatchObject({ status: 404 })
     expect(() =>
-      uploadProfileOptionsSchema.parse({ folderId: 'marketing' })
+      uploadProfileInputSchema.parse({
+        name: 'Marketing',
+        options: { folderId: 'marketing' },
+      })
     ).toThrow()
+  })
+
+  it('reads saved profile options without the fields this version dropped', () => {
+    expect(
+      uploadProfileOptionsSchema.parse({
+        visibility: 'PRIVATE',
+        copyFormat: 'markdown',
+        folderId: 'marketing',
+      })
+    ).toEqual({ visibility: 'PRIVATE' })
+    expect(() =>
+      uploadProfileOptionsSchema.parse({ visibility: 'HIDDEN' })
+    ).toThrow()
+    expect(
+      uploadProfileInputSchema.parse({
+        name: 'Older recipe',
+        options: { visibility: 'PRIVATE', copyFormat: 'markdown' },
+      }).options
+    ).toEqual({ visibility: 'PRIVATE' })
+  })
+
+  it('answers saved profile options it cannot read with a logged 500', async () => {
+    const logged = vi.spyOn(loggers.files, 'error').mockImplementation(() => {})
+    database.uploadProfile.findFirst.mockResolvedValue({
+      id: 'profile-one',
+      options: { visibility: 'HIDDEN', copyFormat: 'markdown' },
+      updatedAt: now,
+    })
+    const failure = await resolveUploadOptions(user).catch((error) => error)
+    const response = errorResponse(failure, uploadRoutes, 'POST /api/files')
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({
+      error: 'Upload could not be completed.',
+    })
+    expect(logged).toHaveBeenCalledWith('POST /api/files failed', failure)
+
+    database.uploadProfile.findFirst.mockResolvedValue({
+      id: 'profile-one',
+      options: { visibility: 'PRIVATE', copyFormat: 'markdown' },
+      updatedAt: now,
+    })
+    expect((await resolveUploadOptions(user)).visibility).toBe('PRIVATE')
+  })
+
+  it('answers request options it cannot read with a 400 the upload way', async () => {
+    const failure = await resolveUploadOptions(user, {
+      visibility: 'HIDDEN',
+    } as never).catch((error) => error)
+    const response = errorResponse(failure, uploadRoutes)
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid upload options.' })
   })
 
   it('pins destinations throughout chunk completion, including explicit unfiled uploads', async () => {
@@ -270,9 +330,13 @@ describe('portable profile and upload policy contracts', () => {
 
   it('does not fall back when an explicitly selected profile is missing or belongs to another account', async () => {
     database.uploadProfile.findFirst.mockResolvedValue(null)
-    await expect(
-      resolveUploadOptions(user, { profileId: 'another-owner' })
-    ).rejects.toMatchObject({ status: 404 })
+    const missing = resolveUploadOptions(user, { profileId: 'another-owner' })
+    // Archive requests recognise this error by its type.
+    await expect(missing).rejects.toBeInstanceOf(ProfileNotFoundError)
+    await expect(missing).rejects.toMatchObject({
+      status: 404,
+      message: 'Upload profile not found.',
+    })
   })
 
   it('prevents bound credentials selecting a different profile, relaxing privacy, or bypassing expiration', async () => {
@@ -457,12 +521,14 @@ describe('upload link outputs', () => {
 
   it('encodes the share URL without adding display-name markup', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://files.example/')
+    // New URL names can't hold these characters; the library spells older
+    // ones the same way.
     const output = uploadLinks(
-      { ...file, urlPath: '/alice/a file.txt)(injected)', name: '<img src=x>' },
+      { ...file, urlPath: '/alice/a file #1 (draft).txt', name: '<img src=x>' },
       user
     )
     expect(output.url).toBe(
-      'https://files.example/alice/a%20file.txt%29%28injected%29'
+      'https://files.example/alice/a%20file%20%231%20(draft).txt'
     )
     expect(output.copyText).toBe(output.url)
     expect(output.pageUrl).toBe(output.url)
