@@ -115,7 +115,7 @@ These actions do not add files to an account or expose other files in the owner'
 
 Each shared archive request checks the current file access rules. Making the archive private, changing its password, or deleting it affects subsequent requests; content already previewed or downloaded cannot be recalled. Expiration follows the normal [scheduled expiry processing](./sharing#give-a-file-a-lifetime).
 
-On a protected archive, the password you enter is checked when the archive contents load. Previews and **Download entry** then use a cookie that only this file's archive requests receive. It lasts **one hour** and the open page renews it in the background; changing or removing the file's password ends it immediately. The password itself is never added to an entry's address. If previews stop loading after the owner changes the password, reload the share page and enter the new one.
+On a protected archive, the password you enter is checked when the archive contents load. Previews and **Download entry** then use a cookie that only this file's archive requests receive. It lasts **one hour**, and the open page renews it every 45 minutes in the background; changing or removing the file's password ends it immediately. The password itself is never added to an entry's address. If previews stop loading after the owner changes the password, reload the share page and enter the new one.
 
 ::: details See the password gate and unlocked archive
 <Screenshot src="/screenshots/archives/share-password.webp" alt="Password-protected file page with an empty File password field and Access file button; archive contents are hidden" caption="A protected public archive requires its file password before a visitor can browse." />

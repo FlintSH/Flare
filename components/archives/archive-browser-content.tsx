@@ -31,6 +31,7 @@ import { Progress } from '@/components/ui/progress'
 
 import {
   ARCHIVE_BROWSE_LIMITS,
+  ARCHIVE_UNLOCK_SECONDS,
   type ArchiveEntry,
   type ArchiveFormat,
   type ArchiveListing,
@@ -60,7 +61,8 @@ import {
 } from './archive-utils'
 
 const ROW_HEIGHT = 44
-const UNLOCK_RENEW_MS = 45 * 60_000
+// Renew a protected archive's unlock at three quarters of its lifetime.
+const UNLOCK_RENEW_MS = (ARCHIVE_UNLOCK_SECONDS * 1000 * 3) / 4
 const count = (value: number, noun: string) =>
   `${value.toLocaleString()} ${noun}${value === 1 ? '' : 's'}`
 
@@ -194,7 +196,7 @@ export function ArchiveBrowserContent({
   const listed = state.status === 'ready' ? state.listing.entries.length : null
   useEffect(() => {
     if (sourceKind !== 'share' || !password || listed === null) return
-    // Protected previews use a one-hour unlock cookie; renew it while open.
+    // Protected previews use a short-lived unlock cookie; renew it while open.
     const timer = setInterval(() => {
       const request = archiveListingRequest(
         file.id,

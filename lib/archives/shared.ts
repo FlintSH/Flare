@@ -40,6 +40,12 @@ export const ARCHIVE_BROWSE_LIMITS = {
   imagePreviewBytes: 50 * 1024 ** 2,
 } as const
 
+/**
+ * How long a file password unlocks a protected archive's previews. The share
+ * page renews the unlock while it stays open.
+ */
+export const ARCHIVE_UNLOCK_SECONDS = 60 * 60
+
 /** Why an entry can be listed but not previewed or extracted. */
 export type ArchiveEntryIssue =
   | 'encrypted'

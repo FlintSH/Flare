@@ -1,5 +1,6 @@
 import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto'
 
+import { ARCHIVE_UNLOCK_SECONDS } from '@/lib/archives/shared'
 import { publicOrigin } from '@/lib/security/public-origin'
 
 /**
@@ -10,7 +11,6 @@ import { publicOrigin } from '@/lib/security/public-origin'
  * so changing or removing the password invalidates it.
  */
 export const ARCHIVE_UNLOCK_COOKIE = 'flare_archive_unlock'
-export const ARCHIVE_UNLOCK_SECONDS = 60 * 60
 
 const keyState = Symbol.for('flare.archive.unlock-key')
 const processState = globalThis as typeof globalThis & {
