@@ -106,7 +106,7 @@ export function SpectacleTool({
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
+                          value={field.value}
                           className="grid grid-cols-2 gap-4"
                         >
                           <div className="flex items-center space-x-2 rounded-lg border p-3">
@@ -154,7 +154,7 @@ export function SpectacleTool({
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            defaultValue={field.value}
+                            value={field.value}
                             className="grid grid-cols-2 gap-2"
                           >
                             {Object.entries(SPECTACLE_CAPTURE_MODES).map(
@@ -192,7 +192,7 @@ export function SpectacleTool({
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            defaultValue={field.value}
+                            value={field.value}
                             className="grid grid-cols-1 gap-2"
                           >
                             {Object.entries(SPECTACLE_RECORDING_MODES).map(
