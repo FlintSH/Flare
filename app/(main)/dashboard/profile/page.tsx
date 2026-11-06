@@ -4,7 +4,6 @@ import { ProfileClient } from '@/components/profile'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
-import { storageQuotaBytes } from '@/lib/config/limits'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
 import {
@@ -12,6 +11,7 @@ import {
   PROFILE_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
+import { storageQuotaBytes } from '@/lib/uploads/capacity'
 import { bytesToMB, formatFileSize } from '@/lib/utils'
 
 export default async function ProfilePage({

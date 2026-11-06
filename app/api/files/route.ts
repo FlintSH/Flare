@@ -1,5 +1,4 @@
 import { getConfig } from '@/lib/config'
-import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
 import { getFilesExpirationInfo } from '@/lib/files/expiry'
 import {
@@ -19,6 +18,7 @@ import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
+import { overCapacity, uploadCapacity } from '@/lib/uploads/capacity'
 import {
   cleanupUncommittedUpload,
   finalizeUpload,
@@ -52,21 +52,14 @@ export const POST = api(async (request) => {
       throw new UploadError('Content-Type must be multipart/form-data.')
     const selection = requestUploadOptions(request)
     const initialOptions = await resolveUploadOptions(user, selection)
-    const config = await getConfig()
-    const maxBytes = maxUploadBytes(config)
-    const quota = storageQuotaBytes(config, user)
-    const quotaLimitBytes =
-      quota === null
-        ? Infinity
-        : Math.max(0, quota / 1024 ** 2 - user.storageUsed) * 1024 ** 2
-    if (quotaLimitBytes <= 0)
-      throw new UploadError('You have reached your storage quota.', 413)
+    const capacity = uploadCapacity(await getConfig(), user, user.storageUsed)
+    if (capacity.quotaBytes <= 0) throw overCapacity('quota')
     storage = await getStorageProvider()
     const { upload, fields, limitHit } = await parseSingleFileUpload({
       req: request,
       storageProvider: storage,
-      maxBytes,
-      quotaLimitBytes,
+      maxBytes: capacity.fileBytes,
+      quotaLimitBytes: capacity.quotaBytes,
       resolveDestination: async ({ filename }) => {
         const destination = await prepareUploadDestination(
           user,
@@ -77,13 +70,7 @@ export const POST = api(async (request) => {
         return destination
       },
     })
-    if (limitHit)
-      throw new UploadError(
-        limitHit === 'quota'
-          ? 'The file would exceed your storage quota.'
-          : 'The file exceeds the upload size limit.',
-        413
-      )
+    if (limitHit) throw overCapacity(limitHit)
     if (!upload) throw new UploadError('No file provided.')
     const overrides = parseUploadFields(fields)
     // Profile and naming are fixed before any bytes are written. Other fields remain

@@ -9,6 +9,7 @@ import {
 } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { decryptSecret } from '@/lib/security/secret-box'
+import { bytesToMB, mbToBytes } from '@/lib/utils/size'
 
 import { resolveWebhookTarget, signWebhook } from './security'
 
@@ -45,7 +46,7 @@ export function fileReadyPayload(file: Omit<ReadyFile, 'userId'>) {
       id: file.id,
       name: file.name,
       mimeType: file.mimeType,
-      sizeBytes: Math.round(file.size * 1024 * 1024),
+      sizeBytes: Math.round(mbToBytes(file.size)),
       visibility: file.visibility,
       passwordProtected: Boolean(file.password),
     },
@@ -59,8 +60,7 @@ export function testEventPayload() {
       id: 'example-file',
       name: 'example.png',
       mimeType: 'image/png',
-      // 1 KiB; file sizes are stored in MiB.
-      size: 1 / 1024,
+      size: bytesToMB(1024),
       uploadedAt: new Date(),
       visibility: 'PUBLIC',
       password: null,

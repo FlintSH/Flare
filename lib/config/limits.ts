@@ -1,5 +1,3 @@
-import { hasPermission } from '@/lib/permissions/catalog'
-
 import type { FlareConfig } from './index'
 
 /** Saved size limits are in megabytes unless their unit is GB. */
@@ -12,13 +10,8 @@ export function maxUploadBytes(config: FlareConfig) {
   return sizeLimitBytes(config.settings.general.storage.maxUploadSize)
 }
 
-/** An account's total storage allowance in bytes, or null when it has none. */
-export function storageQuotaBytes(
-  config: FlareConfig,
-  access: { permissions?: readonly string[] }
-): number | null {
+/** The storage allowance accounts get, in bytes, or null when quotas are off. */
+export function defaultQuotaBytes(config: FlareConfig): number | null {
   const { quotas } = config.settings.general.storage
-  return quotas.enabled && !hasPermission(access, 'quotas.bypass')
-    ? sizeLimitBytes(quotas.default)
-    : null
+  return quotas.enabled ? sizeLimitBytes(quotas.default) : null
 }

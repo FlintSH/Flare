@@ -13,7 +13,6 @@ import { z } from 'zod'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig, readConfig } from '@/lib/config'
-import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { hashFilePassword } from '@/lib/files/password-hash'
@@ -27,6 +26,7 @@ import {
 } from '@/lib/storage/targets'
 import type { StorageTarget } from '@/lib/storage/targets'
 
+import { assertFits, uploadCapacity } from './capacity'
 import { uploadDisplayName } from './display-name'
 import {
   cleanupUncommittedUpload,
@@ -193,12 +193,7 @@ export async function initializeChunkUpload(
     ...bodyOptions,
     ...selection,
   })
-  const config = await getConfig()
-  if (size > maxUploadBytes(config))
-    throw new UploadError('The file exceeds the upload size limit.', 413)
-  const quota = storageQuotaBytes(config, user)
-  if (quota !== null && user.storageUsed + size / 1024 ** 2 > quota / 1024 ** 2)
-    throw new UploadError('The file would exceed your storage quota.', 413)
+  assertFits(uploadCapacity(await getConfig(), user, user.storageUsed), size)
   const destination = await prepareUploadDestination(user, filename, options)
   const storage = await getStorageProvider()
   const s3UploadId = await storage.initializeMultipartUpload(

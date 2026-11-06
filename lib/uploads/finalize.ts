@@ -5,7 +5,6 @@ import { basename, extname } from 'node:path'
 import { setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { readConfig } from '@/lib/config'
-import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import {
@@ -26,7 +25,9 @@ import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
+import { bytesToMB } from '@/lib/utils/size'
 
+import { assertFits, uploadCapacity } from './capacity'
 import { UploadError } from './options'
 import { findOwnedProfile } from './profiles'
 import type { ResolvedUploadOptions } from './schema'
@@ -171,15 +172,8 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           () => new UploadError('The token upload profile was removed.', 403)
         )
     }
-    if (size > maxUploadBytes(config))
-      throw new UploadError(
-        'The file exceeds the current upload size limit.',
-        413
-      )
-    const sizeMB = size / 1024 ** 2
-    const quota = storageQuotaBytes(config, access)
-    if (quota !== null && fresh.storageUsed + sizeMB > quota / 1024 ** 2)
-      throw new UploadError('The file would exceed your storage quota.', 413)
+    assertFits(uploadCapacity(config, access, fresh.storageUsed), size)
+    const sizeMB = bytesToMB(size)
     if (expiry && expiry.expiresAt <= new Date())
       throw new UploadError(
         'The selected expiration passed before upload finished.'

@@ -8,6 +8,7 @@ import { finalizeUpload } from '@/lib/uploads/finalize'
 import { mergeUploadOptions } from '@/lib/uploads/schema'
 
 const mocks = vi.hoisted(() => ({
+  quotas: { enabled: false, default: { value: 10, unit: 'GB' } },
   applyProfileTags: vi.fn(),
   applyAutomaticTags: vi.fn(),
   enqueueFileReady: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock('@/lib/config', () => ({
       general: {
         storage: {
           maxUploadSize: { value: 10, unit: 'MB' },
-          quotas: { enabled: false, default: { value: 10, unit: 'GB' } },
+          quotas: mocks.quotas,
         },
       },
     },
@@ -87,6 +88,7 @@ const input = () => ({
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.quotas.enabled = false
   mocks.tx.config.findUnique.mockResolvedValue(null)
   mocks.tx.user.findUnique.mockResolvedValue(user)
   mocks.tx.role.findUnique.mockResolvedValue({
@@ -289,5 +291,32 @@ describe('token-bound profiles at the upload commit', () => {
       where: { id: 'bound', userId: 'alice' },
     })
     expect(mocks.tx.file.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('limits at the upload commit', () => {
+  it('refuses a file over the size limit or the quota left, before writing', async () => {
+    const large = input()
+    large.size = 10 * 1024 ** 2 + 1
+    await expect(finalizeUpload(large)).rejects.toMatchObject({
+      status: 413,
+      message: 'A file exceeds the upload size limit.',
+    })
+    mocks.quotas.enabled = true
+    mocks.tx.user.findUnique.mockResolvedValue({
+      ...user,
+      storageUsed: 10 * 1024 - 0.5,
+    })
+    const over = input()
+    over.size = 1024 ** 2 / 2 + 1
+    await expect(finalizeUpload(over)).rejects.toMatchObject({
+      status: 413,
+      message: 'This would exceed your storage quota.',
+    })
+    expect(mocks.tx.file.create).not.toHaveBeenCalled()
+    await finalizeUpload({ ...over, size: 1024 ** 2 / 2 })
+    expect(mocks.tx.file.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ size: 0.5 }) })
+    )
   })
 })

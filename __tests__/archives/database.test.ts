@@ -1180,7 +1180,11 @@ suite('archive publication against disposable PostgreSQL', () => {
     const before = (
       await prisma.user.findUniqueOrThrow({ where: { id: 'archive-owner' } })
     ).storageUsed
-    expect((await extract(file.id)).status).toBe(413)
+    const refused = await extract(file.id)
+    expect(refused.status).toBe(413)
+    expect((await refused.json()).error).toBe(
+      'This would exceed your storage quota.'
+    )
     expect(await prisma.file.count()).toBe(1)
     expect(await prisma.vaultFolder.count()).toBe(0)
     expect(

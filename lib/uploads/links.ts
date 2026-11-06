@@ -1,5 +1,6 @@
 import { fileUrls } from '@/lib/files/urls'
 import { publicOrigin } from '@/lib/security/public-origin'
+import { mbToBytes } from '@/lib/utils/size'
 
 export function uploadLinks(
   file: {
@@ -26,7 +27,7 @@ export function uploadLinks(
     // Keep previously downloaded uploader configurations working.
     copyText: urls.page,
     name: file.name,
-    size: Math.round(file.size * 1024 * 1024),
+    size: Math.round(mbToBytes(file.size)),
     type: file.mimeType,
   }
 }

@@ -2,7 +2,6 @@ import type { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
 import { readConfig } from '@/lib/config'
-import { storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
@@ -11,7 +10,8 @@ import {
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { sanitizeFilename } from '@/lib/security/paths'
-import { bytesToMB } from '@/lib/utils'
+import { AVATAR_MAX_BYTES } from '@/lib/storage/avatar-policy'
+import { assertFits, uploadCapacity } from '@/lib/uploads/capacity'
 
 import { queueAvatarStorageDeletion } from './deletion'
 import { getStorageProvider } from './index'
@@ -29,9 +29,13 @@ async function authorizeAvatarWrite(
   const user = await tx.user.findUnique({ where: { id: userId } })
   if (!user) throw new PermissionError('Account not found', 404)
   const access = await requireActorPermission(tx, userId, 'profile.update')
-  const quota = storageQuotaBytes(await readConfig(tx), access)
-  if (quota !== null && user.storageUsed + bytesToMB(size) > quota / 1024 ** 2)
-    throw new PermissionError('Storage quota exceeded', 413)
+  // An avatar has its own size limit, not the instance's upload limit.
+  assertFits(
+    uploadCapacity(await readConfig(tx), access, user.storageUsed, {
+      fileBytes: AVATAR_MAX_BYTES,
+    }),
+    size
+  )
   return user
 }
 

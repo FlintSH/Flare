@@ -74,7 +74,7 @@ Under **Profile → Account**, update **Username** and choose **Save changes**, 
 
 Choose **Change avatar** and select a PNG, JPEG, GIF, or WebP image of at most 2 MB to update your photo. A larger file shows **File too large** and another format, such as SVG, HEIC, or AVIF, shows **Invalid file type**; nothing is uploaded, so resize or convert the image and try again. The server checks the same rules again and also checks that the content really is the format the file claims to be. Earlier versions accepted an image of any type and size. When your instance enforces [storage quotas](#check-storage-and-usage), the image must fit in your remaining space, although it isn't added to your used space. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
-If Flare refuses the image, **Upload failed** gives its reason, for example **Storage quota exceeded** or **File content does not match claimed image type**. Earlier versions said **Failed to upload avatar** whatever the reason, which is still the message when Flare gives none.
+If Flare refuses the image, **Upload failed** gives its reason, for example **This would exceed your storage quota.** or **File content does not match claimed image type**. Earlier versions said **Failed to upload avatar** whatever the reason, which is still the message when Flare gives none.
 
 Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
 

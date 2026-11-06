@@ -7,7 +7,6 @@ import type { z } from 'zod'
 
 import { recordAudit, setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { readConfig } from '@/lib/config'
-import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
@@ -25,6 +24,7 @@ import {
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
 import { queueStorageDeletion } from '@/lib/storage/deletion'
 import { captureStorageTarget } from '@/lib/storage/targets'
+import { assertFits, uploadCapacity } from '@/lib/uploads/capacity'
 import {
   accountUploadOptions,
   effectiveUploadRevision,
@@ -401,22 +401,7 @@ async function preflightCapacity(actor: ArchiveActor, sizes: number[]) {
     }),
   ])
   if (!user) throw new ArchiveError('Account no longer exists.', 401)
-  const max = maxUploadBytes(config)
-  if (sizes.some((size) => size > max))
-    throw new ArchiveError(
-      'An output file exceeds the current upload size limit.',
-      413
-    )
-  const quota = storageQuotaBytes(config, actor.user)
-  if (
-    quota !== null &&
-    user.storageUsed * 1024 ** 2 + sizes.reduce((sum, size) => sum + size, 0) >
-      quota
-  )
-    throw new ArchiveError(
-      'The output files would exceed your storage quota.',
-      413
-    )
+  assertFits(uploadCapacity(config, actor.user, user.storageUsed), sizes)
 }
 
 async function archiveOptions(

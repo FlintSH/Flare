@@ -204,10 +204,10 @@ The following paths are relative to `settings` in Flare's saved configuration. T
 | `general.storage.s3.secretAccessKey`               | Empty string       | Configured S3 credential secret; protect database backups                                                       |
 | `general.storage.s3.endpoint`                      | Empty string       | Optional custom S3 API endpoint; saved settings normalize a missing scheme to HTTPS and remove trailing slashes |
 | `general.storage.s3.forcePathStyle`                | `false`            | Use path-style addressing with a custom endpoint                                                                |
-| `general.storage.quotas.enabled`                   | `false`            | Apply the shared allowance to accounts without `quotas.bypass`                                                  |
+| `general.storage.quotas.enabled`                   | `false`            | Apply the shared allowance to accounts without `quotas.bypass` or Administrator                                 |
 | `general.storage.quotas.default.value`             | `10`               | Allowance amount per account without quota bypass                                                               |
 | `general.storage.quotas.default.unit`              | `GB`               | Dashboard choices are MB or GB, using binary units; any unit other than `GB` is read as MB                      |
-| `general.storage.maxUploadSize.value`              | `100`              | Maximum size of one uploaded file                                                                               |
+| `general.storage.maxUploadSize.value`              | `100`              | Maximum size of one file an upload or archive creates, for every account                                        |
 | `general.storage.maxUploadSize.unit`               | `MB`               | Dashboard choices are MB or GB, using binary units; any unit other than `GB` is read as MB                      |
 | `general.credits.showFooter`                       | `true`             | Show the instance's Flare credit footer                                                                         |
 | `general.ocr.enabled`                              | `true`             | Queue background image text extraction                                                                          |
