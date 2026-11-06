@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { fileTypeGroup, fileTypeLabel } from '@/lib/files/file-kind'
 import {
   type FileGrouping,
   GROUP_OPTIONS,
@@ -72,40 +73,6 @@ const visibilityIcons = {
   hasPassword: KeyRound,
 } satisfies Record<VisibilityFilter, unknown>
 
-function getFileTypeCategory(type: string) {
-  if (type.startsWith('image/')) return 'Images'
-  if (type.startsWith('video/')) return 'Videos'
-  if (type.startsWith('audio/')) return 'Audio'
-  if (
-    type.includes('pdf') ||
-    type.includes('document') ||
-    type.startsWith('text/')
-  )
-    return 'Documents'
-  return 'Other files'
-}
-
-function getFileTypeLabel(type: string) {
-  const knownTypes: Record<string, string> = {
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-      'Word document',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-      'Excel spreadsheet',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation':
-      'PowerPoint presentation',
-    'application/octet-stream': 'Other file',
-    'text/plain': 'Plain text',
-    'image/svg+xml': 'SVG',
-  }
-  // Own keys only: a stored type such as "constructor" mustn't reach
-  // Object.prototype.
-  return (
-    (Object.prototype.hasOwnProperty.call(knownTypes, type) &&
-      knownTypes[type]) ||
-    (type.split('/')[1] || type).toUpperCase()
-  )
-}
-
 export const FileFilters = memo(function FileFilters({
   tagFilter,
   sortBy,
@@ -124,8 +91,7 @@ export const FileFilters = memo(function FileFilters({
     .sort()
     .reduce(
       (groups, type) => {
-        const category = getFileTypeCategory(type)
-        ;(groups[category] ||= []).push(type)
+        ;(groups[fileTypeGroup(type)] ||= []).push(type)
         return groups
       },
       {} as Record<string, string[]>
@@ -264,7 +230,7 @@ export const FileFilters = memo(function FileFilters({
                       )
                     }
                   >
-                    <span className="truncate">{getFileTypeLabel(type)}</span>
+                    <span className="truncate">{fileTypeLabel(type)}</span>
                   </DropdownMenuCheckboxItem>
                 ))}
               </Fragment>

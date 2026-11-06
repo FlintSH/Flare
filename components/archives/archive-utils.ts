@@ -5,8 +5,8 @@ import {
   type ArchiveListing,
   type ArchiveListingProgress,
   type ArchiveOutputFormat,
-  detectArchiveFormat,
 } from '@/lib/archives/shared'
+import { fileKind } from '@/lib/files/file-kind'
 
 /** File-library metadata uses MiB; archive contracts use bytes. */
 export function archiveSelectionSize(files: { size: number }[]) {
@@ -75,12 +75,10 @@ export class ArchiveRequestError extends Error {
   }
 }
 
+/** Whether the library offers Browse archive, including for RAR and 7z. */
 export function isArchiveCandidate(name: string, mimeType: string) {
-  return (
-    !!detectArchiveFormat(name, mimeType) ||
-    /\.(rar|7z)$/i.test(name) ||
-    /(?:rar|7z-compressed)/i.test(mimeType)
-  )
+  const { kind } = fileKind({ name, mimeType })
+  return kind === 'archive' || kind === 'unsupported-archive'
 }
 
 export interface ArchiveFileRef {

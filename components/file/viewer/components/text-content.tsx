@@ -4,8 +4,10 @@ import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { FileText } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
-import { getLanguageExtension } from '../../protected/language-utils'
+import type { Language } from '@/lib/files/file-kind'
+
 import { useFileViewer } from '../context'
+import { codeGrammar } from './code-grammar'
 import { codeViewerTheme } from './code-theme'
 import { ErrorState } from './error-state'
 import { LoadingState } from './loading-state'
@@ -13,15 +15,15 @@ import { PreviewPlaceholder } from './preview-placeholder'
 
 /** Markdown prose wraps to the width; code, logs and other text keep their
  * lines and scroll sideways, so columns stay aligned. */
-const WRAPPED_LANGUAGES = new Set(['markdown'])
+const WRAPPED_LANGUAGES = new Set<Language>(['markdown'])
 
-export function TextContent({ language }: { language: string }) {
+export function TextContent({ language }: { language: Language }) {
   const { file, state, fetchContent } = useFileViewer()
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme !== 'light'
   const extensions = useMemo(
     () => [
-      getLanguageExtension(language),
+      codeGrammar(language),
       codeViewerTheme(dark),
       ...(WRAPPED_LANGUAGES.has(language) ? [EditorView.lineWrapping] : []),
     ],

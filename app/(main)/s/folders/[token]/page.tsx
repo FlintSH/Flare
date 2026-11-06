@@ -2,20 +2,13 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import {
-  ArrowLeft,
-  ArrowRight,
-  File,
-  FolderOpen,
-  Lock,
-  Music,
-  Video,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, FolderOpen, Lock } from 'lucide-react'
 
 import {
   PublicHeader,
   publicColumnClassName,
 } from '@/components/customization/share-layout'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { pagePanelClassName } from '@/components/layout/page-header'
@@ -92,16 +85,11 @@ export default async function SharedFolderPage({
             {folder.files.length ? (
               <ul className="grid grid-cols-1 gap-4 p-6 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {folder.files.map((file) => {
-                  const Icon = file.hasPassword
-                    ? Lock
-                    : file.mimeType?.startsWith('video/')
-                      ? Video
-                      : file.mimeType?.startsWith('audio/')
-                        ? Music
-                        : File
                   const image = file.mimeType?.startsWith('image/')
                     ? file.rawUrl
                     : null
+                  const iconClassName =
+                    'h-8 w-8 text-muted-foreground min-[480px]:h-10 min-[480px]:w-10'
                   return (
                     <li key={file.id} className="min-w-0">
                       <Link
@@ -127,10 +115,18 @@ export default async function SharedFolderPage({
                               loading="lazy"
                               className="h-full w-full object-cover"
                             />
-                          ) : (
-                            <Icon
-                              className="h-8 w-8 text-muted-foreground min-[480px]:h-10 min-[480px]:w-10"
+                          ) : file.hasPassword ? (
+                            <Lock
+                              className={iconClassName}
                               aria-hidden="true"
+                            />
+                          ) : (
+                            <FileTypeIcon
+                              file={{
+                                name: file.name,
+                                mimeType: file.mimeType ?? '',
+                              }}
+                              className={iconClassName}
                             />
                           )}
                         </div>

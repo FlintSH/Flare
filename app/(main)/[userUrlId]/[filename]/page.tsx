@@ -17,13 +17,12 @@ import { ShareLayout } from '@/components/customization/share-layout'
 import { ProtectedFile } from '@/components/file/protected-file'
 import { Footer } from '@/components/layout/footer'
 
-import { detectArchiveFormat } from '@/lib/archives/shared'
 import { recordAudit } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
 import { shareMetadataText } from '@/lib/customization/sharing'
 import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
-import { languageFromFilename } from '@/lib/files/text-language'
+import { fileKind } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
@@ -90,10 +89,10 @@ export async function generateMetadata({
     name: file.user.name || 'Anonymous',
   }
 
-  const isImage = cleanFile.mimeType.startsWith('image/')
-  const isVideo = cleanFile.mimeType.startsWith('video/')
-  const isAudio = cleanFile.mimeType.startsWith('audio/')
-  const isMediaFile = isImage || isVideo || isAudio
+  const { kind } = fileKind(file)
+  const isImage = kind === 'image'
+  const isVideo = kind === 'video'
+  const isMediaFile = isImage || isVideo || kind === 'audio'
   const formattedSize = formatFileSize(cleanFile.size)
 
   const {
@@ -220,10 +219,9 @@ export default async function FilePage({
   // Only a visitor who may see the file adds a view; refusals never count.
   await countView(file.id)
 
-  const isImage = file.mimeType.startsWith('image/')
-  const isVideo = file.mimeType.startsWith('video/')
-  const isPdf = file.mimeType === 'application/pdf'
-  const isMediaFile = isImage || isVideo || isPdf
+  // From the real name, which the page may hide.
+  const type = fileKind(file)
+  const isMediaFile = ['image', 'video', 'pdf'].includes(type.kind)
 
   // Send only viewer fields to the client. In particular, never serialize the
   // uploader profile or the stored password hash into a public page.
@@ -238,9 +236,7 @@ export default async function FilePage({
         : null,
     userId: access.isOwner ? file.userId : '',
     mimeType: file.mimeType,
-    // Detect using the real name while keeping the filename presentation setting.
-    archiveFormat: detectArchiveFormat(file.name, file.mimeType),
-    textLanguage: languageFromFilename(file.name),
+    ...type,
   }
 
   const backLink = await sharedFolderBackLink(

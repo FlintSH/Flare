@@ -1,6 +1,7 @@
-import type { ArchiveFormat } from '@/lib/archives/shared'
+import type { FileKindInfo } from '@/lib/files/file-kind'
 
-export interface FileViewerFile {
+/** The kind comes from the real filename, which `name` may hide. */
+export type FileViewerFile = {
   id: string
   name: string
   urlPath: string
@@ -8,10 +9,7 @@ export interface FileViewerFile {
   visibility: 'PUBLIC' | 'PRIVATE'
   password: string | null
   userId: string
-  archiveFormat?: ArchiveFormat | null
-  /** Highlighting for text/plain files, from the real filename. */
-  textLanguage?: string
-}
+} & FileKindInfo
 
 export interface FileViewerUrls {
   fileUrl: string

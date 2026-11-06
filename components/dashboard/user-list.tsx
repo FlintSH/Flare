@@ -7,29 +7,23 @@ import { useRouter } from 'next/navigation'
 
 import { URL_ID_LENGTH, isUrlIdDraft } from '@/types/dto/user'
 import {
-  Archive,
   ChevronLeft,
   ChevronRight,
   Edit2,
   Eye,
   EyeOff,
-  File,
-  FileText,
   FolderOpen,
   Globe,
-  Image as ImageIcon,
   KeyRound,
   Link2,
   Lock,
   LogOut,
   MoreVertical,
-  Music,
   Plus,
   RefreshCw,
   Search,
   Trash2,
   UserX,
-  Video,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
@@ -38,6 +32,7 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { RoleBadges, RoleChecklist } from '@/components/roles/role-badges'
 import {
@@ -663,36 +658,6 @@ export function UserList() {
     setUrlSearch(search)
   }
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/'))
-      return <ImageIcon className="h-4 w-4" aria-label="Image file" />
-    if (mimeType.startsWith('text/')) return <FileText className="h-4 w-4" />
-    if (mimeType.startsWith('application/pdf'))
-      return <FileText className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/msword') ||
-      mimeType.startsWith(
-        'application/vnd.openxmlformats-officedocument.wordprocessingml'
-      )
-    )
-      return <FileText className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/vnd.ms-excel') ||
-      mimeType.startsWith(
-        'application/vnd.openxmlformats-officedocument.spreadsheetml'
-      )
-    )
-      return <FileText className="h-4 w-4" />
-    if (mimeType.startsWith('video/')) return <Video className="h-4 w-4" />
-    if (mimeType.startsWith('audio/')) return <Music className="h-4 w-4" />
-    if (
-      mimeType.startsWith('application/zip') ||
-      mimeType.startsWith('application/x-rar-compressed')
-    )
-      return <Archive className="h-4 w-4" />
-    return <File className="h-4 w-4" />
-  }
-
   // A hairline keeps light screenshots from dissolving into the row.
   const getFilePreview = (file: File) => {
     if (file.mimeType.startsWith('image/')) {
@@ -714,7 +679,7 @@ export function UserList() {
     }
     return (
       <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
-        {getFileIcon(file.mimeType)}
+        <FileTypeIcon file={file} className="h-4 w-4" />
       </div>
     )
   }

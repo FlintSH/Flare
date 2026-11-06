@@ -7,9 +7,10 @@ import { configureAuditWriter } from '@/lib/audit'
 const mocks = vi.hoisted(() => ({
   viewerFile: null as null | Record<string, unknown>,
   showFilename: false,
+  file: undefined as unknown,
 }))
 
-const file = {
+const paste = {
   id: 'share-page-paste',
   name: 'csv_to_json.py',
   urlPath: '/owner/csv_to_json.py',
@@ -35,7 +36,12 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { file: { findUnique: async () => file, update: async () => file } },
+  prisma: {
+    file: {
+      findUnique: async () => mocks.file,
+      update: async () => mocks.file,
+    },
+  },
 }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
@@ -63,11 +69,12 @@ vi.mock('@/components/file/protected-file', () => ({
   },
 }))
 
-function open() {
+function open(file: typeof paste) {
+  mocks.file = file
   return FilePage({
     params: Promise.resolve({
       userUrlId: 'owner',
-      filename: 'csv_to_json.py',
+      filename: file.urlPath.split('/').pop()!,
     }),
     searchParams: Promise.resolve({}),
   })
@@ -78,25 +85,83 @@ beforeEach(() => {
   mocks.viewerFile = null
 })
 
-describe('share page text highlighting', () => {
+describe('share page file kind', () => {
   it('names the language from the real filename when filenames are hidden', async () => {
     mocks.showFilename = false
-    const html = renderToStaticMarkup(await open())
+    const html = renderToStaticMarkup(await open(paste))
 
     expect(mocks.viewerFile).toMatchObject({
       name: 'Shared file',
-      textLanguage: 'python',
+      kind: 'text',
+      language: 'python',
     })
     expect(html).not.toContain('csv_to_json')
   })
 
   it('names the language from the shown filename too', async () => {
     mocks.showFilename = true
-    renderToStaticMarkup(await open())
+    renderToStaticMarkup(await open(paste))
 
     expect(mocks.viewerFile).toMatchObject({
       name: 'csv_to_json.py',
-      textLanguage: 'python',
+      kind: 'text',
+      language: 'python',
+    })
+  })
+
+  // The viewer used to look for ".csv" in the name it was given, which is
+  // "Shared file" when filenames are hidden.
+  it('shows a CSV stored under a spreadsheet type as a table when filenames are hidden', async () => {
+    mocks.showFilename = false
+    renderToStaticMarkup(
+      await open({
+        ...paste,
+        id: 'share-page-csv',
+        name: 'Quarterly report.csv',
+        urlPath: '/owner/Quarterly-report.csv',
+        mimeType: 'application/vnd.ms-excel',
+      })
+    )
+
+    expect(mocks.viewerFile).toMatchObject({
+      name: 'Shared file',
+      kind: 'csv',
+    })
+  })
+
+  it('recognizes a RAR archive by its real name when filenames are hidden', async () => {
+    mocks.showFilename = false
+    renderToStaticMarkup(
+      await open({
+        ...paste,
+        id: 'share-page-rar',
+        name: 'backup.rar',
+        urlPath: '/owner/backup.rar',
+        mimeType: 'application/octet-stream',
+      })
+    )
+
+    expect(mocks.viewerFile).toMatchObject({
+      name: 'Shared file',
+      kind: 'unsupported-archive',
+    })
+  })
+
+  it('sends the archive format the browser reads', async () => {
+    mocks.showFilename = false
+    renderToStaticMarkup(
+      await open({
+        ...paste,
+        id: 'share-page-tgz',
+        name: 'site.tgz',
+        urlPath: '/owner/site.tgz',
+        mimeType: 'application/octet-stream',
+      })
+    )
+
+    expect(mocks.viewerFile).toMatchObject({
+      kind: 'archive',
+      archiveFormat: 'tar.gz',
     })
   })
 })

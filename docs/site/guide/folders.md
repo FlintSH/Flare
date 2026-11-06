@@ -82,6 +82,8 @@ A visitor who opens a file from the shared page sees **Back to** and the folder'
 | Subfolder and its files               | Nothing; sharing does not recursively publish subfolders.                           |
 | Tags and account details              | Not listed.                                                                         |
 
+A tile without an image preview shows the same icon for the file's kind as your [library cards](./library#read-a-file-card): video, audio, text or PDF, code, table, archive, or a plain file. Earlier versions told only video and audio apart, and showed a plain file for everything else.
+
 There is no separate folder password. Protect individual public files with their own passwords, or keep them private. A shared folder is a collection for viewing, not a collaborative upload or editing space.
 
 The protected-file route reached through a folder also checks that the share is still enabled and that the file is still a public member of that folder. Moving the file out or disabling the share stops access through that folder route.

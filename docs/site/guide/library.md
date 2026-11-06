@@ -15,7 +15,7 @@ Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upg
 
 ## Read a file card
 
-Every card has the same layout and height, whether or not a file has tags or a folder. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
+Every card has the same layout and height, whether or not a file has tags or a folder. A file without an image preview shows an icon for its kind: video, audio, text or PDF, code, table for CSV and spreadsheets, archive, or a plain file. The icon follows the same rules as the [share page viewer](./sharing#what-recipients-can-preview), so a CSV file or archive saved under a generic type is recognized by its name, and **Users → View content** shows the same icons. Earlier builds chose the icon from the stored type alone and matched parts of it, so code types such as JSON, XML, Markdown, and shell scripts showed a text or plain file icon, while Java archives showed a code icon. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
 
 A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
@@ -57,14 +57,14 @@ Type in the search field to find matches in filenames and extracted OCR text. Ma
 
 Use the controls beside search to narrow the current library:
 
-| Control         | Choices and behavior                                                                                                                                      |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Folder**      | All files, Unfiled, or the direct contents of a folder. Opening a folder does not merge its subfolders' contents into the results.                        |
-| **Tags**        | Choose a tag, return to all tags, or find untagged files.                                                                                                 |
-| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, or most/least downloaded.                                                                             |
-| **Visibility**  | Public, private, and password-protected. Multiple checked choices are alternatives: public plus password-protected includes files matching either choice. |
-| **File type**   | Select the MIME types present in your library. These are grouped into images, videos, audio, documents, and other files.                                  |
-| **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                 |
+| Control         | Choices and behavior                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Folder**      | All files, Unfiled, or the direct contents of a folder. Opening a folder does not merge its subfolders' contents into the results.                                                                                                                     |
+| **Tags**        | Choose a tag, return to all tags, or find untagged files.                                                                                                                                                                                              |
+| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, or most/least downloaded.                                                                                                                                                                          |
+| **Visibility**  | Public, private, and password-protected. Multiple checked choices are alternatives: public plus password-protected includes files matching either choice.                                                                                              |
+| **File type**   | Select the MIME types present in your library. These are grouped into images, videos, audio, documents, and other files. Documents include PDF, text, code, and CSV types, such as `application/json`, and office documents; archives are other files. |
+| **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                                                                                                              |
 
 Separate controls combine. For example, a folder, an image type, and a search phrase narrow results to matching images in that folder. Visibility is the notable exception within its own menu: checking multiple values includes any selected value.
 
@@ -110,7 +110,7 @@ Open the card's menu for the full action list. On a desktop, preview actions als
 - **Open file:** open its share/viewer page.
 - **Copy link:** copy its share-page URL. The link starts with the address you opened Flare at and uses your account's URL ID, not your [vanity URL](./upload-profiles#account-upload-defaults). Links shown after an upload start with the instance's public URL instead, and use your vanity URL when you have one.
 - **Download file:** save a copy to your device.
-- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives).
+- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives). Flare offers it for ZIP, TAR, TAR.GZ, GZIP, RAR, and 7z files, recognized by their type or name. An image, video, audio, or PDF file named like an archive, such as `photo.zip`, opens as that file; earlier builds offered **Browse archive** for it.
 - **Edit tags:** add or remove private organizational labels.
 - **Move to folder:** change its library location without changing the file link.
 - **Change visibility:** switch between public and private.

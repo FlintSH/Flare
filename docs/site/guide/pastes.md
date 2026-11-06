@@ -41,7 +41,7 @@ The paste form saves content as `text/plain`, and the share page picks the synta
 | Data and docs   | `.json`, `.yaml`, `.yml`, `.md`, `.markdown`, `.sql`                            |
 | Other languages | `.py`, `.java`, `.c`, `.h`, `.cpp`, `.cc`, `.hpp`, `.rs`, `.php`, `.go`, `.wat` |
 
-Flare reads the last extension, in any case: `notes.MD` is Markdown and `report.final.py` is Python. Any other extension, including `.txt` and `.log`, shows plain text without coloring. Uploaded files with a code MIME type, such as `text/x-python`, are highlighted by that type when it's one of the languages above. Code in other languages, such as shell scripts, Ruby or TOML, shows plain text. The extension also helps a recipient open the download in the right application.
+Flare reads the last extension, in any case: `notes.MD` is Markdown and `report.final.py` is Python. Any other extension, including `.txt` and `.log`, shows plain text without coloring. Uploaded files with a code MIME type, such as `text/x-python`, are highlighted by that type when it's one of the languages above. Code in other languages, such as shell scripts, Ruby or TOML, shows plain text. Files with another text type, such as `text/x-csharp`, are highlighted by their extension, like a paste. The extension also helps a recipient open the download in the right application.
 
 Markdown pastes wrap long lines to fit the screen, so they stay readable on a phone. Code, logs and other plain text keep their line breaks and scroll sideways, so columns stay aligned; the bottom edge fades while more lines follow.
 

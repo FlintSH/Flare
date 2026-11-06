@@ -90,6 +90,8 @@ describe('archive browser navigation', () => {
       true
     )
     expect(isArchiveCandidate('photo.png', 'image/png')).toBe(false)
+    // An image type wins over a name that ends like an archive.
+    expect(isArchiveCandidate('photo.zip', 'image/png')).toBe(false)
   })
 })
 

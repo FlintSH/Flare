@@ -29,7 +29,7 @@ import {
   type FileActionId,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
-import { getFileIcon } from '@/components/dashboard/file-card/utils'
+import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import {
   OcrDialog,
@@ -431,7 +431,10 @@ export function FileCard({
             // The icon steps aside for the hover and focus controls, so it
             // doesn't show through between them.
             <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
-              {getFileIcon(file.mimeType, 'h-16 w-16 text-muted-foreground')}
+              <FileTypeIcon
+                file={file}
+                className="h-16 w-16 text-muted-foreground"
+              />
             </div>
           )}
         </Link>
