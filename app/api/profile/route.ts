@@ -1,6 +1,6 @@
 import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
 import { Prisma } from '@prisma/client'
-import { compare, hash } from 'bcryptjs'
+import { compare } from 'bcryptjs'
 
 import { securitySession } from '@/lib/auth/security/http'
 import { assertSecurityProof } from '@/lib/auth/security/service'
@@ -14,7 +14,7 @@ import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
-import { changeCredentials } from '@/lib/users/credentials'
+import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
 
 const api = routes('/api/profile', {
   envelope: 'api',
@@ -81,7 +81,7 @@ export const PUT = api(async (request) => {
   const updateData: Prisma.UserUpdateInput = {}
   if (body.name) updateData.name = body.name
   const passwordHash = body.newPassword
-    ? await hash(body.newPassword, 10)
+    ? await hashAccountPassword(body.newPassword)
     : undefined
   if (typeof body.randomizeFileUrls === 'boolean')
     updateData.randomizeFileUrls = body.randomizeFileUrls

@@ -62,7 +62,7 @@ An upgrade leaves email disabled and keeps existing access unchanged. Older `ema
 
 Recovery works for **local-password accounts whose current email address has verified proof**. It is disabled by default. Once enabled, an eligible user can request a reset from the sign-in flow, open the link, and submit a new password.
 
-Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload tokens after a password reset** is enabled; scoped API tokens should be managed separately.
+Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. The new password follows the rules for every account password, at least 8 characters and at most 72 UTF-8 bytes, and Flare stores only its bcrypt hash. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload tokens after a password reset** is enabled; scoped API tokens should be managed separately.
 
 Recovery requests do not reveal whether the submitted email belongs to an eligible account. If an old user never enrolled a recovery address, an administrator must help them regain access; the stored address alone is insufficient. An exemption from verification does not enable recovery.
 

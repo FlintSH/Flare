@@ -1,8 +1,17 @@
 import type { Prisma } from '@prisma/client'
+import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 
 import { revokeSecuritySessions } from '@/lib/auth/security/service'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
+
+/**
+ * The stored form of an account password: its bcrypt hash. Hash before a
+ * transaction, so that no lock waits for bcrypt.
+ */
+export function hashAccountPassword(password: string) {
+  return hash(password, 10)
+}
 
 /** A new legacy upload token. */
 export function newUploadToken() {
@@ -10,7 +19,7 @@ export function newUploadToken() {
 }
 
 interface CredentialChange {
-  /** A new password hash. */
+  /** A new password, as `hashAccountPassword` stores it. */
   password?: string
   /** A new sign-in address; `verified` when a link sent to it confirmed it. */
   email?: { address: string; verified: boolean }

@@ -1,5 +1,3 @@
-import { hash } from 'bcryptjs'
-
 import { DEFAULT_CONFIG, configSchema, replaceConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
@@ -12,6 +10,7 @@ import { setupSchema } from '@/lib/setup/schema'
 import { isSetupComplete } from '@/lib/setup/status'
 import { invalidateStorageProvider } from '@/lib/storage'
 import { createAccount } from '@/lib/users/create-account'
+import { hashAccountPassword } from '@/lib/users/credentials'
 
 const api = routes('/api/setup', {
   invalid: (error) => {
@@ -30,7 +29,7 @@ export const POST = api(async (request) => {
 
   const validatedData = setupSchema.parse(await readJson(request))
 
-  const hashedPassword = await hash(validatedData.admin.password, 10)
+  const hashedPassword = await hashAccountPassword(validatedData.admin.password)
 
   const initialConfig = configSchema.parse({
     ...DEFAULT_CONFIG,

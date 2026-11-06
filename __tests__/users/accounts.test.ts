@@ -1,3 +1,4 @@
+import { compare, getRounds } from 'bcryptjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
@@ -35,7 +36,8 @@ vi.mock('@/lib/permissions/server', () => ({
 
 const { createAccount, verifiesNewAccounts } =
   await import('@/lib/users/create-account')
-const { changeCredentials } = await import('@/lib/users/credentials')
+const { changeCredentials, hashAccountPassword } =
+  await import('@/lib/users/credentials')
 
 const tx = mocks.tx as never
 const account = { email: 'new@example.test', name: 'N', password: 'hash' }
@@ -208,5 +210,14 @@ describe('changeCredentials', () => {
       emailVerifiedFor: null,
       emailVerificationSource: null,
     })
+  })
+})
+
+describe('hashAccountPassword', () => {
+  it('stores an account password as a cost-10 bcrypt hash', async () => {
+    const stored = await hashAccountPassword('correct horse battery')
+    expect(getRounds(stored)).toBe(10)
+    expect(await compare('correct horse battery', stored)).toBe(true)
+    expect(await compare('wrong horse battery', stored)).toBe(false)
   })
 })

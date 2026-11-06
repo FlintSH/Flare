@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 
-import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
 import { recordAudit } from '@/lib/audit'
@@ -23,6 +22,7 @@ import {
   accountPasswordSchema,
 } from '@/lib/users/account-policy'
 import { createAccount, verifiesNewAccounts } from '@/lib/users/create-account'
+import { hashAccountPassword } from '@/lib/users/credentials'
 
 const registerSchema = z.object({
   email: accountEmailSchema,
@@ -74,7 +74,7 @@ export const POST = api(async (request) => {
   if (verifiesNewAccounts(emailConfig))
     await limitEmailRequest(request, emailConfig, body.email)
 
-  const hashedPassword = await hash(body.password, 10)
+  const hashedPassword = await hashAccountPassword(body.password)
 
   const { user, redeemed } = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)

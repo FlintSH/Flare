@@ -1,6 +1,5 @@
 import { UserResponse, UserSchema } from '@/types/dto/user'
 import type { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
 
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
@@ -24,7 +23,7 @@ import {
   validateRoleAssignment,
 } from '@/lib/permissions/server'
 import { createAccount } from '@/lib/users/create-account'
-import { changeCredentials } from '@/lib/users/credentials'
+import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
 import { claimEmail } from '@/lib/users/email-claim'
 
 class UserEmailPolicyError extends HttpError {
@@ -149,7 +148,7 @@ export const POST = api(async (request) => {
   }
 
   const hashedPassword = body.password
-    ? await hash(body.password, 10)
+    ? await hashAccountPassword(body.password)
     : undefined
 
   const user = await prisma.$transaction(async (tx) => {
@@ -261,7 +260,9 @@ export const PUT = api(async (request) => {
       vanityId: body.vanityId || null,
     }),
   }
-  const passwordHash = body.password ? await hash(body.password, 10) : undefined
+  const passwordHash = body.password
+    ? await hashAccountPassword(body.password)
+    : undefined
 
   const user = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)

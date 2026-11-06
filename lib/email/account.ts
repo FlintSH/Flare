@@ -1,12 +1,12 @@
 import { Prisma, type User } from '@prisma/client'
-import { compare, hash } from 'bcryptjs'
+import { compare } from 'bcryptjs'
 import type { Session } from 'next-auth'
 
 import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
 import { getConfig, readConfig } from '@/lib/config'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { changeCredentials } from '@/lib/users/credentials'
+import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
 import { claimEmail, findAccountByEmail } from '@/lib/users/email-claim'
 
 import { getEmailConfigForUpdate } from './config'
@@ -144,7 +144,7 @@ export async function resetPassword(
 ) {
   if (!(await isPasswordRecoveryAvailable(config)))
     throw new EmailHttpError('Password recovery is disabled.')
-  const passwordHash = await hash(password, 10)
+  const passwordHash = await hashAccountPassword(password)
   await prisma.$transaction(async (tx) => {
     config = await getEmailConfigForUpdate(tx)
     if (!(await isPasswordRecoveryAvailable(config, tx)))
