@@ -113,8 +113,10 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Add healthcheck
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+# Failed checks don't count for the first 150 seconds: start.sh tries the
+# database up to 30 times, and each failed try takes about 2 seconds before
+# its 2-second pause, so the wait alone can last 2 minutes before migrations.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=150s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 # The entrypoint script runs as root but switches to nextjs user

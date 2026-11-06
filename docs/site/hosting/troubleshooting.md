@@ -15,6 +15,8 @@ docker compose logs --tail=100 db
 docker compose exec -T db pg_isready -U flare -d flare
 ```
 
+The image's health check requests `/api/health` inside the container. Failed checks in the first 150 seconds don't count, which leaves time for the database wait, up to 30 tries that take about 4 seconds each, and migrations: `docker compose ps` shows `health: starting` until a check succeeds, then `healthy`. After those 150 seconds, three failed checks 10 seconds apart mark the container `unhealthy`. Earlier images allowed 10 seconds, so a start that waited for the database or applied migrations could show `unhealthy` until Flare answered.
+
 The startup script waits for PostgreSQL and runs migrations. Check `DATABASE_URL` points to the database's network hostname (`db` in the documented Compose example, `postgres` in the repository's `docker-compose.yml`), not the app container's `localhost`. Check credentials, reachability, schema permissions, and database disk space.
 
 Changing `POSTGRES_PASSWORD` in Compose does not change a password inside an already initialized PostgreSQL volume. Update the actual database account deliberately or restore the original correct environment value. Do not delete the volume to fix a password mismatch on a real instance.
