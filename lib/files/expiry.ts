@@ -147,7 +147,7 @@ export async function pendingExpiration(
   fileId: string
 ): Promise<Date | null> {
   await ownedFile(prisma, userId, fileId)
-  return (await getFilesExpirationInfo([fileId])).get(fileId) ?? null
+  return (await getFilesExpirationInfo([fileId])).get(fileId)?.expiresAt ?? null
 }
 
 /**
@@ -234,11 +234,14 @@ export async function cancelFileExpiration(
   })
 }
 
-/** Each file's earliest pending expiry, for a page of files in one query. */
+/**
+ * Each file's earliest pending expiry and what it does, for a page of files in
+ * one query; null for a job without a time.
+ */
 export async function getFilesExpirationInfo(
   fileIds: string[]
-): Promise<Map<string, Date | null>> {
-  const expirations = new Map<string, Date | null>()
+): Promise<Map<string, FileExpiry | null>> {
+  const expirations = new Map<string, FileExpiry | null>()
   if (!fileIds.length) return expirations
   const rows = await prisma.event.findMany({
     where: {
@@ -250,9 +253,16 @@ export async function getFilesExpirationInfo(
     orderBy: { scheduledAt: 'asc' },
   })
   for (const row of rows) {
-    const { fileId } = jsonObject(row.payload)
+    const { fileId, action } = jsonObject(row.payload)
     if (typeof fileId === 'string' && !expirations.has(fileId))
-      expirations.set(fileId, row.scheduledAt)
+      expirations.set(
+        fileId,
+        row.scheduledAt && {
+          expiresAt: row.scheduledAt,
+          // Every job records its action; deletion is the scheduling default.
+          action: isExpiryAction(action) ? action : ExpiryAction.DELETE,
+        }
+      )
   }
   return expirations
 }

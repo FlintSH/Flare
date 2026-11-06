@@ -310,7 +310,7 @@ suite('file expiry against disposable PostgreSQL', () => {
       { expiresAt: deadline.toISOString() }
     )
     expect((await expiry.getFilesExpirationInfo([row.id])).get(row.id)).toEqual(
-      deadline
+      { expiresAt: deadline, action: 'DELETE' }
     )
     const claimed = await prisma.event.update({
       where: { id: (await prisma.event.findFirstOrThrow()).id },

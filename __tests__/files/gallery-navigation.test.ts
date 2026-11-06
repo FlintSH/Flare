@@ -286,7 +286,7 @@ describe('anchored image navigation API', () => {
 
   it('preserves public metadata and expiry without returning password hashes', async () => {
     const expiresAt = new Date('2026-12-01T00:00:00Z')
-    mocks.expiration.mockResolvedValue(expiresAt)
+    mocks.expiration.mockResolvedValue({ expiresAt, action: 'SET_PRIVATE' })
     const response = await request()
     const body = await response.json()
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
@@ -294,9 +294,15 @@ describe('anchored image navigation API', () => {
       id: 'neighbor-a',
       hasPassword: true,
       expiresAt: expiresAt.toISOString(),
+      expiryAction: 'SET_PRIVATE',
       tags: [{ id: 'tag-work', name: 'Work' }],
     })
     expect(body.data[0]).not.toHaveProperty('password')
+  })
+
+  it('sends no expiry time or action for a file without one', async () => {
+    const body = await (await request()).json()
+    expect(body.data[0]).toMatchObject({ expiresAt: null, expiryAction: null })
   })
 
   it.each([

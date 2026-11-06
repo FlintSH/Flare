@@ -209,7 +209,8 @@ Different filter categories combine with AND. For example, `types=image/png&visi
       "user": { "urlId": "abc123" },
       "tags": [{ "id": "TAG_ID", "name": "Finance" }],
       "hasPassword": false,
-      "expiresAt": null
+      "expiresAt": null,
+      "expiryAction": null
     }
   ],
   "pagination": { "total": 1, "pageCount": 1, "page": 1, "limit": 24 }
@@ -234,7 +235,7 @@ curl --fail-with-body --get \
 
 Empty IDs, duplicate IDs, whitespace or ASCII control characters, overlong IDs, more than 100 IDs, or repeated `ids` parameters return `400`. The regular page and limit rules still apply; omitting `limit` returns at most 24 records.
 
-The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is a timestamp or `null`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
+The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is when the file's earliest pending expiration runs, or `null`, and `expiryAction` is what that expiration does: `DELETE` or `SET_PRIVATE`, or `null` with no expiration pending. Earlier versions sent only `expiresAt`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
 
 Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
 

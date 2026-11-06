@@ -60,7 +60,8 @@
                       "user": { "urlId": "abc123" },
                       "tags": [],
                       "hasPassword": false,
-                      "expiresAt": null
+                      "expiresAt": null,
+                      "expiryAction": null
                     }
                   ],
                   "pagination": {
@@ -2060,7 +2061,16 @@
             }
           },
           "hasPassword": { "type": "boolean" },
-          "expiresAt": { "type": ["string", "null"], "format": "date-time" }
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "When the earliest pending expiration runs; null when none is pending."
+          },
+          "expiryAction": {
+            "type": ["string", "null"],
+            "enum": ["DELETE", "SET_PRIVATE", null],
+            "description": "What the pending expiration at expiresAt does: deletes the file or makes it private. Null when none is pending."
+          }
         },
         "required": [
           "id",
@@ -2076,7 +2086,8 @@
           "user",
           "tags",
           "hasPassword",
-          "expiresAt"
+          "expiresAt",
+          "expiryAction"
         ],
         "description": "Owner-scoped metadata, including private files. Password hashes, content, and OCR text are not returned.",
         "example": {
@@ -2093,7 +2104,8 @@
           "user": { "urlId": "abc123" },
           "tags": [],
           "hasPassword": false,
-          "expiresAt": null
+          "expiresAt": null,
+          "expiryAction": null
         }
       },
       "Pagination": {

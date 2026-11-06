@@ -3,7 +3,11 @@ import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { applyFileExpiration, processDueExpirations } from '@/lib/files/expiry'
+import {
+  applyFileExpiration,
+  getFilesExpirationInfo,
+  processDueExpirations,
+} from '@/lib/files/expiry'
 import { EXPIRY_EFFECTS, actionPermissions } from '@/lib/permissions/actions'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import type { StorageProvider } from '@/lib/storage'
@@ -198,6 +202,29 @@ describe('applying a due expiration', () => {
       )
     }
   )
+})
+
+describe('pending expirations for a list of files', () => {
+  it('names each file’s earliest pending time and what it does then', async () => {
+    const soon = new Date('2030-01-01T10:00:00Z')
+    const later = new Date('2030-02-01T10:00:00Z')
+    // Earliest first, as the query orders them.
+    mocks.findDue.mockResolvedValue([
+      { payload: { fileId: 'a', action: 'SET_PRIVATE' }, scheduledAt: soon },
+      { payload: { fileId: 'a', action: 'DELETE' }, scheduledAt: later },
+      { payload: { fileId: 'b', action: 'DELETE' }, scheduledAt: later },
+      { payload: { fileId: 'c' }, scheduledAt: later },
+      { payload: { fileId: 'd', action: 'DELETE' }, scheduledAt: null },
+    ])
+    expect(await getFilesExpirationInfo(['a', 'b', 'c', 'd'])).toEqual(
+      new Map([
+        ['a', { expiresAt: soon, action: ExpiryAction.SET_PRIVATE }],
+        ['b', { expiresAt: later, action: ExpiryAction.DELETE }],
+        ['c', { expiresAt: later, action: ExpiryAction.DELETE }],
+        ['d', null],
+      ])
+    )
+  })
 })
 
 describe('the expiry poller', () => {

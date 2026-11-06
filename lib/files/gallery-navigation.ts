@@ -1,6 +1,7 @@
 import type { File, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import type { FileExpiry } from '@/lib/files/expiry'
 import {
   type FileSort,
   type SortField,
@@ -27,20 +28,24 @@ export const fileListSelect = {
   },
 } satisfies Prisma.FileSelect
 
-/** A list row as the API sends it: tag names flat, the password reduced to a flag. */
+/**
+ * A list row as the API sends it: tag names flat, the password reduced to a
+ * flag, and the pending expiry's time and action.
+ */
 export function fileListItem(
   {
     password,
     tags,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
-  expiresAt: Date | null
+  expiry: FileExpiry | null
 ) {
   return {
     ...file,
     tags: tags.map(({ tag }) => tag),
     hasPassword: Boolean(password),
-    expiresAt,
+    expiresAt: expiry?.expiresAt ?? null,
+    expiryAction: expiry?.action ?? null,
   }
 }
 

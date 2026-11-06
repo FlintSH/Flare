@@ -136,6 +136,8 @@ With `files.update`, use **Manage expiration** to schedule one of two actions:
 - **Delete:** also requires `files.delete`; remove the saved file and stop the link from serving it.
 - **Set to private:** also requires `files.share`; stop public access while keeping your file and its storage usage.
 
+For a file that already has an expiration, the dialog opens with its time and its action selected. Earlier versions always selected **Delete file**, so saving a new time for a file set to become private switched it to deletion unless you chose **Set to private** again.
+
 A previously scheduled expiration keeps running if a role grant is later revoked; cancel the schedule explicitly to stop it. Expiry work runs through the server's scheduled worker. A link can remain available until that worker processes the action. Downloaded copies and external caches cannot be recalled by expiration or deletion.
 
 Changing account or profile defaults affects future uploads. To change the lifetime of a file already in the library, update that file's expiration directly. If the file is deleted while you save its expiration, for example from another tab, **Couldn’t update expiration** says **File not found**. Earlier versions said **Failed to schedule file expiry**, or reported a removed expiration as **Expiration removed**.

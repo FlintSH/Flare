@@ -875,6 +875,7 @@ export function FileCard({
         onOpenChange={setIsExpiryModalOpen}
         onConfirm={handleExpiryUpdate}
         initialDate={file.expiresAt ? new Date(file.expiresAt) : null}
+        initialAction={file.expiryAction ?? undefined}
         title="Manage expiration"
         description="Choose when this file is deleted or made private."
       />
