@@ -11,7 +11,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { Transform, addAbortSignal } from 'node:stream'
 import type { Readable } from 'node:stream'
-import { setTimeout as delay } from 'node:timers/promises'
 
 import { contentDisposition } from '@/lib/files/content-disposition'
 import { loggers } from '@/lib/logger'
@@ -158,53 +157,34 @@ export class S3StorageProvider implements StorageProvider {
       options.Range = `bytes=${range.start || 0}-${typeof range.end !== 'undefined' ? range.end : ''}`
     }
 
-    const maxRetries = 5
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      signal?.throwIfAborted()
-      try {
-        const response = await this.client.send(
-          new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: key,
-            ...options,
-          }),
-          { abortSignal: signal }
-        )
-
-        if (!response.Body) {
-          throw new Error('No file body returned from S3')
-        }
-
-        const stream = response.Body as Readable
-
-        stream.on('error', (error) => {
-          logger.error(`S3 stream error for ${key}`, error as Error, { key })
-        })
-
-        // The consumer starts reading. Resuming before it attaches discards
-        // bytes while callers prepare responses or await other work.
-        return signal ? addAbortSignal(signal, stream) : stream
-      } catch (error) {
+    signal?.throwIfAborted()
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ...options,
+    })
+    // The client itself retries what is worth retrying (maxAttempts above).
+    const response = await this.client
+      .send(command, { abortSignal: signal })
+      .catch((error: unknown) => {
+        // Report why the read was cancelled, not the client's abort error.
         signal?.throwIfAborted()
-        lastError = error as Error
-        logger.warn(`S3 getFileStream attempt ${attempt} failed`, {
-          error,
-          key,
-          attempt,
-          maxRetries,
-        })
+        throw error
+      })
 
-        if (attempt === maxRetries) {
-          throw lastError
-        }
-
-        await delay(Math.pow(2, attempt) * 1000, undefined, { signal })
-      }
+    if (!response.Body) {
+      throw new Error('No file body returned from S3')
     }
 
-    throw lastError || new Error('Failed to get file stream after retries')
+    const stream = response.Body as Readable
+
+    stream.on('error', (error) => {
+      logger.error(`S3 stream error for ${key}`, error as Error, { key })
+    })
+
+    // The consumer starts reading. Resuming before it attaches discards
+    // bytes while callers prepare responses or await other work.
+    return signal ? addAbortSignal(signal, stream) : stream
   }
 
   // S3 objects are reachable directly via a presigned/public URL, so callers
