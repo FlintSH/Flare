@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loginMetadata } from '@/lib/auth/sessions'
@@ -9,12 +8,15 @@ import {
   requesterKey,
 } from '@/lib/security/rate-limit'
 
-const database = vi.hoisted(() => ({ keys: [] as string[] }))
+const database = vi.hoisted(() => ({ counts: new Map<string, number>() }))
+// The email limit table: one counter per key, in a window that stays open.
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     $queryRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
-      database.keys.push(values.find((value) => typeof value === 'string')!)
-      return [{ count: 1, resetsIn: 3600 }]
+      const key = values.find((value) => typeof value === 'string')!
+      const count = (database.counts.get(key) ?? 0) + 1
+      database.counts.set(key, count)
+      return [{ count, resetsIn: 3600 }]
     },
   },
 }))
@@ -160,24 +162,41 @@ describe('rate limit keys', () => {
 })
 
 describe('other limiters', () => {
-  const digest = (key: string) => createHash('sha256').update(key).digest('hex')
+  // A second request that shares the first one's key is refused.
+  const oncePerHour = {
+    ...DEFAULT_EMAIL_CONFIG,
+    limits: { ...DEFAULT_EMAIL_CONFIG.limits, ipPerHour: 1 },
+  }
+
+  beforeEach(() => database.counts.clear())
 
   it('keys the email request limit on the same address', async () => {
-    database.keys.length = 0
     await limitEmailRequest(
       request({
         'x-real-ip': real,
         'x-forwarded-for': `198.51.100.3, ${real}`,
       }),
-      DEFAULT_EMAIL_CONFIG
+      oncePerHour
     )
-    expect(database.keys[0]).toBe(digest(`email:ip:${real}`))
+    await expect(
+      limitEmailRequest(
+        request({
+          'x-real-ip': real,
+          'x-forwarded-for': `198.51.100.4, ${real}`,
+        }),
+        oncePerHour
+      )
+    ).rejects.toMatchObject({ status: 429 })
+    await expect(
+      limitEmailRequest(request({ 'x-real-ip': '192.0.2.10' }), oncePerHour)
+    ).resolves.toBeUndefined()
   })
 
   it('counts email requests without an address together', async () => {
-    database.keys.length = 0
-    await limitEmailRequest(request({}), DEFAULT_EMAIL_CONFIG)
-    expect(database.keys).toEqual([digest('email:ip:unknown')])
+    await limitEmailRequest(request({}), oncePerHour)
+    await expect(
+      limitEmailRequest(request({}), oncePerHour)
+    ).rejects.toMatchObject({ status: 429 })
   })
 
   it('reads the header records NextAuth passes to sign-in providers', () => {

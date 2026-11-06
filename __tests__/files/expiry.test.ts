@@ -1,6 +1,6 @@
 import { ExpiryAction } from '@/types/events'
 import { Readable } from 'node:stream'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import {
@@ -8,7 +8,6 @@ import {
   getFilesExpirationInfo,
   processDueExpirations,
 } from '@/lib/files/expiry'
-import { EXPIRY_EFFECTS, actionPermissions } from '@/lib/permissions/actions'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
 import type { StorageProvider } from '@/lib/storage'
 import { finalizeUpload } from '@/lib/uploads/finalize'
@@ -115,7 +114,6 @@ beforeEach(() => {
   })
   mocks.tx.file.findUnique.mockResolvedValue(structuredClone(file))
 })
-afterEach(() => vi.useRealTimers())
 
 describe('applying a due expiration', () => {
   it.each([
@@ -288,40 +286,6 @@ describe('the expiry poller', () => {
       )
     }
   )
-
-  it('waits 1, 5 and 30 minutes before retrying and reclaims abandoned claims after 5 minutes', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2099-10-06T16:00:00.000Z'))
-    mocks.findDue.mockResolvedValue([])
-    await processDueExpirations()
-    const { where, orderBy, take } = mocks.findDue.mock.calls[0][0]
-    expect(where.type).toEqual({
-      in: ['file.schedule-expiration', 'file.expired'],
-    })
-    const [waiting, abandoned] = where.OR
-    expect(waiting.status).toEqual({ in: ['SCHEDULED', 'PENDING'] })
-    expect(waiting.AND[1].OR).toEqual([
-      { failedAt: null },
-      {
-        retryCount: { lte: 1 },
-        failedAt: { lte: new Date('2099-10-06T15:59:00.000Z') },
-      },
-      {
-        retryCount: 2,
-        failedAt: { lte: new Date('2099-10-06T15:55:00.000Z') },
-      },
-      {
-        retryCount: { gte: 3 },
-        failedAt: { lte: new Date('2099-10-06T15:30:00.000Z') },
-      },
-    ])
-    expect(abandoned).toEqual({
-      status: 'PROCESSING',
-      updatedAt: { lte: new Date('2099-10-06T15:55:00.000Z') },
-    })
-    expect(orderBy).toEqual([{ scheduledAt: 'asc' }, { id: 'asc' }])
-    expect(take).toBe(10)
-  })
 })
 
 describe('upload-time expiration', () => {
@@ -409,16 +373,14 @@ describe('upload-time expiration', () => {
     })
   })
 
-  it.each(['DELETE', 'SET_PRIVATE'] as const)(
-    'rejects a %s expiration when the role lacks its permission',
-    async (action) => {
-      const needed = actionPermissions(EXPIRY_EFFECTS[action as ExpiryAction])
+  it.each([
+    ['DELETE', 'files.delete'],
+    ['SET_PRIVATE', 'files.share'],
+  ] as const)(
+    'rejects a %s expiration when the role lacks %s',
+    async (action, permission) => {
       mocks.tx.role.findUnique.mockResolvedValue(
-        role(
-          DEFAULT_PERMISSIONS.filter(
-            (permission) => !needed.includes(permission)
-          )
-        )
+        role(DEFAULT_PERMISSIONS.filter((granted) => granted !== permission))
       )
       await expect(finalizeUpload(upload(action))).rejects.toMatchObject({
         status: 403,

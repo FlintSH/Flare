@@ -32,13 +32,15 @@ for (const [path, name] of [
   }))
 
 const workers = [
-  'startSecurityCleanupWorker',
   'startAuditRetentionWorker',
-  'startStorageDeletionWorker',
   'startMailWorker',
-  'startWebhookWorker',
   'startOcrTagWorker',
+  'startSecurityCleanupWorker',
+  'startStorageDeletionWorker',
+  'startWebhookWorker',
 ]
+/** The workers startup started, sorted: the order they start in doesn't matter. */
+const started = () => [...mocks.started].sort()
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -60,7 +62,7 @@ describe('startup tasks', () => {
     mocks.process.mockRejectedValue(new Error('Database unavailable'))
     const { runStartupTasks } = await import('@/lib/startup')
     await runStartupTasks()
-    expect(mocks.started).toEqual(workers)
+    expect(started()).toEqual(workers)
     // The file expiry worker's interval, which hasn't run yet.
     expect(vi.getTimerCount()).toBe(1)
     expect(mocks.process).not.toHaveBeenCalled()
@@ -75,7 +77,9 @@ describe('startup tasks', () => {
     mocks.failing = 'startSecurityCleanupWorker'
     const { runStartupTasks } = await import('@/lib/startup')
     await expect(runStartupTasks()).resolves.toBeUndefined()
-    expect(mocks.started).toEqual(workers.slice(1))
+    expect(started()).toEqual(
+      workers.filter((name) => name !== 'startSecurityCleanupWorker')
+    )
     expect(vi.getTimerCount()).toBe(1)
     expect(mocks.startup.error).toHaveBeenCalledExactlyOnceWith(
       'Startup tasks failed',
@@ -91,11 +95,11 @@ describe('startup tasks', () => {
   it('starts the memory monitor only in production', async () => {
     const { runStartupTasks } = await import('@/lib/startup')
     await runStartupTasks()
-    expect(mocks.started).toEqual(workers)
+    expect(started()).toEqual(workers)
     mocks.started.length = 0
     vi.stubEnv('NODE_ENV', 'production')
     await runStartupTasks()
-    expect(mocks.started).toEqual([...workers, 'startMemoryMonitor'])
+    expect(started()).toEqual([...workers, 'startMemoryMonitor'].sort())
   })
 
   it('warns every minute while the heap is above 1 GiB', async () => {

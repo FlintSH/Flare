@@ -89,19 +89,16 @@ describe('uploader tools in the profile editor', () => {
 })
 
 describe('saveResponseAsFile', () => {
-  const saved = vi.hoisted(() => ({
-    anchor: { href: '', download: '', click: vi.fn(), remove: vi.fn() },
-  }))
-
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
   async function save(response: Response, fallbackName: string) {
+    const anchor = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
     vi.useFakeTimers()
     vi.stubGlobal('document', {
-      createElement: () => saved.anchor,
+      createElement: () => anchor,
       body: { appendChild: vi.fn() },
     })
     const revoke = vi.fn()
@@ -113,11 +110,11 @@ describe('saveResponseAsFile', () => {
       })
     )
     await saveResponseAsFile(response, fallbackName)
-    expect(saved.anchor.click).toHaveBeenCalled()
+    expect(anchor.click).toHaveBeenCalled()
     expect(revoke).not.toHaveBeenCalled()
     vi.runAllTimers()
     expect(revoke).toHaveBeenCalledWith('blob:download')
-    return saved.anchor.download
+    return anchor.download
   }
 
   it.each([

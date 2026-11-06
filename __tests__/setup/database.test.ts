@@ -18,6 +18,9 @@ vi.mock('@/lib/security/rate-limit', () => ({
 const databaseUrl = process.env.FLARE_SETUP_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('setup contracts against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let setup: typeof import('@/app/api/setup/route')

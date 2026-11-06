@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  PREVIEW_TEXT_BYTES,
-  loadPreviewText,
-} from '@/components/file/viewer/preview-text'
+import { loadPreviewText } from '@/components/file/viewer/preview-text'
 
+// The preview limit the handbook states (guide/sharing.md).
+const MIB = 1024 * 1024
 const failed = (status?: number) => `Failed: ${status}`
 const TOO_LARGE =
   'This file is too large to preview. Download it to view all its data.'
@@ -41,21 +40,17 @@ describe('loadPreviewText', () => {
     )
   })
 
-  it('caps text, code and CSV at 1 MiB', () => {
-    expect(PREVIEW_TEXT_BYTES).toBe(1024 * 1024)
-  })
-
-  it('previews a file of exactly the cap', async () => {
-    const { body } = stream(16, PREVIEW_TEXT_BYTES / 16)
+  it('previews a file of exactly 1 MiB', async () => {
+    const { body } = stream(16, MIB / 16)
     serve(new Response(body))
     const text = await loadPreviewText('/api/files/owner/a.log', failed)
-    expect(text).toHaveLength(PREVIEW_TEXT_BYTES)
+    expect(text).toHaveLength(MIB)
   })
 
-  it('refuses a file whose stated length is over the cap', async () => {
+  it('refuses a file whose stated length is over 1 MiB', async () => {
     serve(
       new Response('a', {
-        headers: { 'content-length': String(PREVIEW_TEXT_BYTES + 1) },
+        headers: { 'content-length': String(MIB + 1) },
       })
     )
     await expect(
@@ -80,12 +75,16 @@ describe('loadPreviewText', () => {
     ).rejects.toThrow('Failed: 404')
   })
 
-  it('passes the signal to fetch', async () => {
-    const fetch = serve(new Response('x'))
-    const controller = new AbortController()
-    await loadPreviewText('/api/files/owner/a.log', failed, controller.signal)
-    expect(fetch).toHaveBeenCalledWith('/api/files/owner/a.log', {
-      signal: controller.signal,
+  it('stops loading when its signal aborts', async () => {
+    // Like fetch, the stub refuses a request whose signal has aborted.
+    vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+      init?.signal?.throwIfAborted()
+      return new Response('x')
     })
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      loadPreviewText('/api/files/owner/a.log', failed, controller.signal)
+    ).rejects.toThrow()
   })
 })

@@ -52,7 +52,6 @@ describe('creating a short link', () => {
     links.create.mockResolvedValue(stored)
     const link = await createShortLink('owner', stored.targetUrl)
     expect(link).toEqual(sent)
-    expect(Object.keys(link)).toEqual(Object.keys(stored))
     expect(links.create).toHaveBeenCalledWith({
       data: {
         shortCode: expect.stringMatching(code),

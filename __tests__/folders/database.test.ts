@@ -24,6 +24,9 @@ vi.mock('@/lib/files/expiry', () => ({
 const databaseUrl = process.env.FLARE_FOLDERS_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('vault folders against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let service: typeof import('@/lib/folders/service')

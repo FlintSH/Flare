@@ -9,7 +9,7 @@ import {
 } from '@/app/api/users/[id]/email/route'
 import { Prisma, type User } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import {
   afterAll,
   afterEach,
@@ -78,6 +78,9 @@ vi.mock('@/lib/config', async (original) => ({
   }),
 }))
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 // Deliberately opt in to a disposable migrated database; never use DATABASE_URL.
 describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
   'email account transactions (PostgreSQL)',
@@ -88,6 +91,15 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
     let savedSecret: string | undefined
 
     beforeAll(async () => {
+      // The suite deletes the settings row and users.
+      const url = new URL(process.env.FLARE_EMAIL_AUTH_DATABASE_URL!)
+      if (
+        !['localhost', '127.0.0.1'].includes(url.hostname) ||
+        url.pathname !== '/flare_email_test'
+      )
+        throw new Error(
+          'Use a disposable local database named flare_email_test for these tests.'
+        )
       savedSecret = process.env.NEXTAUTH_SECRET
       process.env.NEXTAUTH_SECRET =
         'email-account-integration-test-secret-0123456789'
@@ -237,6 +249,14 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       })
     }
 
+    /** Ends every open request-limit window; the daily sending budget is kept. */
+    async function expireRequestLimits() {
+      await prisma.emailRateLimit.updateMany({
+        where: { NOT: { key: { startsWith: 'mail:daily:' } } },
+        data: { resetAt: new Date(0) },
+      })
+    }
+
     it('requires account authentication before enrolling a legacy setup timestamp as recovery proof', async () => {
       const account = await user({
         emailVerifiedFor: null,
@@ -257,20 +277,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       }
       expect((await resend(request({}))).status).toBe(400)
       // Expire this account's cooldown between intentional negative attempts.
-      const cooldownKey = createHash('sha256')
-        .update(`email:cooldown:${account.email}`)
-        .digest('hex')
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       expect(
         (await enroll(request({ password: 'wrong-password' }))).status
       ).toBe(400)
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       const response = await enroll(request({ password: 'old-password' }))
       expect(
         response.status,
@@ -517,14 +528,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ids.push((await registered.json()).user.id)
       // Letter case still names the same mailbox. Expire the address's mail
       // cooldown so the attempt reaches the claim.
-      await prisma.emailRateLimit.update({
-        where: {
-          key: createHash('sha256')
-            .update(`email:cooldown:${address}`)
-            .digest('hex'),
-        },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       const duplicate = await register(
         request({
           email: address.toUpperCase(),
@@ -627,13 +631,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(1)
 
       // Restart under the new policy; the endpoint now sends both confirmations.
-      const cooldownKey = createHash('sha256')
-        .update(`email:cooldown:${email}`)
-        .digest('hex')
-      await prisma.emailRateLimit.update({
-        where: { key: cooldownKey },
-        data: { resetAt: new Date(0) },
-      })
+      await expireRequestLimits()
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
       ).toBe(200)

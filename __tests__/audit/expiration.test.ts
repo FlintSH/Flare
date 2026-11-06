@@ -1,6 +1,7 @@
 import { ExpiryAction } from '@/types/events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { configureAuditWriter } from '@/lib/audit'
 import {
   applyFileExpiration,
   cancelFileExpiration,
@@ -8,7 +9,6 @@ import {
 } from '@/lib/files/expiry'
 
 const mocks = vi.hoisted(() => ({
-  recordAudit: vi.fn(),
   findFile: vi.fn(),
   updateFile: vi.fn(),
   deleteFile: vi.fn(),
@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   storageDelete: vi.fn(),
 }))
-vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { $transaction: mocks.transaction },
 }))
@@ -54,9 +53,14 @@ const job = (action: ExpiryAction) => ({
   id: 'event-1',
   payload: { fileId: 'file-1', userId: 'owner-1', action },
 })
+const recorded: Record<string, unknown>[] = []
 
 beforeEach(() => {
   vi.resetAllMocks()
+  recorded.length = 0
+  configureAuditWriter(async (event) => {
+    recorded.push(event)
+  })
   mocks.findFile.mockResolvedValue(structuredClone(file))
   mocks.findEvent.mockResolvedValue(event)
   mocks.deleteEvents.mockResolvedValue({ count: 1 })
@@ -90,64 +94,70 @@ describe('file expiration audit actions', () => {
       'file-1',
       { expiresAt: expiresAt.toISOString(), action: ExpiryAction.SET_PRIVATE }
     )
-    expect(mocks.recordAudit).toHaveBeenCalledWith({
-      action: 'file.expiration.scheduled',
-      category: 'files',
-      targetType: 'file',
-      targetId: 'file-1',
-      targetName: 'receipt.pdf',
-      details: {
-        ownerId: 'owner-1',
-        expiresAt,
-        expiryAction: ExpiryAction.SET_PRIVATE,
-      },
-    })
-    expect(JSON.stringify(mocks.recordAudit.mock.calls)).not.toMatch(
+    expect(recorded).toEqual([
+      expect.objectContaining({
+        action: 'file.expiration.scheduled',
+        category: 'files',
+        targetType: 'file',
+        targetId: 'file-1',
+        targetName: 'receipt.pdf',
+        details: {
+          ownerId: 'owner-1',
+          expiresAt: expiresAt.toISOString(),
+          expiryAction: ExpiryAction.SET_PRIVATE,
+        },
+      }),
+    ])
+    expect(JSON.stringify(recorded)).not.toMatch(
       /private-password|private\/path/
     )
   })
 
   it('records actual cancellation and does not claim another cancellation after no schedules remain', async () => {
     expect(await cancelFileExpiration('owner-1', 'file-1')).toBe(true)
-    expect(mocks.recordAudit).toHaveBeenCalledWith({
-      action: 'file.expiration.cancelled',
-      category: 'files',
-      targetType: 'file',
-      targetId: 'file-1',
-      targetName: 'receipt.pdf',
-      details: {
-        ownerId: 'owner-1',
-        count: 1,
-        expiresAt,
-        expiryAction: ExpiryAction.DELETE,
-      },
-    })
-    mocks.recordAudit.mockClear()
+    expect(recorded).toEqual([
+      expect.objectContaining({
+        action: 'file.expiration.cancelled',
+        category: 'files',
+        targetType: 'file',
+        targetId: 'file-1',
+        targetName: 'receipt.pdf',
+        details: {
+          ownerId: 'owner-1',
+          count: 1,
+          expiresAt: expiresAt.toISOString(),
+          expiryAction: ExpiryAction.DELETE,
+        },
+      }),
+    ])
+    recorded.length = 0
     mocks.deleteEvents.mockResolvedValue({ count: 0 })
     expect(await cancelFileExpiration('owner-1', 'file-1')).toBe(false)
-    expect(mocks.recordAudit).not.toHaveBeenCalled()
+    expect(recorded).toEqual([])
   })
 
   it.each([ExpiryAction.DELETE, ExpiryAction.SET_PRIVATE])(
     'records autonomous applied %s only after the mutation succeeds',
     async (action) => {
       await applyFileExpiration(job(action))
-      expect(mocks.recordAudit).toHaveBeenCalledWith({
-        action: 'file.expiration.applied',
-        category: 'files',
-        actorId: null,
-        actorName: 'System',
-        targetType: 'file',
-        targetId: 'file-1',
-        targetName: 'receipt.pdf',
-        details: {
-          ownerId: 'owner-1',
-          eventId: 'event-1',
-          expiresAt,
-          expiryAction: action,
-        },
-      })
-      expect(JSON.stringify(mocks.recordAudit.mock.calls)).not.toMatch(
+      expect(recorded).toEqual([
+        expect.objectContaining({
+          action: 'file.expiration.applied',
+          category: 'files',
+          actorName: 'System',
+          targetType: 'file',
+          targetId: 'file-1',
+          targetName: 'receipt.pdf',
+          details: {
+            ownerId: 'owner-1',
+            eventId: 'event-1',
+            expiresAt: expiresAt.toISOString(),
+            expiryAction: action,
+          },
+        }),
+      ])
+      expect(recorded[0].actorId).toBeUndefined()
+      expect(JSON.stringify(recorded)).not.toMatch(
         /private-password|private\/path/
       )
     }
@@ -158,10 +168,10 @@ describe('file expiration audit actions', () => {
     await expect(applyFileExpiration(job(ExpiryAction.DELETE))).rejects.toThrow(
       'Storage failure'
     )
-    expect(mocks.recordAudit).not.toHaveBeenCalled()
+    expect(recorded).toEqual([])
     mocks.findEvent.mockResolvedValue({ ...event, status: 'COMPLETED' })
     await applyFileExpiration(job(ExpiryAction.DELETE))
-    expect(mocks.recordAudit).not.toHaveBeenCalled()
+    expect(recorded).toEqual([])
     expect(mocks.deleteFile).not.toHaveBeenCalled()
   })
 })

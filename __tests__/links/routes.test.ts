@@ -7,12 +7,11 @@ import { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type AuditInput, configureAuditWriter } from '@/lib/audit'
-import { AccessError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
 
 const mocks = vi.hoisted(() => ({
-  requireAccount: vi.fn(),
-  requireSession: vi.fn(),
+  account: vi.fn(),
+  session: vi.fn(),
   shortenedUrl: {
     create: vi.fn(),
     findMany: vi.fn(),
@@ -23,18 +22,13 @@ const mocks = vi.hoisted(() => ({
     deleteMany: vi.fn(),
   },
 }))
-vi.mock('@/lib/http/access', async () => {
-  // The session check also refuses writes from other origins.
-  const { assertBrowserWrite } = await import('@/lib/http/request')
-  return {
-    requireAccount: mocks.requireAccount,
-    requireSession: async (request: Request, ...rest: unknown[]) => {
-      const access = await mocks.requireSession(request, ...rest)
-      assertBrowserWrite(request)
-      return access
-    },
-  }
-})
+vi.mock('@/lib/auth/api-auth', () => ({
+  getAuthenticatedUser: mocks.account,
+}))
+vi.mock('@/lib/auth', () => ({
+  authOptions: {},
+  getAccessSession: mocks.session,
+}))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { shortenedUrl: mocks.shortenedUrl },
 }))
@@ -65,8 +59,14 @@ beforeEach(() => {
   configureAuditWriter(async (event) => {
     events.push(event as Partial<AuditInput>)
   })
-  mocks.requireAccount.mockResolvedValue({ id: 'owner' })
-  mocks.requireSession.mockResolvedValue({ user: { id: 'moderator' } })
+  mocks.account.mockResolvedValue({
+    id: 'owner',
+    permissions: ['links.read', 'links.create', 'links.delete'],
+    credential: 'session',
+  })
+  mocks.session.mockResolvedValue({
+    user: { id: 'moderator', permissions: ['content.read', 'content.delete'] },
+  })
 })
 
 describe('owner short-link API', () => {
@@ -76,9 +76,7 @@ describe('owner short-link API', () => {
       json('https://flare.test/api/urls', { url: stored.targetUrl })
     )
     expect(response.status).toBe(200)
-    expect(await response.text()).toBe(
-      JSON.stringify({ data: sent, success: true })
-    )
+    expect(await response.json()).toEqual({ data: sent, success: true })
   })
 
   it('answers a concurrent request that drew the same code instead of failing with 500', async () => {
@@ -166,10 +164,11 @@ describe('moderation short-link API', () => {
       urls: [{ ...listed, createdAt: sent.createdAt }],
       pagination: { total: 1, pages: 1, page: 1, limit: 10 },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith(
-      expect.any(Request),
-      'content.read'
-    )
+    // Reading another account's links takes content.read.
+    mocks.session.mockResolvedValue({
+      user: { id: 'moderator', permissions: ['content.delete'] },
+    })
+    expect((await list('')).status).toBe(403)
   })
 
   it.each([
@@ -224,10 +223,6 @@ describe('moderation short-link API', () => {
     expect(links.deleteMany).toHaveBeenCalledWith({
       where: { id: 'cm_link', userId: 'member' },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith(
-      expect.any(Request),
-      'content.delete'
-    )
 
     links.deleteMany.mockResolvedValue({ count: 0 })
     const missing = await remove()
@@ -240,13 +235,16 @@ describe('moderation short-link API', () => {
     links.deleteMany.mockClear()
     const foreign = await remove({ Origin: 'https://foreign.test' })
     expect(foreign.status).toBe(403)
+    // Deleting takes content.delete; content.read is not enough.
+    mocks.session.mockResolvedValue({
+      user: { id: 'moderator', permissions: ['content.read'] },
+    })
+    expect((await remove()).status).toBe(403)
     expect(links.deleteMany).not.toHaveBeenCalled()
   })
 
   it('answers sign-in refusals without the envelope', async () => {
-    mocks.requireSession.mockRejectedValue(
-      new AccessError(401, 'Authentication required')
-    )
+    mocks.session.mockResolvedValue(null)
     const response = await list('')
     expect(response.status).toBe(401)
     expect(await response.json()).toEqual({ error: 'Authentication required' })

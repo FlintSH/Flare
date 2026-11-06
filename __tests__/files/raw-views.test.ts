@@ -101,10 +101,6 @@ describe('raw file views', () => {
       expect(file.views).toBe(8 + i)
     }
     expect(mocks.update).toHaveBeenCalledTimes(2)
-    expect(mocks.update).toHaveBeenCalledWith({
-      where: { id: file.id },
-      data: { views: { increment: 1 } },
-    })
   })
 
   it.each(['bytes=0-2', 'bytes=4-'])(

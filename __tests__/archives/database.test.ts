@@ -90,6 +90,9 @@ const storage = {
 const databaseUrl = process.env.FLARE_ARCHIVE_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('archive publication against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let codec: typeof import('@/lib/archives/codec')

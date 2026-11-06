@@ -27,6 +27,22 @@ describe('per-process request limits', () => {
     ).toBe(429)
   })
 
+  it('refuse the request after each per-minute budget', async () => {
+    const limits = await import('@/lib/security/rate-limit')
+    for (const [limiter, budget, address] of [
+      [limits.authLimiter, 5, '198.51.100.80'],
+      [limits.setupLimiter, 3, '198.51.100.81'],
+      [limits.uploadLimiter, 30, '198.51.100.82'],
+      [limits.generalLimiter, 60, '198.51.100.83'],
+    ] as const) {
+      for (let spent = 0; spent < budget; spent++)
+        expect(await limits.rateLimit(request(address), limiter)).toBeNull()
+      const refused = await limits.rateLimit(request(address), limiter)
+      expect(refused?.status).toBe(429)
+      expect(refused?.headers.get('Retry-After')).toBe('60')
+    }
+  })
+
   it('tell a refused client to wait one whole window', async () => {
     const { rateLimit, requestLimit } =
       await import('@/lib/security/rate-limit')
@@ -38,22 +54,5 @@ describe('per-process request limits', () => {
     expect(refused?.headers.get('Content-Type')).toBe('application/json')
     expect(await refused?.json()).toEqual({ error: 'Too many requests' })
     expect(await rateLimit(request('198.51.100.72'), limiter)).toBeNull()
-  })
-
-  it('keep the documented per-minute budgets', async () => {
-    const limits = await import('@/lib/security/rate-limit')
-    expect(
-      [
-        limits.authLimiter,
-        limits.setupLimiter,
-        limits.uploadLimiter,
-        limits.generalLimiter,
-      ].map((limiter) => [limiter.points, limiter.duration])
-    ).toEqual([
-      [5, 60],
-      [3, 60],
-      [30, 60],
-      [60, 60],
-    ])
   })
 })

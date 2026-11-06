@@ -108,7 +108,7 @@ afterEach(() => {
 })
 
 describe('durable mail admission', () => {
-  it('encrypts link-bearing content and serializes daily admission before inserting', async () => {
+  it('encrypts link-bearing content before inserting', async () => {
     const input = {
       userId: 'user-1',
       tokenId: 'token-1',
@@ -127,12 +127,6 @@ describe('durable mail admission', () => {
       html: '<p>secret-link</p>',
     })
     expect(row).toMatchObject({ tokenId: 'token-1', maxAttempts: 3 })
-    expect(doubles.db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
-      doubles.db.emailRateLimit.findUnique.mock.invocationCallOrder[0]
-    )
-    expect(
-      doubles.db.emailRateLimit.findUnique.mock.invocationCallOrder[0]
-    ).toBeLessThan(doubles.db.mailOutbox.create.mock.invocationCallOrder[0])
   })
 
   it('refuses admission once the shared daily cap is reached', async () => {

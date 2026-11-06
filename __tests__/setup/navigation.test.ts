@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  SETUP_STEPS,
   getSetupResumePath,
   getSetupResumePathAfterSignIn,
   getSetupSignInPath,
   getSetupStep,
   isSetupPath,
-  isSetupResumeStep,
 } from '@/lib/setup/navigation'
 
 describe('setup continuation through authentication', () => {
@@ -75,23 +73,10 @@ describe('setup continuation through authentication', () => {
 
 describe('setup steps', () => {
   it('lets only the steps after the instance exists be resumed', () => {
-    expect(SETUP_STEPS).toEqual([
-      'account',
-      'storage',
-      'access',
-      'appearance',
-      'email',
-      'ready',
-    ])
-    expect(SETUP_STEPS.filter(isSetupResumeStep)).toEqual([
-      'appearance',
-      'email',
-      'ready',
-    ])
-    for (const step of SETUP_STEPS)
-      expect(getSetupStep(step)).toBe(
-        isSetupResumeStep(step) ? step : 'appearance'
-      )
+    for (const step of ['appearance', 'email', 'ready'])
+      expect(getSetupStep(step)).toBe(step)
+    for (const step of ['account', 'storage', 'access'])
+      expect(getSetupStep(step)).toBe('appearance')
   })
 
   it('treats the setup page and its legacy email page as setup', () => {

@@ -203,8 +203,8 @@ describe('webhook delivery contract', () => {
     const payload = testEventPayload()
     const event = { ...claimed(), eventId: payload.id, payload }
     configure(event)
+    db.file.mockResolvedValue(null)
     await deliverWebhook(event)
-    expect(db.file).not.toHaveBeenCalled()
     expect(received).toHaveLength(1)
     expect(JSON.parse(received[0].body)).toEqual(payload)
   })

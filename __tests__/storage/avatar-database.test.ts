@@ -50,6 +50,9 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite.sequential(
   'avatar publication and cleanup against isolated PostgreSQL',
   () => {

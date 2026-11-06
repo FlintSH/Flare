@@ -105,6 +105,8 @@ describe("the owner's file routes", () => {
   })
 
   it('checks the session and its permission before the body', async () => {
+    // Had the route looked the file up first, each answer would be this 404.
+    files.findUnique.mockResolvedValue(null)
     mocks.session.mockResolvedValue(null)
     const signedOut = await patch({ visibility: 'HIDDEN' })
     expect(signedOut.status).toBe(401)
@@ -117,7 +119,6 @@ describe("the owner's file routes", () => {
     const invalid = await patch({ visibility: 'HIDDEN' })
     expect(invalid.status).toBe(400)
     expect(await invalid.json()).toEqual({ error: 'Invalid request body' })
-    expect(files.findUnique).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -182,13 +183,16 @@ describe('the moderation file routes', () => {
   })
 
   it('answers a missing or foreign file with 404 instead of failing', async () => {
-    files.findUnique.mockResolvedValue(null)
+    // The file belongs to another account than the one in the route, and a
+    // lookup that names an account finds only that account's file.
+    const foreign = { ...found, userId: 'other' }
+    files.findUnique.mockImplementation(
+      async ({ where }: { where: { userId?: string } }) =>
+        (where.userId ?? foreign.userId) === foreign.userId ? foreign : null
+    )
     const response = await patch({ visibility: 'PUBLIC' })
     expect(response.status).toBe(404)
     expect(await response.json()).toEqual({ error: 'File not found' })
-    expect(files.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'file-one', userId: 'owner' } })
-    )
     expect(files.update).not.toHaveBeenCalled()
     expect(events).toEqual([
       expect.objectContaining({

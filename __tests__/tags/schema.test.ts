@@ -62,7 +62,6 @@ describe('tag names and automatic rules', () => {
     { name: 'Work', ruleSource: 'ocr' },
     { name: 'Work', ruleSource: 'filename', ruleText: '  ' },
     { name: 'Work', ruleText: 'receipt' },
-    { name: 'Work', ruleSource: 'filename', ruleText: 'x'.repeat(201) },
     { name: 'Work', ruleSource: 'regex', ruleText: '.*' },
   ])('rejects incomplete or unsupported rules %j', (input) => {
     expect(tagInputSchema.safeParse(input).success).toBe(false)

@@ -155,7 +155,6 @@ describe('integration commands', () => {
         { 'cache-control': 'no-store' },
       ])
     }
-    expect(db.tx.uploadProfile.findFirst).toHaveBeenCalledTimes(1)
     expect(db.tx.uploadProfile.findFirst).toHaveBeenCalledWith({
       where: { id: 'foreign', userId: 'owner' },
     })

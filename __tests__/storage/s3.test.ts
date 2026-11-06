@@ -1,36 +1,41 @@
-import { afterAll, describe, it } from 'vitest'
+import { afterAll, beforeAll, describe } from 'vitest'
 
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
 
 import { createInMemoryS3 } from './helpers/in-memory-s3'
 import { runStorageProviderContract } from './provider-contract'
 
-// A single in-memory S3 backend services the whole suite. Handlers are
-// registered once; unique per-test paths keep tests isolated.
-const s3 = createInMemoryS3()
-
-afterAll(() => {
-  s3.restore()
-})
-
-runStorageProviderContract('s3 (in-memory)', async () => {
-  const provider = new S3StorageProvider({
-    bucket: 'test-bucket',
-    region: 'us-east-1',
-    accessKeyId: 'test',
-    secretAccessKey: 'test',
-    endpoint: 'http://localhost:9000',
-    forcePathStyle: true,
+// The in-memory backend replaces every S3Client's requests, so it must be gone
+// before the real-endpoint run below starts. Unique per-test paths keep tests
+// isolated.
+describe('in-memory S3 backend', () => {
+  let s3: ReturnType<typeof createInMemoryS3>
+  beforeAll(() => {
+    s3 = createInMemoryS3()
+  })
+  afterAll(() => {
+    s3.restore()
   })
 
-  return {
-    provider,
-    prefix: 'uploads/contract',
-    cleanup: async () => {
-      // Data persists across tests (unique paths avoid collisions); nothing
-      // to tear down between cases.
-    },
-  }
+  runStorageProviderContract('s3 (in-memory)', async () => {
+    const provider = new S3StorageProvider({
+      bucket: 'test-bucket',
+      region: 'us-east-1',
+      accessKeyId: 'test',
+      secretAccessKey: 'test',
+      endpoint: 'http://localhost:9000',
+      forcePathStyle: true,
+    })
+
+    return {
+      provider,
+      prefix: 'uploads/contract',
+      cleanup: async () => {
+        // Data persists across tests (unique paths avoid collisions); nothing
+        // to tear down between cases.
+      },
+    }
+  })
 })
 
 // Opt-in run against a real S3-compatible endpoint (AWS, MinIO, etc.). Set the
@@ -65,9 +70,5 @@ if (realS3Configured) {
         // bucket; no teardown required between cases.
       },
     }
-  })
-} else {
-  describe.skip('StorageProvider contract: s3 (real endpoint) [set TEST_S3_* to enable]', () => {
-    it('skipped', () => {})
   })
 }

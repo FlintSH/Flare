@@ -104,9 +104,17 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllEnvs())
 
-/** The file name after the account-name prefix, with default options. */
-const fileName = <Id extends UploaderClientId>(id: Id) =>
-  uploaderClients[id].fileName(uploaderClients[id].defaults)
+/**
+ * Each download's type, and its file name after the account-name prefix,
+ * with default options.
+ */
+const downloads: Record<UploaderClientId, { type: string; name: string }> = {
+  sharex: { type: 'application/json', name: 'sharex.sxcu' },
+  itake: { type: 'application/json', name: 'itake.itup' },
+  flameshot: { type: 'text/plain', name: 'flameshot.sh' },
+  spectacle: { type: 'text/plain', name: 'spectacle-screenshot.sh' },
+  bash: { type: 'text/plain', name: 'upload.sh' },
+}
 
 /** Downloads a client the way the dashboard asks for it. */
 function download<Id extends UploaderClientId>(
@@ -131,11 +139,9 @@ async function uploadRequest(
   profileName = 'Account defaults'
 ) {
   expect(response.status).toBe(200)
-  expect(response.headers.get('content-type')).toBe(
-    uploaderClients[id].contentType
-  )
+  expect(response.headers.get('content-type')).toBe(downloads[id].type)
   expect(response.headers.get('content-disposition')).toBe(
-    `attachment; filename="screenshot-user-${fileName(id)}"`
+    `attachment; filename="screenshot-user-${downloads[id].name}"`
   )
   // Every download carries the account upload token.
   expect(response.headers.get('cache-control')).toBe('private, no-store')
@@ -343,7 +349,7 @@ describe.each(clients)('$name setup download', ({ id }) => {
     const response = await download(id)
     expect(response.status).toBe(200)
     expect(response.headers.get('content-disposition')).toBe(
-      `attachment; filename="jane--mac---user-${fileName(id)}"`
+      `attachment; filename="jane--mac---user-${downloads[id].name}"`
     )
   })
 })

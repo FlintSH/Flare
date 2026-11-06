@@ -41,6 +41,9 @@ vi.mock('@/lib/storage', () => ({
 const databaseUrl = process.env.FLARE_AUDIT_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite.sequential('audit against disposable PostgreSQL', () => {
   let base: PrismaClient
   let prisma: PrismaClient
@@ -382,7 +385,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         where: { action: 'file.deleteMany', targetId: 'file-1004' },
       })
     ).toMatchObject({ targetName: 'invoice-1004.pdf' })
-  }, 30000)
+  })
 
   it('records rows a cascade will delete in the caller’s transaction, with the request’s context', async () => {
     const { recordCascadedDeletes } = await import('@/lib/audit')

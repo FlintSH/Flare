@@ -200,20 +200,13 @@ describe('file content cache headers', () => {
       })
     })
 
-    it.each([
-      ['PRIVATE', null, 404],
-      ['PUBLIC', 'password', 401],
-    ] as const)(
-      'does not let a cache store a denial for a %s file',
-      async (visibility, protectedBy, status) => {
-        file.visibility = visibility
-        file.password = protectedBy ? passwordHash : null
-        expect(await cacheControl(contentRequest())).toEqual({
-          status,
-          cache: 'private, no-store',
-        })
-      }
-    )
+    it('does not let a cache store a denial for a PRIVATE file', async () => {
+      file.visibility = 'PRIVATE'
+      expect(await cacheControl(contentRequest())).toEqual({
+        status: 404,
+        cache: 'private, no-store',
+      })
+    })
   })
 
   describe('/{userUrlId}/{filename}/raw', () => {

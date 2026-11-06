@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { requestedExportId } from '@/lib/users/export-id'
+
 import { useDataExport } from '@/hooks/use-data-export'
 
 // Keeps hook state across explicit renders without a browser renderer.
@@ -113,10 +115,10 @@ describe('account data export in the browser', () => {
     const progress = url(FakeEventSource.opened[0].url)
     expect(download.pathname).toBe('/api/profile/export')
     expect(progress.pathname).toBe('/api/profile/export/progress')
-    expect(download.searchParams.get('id')).toMatch(/^[0-9a-f]{32}$/)
-    expect(progress.searchParams.get('id')).toBe(
-      download.searchParams.get('id')
-    )
+    // The routes refuse an id they can't use with a 400.
+    const id = requestedExportId(new Request(download))
+    expect(id).not.toBeNull()
+    expect(requestedExportId(new Request(progress))).toBe(id)
 
     body.enqueue(new Uint8Array([80, 75, 5, 6]))
     body.close()

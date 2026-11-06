@@ -17,6 +17,9 @@ import {
 const databaseUrl = process.env.FLARE_EXPIRY_DATABASE_URL
 const suite = databaseUrl ? describe : describe.skip
 
+// Real queries; a full parallel run can take one past the 5 s default.
+vi.setConfig({ testTimeout: 30_000 })
+
 suite('file expiry against disposable PostgreSQL', () => {
   let prisma: typeof import('@/lib/database/prisma').prisma
   let expiry: typeof import('@/lib/files/expiry')

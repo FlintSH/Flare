@@ -66,7 +66,15 @@ const file = {
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.requireAccount.mockResolvedValue(owner())
-  mocks.findFile.mockResolvedValue(file)
+  // A query finds the file only if the file has every value the query names.
+  mocks.findFile.mockImplementation(
+    async ({ where }: { where: Record<string, unknown> }) =>
+      Object.entries(where).every(
+        ([key, value]) => file[key as keyof typeof file] === value
+      )
+        ? file
+        : null
+  )
   mocks.findEvents.mockResolvedValue([
     { payload: { fileId: 'file-1' }, scheduledAt: new Date(deadline) },
   ])
@@ -79,9 +87,6 @@ describe('file expiry route', () => {
     expect(await response.json()).toEqual({
       success: true,
       data: { expiresAt: deadline },
-    })
-    expect(mocks.findFile).toHaveBeenCalledWith({
-      where: { id: 'file-1', userId: 'owner-1' },
     })
     mocks.findEvents.mockResolvedValue([])
     const empty = await GET(new Request(url), context)
@@ -167,12 +172,16 @@ describe('file expiry route', () => {
   })
 
   it('answers 404 for a file the requester doesn’t own, or that is gone by the time it is locked', async () => {
-    mocks.findFile.mockResolvedValue(null)
-    for (const response of [
+    const answers = async () => [
       await GET(new Request(url), context),
       await schedule({ expiresAt: deadline }),
       await cancel(),
-    ]) {
+    ]
+    mocks.requireAccount.mockResolvedValue({ ...owner(), id: 'owner-2' })
+    const notOwned = await answers()
+    mocks.requireAccount.mockResolvedValue(owner())
+    mocks.findFile.mockResolvedValue(null)
+    for (const response of [...notOwned, ...(await answers())]) {
       expect(response.status).toBe(404)
       expect(await response.json()).toEqual({
         success: false,
@@ -183,14 +192,11 @@ describe('file expiry route', () => {
     expect(mocks.deleteEvents).not.toHaveBeenCalled()
   })
 
-  it('cancels only the requesting owner’s file', async () => {
+  it('cancels the requesting owner’s file', async () => {
     const response = await cancel()
     expect(await response.json()).toEqual({
       success: true,
       data: { message: 'File expiration cancelled', cancelled: true },
-    })
-    expect(mocks.findFile).toHaveBeenCalledWith({
-      where: { id: 'file-1', userId: 'owner-1' },
     })
     mocks.deleteEvents.mockResolvedValue({ count: 0 })
     expect(await (await cancel()).json()).toEqual({

@@ -155,7 +155,6 @@ describe('upload profile requests', () => {
     )
     expect(chosen.status).toBe(404)
     expect(await chosen.json()).toEqual({ error: 'Profile not found.' })
-    expect(database.$queryRaw).toHaveBeenCalledTimes(1)
     expect(database.user.update).not.toHaveBeenCalled()
   })
 
@@ -189,10 +188,9 @@ describe('tag deletion and saved profiles', () => {
     expect(database.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       database.vaultTag.deleteMany.mock.invocationCallOrder[0]
     )
-    expect(database.uploadProfile.findMany).toHaveBeenCalledWith({
-      where: { userId: 'alice' },
-      select: { id: true, options: true },
-    })
+    expect(database.uploadProfile.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'alice' } })
+    )
     expect(database.uploadProfile.update).toHaveBeenCalledTimes(1)
     expect(database.uploadProfile.update).toHaveBeenCalledWith({
       where: { id: 'work' },

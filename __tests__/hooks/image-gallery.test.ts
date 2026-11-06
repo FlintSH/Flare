@@ -1,5 +1,5 @@
 import type { FileType } from '@/types/components/file'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { LibraryFilters } from '@/lib/library/contract'
 import type { GalleryPage } from '@/lib/library/gallery'
@@ -11,7 +11,7 @@ const harness = vi.hoisted(() => ({
   cursor: 0,
   dirty: false,
   effects: [] as (() => void)[],
-  adjacentImagePage: vi.fn(),
+  fetch: vi.fn(),
   toast: vi.fn(),
 }))
 
@@ -69,14 +69,12 @@ vi.mock('react', () => ({
   },
 }))
 
-vi.mock('@/lib/library/gallery', () => ({
-  adjacentImagePage: harness.adjacentImagePage,
-}))
 vi.mock('@/hooks/use-toast', () => ({ toast: harness.toast }))
 
 const filters: LibraryFilters = {
   folder: null,
-  tag: null,
+  // Not a default, so the neighbor request shows whether it carries the filters.
+  tag: 'trips',
   search: '',
   types: [],
   visibility: [],
@@ -126,19 +124,44 @@ function render(props: HookProps = initialProps) {
   return result
 }
 
+const pageResponse = ({ files, pagination }: GalleryPage) =>
+  Response.json({ data: files, pagination })
+
+/** Answers the next neighbor request as `GET /api/files` does; null is a 404. */
+function answer(page: GalleryPage | null) {
+  harness.fetch.mockResolvedValueOnce(
+    page ? pageResponse(page) : new Response(null, { status: 404 })
+  )
+}
+
 function pendingPage() {
   let resolve!: (page: GalleryPage) => void
-  const promise = new Promise<GalleryPage>((complete) => {
-    resolve = complete
-  })
-  harness.adjacentImagePage.mockReturnValueOnce(promise)
+  harness.fetch.mockReturnValueOnce(
+    new Promise<Response>((complete) => {
+      resolve = (page) => complete(pageResponse(page))
+    })
+  )
   return { resolve }
+}
+
+function neighborRequest(call: number) {
+  const [url, init] = harness.fetch.mock.calls[call] as [string, RequestInit]
+  const query = new URL(url, 'http://localhost').searchParams
+  return {
+    anchor: query.get('galleryAnchor'),
+    direction: query.get('galleryDirection'),
+    tag: query.get('tag'),
+    signal: init.signal as AbortSignal,
+  }
 }
 
 beforeEach(() => {
   harness.slots = []
   vi.clearAllMocks()
+  vi.stubGlobal('fetch', harness.fetch)
 })
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('image gallery refresh lifecycle', () => {
   it('opens on the chosen image alone and finds its neighbors by its ID', async () => {
@@ -150,14 +173,14 @@ describe('image gallery refresh lifecycle', () => {
       atStart: false,
       atEnd: false,
     })
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('third')],
       pagination: { ...pagination, page: 2, offset: 2 },
     })
     await render().move(1)
-    expect(harness.adjacentImagePage.mock.calls[0][0]).toMatchObject({
-      anchorId: 'second',
-      direction: 1,
+    expect(neighborRequest(0)).toMatchObject({
+      anchor: 'second',
+      direction: 'next',
     })
     expect(render().gallery?.files[0].id).toBe('third')
     expect(render().gallery?.pagination?.offset).toBe(2)
@@ -180,16 +203,16 @@ describe('image gallery refresh lifecycle', () => {
   it('anchors a shifted page boundary to the current image instead of its old page number', async () => {
     render().open(files[1])
     const props = { ...initialProps, refreshKey: 1 }
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('third'), file('fourth')],
       pagination: { ...pagination, total: 7, pageCount: 4, page: 2, offset: 3 },
     })
 
     await render(props).move(1)
-    expect(harness.adjacentImagePage.mock.calls[0][0]).toMatchObject({
-      anchorId: 'second',
-      direction: 1,
-      filters,
+    expect(neighborRequest(0)).toMatchObject({
+      anchor: 'second',
+      direction: 'next',
+      tag: 'trips',
     })
     expect(render(props).gallery?.files[0].id).toBe('third')
     expect(render(props).gallery?.pagination?.offset).toBe(3)
@@ -197,7 +220,7 @@ describe('image gallery refresh lifecycle', () => {
   })
 
   it('re-anchors even within a loaded window when refresh removes the next image', async () => {
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('second'), file('third')],
       pagination: { ...pagination, offset: 1 },
     })
@@ -208,17 +231,17 @@ describe('image gallery refresh lifecycle', () => {
       files: [files[0], file('second')],
       refreshKey: 1,
     }
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('fourth')],
       pagination: { ...pagination, offset: 2 },
     })
     await render(props).move(1)
-    expect(harness.adjacentImagePage.mock.calls[1][0].anchorId).toBe('second')
+    expect(neighborRequest(1).anchor).toBe('second')
     expect(render(props).gallery?.files[0].id).toBe('fourth')
   })
 
   it('allows a refreshed start boundary to discover newly uploaded predecessors', async () => {
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [],
       pagination: { ...pagination, offset: 0 },
     })
@@ -226,10 +249,10 @@ describe('image gallery refresh lifecycle', () => {
     await render().move(-1)
     expect(render().gallery?.atStart).toBe(true)
     await render().move(-1)
-    expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
+    expect(harness.fetch).toHaveBeenCalledTimes(1)
 
     const props = { ...initialProps, refreshKey: 1 }
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('newer'), file('new')],
       pagination: { ...pagination, offset: 0 },
     })
@@ -241,7 +264,7 @@ describe('image gallery refresh lifecycle', () => {
   })
 
   it('keeps local navigation immediate while the library is unchanged', async () => {
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('second'), file('third')],
       pagination: { ...pagination, offset: 1 },
     })
@@ -249,7 +272,7 @@ describe('image gallery refresh lifecycle', () => {
     await render().move(1)
     await render().move(1)
     expect(render().gallery?.files[render().gallery!.index].id).toBe('third')
-    expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
+    expect(harness.fetch).toHaveBeenCalledTimes(1)
   })
 
   it.each([-1, 1] as const)(
@@ -257,7 +280,7 @@ describe('image gallery refresh lifecycle', () => {
     async (direction) => {
       render().open(files[1])
       const props = { ...initialProps, refreshKey: 1 }
-      harness.adjacentImagePage.mockResolvedValueOnce({
+      answer({
         files: [],
         pagination: { ...pagination, total: 1, pageCount: 1, offset: 0 },
       })
@@ -269,14 +292,14 @@ describe('image gallery refresh lifecycle', () => {
       expect(gallery.atEnd).toBe(true)
       expect(render(props).navigationStale).toBe(false)
       await render(props).move(direction)
-      expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
+      expect(harness.fetch).toHaveBeenCalledTimes(1)
     }
   )
 
   it('closes if a refreshed active image is no longer in the filtered results', async () => {
     render().open(files[0])
     const props = { ...initialProps, refreshKey: 1 }
-    harness.adjacentImagePage.mockResolvedValueOnce(null)
+    answer(null)
     await render(props).move(1)
     expect(render(props).gallery).toBeNull()
     expect(render(props).navigationPending).toBe(false)
@@ -289,7 +312,7 @@ describe('image gallery refresh lifecycle', () => {
 
   it('does not replace a later gallery page with a refreshed first grid page', async () => {
     const third = file('third')
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [third, file('fourth')],
       pagination: { ...pagination, page: 2, offset: 2 },
     })
@@ -303,15 +326,14 @@ describe('image gallery refresh lifecycle', () => {
 
     expect(refreshed.gallery).toBe(before)
     expect(refreshed.gallery?.pagination?.page).toBe(2)
-    expect(refreshed.gallery?.files[refreshed.gallery.index]).toBe(third)
+    expect(refreshed.gallery?.files[refreshed.gallery.index]).toEqual(third)
   })
 
   it('lets explicit image navigation complete through a background grid refresh', async () => {
     const next = pendingPage()
     render().open(files[1])
     const navigation = render().move(1)
-    const signal = harness.adjacentImagePage.mock.calls[0][0]
-      .signal as AbortSignal
+    const { signal } = neighborRequest(0)
     const refreshedProps = {
       ...initialProps,
       files: [file('new-upload'), file('first')],
@@ -330,12 +352,12 @@ describe('image gallery refresh lifecycle', () => {
     expect(render(refreshedProps).gallery?.files[0].id).toBe('third')
     expect(render(refreshedProps).navigationPending).toBe(false)
     expect(render(refreshedProps).navigationStale).toBe(true)
-    harness.adjacentImagePage.mockResolvedValueOnce({
+    answer({
       files: [file('inserted-between')],
       pagination: { ...pagination, page: 2, offset: 3 },
     })
     await render(refreshedProps).move(1)
-    expect(harness.adjacentImagePage.mock.calls[1][0].anchorId).toBe('third')
+    expect(neighborRequest(1).anchor).toBe('third')
     expect(render(refreshedProps).gallery?.files[0].id).toBe('inserted-between')
     expect(render(refreshedProps).navigationStale).toBe(false)
   })
@@ -344,8 +366,7 @@ describe('image gallery refresh lifecycle', () => {
     const next = pendingPage()
     render().open(files[1])
     const navigation = render().move(1)
-    const signal = harness.adjacentImagePage.mock.calls[0][0]
-      .signal as AbortSignal
+    const { signal } = neighborRequest(0)
     const filteredProps = {
       ...initialProps,
       filters: { ...filters, search: 'holiday' },

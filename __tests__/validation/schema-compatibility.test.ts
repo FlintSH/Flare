@@ -66,12 +66,21 @@ describe('schema behavior kept across the Zod 4 upgrade', () => {
     ).inviteLimits
 
     const upgraded = configSchema.parse(legacy)
+    // Not DEFAULT_CONFIG: it is parsed from settings that lack these sections
+    // too, so it would be missing the same defaults.
     expect(upgraded.settings.customization).toEqual(
-      DEFAULT_CONFIG.settings.customization
+      customizationSchema.parse({})
     )
-    expect(upgraded.settings.general.oidc).toEqual(
-      DEFAULT_CONFIG.settings.general.oidc
-    )
+    expect(upgraded.settings.general.oidc).toEqual({
+      enabled: false,
+      issuer: '',
+      clientId: '',
+      clientSecret: '',
+      buttonText: 'Sign in with SSO',
+      autoProvision: true,
+      requireEmailVerified: true,
+      enforceSso: false,
+    })
     expect(upgraded.settings.general.registrations.inviteLimits).toEqual({
       activeInvites: 5,
       usesPerInvite: 1,

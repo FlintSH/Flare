@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   tx: {
     $executeRaw: vi.fn(),
     user: {
-      count: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -53,7 +52,6 @@ function emailConfig(changes: Partial<EmailConfig> = {}): EmailConfig {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.tx.user.count.mockResolvedValue(3)
   mocks.tx.user.findFirst.mockResolvedValue(null)
   mocks.tx.user.findMany.mockResolvedValue([])
   mocks.tx.user.findUnique.mockResolvedValue(null)
@@ -107,7 +105,7 @@ describe('createAccount', () => {
   })
 
   it('makes the first account an administrator and mints its upload token', async () => {
-    mocks.tx.user.count.mockResolvedValue(0)
+    // findFirst finds no account, so setup has not created one yet.
     await createAccount(tx, { ...account, roleIds: ['moderator'] })
     const { data } = mocks.tx.user.create.mock.calls[0][0]
     expect(data.roles).toEqual({

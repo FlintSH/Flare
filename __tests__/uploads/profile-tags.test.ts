@@ -94,6 +94,8 @@ describe('upload profile tag ownership', () => {
   })
 
   it('keeps recipes without tags compatible and permits clearing all selected tags', async () => {
+    // What the database answers when no tags are selected.
+    database.vaultTag.count.mockResolvedValue(0)
     const response = await POST(request({ ...profile, options: {} }))
     expect(response.status).toBe(201)
     const edited = await PUT(
@@ -101,7 +103,6 @@ describe('upload profile tag ownership', () => {
       { params: Promise.resolve({ id: 'profile' }) }
     )
     expect(edited.status).toBe(200)
-    expect(database.vaultTag.count).not.toHaveBeenCalled()
     expect(database.uploadProfile.updateMany).toHaveBeenCalledWith({
       where: { id: 'profile', userId: 'alice', updatedAt: new Date(revision) },
       data: { ...profile, options: { tagIds: [] } },

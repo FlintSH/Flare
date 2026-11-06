@@ -76,28 +76,19 @@ describe('changing file settings', () => {
     await expect(
       updateFileSettings(owner, 'file-one', { visibility: 'PUBLIC' })
     ).rejects.toMatchObject({ status: 401, message: 'Unauthorized' })
-    expect(files.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'file-one' } })
-    )
     expect(files.update).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['its owner', owner, { id: 'file-one' }],
-    ['a moderator', moderator, { id: 'file-one', userId: 'owner' }],
-  ])(
-    'reports a missing file to %s as 404',
-    async (_actor, authority, where) => {
-      files.findUnique.mockResolvedValue(null)
-      await expect(
-        updateFileSettings(authority, 'file-one', { visibility: 'PUBLIC' })
-      ).rejects.toMatchObject({ status: 404, message: 'File not found' })
-      expect(files.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where })
-      )
-      expect(files.update).not.toHaveBeenCalled()
-    }
-  )
+    ['its owner', owner],
+    ['a moderator', moderator],
+  ])('reports a missing file to %s as 404', async (_actor, authority) => {
+    files.findUnique.mockResolvedValue(null)
+    await expect(
+      updateFileSettings(authority, 'file-one', { visibility: 'PUBLIC' })
+    ).rejects.toMatchObject({ status: 404, message: 'File not found' })
+    expect(files.update).not.toHaveBeenCalled()
+  })
 
   it('writes only the fields a request sends, hashing a new password', async () => {
     await updateFileSettings(owner, 'file-one', { visibility: 'PRIVATE' })
@@ -160,9 +151,6 @@ describe('deleting a file', () => {
     'lets %s remove the bytes, the record and its storage use',
     async (_actor, authority, where) => {
       const request = await remove(authority)
-      expect(files.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where })
-      )
       expect(mocks.removeBytes).toHaveBeenCalledWith('owner/meeting-notes.txt')
       expect(mocks.tx.file.delete).toHaveBeenCalledWith({ where })
       expect(mocks.tx.user.update).toHaveBeenCalledWith({
@@ -213,12 +201,21 @@ describe('deleting a file', () => {
 
   it.each([
     ['a missing file', null, owner, 404],
-    ['a missing or foreign moderated file', null, moderator, 404],
+    [
+      'a moderated file of another account',
+      { ...found, userId: 'other' },
+      moderator,
+      404,
+    ],
     ["another account's file", { ...found, userId: 'other' }, owner, 401],
   ])(
     'touches neither storage nor the record for %s',
     async (_case, file, authority, status) => {
-      files.findUnique.mockResolvedValue(file)
+      // A lookup that names an account finds only that account's file.
+      files.findUnique.mockImplementation(
+        async ({ where }: { where: { userId?: string } }) =>
+          file && (where.userId ?? file.userId) === file.userId ? file : null
+      )
       await expect(deleteFile(authority, 'file-one')).rejects.toMatchObject({
         status,
       })

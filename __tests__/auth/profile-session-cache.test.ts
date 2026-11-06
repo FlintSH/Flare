@@ -123,7 +123,6 @@ beforeEach(() => {
   renderToStaticMarkup(
     createElement(QueryProvider, null, createElement(CaptureClient))
   )
-  expect(client.getDefaultOptions().queries?.staleTime).toBe(5 * 60 * 1000)
   authenticate('alice')
   vi.stubGlobal('fetch', vi.fn())
 })
@@ -166,7 +165,6 @@ describe('profile activity query ownership', () => {
     expectAbsent(html, 'alice')
     expect(html).not.toContain('Revoke session')
     expect(html).not.toContain('Load more attempts')
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('keeps activity on screen while a session refresh is loading', () => {
@@ -178,7 +176,6 @@ describe('profile activity query ownership', () => {
     expect(html).toContain('alice-private-user-agent')
     expect(html).toContain('Load more attempts')
     expect(latestKeys()).toEqual(keys)
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('does not inherit current-session markers after the same account signs in with a new browser session', () => {
@@ -257,7 +254,7 @@ describe('adjacent sign-in security query ownership', () => {
     expect(latestSecurityKey()).not.toEqual(bob)
   })
 
-  it('hides sign-in controls and hook data once signed out, even with a populated account cache', () => {
+  it('hides sign-in controls and hook data once signed out, even with a populated account cache', async () => {
     render(SignInSecurity)
     seedSecurity(latestSecurityKey(), 'alice')
     auth.status = 'unauthenticated'
@@ -277,7 +274,10 @@ describe('adjacent sign-in security query ownership', () => {
       ...query.options,
       queryKey: query.queryKey,
     })
-    expect(observer.options.enabled).toBe(false)
+    const unsubscribe = observer.subscribe(() => {})
+    await Promise.resolve()
+    unsubscribe()
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('ignores legacy unscoped security status retained by the root query provider', () => {
@@ -397,7 +397,7 @@ describe('library association query ownership', () => {
     expect(keys()).not.toEqual(bob)
   })
 
-  it('hides association caches and removes query identity once signed out even with stale session data', () => {
+  it('hides association caches and removes query identity once signed out even with stale session data', async () => {
     render(LibraryAssociations)
     seedAssociations('alice')
     auth.status = 'unauthenticated'
@@ -411,8 +411,11 @@ describe('library association query ownership', () => {
         ...query.options,
         queryKey: key,
       })
-      expect(observer.options.enabled).toBe(false)
+      const unsubscribe = observer.subscribe(() => {})
+      await Promise.resolve()
+      unsubscribe()
     }
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -480,7 +483,6 @@ describe('session refresh', () => {
     auth.status = 'authenticated'
     expect(render(AccountData)).toContain('alice-display-name')
     expect(probes()).toEqual([key])
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('keeps sign-in security data under the same key during the refresh', () => {

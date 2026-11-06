@@ -138,12 +138,10 @@ describe('favicon upload, serving and page links', () => {
     const first = await upload(png, 'image/png', { Origin: 'http://localhost' })
     expect(first.status).toBe(200)
     const { url: firstUrl } = await first.json()
-    expect(firstUrl).toBe(`/api/favicon?v=${version(png)}`)
     expect(state.favicon).toBe(firstUrl)
 
     const second = await upload(otherPng)
     const { url: secondUrl } = await second.json()
-    expect(secondUrl).toBe(`/api/favicon?v=${version(otherPng)}`)
     expect(secondUrl).not.toBe(firstUrl)
     expect(state.favicon).toBe(secondUrl)
     expect(await stored()).toEqual(otherPng)
@@ -179,15 +177,16 @@ describe('favicon upload, serving and page links', () => {
   })
 
   it('answers 404 when no favicon is saved or its bytes are gone', async () => {
-    const read = vi.spyOn(provider, 'getFileStream')
-    const none = await fetchIcon('/api/favicon')
-    expect(none.status).toBe(404)
-    expect(read).not.toHaveBeenCalled()
-
     state.favicon = '/api/favicon?v=0123456789abcdef'
     const missing = await fetchIcon(state.favicon)
     expect(missing.status).toBe(404)
     expect(await missing.text()).toBe('')
+
+    // Bytes left in storage are not served once no favicon is saved.
+    await provider.uploadFile(png, 'uploads/favicon.png', 'image/png')
+    state.favicon = null
+    const none = await fetchIcon('/api/favicon')
+    expect(none.status).toBe(404)
   })
 
   it('still redirects to the object when storage gives it an address', async () => {

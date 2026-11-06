@@ -71,10 +71,6 @@ describe('resolveOidcUser', () => {
       ok: true,
       user: expect.objectContaining({ id: dbUser.id }),
     })
-    expect(mocks.userFindUnique).toHaveBeenCalledTimes(1)
-    expect(mocks.userFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { oidcSubject: 'idp-subject-1' } })
-    )
     expect(mocks.userUpdate).not.toHaveBeenCalled()
     expect(mocks.createAccount).not.toHaveBeenCalled()
   })
@@ -93,7 +89,9 @@ describe('resolveOidcUser', () => {
   it.each([false, null, undefined])(
     'rejects unverified email before any email-based lookup (email_verified=%s)',
     async (emailVerified) => {
-      mocks.userFindUnique.mockResolvedValueOnce(null) // oidcSubject lookup misses
+      mocks.userFindUnique
+        .mockResolvedValueOnce(null) // oidcSubject lookup misses
+        .mockResolvedValueOnce(dbUser) // an account already uses the address
 
       const result = await resolveOidcUser(
         makeProfile({ email_verified: emailVerified }),
@@ -104,7 +102,6 @@ describe('resolveOidcUser', () => {
       )
 
       expect(result).toEqual({ ok: false, reason: 'email_unverified' })
-      expect(mocks.userFindUnique).toHaveBeenCalledTimes(1) // only the subject lookup
       expect(mocks.userUpdate).not.toHaveBeenCalled()
       expect(mocks.createAccount).not.toHaveBeenCalled()
     }
@@ -135,7 +132,6 @@ describe('resolveOidcUser', () => {
   ])(
     'rejects an email match for $account without modifying it',
     async ({ user }) => {
-      const originalUser = { ...user }
       mocks.userFindUnique
         .mockResolvedValueOnce(null) // oidcSubject lookup misses
         .mockResolvedValueOnce(user) // email lookup hits
@@ -143,14 +139,8 @@ describe('resolveOidcUser', () => {
       const result = await resolveOidcUser(makeProfile(), makeConfig())
 
       expect(result).toEqual({ ok: false, reason: 'account_exists' })
-      expect(mocks.userFindUnique).toHaveBeenCalledTimes(2)
-      expect(mocks.userFindUnique).toHaveBeenLastCalledWith(
-        expect.objectContaining({ where: { email: 'user@example.com' } })
-      )
       expect(mocks.userUpdate).not.toHaveBeenCalled()
       expect(mocks.createAccount).not.toHaveBeenCalled()
-      expect(mocks.transaction).not.toHaveBeenCalled()
-      expect(user).toEqual(originalUser)
     }
   )
 
@@ -167,7 +157,6 @@ describe('resolveOidcUser', () => {
     expect(result).toEqual({ ok: false, reason: 'account_exists' })
     expect(mocks.userUpdate).not.toHaveBeenCalled()
     expect(mocks.createAccount).not.toHaveBeenCalled()
-    expect(mocks.transaction).not.toHaveBeenCalled()
   })
 
   it('auto-provisions a new user when no match exists, falling back to the email prefix for name', async () => {

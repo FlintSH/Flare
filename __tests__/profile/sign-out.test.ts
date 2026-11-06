@@ -110,16 +110,17 @@ function render() {
   return ProfileDeleteAccount()
 }
 
-/** Chooses Delete account permanently and waits for the dialog to settle. */
+const confirmButton = () =>
+  find(render(), (element) => element.type === AlertDialogAction)!
+
+/** Chooses Delete account permanently and waits until it can be chosen again. */
 async function deleteAccount() {
-  const confirm = find(
-    render(),
-    (element) => element.type === AlertDialogAction
-  )
-  ;(confirm!.props.onClick as (event: { preventDefault(): void }) => void)({
+  ;(
+    confirmButton().props.onClick as (event: { preventDefault(): void }) => void
+  )({
     preventDefault() {},
   })
-  await vi.waitFor(() => expect(harness.slots[0]).toBe(false))
+  await vi.waitFor(() => expect(confirmButton().props.disabled).toBe(false))
 }
 
 const shownError = () =>

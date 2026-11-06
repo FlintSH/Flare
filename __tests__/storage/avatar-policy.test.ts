@@ -68,7 +68,6 @@ afterEach(() => avatars.uploadAvatar.mockClear())
 
 describe('avatar policy shared by the profile control and the upload route', () => {
   it('accepts the four formats every browser shows, up to 2 MB', () => {
-    expect(AVATAR_ACCEPT).toBe('image/png,image/jpeg,image/gif,image/webp')
     for (const type of AVATAR_ACCEPT.split(','))
       expect(avatarProblem({ size: AVATAR_MAX_BYTES, type })).toBeNull()
     expect(

@@ -11,14 +11,9 @@ import {
   passkeyChallengeCookie,
   readPasskeyChallengeCookie,
 } from '@/lib/auth/security/passkeys'
-import {
-  TOTP_CODE_PATTERN,
-  TOTP_PLACEHOLDER,
-  isTotpCode,
-} from '@/lib/auth/security/policy'
+import { isTotpCode } from '@/lib/auth/security/policy'
 import {
   LOCAL_SIGN_IN_PATH,
-  TOO_MANY_SIGN_IN_ATTEMPTS,
   getOidcErrorMessage,
   isLocalSignIn,
   oidcErrorPath,
@@ -43,18 +38,10 @@ describe('the login page protocol', () => {
     for (const code of ['OidcPasskeyRequired', 'OidcTwoFactorRequired'])
       expect(getOidcErrorMessage(code)).not.toBe(fallback)
   })
-
-  it('names the attempt-limit window in the throttled sign-in message', () => {
-    expect(TOO_MANY_SIGN_IN_ATTEMPTS).toBe(
-      'Too many sign-in attempts. Wait 15 minutes before trying again.'
-    )
-  })
 })
 
 describe('code formats', () => {
   it('accepts six-digit authenticator codes, as the form fields ask', () => {
-    expect(TOTP_CODE_PATTERN).toBe('[0-9]{6}')
-    expect(TOTP_PLACEHOLDER).toBe('000000')
     expect(isTotpCode('123456')).toBe(true)
     for (const code of ['12345', '1234567', '1e1234', '12345a'])
       expect(isTotpCode(code)).toBe(false)
