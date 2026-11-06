@@ -1,10 +1,11 @@
-import type { FileType, PaginationInfo } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
+import type { PaginationMeta } from '@/types/dto/api-responses'
 
 import { DEFAULT_PAGE_SIZE, type LibraryFilters, listQuery } from './contract'
 
 export interface GalleryPage {
   files: FileType[]
-  pagination: PaginationInfo & { offset: number }
+  pagination: PaginationMeta & { offset: number }
 }
 
 /** Find image neighbors by ID so changes to earlier pages cannot shift navigation. */

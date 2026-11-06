@@ -8,7 +8,7 @@ import {
 
 import Link from 'next/link'
 
-import type { FileType, PaginationInfo } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 import { useQueryClient } from '@tanstack/react-query'
 import { endOfDay, format } from 'date-fns'
 import {
@@ -220,12 +220,7 @@ function FileLibrary({ scope }: { scope: string }) {
   useEffect(() => {
     if (!timeline?.total) setFiles((current) => (current.length ? [] : current))
   }, [timeline])
-  const paginationInfo: PaginationInfo = {
-    total: timeline?.total ?? 0,
-    page: 1,
-    pageCount: Math.ceil((timeline?.total ?? 0) / filters.limit),
-    limit: filters.limit,
-  }
+  const total = timeline?.total ?? 0
   const onVisibleFiles = useCallback(
     (visible: FileType[], firstIndex: number) => {
       if (visible.length) recordPosition(firstIndex)
@@ -260,7 +255,7 @@ function FileLibrary({ scope }: { scope: string }) {
     setIndex,
     navigationPending,
     navigationStale,
-  } = useImageGallery(filters, files, paginationInfo, refreshKey, true)
+  } = useImageGallery(filters, files, refreshKey)
   const hasActiveFilters = Boolean(
     filters.tag ||
     filters.search ||
@@ -350,7 +345,7 @@ function FileLibrary({ scope }: { scope: string }) {
                   ? 'Loading…'
                   : error
                     ? 'Unavailable'
-                    : `${paginationInfo.total.toLocaleString()} ${paginationInfo.total === 1 ? 'file' : 'files'}`}
+                    : `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`}
               </span>
               <Button
                 variant="ghost"
@@ -730,7 +725,7 @@ function FileLibrary({ scope }: { scope: string }) {
           }
           navigationPending={navigationPending}
           positionLabel={
-            gallery.pagination.offset !== undefined
+            gallery.pagination
               ? `${gallery.pagination.offset + gallery.index + 1} of ${gallery.pagination.total}`
               : gallery.files[gallery.index].name
           }

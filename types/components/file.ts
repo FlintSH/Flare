@@ -5,8 +5,6 @@ export interface FileType {
   mimeType: string
   visibility: 'PUBLIC' | 'PRIVATE'
   hasPassword: boolean
-  /** Legacy responses may include this; use hasPassword for display state. */
-  password?: string | null
   size: number
   uploadedAt: string
   views: number
@@ -14,13 +12,4 @@ export interface FileType {
   expiresAt?: string | null
   folderId?: string | null
   tags?: { id: string; name: string }[]
-}
-
-export interface PaginationInfo {
-  total: number
-  pageCount: number
-  page: number
-  limit: number
-  /** Exact image offset for a gallery window anchored to the current file. */
-  offset?: number
 }

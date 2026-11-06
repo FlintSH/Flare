@@ -1,4 +1,4 @@
-import type { FileType, PaginationInfo } from '@/types/components/file'
+import type { FileType } from '@/types/components/file'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { LibraryFilters } from '@/lib/library/contract'
@@ -104,14 +104,13 @@ function file(id: string): FileType {
 }
 
 const files = [file('first'), file('second')]
-const pagination: PaginationInfo = { page: 1, pageCount: 3, total: 6, limit: 2 }
+const pagination = { page: 1, pageCount: 3, total: 6, limit: 2 }
 type HookProps = {
   filters: LibraryFilters
   files: FileType[]
-  pagination: PaginationInfo
   refreshKey: number
 }
-const initialProps: HookProps = { filters, files, pagination, refreshKey: 0 }
+const initialProps: HookProps = { filters, files, refreshKey: 0 }
 
 function render(props: HookProps = initialProps) {
   let result!: ReturnType<typeof useImageGallery>
@@ -121,12 +120,7 @@ function render(props: HookProps = initialProps) {
     harness.effects = []
     // Each iteration models one explicit render; React is mocked above.
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    result = useImageGallery(
-      props.filters,
-      props.files,
-      props.pagination,
-      props.refreshKey
-    )
+    result = useImageGallery(props.filters, props.files, props.refreshKey)
     harness.effects.forEach((effect) => effect())
   } while (harness.dirty)
   return result
@@ -147,13 +141,34 @@ beforeEach(() => {
 })
 
 describe('image gallery refresh lifecycle', () => {
+  it('opens on the chosen image alone and finds its neighbors by its ID', async () => {
+    render().open(files[1])
+    expect(render().gallery).toMatchObject({
+      files: [files[1]],
+      index: 0,
+      pagination: null,
+      atStart: false,
+      atEnd: false,
+    })
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('third')],
+      pagination: { ...pagination, page: 2, offset: 2 },
+    })
+    await render().move(1)
+    expect(harness.adjacentImagePage.mock.calls[0][0]).toMatchObject({
+      anchorId: 'second',
+      direction: 1,
+    })
+    expect(render().gallery?.files[0].id).toBe('third')
+    expect(render().gallery?.pagination?.offset).toBe(2)
+  })
+
   it('preserves the same current image and session when uploads shift the grid', () => {
     render().open(files[1])
     const before = render().gallery
     const refreshed = render({
       ...initialProps,
       files: [file('new-upload'), file('first')],
-      pagination: { ...pagination, total: 7, pageCount: 4 },
     })
 
     expect(refreshed.gallery).toBe(before)
@@ -177,28 +192,42 @@ describe('image gallery refresh lifecycle', () => {
       filters,
     })
     expect(render(props).gallery?.files[0].id).toBe('third')
-    expect(render(props).gallery?.pagination.offset).toBe(3)
+    expect(render(props).gallery?.pagination?.offset).toBe(3)
     expect(render(props).navigationStale).toBe(false)
   })
 
-  it('re-anchors even within a cached window when refresh removes the next image', async () => {
+  it('re-anchors even within a loaded window when refresh removes the next image', async () => {
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('second'), file('third')],
+      pagination: { ...pagination, offset: 1 },
+    })
     render().open(files[0])
+    await render().move(1)
     const props = {
       ...initialProps,
-      files: [files[0], file('third')],
+      files: [files[0], file('second')],
       refreshKey: 1,
     }
     harness.adjacentImagePage.mockResolvedValueOnce({
-      files: [file('third')],
-      pagination: { ...pagination, offset: 1 },
+      files: [file('fourth')],
+      pagination: { ...pagination, offset: 2 },
     })
     await render(props).move(1)
-    expect(harness.adjacentImagePage.mock.calls[0][0].anchorId).toBe('first')
-    expect(render(props).gallery?.files[0].id).toBe('third')
+    expect(harness.adjacentImagePage.mock.calls[1][0].anchorId).toBe('second')
+    expect(render(props).gallery?.files[0].id).toBe('fourth')
   })
 
   it('allows a refreshed start boundary to discover newly uploaded predecessors', async () => {
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [],
+      pagination: { ...pagination, offset: 0 },
+    })
     render().open(files[0])
+    await render().move(-1)
+    expect(render().gallery?.atStart).toBe(true)
+    await render().move(-1)
+    expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
+
     const props = { ...initialProps, refreshKey: 1 }
     harness.adjacentImagePage.mockResolvedValueOnce({
       files: [file('newer'), file('new')],
@@ -212,10 +241,15 @@ describe('image gallery refresh lifecycle', () => {
   })
 
   it('keeps local navigation immediate while the library is unchanged', async () => {
+    harness.adjacentImagePage.mockResolvedValueOnce({
+      files: [file('second'), file('third')],
+      pagination: { ...pagination, offset: 1 },
+    })
     render().open(files[0])
     await render().move(1)
-    expect(render().gallery?.index).toBe(1)
-    expect(harness.adjacentImagePage).not.toHaveBeenCalled()
+    await render().move(1)
+    expect(render().gallery?.files[render().gallery!.index].id).toBe('third')
+    expect(harness.adjacentImagePage).toHaveBeenCalledTimes(1)
   })
 
   it.each([-1, 1] as const)(
@@ -265,11 +299,10 @@ describe('image gallery refresh lifecycle', () => {
     const refreshed = render({
       ...initialProps,
       files: [file('new-upload'), file('first')],
-      pagination: { ...pagination, total: 7, pageCount: 4 },
     })
 
     expect(refreshed.gallery).toBe(before)
-    expect(refreshed.gallery?.pagination.page).toBe(2)
+    expect(refreshed.gallery?.pagination?.page).toBe(2)
     expect(refreshed.gallery?.files[refreshed.gallery.index]).toBe(third)
   })
 
@@ -346,7 +379,7 @@ describe('image gallery refresh lifecycle', () => {
     })
     await oldNavigation
     expect(render().navigationPending).toBe(true)
-    expect(render().gallery?.files[1].id).toBe('second')
+    expect(render().gallery?.files[0].id).toBe('second')
     replacement.resolve({
       files: [file('current')],
       pagination: { ...pagination, page: 2, offset: 2 },
