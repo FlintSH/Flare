@@ -11,7 +11,7 @@ import {
 const avatars = vi.hoisted(() => ({
   uploadAvatar: vi.fn(async () => '/api/avatars/new.jpg'),
 }))
-vi.mock('@/lib/storage/avatar', () => avatars)
+vi.mock('@/lib/users/avatar', () => avatars)
 vi.mock('@/lib/database/prisma', () => ({ prisma: {} }))
 vi.mock('@/lib/auth', () => ({
   getAccessSession: async () => ({

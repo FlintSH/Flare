@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { join } from 'path'
-
-import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { sanitizeFilename } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -11,7 +8,7 @@ import {
   StorageTargetChangedError,
   getStorageProviderForTarget,
 } from '@/lib/storage/target-provider'
-import { parseStorageTarget } from '@/lib/storage/targets'
+import { findAvatar } from '@/lib/users/avatar'
 
 const logger = loggers.files
 
@@ -29,32 +26,22 @@ export async function GET(
       return new Response(null, { status: 400 })
     }
 
-    const avatarPath = join('uploads', 'avatars', safeFilename)
-    const owner = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { avatarStoragePath: avatarPath },
-          { avatarStoragePath: null, image: `/api/avatars/${safeFilename}` },
-        ],
-      },
-      select: { avatarStorageTarget: true, avatarStoragePath: true },
-    })
-    if (!owner) return new Response(null, { status: 404 })
-    const target = parseStorageTarget(owner.avatarStorageTarget)
+    const avatar = await findAvatar(safeFilename)
+    if (!avatar) return new Response(null, { status: 404 })
     // Historical avatars have no provenance; keep their existing read behavior.
     // New uploads always resolve their captured target, never another backend.
-    if (owner.avatarStoragePath && !target)
+    if (avatar.recorded && !avatar.target)
       return new Response(null, { status: 503 })
-    const storageProvider = target
-      ? await getStorageProviderForTarget(target)
+    const storageProvider = avatar.target
+      ? await getStorageProviderForTarget(avatar.target)
       : await getStorageProvider()
 
-    const publicUrl = await storageProvider.getPublicUrl(avatarPath)
+    const publicUrl = await storageProvider.getPublicUrl(avatar.path)
     if (publicUrl) {
       return NextResponse.redirect(publicUrl)
     }
 
-    const stream = await storageProvider.getFileStream(avatarPath)
+    const stream = await storageProvider.getFileStream(avatar.path)
 
     return new NextResponse(stream as unknown as ReadableStream, {
       headers: {

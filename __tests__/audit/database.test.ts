@@ -384,6 +384,112 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     ).toMatchObject({ targetName: 'invoice-1004.pdf' })
   }, 30000)
 
+  it('records rows a cascade will delete in the caller’s transaction, with the request’s context', async () => {
+    const { recordCascadedDeletes } = await import('@/lib/audit')
+    const long = `${'x'.repeat(520)}.pdf`
+    await base.file.create({
+      data: {
+        id: 'cascaded-file',
+        name: long,
+        userId: 'audit-actor',
+        urlPath: 'cascaded-file',
+        path: 'fixture/cascaded-file',
+        mimeType: 'application/pdf',
+        size: 12,
+      },
+    })
+    await base.invite.create({
+      data: {
+        id: 'cascaded-invite',
+        creatorId: 'audit-actor',
+        tokenHash: 'cascaded-invite-digest',
+        token: 'encrypted-fixture',
+        uses: 2,
+      },
+    })
+    const deletion = {
+      actorId: 'operator',
+      actorName: 'Olive',
+      reason: 'Account deleted',
+    }
+    async function write(tx: Prisma.TransactionClient) {
+      await recordCascadedDeletes(tx, 'File', {
+        ...deletion,
+        where: { userId: 'audit-actor' },
+        name: 'name',
+        copy: { ownerId: 'userId' },
+      })
+      await recordCascadedDeletes(tx, 'Invite', {
+        ...deletion,
+        where: { creatorId: 'audit-actor' },
+        name: 'note',
+        copy: { creatorId: 'creatorId', uses: 'uses' },
+      })
+    }
+    // A rolled-back deletion leaves no events behind.
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await write(tx)
+        throw new Error('deletion refused')
+      })
+    ).rejects.toThrow('deletion refused')
+    expect(await base.auditEvent.count()).toBe(0)
+    await auditContext.run(
+      {
+        requestId: 'request-1',
+        method: 'DELETE',
+        route: '/api/users/[id]',
+        tokenId: 'token-1',
+      },
+      () => prisma.$transaction(write)
+    )
+    expect(
+      await base.auditEvent.findFirstOrThrow({
+        where: { targetId: 'cascaded-file' },
+      })
+    ).toMatchObject({
+      action: 'file.delete',
+      category: 'files',
+      outcome: 'success',
+      actorId: 'operator',
+      actorName: 'Olive',
+      targetType: 'file',
+      targetName: long.slice(0, 500),
+      requestId: 'request-1',
+      method: 'DELETE',
+      route: '/api/users/[id]',
+      status: null,
+      details: {
+        reason: 'Account deleted',
+        ownerId: 'audit-actor',
+        tokenId: 'token-1',
+      },
+    })
+    expect(
+      await base.auditEvent.findFirstOrThrow({
+        where: { targetId: 'cascaded-invite' },
+      })
+    ).toMatchObject({
+      action: 'invite.delete',
+      category: 'invites',
+      targetType: 'invite',
+      // An invite without a note names nothing.
+      targetName: null,
+      details: { creatorId: 'audit-actor', uses: 2 },
+    })
+    // Only the model's audited fields can be copied into an event.
+    await expect(
+      prisma.$transaction((tx) =>
+        recordCascadedDeletes(tx, 'Invite', {
+          ...deletion,
+          where: { creatorId: 'audit-actor' },
+          name: 'note',
+          copy: { token: 'token' },
+        })
+      )
+    ).rejects.toThrow('Invite.token is not an audited field')
+  })
+
   async function fixtureFile(
     id: string,
     visibility: 'PUBLIC' | 'PRIVATE' = 'PUBLIC'

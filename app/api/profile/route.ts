@@ -11,8 +11,8 @@ import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
 import { hashAccountPassword } from '@/lib/users/credentials'
+import { deleteAccount } from '@/lib/users/delete-account'
 import { updateAccount } from '@/lib/users/update-account'
 
 const api = routes('/api/profile', {
@@ -128,12 +128,7 @@ export const PUT = api(async (request) => {
 export const DELETE = api(async (request) => {
   const user = await requireAccount(request)
 
-  await deleteAccountWithStorageCleanup(
-    user.id,
-    user.id,
-    'profile.update',
-    true
-  )
+  await deleteAccount(user.id, user.id, 'profile.update', true)
 
   return new Response(null, { status: 204 })
 })

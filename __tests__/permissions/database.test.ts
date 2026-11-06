@@ -47,6 +47,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
   let detail: typeof import('@/app/api/roles/[id]/route')
   let createAccount: typeof import('@/lib/users/create-account').createAccount
   let cleanup: typeof import('@/lib/storage/deletion')
+  let accounts: typeof import('@/lib/users/delete-account')
   let LocalStorage: typeof import('@/lib/storage/providers/local').LocalStorageProvider
   const cleanupPaths = new Set<string>()
   const cleanupPrefix = `uploads/roles-cleanup-test-${randomUUID()}`
@@ -66,6 +67,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     detail = await import('@/app/api/roles/[id]/route')
     createAccount = (await import('@/lib/users/create-account')).createAccount
     cleanup = await import('@/lib/storage/deletion')
+    accounts = await import('@/lib/users/delete-account')
     LocalStorage = (await import('@/lib/storage/providers/local'))
       .LocalStorageProvider
   })
@@ -1095,6 +1097,19 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       expect(
         await prisma.user.findUnique({ where: { id: user.id } })
       ).toBeNull()
+      // The cascade's file events carry the request, like the request's own event.
+      expect(
+        await prisma.auditEvent.findFirstOrThrow({
+          where: { action: 'file.delete', targetId: file.id },
+        })
+      ).toMatchObject({
+        category: 'files',
+        targetType: 'file',
+        targetName: file.name,
+        method: 'DELETE',
+        route: kind === 'self' ? '/api/profile' : '/api/users/[id]',
+        details: { reason: 'Account deleted', ownerId: user.id },
+      })
       expect(await prisma.file.count({ where: { userId: user.id } })).toBe(0)
       expect(
         (await prisma.storageDeletion.findMany({ where: { ownerId: user.id } }))
@@ -1126,12 +1141,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     cleanupPaths.add(file.path)
     const remove = vi.spyOn(LocalStorage.prototype, 'deleteFile')
     await expect(
-      cleanup.deleteAccountWithStorageCleanup(
-        'admin',
-        'admin',
-        'profile.update',
-        true
-      )
+      accounts.deleteAccount('admin', 'admin', 'profile.update', true)
     ).rejects.toMatchObject({ status: 409 })
     expect(await prisma.user.count({ where: { id: 'admin' } })).toBe(1)
     expect(await prisma.file.count({ where: { id: file.id } })).toBe(1)
@@ -1151,11 +1161,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     )
     try {
       await expect(
-        cleanup.deleteAccountWithStorageCleanup(
-          'admin',
-          user.id,
-          'users.delete'
-        )
+        accounts.deleteAccount('admin', user.id, 'users.delete')
       ).rejects.toThrow('injected account deletion failure')
       expect(await prisma.storageDeletion.count()).toBe(0)
       expect(await prisma.user.count({ where: { id: user.id } })).toBe(1)
@@ -1179,11 +1185,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       'text/plain'
     )
     cleanupPaths.add(file.path)
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     await prisma.storageDeletion.deleteMany({
       where: { path: { not: file.path } },
     })
@@ -1239,11 +1241,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       'text/plain'
     )
     cleanupPaths.add(file.path)
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     await prisma.storageDeletion.deleteMany({
       where: { path: { not: file.path } },
     })
@@ -1267,11 +1265,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       'text/plain'
     )
     cleanupPaths.add(file.path)
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     await prisma.storageDeletion.deleteMany({
       where: { path: { not: file.path } },
     })
@@ -1318,11 +1312,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
   it('bounds concurrent claims globally and never discards repeatedly failing jobs', async () => {
     const user = await cleanupAccount()
     for (let i = 0; i < 8; i++) await cleanupFile(user.id)
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const claims = (
       await Promise.all(
         Array.from({ length: 12 }, () => cleanup.claimStorageDeletions())
@@ -1365,11 +1355,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         image: `https://s3.example.test/cleanup-original/avatars/${user.id}.jpg`,
       },
     })
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const jobs = await prisma.storageDeletion.findMany()
     expect(jobs).toHaveLength(2)
     expect(jobs.every((job) => job.provider === 's3')).toBe(true)
@@ -1435,11 +1421,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
   it('treats a missing S3 key as success but keeps a missing bucket for recovery', async () => {
     await cleanupConfig('s3')
     const user = await cleanupAccount()
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     s3Mock
       .on(DeleteObjectCommand)
       .rejects(
@@ -1476,11 +1458,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         avatarStorageTarget: Prisma.DbNull,
       },
     })
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const queued = await prisma.storageDeletion.findMany()
     expect(queued).toEqual(
       expect.arrayContaining([
@@ -1502,11 +1480,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       where: { id: external.id },
       data: { image: '/api/avatars/another-user.jpg' },
     })
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      external.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', external.id, 'users.delete')
     expect(
       (await prisma.storageDeletion.findMany()).map((job) => job.path)
     ).toEqual([`uploads/avatars/${external.id}.jpg`])
@@ -1519,11 +1493,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         avatarStorageTarget: Prisma.DbNull,
       },
     })
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      oldHttpAvatar.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', oldHttpAvatar.id, 'users.delete')
     expect(
       await prisma.storageDeletion.findMany({
         where: { ownerId: oldHttpAvatar.id },
@@ -1549,11 +1519,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       cleanupPaths.add(path)
     }
     await cleanupConfig('s3')
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const jobs = await cleanup.claimStorageDeletions()
     expect(jobs.every((job) => job.provider === 'local')).toBe(true)
     expect(await Promise.all(jobs.map(cleanup.processStorageDeletion))).toEqual(
@@ -1574,11 +1540,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       data: { value: config },
     })
     const second = await cleanupFile(user.id)
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     s3Mock.on(DeleteObjectCommand).resolves({})
     await Promise.all(
       (await cleanup.claimStorageDeletions()).map(
@@ -1622,11 +1584,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     cleanupPaths.add(file.path)
     await cleanupConfig('s3')
     const remove = vi.spyOn(LocalStorage.prototype, 'deleteFile')
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const jobs = await cleanup.claimStorageDeletions()
     expect(jobs.map((job) => job.provider)).toEqual(['unknown', 'unknown'])
     expect(await Promise.all(jobs.map(cleanup.processStorageDeletion))).toEqual(
@@ -1667,11 +1625,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         writePending: true,
       },
     })
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     const claimed = await cleanup.claimStorageDeletions()
     expect(claimed.map((job) => job.id)).not.toContain(intent.id)
     await Promise.all(claimed.map(cleanup.processStorageDeletion))
@@ -1735,18 +1689,14 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       FROM generate_series(1, 150000) AS i
     `
     const start = Date.now()
-    await cleanup.deleteAccountWithStorageCleanup(
-      'admin',
-      user.id,
-      'users.delete'
-    )
+    await accounts.deleteAccount('admin', user.id, 'users.delete')
     expect(await prisma.user.count({ where: { id: user.id } })).toBe(0)
     expect(await prisma.file.count({ where: { userId: user.id } })).toBe(0)
     expect(
       await prisma.storageDeletion.count({ where: { ownerId: user.id } })
     ).toBe(150001)
     expect(Date.now() - start).toBeLessThan(
-      cleanup.ACCOUNT_DELETION_TRANSACTION_MS
+      accounts.ACCOUNT_DELETION_TRANSACTION_MS
     )
   }, 180_000)
 

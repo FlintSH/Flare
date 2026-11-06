@@ -663,9 +663,8 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     const invite = (await create({ note: 'Neighbor' }, 'inviter')).body.invite
     const joined = await join(invite.token, 'Kept Person')
     expect(joined.status).toBe(200)
-    const { deleteAccountWithStorageCleanup } =
-      await import('@/lib/storage/deletion')
-    await deleteAccountWithStorageCleanup('admin', 'inviter', 'users.delete')
+    const { deleteAccount } = await import('@/lib/users/delete-account')
+    await deleteAccount('admin', 'inviter', 'users.delete')
     expect(await prisma.invite.count()).toBe(0)
     expect(
       await prisma.auditEvent.findFirst({

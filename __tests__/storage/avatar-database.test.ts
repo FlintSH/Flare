@@ -56,6 +56,7 @@ suite.sequential(
     let prisma: typeof import('@/lib/database/prisma').prisma
     let permissions: typeof import('@/lib/permissions/server')
     let cleanup: typeof import('@/lib/storage/deletion')
+    let accounts: typeof import('@/lib/users/delete-account')
     let storage: typeof import('@/lib/storage')
     let configuration: typeof import('@/lib/config')
     let route: typeof import('@/app/api/profile/avatar/route')
@@ -76,6 +77,7 @@ suite.sequential(
       prisma = (await import('@/lib/database/prisma')).prisma
       permissions = await import('@/lib/permissions/server')
       cleanup = await import('@/lib/storage/deletion')
+      accounts = await import('@/lib/users/delete-account')
       storage = await import('@/lib/storage')
       configuration = await import('@/lib/config')
       route = await import('@/app/api/profile/avatar/route')
@@ -229,11 +231,7 @@ suite.sequential(
             writePending: true,
             target: { provider: 'local' },
           })
-          await cleanup.deleteAccountWithStorageCleanup(
-            adminId,
-            memberId,
-            'users.delete'
-          )
+          await accounts.deleteAccount(adminId, memberId, 'users.delete')
           const jobs = await drain()
           expect(jobs.map((job) => job.path)).toEqual([old])
           expect(
@@ -357,11 +355,7 @@ suite.sequential(
       )
       expect(response.status).toBe(200)
       expect(Buffer.from(await response.arrayBuffer())).toEqual(image)
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       await drain()
       expect(s3.commandCalls(DeleteObjectCommand)).toHaveLength(0)
       await expect(readFile(user.avatarStoragePath!)).rejects.toMatchObject({
@@ -400,11 +394,7 @@ suite.sequential(
       expect((await get()).headers.get('Location')).toBe(url)
       await setS3('different-active-bucket')
       expect((await get()).status).toBe(503)
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       const [job] = await cleanup.claimStorageDeletions()
       expect(await cleanup.processStorageDeletion(job)).toBe(false)
       expect(s3.commandCalls(DeleteObjectCommand)).toHaveLength(0)
@@ -490,11 +480,7 @@ suite.sequential(
         path,
         'image/jpeg'
       )
-      await cleanup.deleteAccountWithStorageCleanup(
-        adminId,
-        memberId,
-        'users.delete'
-      )
+      await accounts.deleteAccount(adminId, memberId, 'users.delete')
       expect(await cleanup.claimStorageDeletions()).toEqual([])
       expect(
         await prisma.storageDeletion.findUnique({ where: { id: intent.id } })

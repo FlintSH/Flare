@@ -6,8 +6,8 @@ import { FORM_FRAMING_BYTES, readForm } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { validateFileType } from '@/lib/security/file-validation'
-import { uploadAvatar } from '@/lib/storage/avatar'
 import { AVATAR_MAX_BYTES, avatarProblem } from '@/lib/storage/avatar-policy'
+import { uploadAvatar } from '@/lib/users/avatar'
 
 const api = routes('/api/profile/avatar', {
   failure: { message: 'Failed to upload avatar' },
