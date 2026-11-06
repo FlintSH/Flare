@@ -1,6 +1,8 @@
 import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
 import { routes } from '@/lib/http/route'
-import { clearProgress, getProgress } from '@/lib/utils'
+import { requestedExportId } from '@/lib/users/export-id'
+import { exportProgressEvents } from '@/lib/users/export-progress'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -9,50 +11,16 @@ const api = routes('/api/profile/export/progress', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async () => {
-  const { session } = await requireSession('profile.export')
+export const GET = api(async (request) => {
+  const { user } = await requireSession('profile.export')
+  const exportId = requestedExportId(request)
+  if (!exportId) throw new HttpError(400, 'Missing export id.')
 
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    start(controller) {
-      let lastProgress = -1
-      let inactivityCounter = 0
-
-      const interval = setInterval(() => {
-        const progress = getProgress(session.user.id)
-
-        if (progress !== lastProgress || inactivityCounter >= 20) {
-          const data = encoder.encode(
-            `data: ${JSON.stringify({ progress })}\n\n`
-          )
-          controller.enqueue(data)
-          lastProgress = progress
-          inactivityCounter = 0
-        } else {
-          inactivityCounter++
-        }
-
-        if (progress === 100 || inactivityCounter > 100) {
-          clearInterval(interval)
-
-          if (lastProgress !== 100) {
-            const finalData = encoder.encode(
-              `data: ${JSON.stringify({ progress: 100 })}\n\n`
-            )
-            controller.enqueue(finalData)
-          }
-
-          controller.close()
-          clearProgress(session.user.id)
-        }
-      }, 100)
+  return new Response(exportProgressEvents(user.id, exportId, request.signal), {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
     },
   })
-
-  const headers = new Headers()
-  headers.set('Content-Type', 'text/event-stream')
-  headers.set('Cache-Control', 'no-cache, no-transform')
-  headers.set('Connection', 'keep-alive')
-
-  return new Response(stream, { headers })
 })

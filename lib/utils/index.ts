@@ -1,7 +1,5 @@
 export { cn, formatBytes, bytesToMB, formatFileSize } from './formatting'
 
-export { updateProgress, clearProgress, getProgress } from './progress'
-
 export function getRelativeTime(date: Date): string {
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
