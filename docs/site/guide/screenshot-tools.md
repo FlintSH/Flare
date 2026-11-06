@@ -77,7 +77,7 @@ Flare's generated Flameshot script supports Linux only. Use the iTake integratio
 
 Open Spectacle's **Download script** action and select **Screenshot** or **Screen recording**.
 
-Screenshot choices are full desktop, current monitor, active window, or a selected region. A recording covers a selected region or one whole screen: Spectacle records the screen under the pointer, so **Full desktop recording** and **Current monitor recording** make the same recording. The form also offers Wayland clipboard support and an option to include the mouse pointer.
+Screenshot choices are full desktop, current monitor, active window, or a selected region. A recording covers a selected region or, with **Current monitor recording**, the whole screen under the pointer. Earlier versions also offered **Full desktop recording**, which made the same recording; scripts downloaded with it keep working. A Profile page opened before the upgrade may still offer it and refuse the download; reload the page and choose **Current monitor recording**. The form also offers Wayland clipboard support and an option to include the mouse pointer.
 
 The generated script checks for `spectacle`, `curl`, `jq`, and its clipboard tool: `xsel`, or `wl-copy` with Wayland clipboard support. Read the script's setup notes, then run it with Bash. The available capture and recording behavior also depends on your installed Spectacle version and desktop session.
 

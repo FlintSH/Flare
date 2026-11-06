@@ -35,7 +35,11 @@ const screenshotDependencies = (tool: string, useWayland: boolean) => [
 ]
 
 const captureMode = z.enum(['fullscreen', 'current', 'activewindow', 'region'])
-const recordingMode = z.enum(['fullscreen', 'current', 'region'])
+/**
+ * `spectacle -R s` records the screen under the pointer, so recording a whole
+ * screen is one choice. Earlier dashboards offered it twice, also as `fullscreen`.
+ */
+const recordingMode = z.enum(['current', 'region'])
 
 /** A Spectacle mode's label in the form and its command-line flag. */
 interface SpectacleMode {
@@ -50,12 +54,7 @@ export const SPECTACLE_CAPTURE_MODES = {
   region: { label: 'Select region', flag: '-r' },
 } satisfies Record<z.infer<typeof captureMode>, SpectacleMode>
 
-/**
- * `spectacle -R s` records one screen, the one under the pointer, so both
- * screen choices make the same recording.
- */
 export const SPECTACLE_RECORDING_MODES = {
-  fullscreen: { label: 'Full desktop recording', flag: 's' },
   current: { label: 'Current monitor recording', flag: 's' },
   region: { label: 'Select region recording', flag: 'r' },
 } satisfies Record<z.infer<typeof recordingMode>, SpectacleMode>

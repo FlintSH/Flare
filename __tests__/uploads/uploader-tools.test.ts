@@ -10,6 +10,8 @@ import {
 
 import { saveResponseAsFile } from '@/lib/client/save-file'
 import {
+  SPECTACLE_CAPTURE_MODES,
+  SPECTACLE_RECORDING_MODES,
   UPLOADER_CLIENT_IDS,
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
@@ -139,5 +141,28 @@ describe('saveResponseAsFile', () => {
     expect(await save(new Response('file'), 'flare-upload.sh')).toBe(
       'flare-upload.sh'
     )
+  })
+})
+
+describe('Spectacle choices', () => {
+  const flags = (modes: Record<string, { flag: string }>) =>
+    Object.values(modes).map(({ flag }) => flag)
+
+  it.each([
+    ['capture', SPECTACLE_CAPTURE_MODES],
+    ['recording', SPECTACLE_RECORDING_MODES],
+  ])('each %s choice makes a different capture', (_, modes) => {
+    expect(new Set(flags(modes)).size).toBe(flags(modes).length)
+  })
+
+  it('records a whole screen through one choice', () => {
+    const options = (recordingMode: string) =>
+      uploaderClients.spectacle.options.safeParse({
+        ...uploaderClients.spectacle.defaults,
+        scriptType: 'recording',
+        recordingMode,
+      }).success
+    expect(options('current')).toBe(true)
+    expect(options('fullscreen')).toBe(false)
   })
 })
