@@ -4,16 +4,15 @@ import { ProfileClient } from '@/components/profile'
 
 import { getPageSession } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
-import { sizeLimitBytes } from '@/lib/config/limits'
+import { storageQuotaBytes } from '@/lib/config/limits'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
-import { hasPermission } from '@/lib/permissions/catalog'
 import {
   PROFILE_SECTIONS,
   PROFILE_SECTION_ALIASES,
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
-import { formatFileSize } from '@/lib/utils'
+import { bytesToMB, formatFileSize } from '@/lib/utils'
 
 export default async function ProfilePage({
   searchParams,
@@ -57,12 +56,9 @@ export default async function ProfilePage({
     redirect('/auth/login')
   }
 
-  const config = await getConfig()
-  const quotasEnabled =
-    config.settings.general.storage.quotas.enabled &&
-    !hasPermission(session.user, 'quotas.bypass')
-  const quotaMB =
-    sizeLimitBytes(config.settings.general.storage.quotas.default) / 1024 ** 2
+  const quota = storageQuotaBytes(await getConfig(), session.user)
+  const quotasEnabled = quota !== null
+  const quotaMB = bytesToMB(quota ?? 0)
   const formattedQuota = formatFileSize(quotaMB)
   const formattedUsed = formatFileSize(user.storageUsed)
   const usagePercentage =

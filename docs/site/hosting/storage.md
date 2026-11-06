@@ -55,6 +55,8 @@ The default maximum is **100 MB per file**. The setting supports MB or GB and us
 
 This limit is checked during upload and finalization. It does not shrink or remove files uploaded before you lower it.
 
+Avatars don't use this setting. For every role, an avatar must be a PNG, JPEG, GIF, or WebP image of at most 2 MB, and Flare stops reading a larger upload rather than holding the whole request in memory, as earlier versions did for an avatar of any size. An avatar must also fit in the account's remaining quota, but its bytes aren't added to the account's recorded usage. Avatars uploaded before this limit existed stay as they are.
+
 ## User quotas
 
 Quotas are **disabled by default**. Enabling them applies a shared per-user allowance; its starting value is **10 GB**. Each account's recorded storage usage is checked against that allowance unless its roles grant `quotas.bypass` or Administrator. Grant quota bypass independently of administration when appropriate.

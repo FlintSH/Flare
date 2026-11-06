@@ -83,7 +83,6 @@ export const PUT = api(async (request) => {
   const passwordHash = body.newPassword
     ? await hash(body.newPassword, 10)
     : undefined
-  if (body.image) updateData.image = body.image
   if (typeof body.randomizeFileUrls === 'boolean')
     updateData.randomizeFileUrls = body.randomizeFileUrls
   if (body.defaultFileExpiration)

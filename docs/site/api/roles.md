@@ -159,9 +159,11 @@ Revoking browser sessions does not revoke named API tokens or rotate the legacy 
 
 ## Avatar publication and removal
 
-`POST /api/profile/avatar` requires a browser session with `profile.update` and a multipart `file` containing an image. Success remains `200` with `{ "success": true, "url": "…" }`. Use that returned URL: new avatars have a unique key per upload, not a predictable account-ID filename.
+`POST /api/profile/avatar` requires a browser session with `profile.update` and a same-origin `multipart/form-data` request whose `file` is a PNG, JPEG, GIF, or WebP image of at most 2 MB. Success remains `200` with `{ "success": true, "url": "…" }`. Use that returned URL: new avatars have a unique key per upload, not a predictable account-ID filename. This route is the only way to set an avatar: `PUT /api/profile` ignores an `image` field, which earlier versions saved as given, without any of these checks.
 
-The server records a durable write intent before storage I/O, then rechecks the account, current permission, and quota before publishing the image. A failed publication leaves the previous avatar in place and retains cleanup work for the new bytes. Invalid image input returns `400`; missing authentication `401`; lost permission `403`; a deleted account `404`; a cancelled write intent `409`; an exceeded quota `413`; and a storage failure `500`.
+Nothing is stored for a rejected request. A request from another origin returns `403`, another content type `415`, and a body over 2 MB plus 64 KB of form framing `413`, without the body being read in full. The form then needs a `file` (`400`) of at most 2 MB (`413`) declared as one of the four types (`415`) whose content really is that format (`400`). Earlier versions checked neither the origin nor the size, accepted any declared `image/*` type, and accepted content whose format they couldn't detect.
+
+An accepted image gets a durable write intent before storage I/O; the server then rechecks the account, current permission, and quota before publishing it. A failed publication leaves the previous avatar in place and retains cleanup work for the new bytes. Missing authentication returns `401`; lost permission `403`; a deleted account `404`; a cancelled write intent `409`; an exceeded quota `413`; and a storage failure `500`.
 
 `DELETE /api/users/{id}/avatar` requires a same-origin browser session with `users.update` and target-account delegation authority. It clears the image and stored avatar metadata while queuing the old owned object's cleanup in the same transaction. Success is `204 No Content`; byte removal happens later through the worker.
 

@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { AVATAR_ACCEPT, avatarProblem } from '@/lib/storage/avatar-policy'
 import { ACCOUNT_NAME_MIN_LENGTH } from '@/lib/users/account-policy'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'
@@ -52,6 +53,16 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
+    const problem = avatarProblem(e.target.files[0])
+    if (problem) {
+      toast({
+        title: problem.title,
+        description: problem.message,
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
     setIsLoading(true)
     try {
       const file = e.target.files[0]
@@ -208,7 +219,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
           <Input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={AVATAR_ACCEPT}
             className="hidden"
             onChange={handleAvatarUpload}
           />

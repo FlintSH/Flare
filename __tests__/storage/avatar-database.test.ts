@@ -61,6 +61,7 @@ suite.sequential(
     let route: typeof import('@/app/api/profile/avatar/route')
     let serve: typeof import('@/app/api/avatars/[filename]/route')
     let remove: typeof import('@/app/api/users/[id]/avatar/route')
+    let profile: typeof import('@/app/api/profile/route')
     const paths = new Set<string>()
     const s3 = mockClient(S3Client)
 
@@ -80,6 +81,7 @@ suite.sequential(
       route = await import('@/app/api/profile/avatar/route')
       serve = await import('@/app/api/avatars/[filename]/route')
       remove = await import('@/app/api/users/[id]/avatar/route')
+      profile = await import('@/app/api/profile/route')
     }, 120000)
 
     beforeEach(async () => {
@@ -550,6 +552,62 @@ suite.sequential(
       )
       expect(response.status).toBe(400)
       expect(await prisma.storageDeletion.count()).toBe(0)
+    })
+
+    it('refuses oversized and unaccepted images before creating an upload intent, even with quota bypass', async () => {
+      authentication.permissions = [...DEFAULT_PERMISSIONS, 'quotas.bypass']
+      const write = vi.spyOn(
+        storage.LocalStorageProvider.prototype,
+        'uploadFile'
+      )
+      for (const [bytes, type, status] of [
+        [
+          Buffer.concat([image, Buffer.alloc(2 * 1024 * 1024)]),
+          'image/png',
+          413,
+        ],
+        [
+          Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+          'image/svg+xml',
+          415,
+        ],
+      ] as const) {
+        const form = new FormData()
+        form.set('file', new Blob([new Uint8Array(bytes)], { type }), 'avatar')
+        const response = await route.POST(
+          new Request('http://localhost/api/profile/avatar', {
+            method: 'POST',
+            body: form,
+          })
+        )
+        expect(response.status).toBe(status)
+      }
+      expect(write).not.toHaveBeenCalled()
+      expect(await prisma.storageDeletion.count()).toBe(0)
+      expect(
+        await prisma.user.findUnique({ where: { id: memberId } })
+      ).toMatchObject({ image: null, avatarStoragePath: null })
+    })
+
+    it('ignores an image field in profile updates; only the avatar route publishes one', async () => {
+      const response = await profile.PUT(
+        new Request('http://localhost/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Renamed member',
+            image: 'https://attacker.test/avatar.png',
+          }),
+        })
+      )
+      expect(response.status).toBe(200)
+      expect((await response.json()).data).toMatchObject({
+        name: 'Renamed member',
+        image: null,
+      })
+      expect(
+        await prisma.user.findUnique({ where: { id: memberId } })
+      ).toMatchObject({ name: 'Renamed member', image: null })
     })
   }
 )

@@ -2,10 +2,17 @@ import { NextResponse } from 'next/server'
 
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
+import {
+  FORM_FRAMING_BYTES,
+  assertMediaType,
+  assertSameOrigin,
+  readForm,
+} from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { validateFileType } from '@/lib/security/file-validation'
 import { uploadAvatar } from '@/lib/storage/avatar'
+import { AVATAR_MAX_BYTES, avatarProblem } from '@/lib/storage/avatar-policy'
 
 const api = routes('/api/profile/avatar', {
   failure: { message: 'Failed to upload avatar' },
@@ -14,25 +21,27 @@ const api = routes('/api/profile/avatar', {
 
 export const POST = api(async (request) => {
   const { session } = await requireSession('profile.update')
+  assertSameOrigin(request)
+  assertMediaType(request, 'multipart/form-data')
 
-  const formData = await request.formData()
+  const formData = await readForm(request, {
+    limit: AVATAR_MAX_BYTES + FORM_FRAMING_BYTES,
+  })
   const file = formData.get('file')
   if (!(file instanceof File)) {
     throw new HttpError(400, 'No file provided')
   }
 
-  if (!file.type.startsWith('image/')) {
-    throw new HttpError(400, 'File must be an image')
+  const problem = avatarProblem(file)
+  if (problem) {
+    throw new HttpError(problem.status, problem.message)
   }
 
-  const avatarBytes = await file.arrayBuffer()
-  const avatarBuffer = Buffer.from(avatarBytes)
+  const avatarBuffer = Buffer.from(await file.arrayBuffer())
+  // Every accepted format has a signature, so content without one is refused.
   const typeCheck = await validateFileType(avatarBuffer, file.type)
-  if (!typeCheck.valid) {
+  if (!typeCheck.valid || !typeCheck.detectedType) {
     throw new HttpError(400, 'File content does not match claimed image type')
-  }
-  if (typeCheck.detectedType && !typeCheck.detectedType.startsWith('image/')) {
-    throw new HttpError(400, 'File must be an image')
   }
 
   const publicPath = await uploadAvatar(session.user.id, avatarBuffer)
