@@ -6,7 +6,6 @@ import {
   prepareEmailConfig,
   resolveEmailConfig,
 } from '@/lib/email/config'
-import { assertEmailEncryptionKey } from '@/lib/email/crypto'
 import { validateEnabledEmail } from '@/lib/email/schema'
 import {
   describeMailError,
@@ -16,6 +15,7 @@ import {
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
+import { assertEmailEncryptionKey } from '@/lib/security/secret-box'
 
 const testSchema = z.object({
   action: z.enum(['connection', 'send']),

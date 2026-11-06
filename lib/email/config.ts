@@ -11,19 +11,21 @@ import { localSignInAllowed } from '@/lib/config/oidc'
 import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
-
 import {
   assertEmailEncryptionKey,
   decryptSecret,
   encryptSecret,
   isEncryptedSecret,
-} from './crypto'
+} from '@/lib/security/secret-box'
+
 import {
   EmailConfig,
   emailConfigSchema,
   redactEmailConfig,
   validateEnabledEmail,
 } from './schema'
+
+const SMTP_PURPOSE = 'smtp'
 
 type Environment = Record<string, string | undefined>
 type ObjectValue = Record<string, unknown>
@@ -106,7 +108,7 @@ export function resolveEmailConfig(
     !managedFields.includes('smtp.password') &&
     config.smtp.password
   )
-    config.smtp.password = decryptSecret(config.smtp.password)
+    config.smtp.password = decryptSecret(config.smtp.password, SMTP_PURPOSE)
   return { config: emailConfigSchema.parse(config), managedFields }
 }
 
@@ -223,7 +225,10 @@ export async function prepareEmailConfig(
     else {
       if (isEncryptedSecret(candidate.smtp.password))
         throw new Error('Enter a new SMTP password, not an encrypted value')
-      candidate.smtp.password = encryptSecret(candidate.smtp.password)
+      candidate.smtp.password = encryptSecret(
+        candidate.smtp.password,
+        SMTP_PURPOSE
+      )
     }
   }
   candidate.verification.requiredSince = previous.verification.requiredSince

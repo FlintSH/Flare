@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-import { decryptSecret, encryptSecret } from '@/lib/email/crypto'
+import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 import { INVITE_TOKEN_PATTERN } from './policy'
 

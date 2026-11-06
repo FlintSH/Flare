@@ -183,7 +183,7 @@ This also permits `http://` destinations. It applies to the whole deployment and
 
 Signing secrets are encrypted in the database. The effective key comes from `FLARE_EMAIL_ENCRYPTION_KEY`, or the file named by `FLARE_EMAIL_ENCRYPTION_KEY_FILE`; set only one. Without a dedicated key, Flare uses `NEXTAUTH_SECRET`. The effective secret must have at least 32 characters.
 
-SMTP and webhook secrets use separate encryption purposes, but share this key configuration. Preserve the key with your database backups and across application replicas. Changing it without migrating encrypted data makes existing signing secrets unreadable; recreate affected webhook destinations and configure their new secrets at the receivers.
+SMTP passwords, queued mail, webhook signing secrets, and copies of invite links each use their own encryption purpose, so a value encrypted for one can't be decrypted as another, but they share this key configuration. Preserve the key with your database backups and across application replicas. Changing it without migrating encrypted data makes existing signing secrets unreadable; recreate affected webhook destinations and configure their new secrets at the receivers.
 
 The durable queue lives in PostgreSQL and the worker runs inside the application. A deployment must keep a Node.js application process running for background deliveries; a static export or scale-to-zero host cannot independently process pending events.
 

@@ -3,7 +3,6 @@ import { type Server, createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { encryptSecret } from '@/lib/email/crypto'
 import { signWebhook } from '@/lib/integrations/security'
 import {
   WEBHOOK_SECRET_PURPOSE,
@@ -15,6 +14,7 @@ import {
   testEventPayload,
   webhooksWithQueueRoom,
 } from '@/lib/integrations/webhooks'
+import { encryptSecret } from '@/lib/security/secret-box'
 
 const db = vi.hoisted(() => ({
   findUnique: vi.fn(),

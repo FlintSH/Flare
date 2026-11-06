@@ -3,13 +3,13 @@ import { z } from 'zod'
 
 import { lockIntegrationChanges, lockWebhookQueue } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { encryptSecret } from '@/lib/email/crypto'
 import { HttpError } from '@/lib/http/errors'
 import {
   type Permission,
   type PermissionSubject,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import { encryptSecret } from '@/lib/security/secret-box'
 
 import { API_SCOPES } from './bearer-routes'
 import { resolveWebhookTarget } from './security'

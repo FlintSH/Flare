@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { decryptSecret } from '@/lib/email/crypto'
 import { HttpError } from '@/lib/http/errors'
 import {
   IntegrationError,
   runIntegrationCommand,
 } from '@/lib/integrations/service'
 import { WEBHOOK_SECRET_PURPOSE } from '@/lib/integrations/webhooks'
+import { decryptSecret } from '@/lib/security/secret-box'
 
 const db = vi.hoisted(() => ({
   transaction: vi.fn(),

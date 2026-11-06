@@ -8,7 +8,7 @@ import {
   lockWebhookQueue,
 } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { decryptSecret } from '@/lib/email/crypto'
+import { decryptSecret } from '@/lib/security/secret-box'
 
 import { resolveWebhookTarget, signWebhook } from './security'
 

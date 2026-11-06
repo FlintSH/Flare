@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 
 import { lockMailBudget, lockMailClaims } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 import { getEmailConfig } from './config'
-import { decryptSecret, encryptSecret } from './crypto'
 import type { EmailConfig } from './schema'
 import { type RenderedEmail, renderAccountEmail } from './templates'
 import {

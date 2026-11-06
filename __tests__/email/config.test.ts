@@ -6,7 +6,6 @@ import {
   resolveEmailConfig,
   transitionEmailPolicy,
 } from '@/lib/email/config'
-import { encryptSecret } from '@/lib/email/crypto'
 import {
   DEFAULT_EMAIL_CONFIG,
   emailConfigSchema,
@@ -14,6 +13,7 @@ import {
   validateEnabledEmail,
 } from '@/lib/email/schema'
 import { sanitizeLogUrl } from '@/lib/logger/url'
+import { encryptSecret } from '@/lib/security/secret-box'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -88,7 +88,7 @@ describe('email upgrade and configuration boundaries', () => {
     )
     const saved = emailConfigSchema.parse({
       enabled: true,
-      smtp: { password: encryptSecret('smtp-secret') },
+      smtp: { password: encryptSecret('smtp-secret', 'smtp') },
     })
     vi.stubEnv(
       'NEXTAUTH_SECRET',

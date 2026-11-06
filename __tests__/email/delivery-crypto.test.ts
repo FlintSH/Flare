@@ -8,7 +8,7 @@ import {
   decryptSecret,
   encryptSecret,
   isEncryptedSecret,
-} from '@/lib/email/crypto'
+} from '@/lib/security/secret-box'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -42,15 +42,15 @@ describe('email secret storage', () => {
       'dedicated-email-key-stable-at-least-32-chars'
     )
     vi.stubEnv('NEXTAUTH_SECRET', 'original-session-secret-at-least-32-chars')
-    const encrypted = encryptSecret('smtp-password')
+    const encrypted = encryptSecret('smtp-password', 'smtp')
     vi.stubEnv('NEXTAUTH_SECRET', 'rotated-session-secret-at-least-32-chars')
-    expect(decryptSecret(encrypted)).toBe('smtp-password')
+    expect(decryptSecret(encrypted, 'smtp')).toBe('smtp-password')
     vi.stubEnv(
       'FLARE_EMAIL_ENCRYPTION_KEY',
       'rotated-email-key-stable-at-least-32-chars'
     )
-    expect(() => decryptSecret(encrypted)).toThrow('Unable to decrypt')
-    expect(() => decryptSecret('smtp-password')).toThrow('Unrecognized')
+    expect(() => decryptSecret(encrypted, 'smtp')).toThrow('Unable to decrypt')
+    expect(() => decryptSecret('smtp-password', 'smtp')).toThrow('Unrecognized')
   })
 
   it('supports a mounted encryption secret without exposing the file path on read errors', () => {
@@ -60,8 +60,8 @@ describe('email secret storage', () => {
       writeFileSync(path, 'mounted-secret-key-with-at-least-32-characters\n')
       vi.stubEnv('FLARE_EMAIL_ENCRYPTION_KEY', undefined)
       vi.stubEnv('FLARE_EMAIL_ENCRYPTION_KEY_FILE', path)
-      const encrypted = encryptSecret('password')
-      expect(decryptSecret(encrypted)).toBe('password')
+      const encrypted = encryptSecret('password', 'smtp')
+      expect(decryptSecret(encrypted, 'smtp')).toBe('password')
       vi.stubEnv(
         'FLARE_EMAIL_ENCRYPTION_KEY',
         'duplicate-key-with-at-least-32-characters'

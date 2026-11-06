@@ -1,7 +1,6 @@
 import type { MailOutbox } from '@prisma/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { decryptSecret, encryptSecret } from '@/lib/email/crypto'
 import {
   MailLimitError,
   deliverClaimedMail,
@@ -9,6 +8,7 @@ import {
   retryMail,
 } from '@/lib/email/outbox'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
+import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 const doubles = vi.hoisted(() => ({
   sendMail: vi.fn(),

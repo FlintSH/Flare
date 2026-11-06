@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 
 const PREFIX = 'flare-email:v1:'
 
-function encryptionKey(purpose: string): Buffer {
+function keySecret(): string {
   let dedicated = process.env.FLARE_EMAIL_ENCRYPTION_KEY
   if (process.env.FLARE_EMAIL_ENCRYPTION_KEY_FILE) {
     if (dedicated !== undefined)
@@ -30,21 +30,25 @@ function encryptionKey(purpose: string): Buffer {
       'Email encryption requires FLARE_EMAIL_ENCRYPTION_KEY or NEXTAUTH_SECRET with at least 32 characters.'
     )
   }
+  return secret
+}
+
+function encryptionKey(purpose: string): Buffer {
   return Buffer.from(
-    hkdfSync('sha256', secret, 'flare-email-encryption-v1', purpose, 32)
+    hkdfSync('sha256', keySecret(), 'flare-email-encryption-v1', purpose, 32)
   )
 }
 
 export function assertEmailEncryptionKey(): void {
-  encryptionKey('smtp')
+  keySecret()
 }
 
 export function isEncryptedSecret(value: string): boolean {
   return value.startsWith(PREFIX)
 }
 
-/** Random nonces and purpose-specific keys prevent swapping SMTP and outbox data. */
-export function encryptSecret(value: string, purpose = 'smtp'): string {
+/** Random nonces and purpose-specific keys keep a value from decrypting under another purpose. */
+export function encryptSecret(value: string, purpose: string): string {
   const nonce = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', encryptionKey(purpose), nonce)
   cipher.setAAD(Buffer.from(PREFIX + purpose))
@@ -60,7 +64,7 @@ export function encryptSecret(value: string, purpose = 'smtp'): string {
   )
 }
 
-export function decryptSecret(value: string, purpose = 'smtp'): string {
+export function decryptSecret(value: string, purpose: string): string {
   if (!isEncryptedSecret(value))
     throw new Error('Unrecognized encrypted email value.')
   const payload = Buffer.from(value.slice(PREFIX.length), 'base64url')

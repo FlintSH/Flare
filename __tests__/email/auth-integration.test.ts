@@ -25,9 +25,9 @@ import {
   requestPasswordReset,
   resetPassword,
 } from '@/lib/email/account'
-import { decryptSecret } from '@/lib/email/crypto'
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
 import { issueEmailToken } from '@/lib/email/tokens'
+import { decryptSecret } from '@/lib/security/secret-box'
 
 /** A different documentation-range address per request keeps per-IP email limits apart. */
 function uniqueAddress() {
