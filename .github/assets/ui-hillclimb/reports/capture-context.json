@@ -1,0 +1,51 @@
+{
+  "constructor": "Installed visual-polish-loop newStateContext, isMobile and hasTouch both derived from viewport.mobile",
+  "constructorSourceModified": "2026-11-01T11:27:17.480Z",
+  "configs": [
+    {
+      "name": "config-final.json",
+      "mobile": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      }
+    },
+    {
+      "name": "config-public-final.json",
+      "mobile": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      }
+    },
+    {
+      "name": "config-setup-final.json",
+      "mobile": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      }
+    },
+    {
+      "name": "config-presets.json",
+      "mobile": {
+        "name": "mobile",
+        "width": 390,
+        "height": 844,
+        "mobile": true
+      }
+    }
+  ],
+  "actualRuntime": {
+    "coarse": true,
+    "fine": false,
+    "maxTouchPoints": 1,
+    "viewport": {
+      "width": 390,
+      "height": 844
+    }
+  }
+}

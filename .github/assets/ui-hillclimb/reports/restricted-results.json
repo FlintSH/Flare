@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-11-06T19:52:23.248Z",
+  "origin": "http://localhost:3202",
+  "buildId": "6qGxSIGHgwcBzmARE6tpa",
+  "results": [
+    "desktop: restricted picker omitted, saved defaults/private guidance retained, expiration-only controls, real PRIVATE upload, safe administration redirect, no horizontal overflow",
+    "mobile: restricted picker omitted, saved defaults/private guidance retained, expiration-only controls, real PRIVATE upload, safe administration redirect, no horizontal overflow"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "profileRequests": [],
+  "uploads": [
+    {
+      "viewport": "desktop",
+      "id": "cmw5e5d4p0005gwzwc4ee1sz3",
+      "name": "restricted-ui-verification.txt",
+      "visibility": "PRIVATE",
+      "uploadStatus": 200
+    },
+    {
+      "viewport": "mobile",
+      "id": "cmw5e5eqh000mgwzwz58q4v1q",
+      "name": "restricted-ui-verification.txt",
+      "visibility": "PRIVATE",
+      "uploadStatus": 200
+    }
+  ],
+  "cleanup": [
+    {
+      "id": "cmw5e5eqh000mgwzwz58q4v1q",
+      "name": "restricted-ui-verification.txt",
+      "method": "DELETE",
+      "route": "/api/users/cmw5c31na000lgwtals98svdt/files/cmw5e5eqh000mgwzwz58q4v1q",
+      "status": 204
+    },
+    {
+      "id": "cmw5e5d4p0005gwzwc4ee1sz3",
+      "name": "restricted-ui-verification.txt",
+      "method": "DELETE",
+      "route": "/api/users/cmw5c31na000lgwtals98svdt/files/cmw5e5d4p0005gwzwc4ee1sz3",
+      "status": 204
+    }
+  ],
+  "originalDemoFilesPreserved": true,
+  "failure": null
+}
