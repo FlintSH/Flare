@@ -44,6 +44,10 @@ import {
   API_SCOPE_CATALOG,
   scopeUsable,
 } from '@/lib/integrations/bearer-routes'
+import {
+  CONNECTION_NAME_MAX_LENGTH,
+  WEBHOOK_URL_MAX_LENGTH,
+} from '@/lib/integrations/limits'
 import { allows } from '@/lib/permissions/actions'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
@@ -363,7 +367,7 @@ export function IntegrationsPanel({
                       name="name"
                       placeholder="My automation script"
                       required
-                      maxLength={80}
+                      maxLength={CONNECTION_NAME_MAX_LENGTH}
                     />
                   </div>
                   <fieldset className="space-y-2">
@@ -580,7 +584,7 @@ export function IntegrationsPanel({
                       name="name"
                       placeholder="My automation server"
                       required
-                      maxLength={80}
+                      maxLength={CONNECTION_NAME_MAX_LENGTH}
                     />
                   </div>
                   <div className="space-y-2">
@@ -591,7 +595,7 @@ export function IntegrationsPanel({
                       type="url"
                       placeholder="https://automation.example.com/flare"
                       required
-                      maxLength={2048}
+                      maxLength={WEBHOOK_URL_MAX_LENGTH}
                     />
                     <p className="text-xs text-muted-foreground">
                       Your receiver gets signed file metadata when your uploads

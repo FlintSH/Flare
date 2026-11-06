@@ -20,7 +20,7 @@ Webhooks belong to individual accounts. A destination receives events for its ow
 5. Send a test from Flare. Check both your receiver's logs and Flare's delivery history.
 6. Upload a small file and confirm that a real `file.ready` event reaches the receiver.
 
-There can be **10 webhooks per account**. Names are 1–80 characters; URLs can be at most 2,048 characters and cannot contain embedded credentials or fragments. Destinations are checked when created and again on delivery.
+There can be **10 webhooks per account**. Names are 1–80 characters; URLs can be at most 2,048 characters and cannot contain embedded credentials or fragments. The webhook fields and the token name field in **Profile → Integrations** stop at these lengths. Destinations are checked when created and again on delivery.
 
 Webhook management uses your signed-in dashboard session. A named API token cannot create destinations, read secrets, send tests, or retry deliveries.
 

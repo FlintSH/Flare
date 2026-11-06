@@ -13,6 +13,7 @@ import { encryptSecret } from '@/lib/security/secret-box'
 import { findOwnedProfile } from '@/lib/uploads/profiles'
 
 import { API_SCOPES } from './bearer-routes'
+import { CONNECTION_NAME_MAX_LENGTH, WEBHOOK_URL_MAX_LENGTH } from './limits'
 import { resolveWebhookTarget } from './security'
 import { createRandomApiToken, createWebhookSecret } from './tokens'
 import {
@@ -34,7 +35,7 @@ export class IntegrationError extends HttpError {
   }
 }
 
-const name = z.string().trim().min(1).max(80)
+const name = z.string().trim().min(1).max(CONNECTION_NAME_MAX_LENGTH)
 const createTokenCommand = z
   .object({
     action: z.literal('create-token'),
@@ -48,7 +49,7 @@ const createWebhookCommand = z
   .object({
     action: z.literal('create-webhook'),
     name,
-    url: z.string().max(2048),
+    url: z.string().max(WEBHOOK_URL_MAX_LENGTH),
   })
   .strict()
 const integrationCommand = z.discriminatedUnion('action', [

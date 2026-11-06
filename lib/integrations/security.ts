@@ -4,6 +4,8 @@ import { isIP } from 'node:net'
 
 import { HttpError } from '@/lib/http/errors'
 
+import { WEBHOOK_URL_MAX_LENGTH } from './limits'
+
 /** A webhook destination Flare won't send to; the message is for the person adding it. */
 export class WebhookTargetError extends HttpError {
   constructor(message: string) {
@@ -71,9 +73,14 @@ export function parseWebhookUrl(value: string): URL {
     throw new WebhookTargetError(
       'Webhooks require HTTPS. Local HTTP requires the operator private-network setting.'
     )
-  if (url.username || url.password || url.hash || value.length > 2048)
+  if (
+    url.username ||
+    url.password ||
+    url.hash ||
+    value.length > WEBHOOK_URL_MAX_LENGTH
+  )
     throw new WebhookTargetError(
-      'Webhook URLs cannot contain credentials or fragments, or exceed 2048 characters.'
+      `Webhook URLs cannot contain credentials or fragments, or exceed ${WEBHOOK_URL_MAX_LENGTH} characters.`
     )
   return url
 }
