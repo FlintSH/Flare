@@ -37,6 +37,9 @@ vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
     settings: { appearance: { favicon: state.favicon } },
   }),
+  getConfigOrDefaults: async () => ({
+    settings: { appearance: { favicon: state.favicon } },
+  }),
   updateConfig: async (update: {
     settings: { appearance: { favicon: string } }
   }) => {

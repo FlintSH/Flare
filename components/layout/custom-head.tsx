@@ -1,4 +1,4 @@
-import { getConfig } from '@/lib/config'
+import { getConfigOrDefaults } from '@/lib/config'
 
 function addImportantToCSS(css: string): string {
   if (!css.trim()) return css
@@ -14,7 +14,7 @@ function addImportantToCSS(css: string): string {
 
 export async function CustomHead({ recovery = false }: { recovery?: boolean }) {
   if (recovery) return null
-  const config = await getConfig()
+  const config = await getConfigOrDefaults()
   const { customCSS, customHead } = config.settings.advanced
 
   const processedCSS = addImportantToCSS(customCSS)

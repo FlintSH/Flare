@@ -31,7 +31,7 @@ All replicas must use the same authentication secret. A secret regenerated on ev
 
 ## Pages show Something went wrong
 
-While Flare can't read its database, for example because PostgreSQL is stopped, unreachable, or rejecting the configured account, the home page and `/setup` show **Something went wrong**. Other pages no longer send visitors to setup, and `GET /api/setup/check` answers `503`. Earlier versions treated an unreadable database as a new instance and showed the first-run setup form instead.
+While Flare can't read its database, for example because PostgreSQL is stopped, unreachable, or rejecting the configured account, pages show **Something went wrong**, API requests that read the instance settings answer `500`, and `GET /api/setup/check` answers `503`. No page sends visitors to setup. Earlier versions treated an unreadable database as a new instance and showed the first-run setup form instead, and a request that couldn't read the settings used the defaults: open registration, local storage, and the stock appearance.
 
 Check the database the same way as for a container that never becomes healthy:
 
@@ -42,7 +42,9 @@ docker compose exec -T db pg_isready -U flare -d flare
 docker compose logs --tail=150 flare
 ```
 
-Flare logs the database error under `GET /api/setup/check failed` when a browser checks setup, and reads settings as their defaults with `Could not access database for config, using default`. Once the database answers again, choose **Try again** or reload the page; nothing in Flare needs repairing. In earlier versions, **Try again** showed the error again until the page was reloaded. If the setup form appears while the database is reachable, Flare is connected to a database with no accounts: read [Files disappear after redeploying](#files-disappear-after-redeploying) before you complete setup again.
+Flare logs the database error under `GET /api/setup/check failed` when a browser checks setup, under each failing API route, and as `Could not read settings; page shell uses defaults` when it draws the frame around the error message with the default appearance. Once the database answers again, choose **Try again** or reload the page; nothing in Flare needs repairing. In earlier versions, **Try again** showed the error again until the page was reloaded. If the setup form appears while the database is reachable, Flare is connected to a database with no accounts: read [Files disappear after redeploying](#files-disappear-after-redeploying) before you complete setup again.
+
+Pages and requests fail the same way while the saved settings document doesn't pass Flare's checks, for example after an edit made directly in the database, and the logged error names the value that failed. Correct that value, or restore it from your [database backup](./maintenance); the next request uses it without a restart. Earlier versions quietly used the default settings until the document was corrected.
 
 ## Startup logs warn about NEXTAUTH_SECRET
 

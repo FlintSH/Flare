@@ -209,39 +209,10 @@ export async function replaceSavedConfigSection(
   return true
 }
 
-async function initConfig(): Promise<FlareConfig> {
-  try {
-    const config = await prisma.config.findFirst({
-      where: { key: CONFIG_KEY },
-    })
-
-    if (!config) {
-      await prisma.config.create({
-        data: {
-          key: CONFIG_KEY,
-          value: DEFAULT_CONFIG as InputJsonValue,
-        },
-      })
-      return DEFAULT_CONFIG
-    }
-
-    return configSchema.parse(config.value)
-  } catch (error) {
-    logger.warn('Could not access database for config, using default', {
-      error,
-    })
-    return DEFAULT_CONFIG
-  }
-}
-
 type ConfigRevision = { id: string; xmin: string }
 type CachedConfigRow = ConfigRevision & {
   /** The saved JSON as read, deep-frozen. Parse it; never edit it. */
   value: unknown
-  parsed?: FlareConfig
-  parseError?: unknown
-  /** The schema that produced `parsed` or `parseError`. */
-  schema?: unknown
 }
 type ConfigCacheState = {
   row?: CachedConfigRow
@@ -330,40 +301,57 @@ export async function readSavedConfigRow(): Promise<CachedConfigRow | null> {
   return cache.loading.promise
 }
 
+// The row is shared by the whole process, but each route bundle loads its own
+// copy of this module, and a development reload brings a new schema, so each
+// copy keeps the parse its own schema made.
+const parsedRows = new WeakMap<
+  CachedConfigRow,
+  { config: FlareConfig } | { error: unknown }
+>()
+
 function parseSavedConfig(row: CachedConfigRow): FlareConfig {
-  // The cache outlives a development reload of this module, which brings a new
-  // schema. Results from another schema are stale even if the row isn't.
-  if (row.schema !== configSchema) {
-    row.parsed = undefined
-    row.parseError = undefined
-    row.schema = configSchema
+  let parsed = parsedRows.get(row)
+  if (!parsed) {
+    try {
+      // Shared by every caller until the row changes, so make it read-only.
+      parsed = { config: deepFreeze(configSchema.parse(row.value)) }
+    } catch (error) {
+      // The same saved value always fails the same way; report it without re-parsing.
+      parsed = { error }
+    }
+    parsedRows.set(row, parsed)
   }
-  if (row.parsed) return row.parsed
-  // The same saved value always fails the same way; report it without re-parsing.
-  if (row.parseError) throw row.parseError
-  try {
-    // Shared by every caller until the row changes, so make it read-only.
-    row.parsed = deepFreeze(configSchema.parse(row.value))
-    return row.parsed
-  } catch (error) {
-    row.parseError = error
-    throw error
-  }
+  if ('error' in parsed) throw parsed.error
+  return parsed.config
 }
 
+/**
+ * The saved settings, or the defaults before anything is saved. Database
+ * errors and a saved document the schema refuses propagate: acting on the
+ * defaults instead would, for example, open a closed instance's registration
+ * or store uploads on local disk.
+ */
 export async function getConfig(): Promise<FlareConfig> {
+  const row = await readSavedConfigRow()
+  if (row) return parseSavedConfig(row)
+  // Startup saves the defaults; this covers a database it hasn't prepared.
+  await prisma.config.createMany({
+    data: { key: CONFIG_KEY, value: DEFAULT_CONFIG as InputJsonValue },
+    skipDuplicates: true,
+  })
+  return DEFAULT_CONFIG
+}
+
+/**
+ * The settings, or the defaults when they can't be read. Only for the page
+ * shell around every page, which renders outside every error boundary: it
+ * must still render so the error page can show.
+ */
+export async function getConfigOrDefaults(): Promise<FlareConfig> {
   try {
-    const row = await readSavedConfigRow()
-
-    if (!row) {
-      return initConfig()
-    }
-
-    return parseSavedConfig(row)
+    return await getConfig()
   } catch (error) {
-    logger.warn('Could not access database for config, using default', {
-      error,
-    })
+    logger.warn('Could not read settings; page shell uses defaults', { error })
     return DEFAULT_CONFIG
   }
 }

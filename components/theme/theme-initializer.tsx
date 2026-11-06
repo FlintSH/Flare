@@ -1,4 +1,4 @@
-import { getConfig } from '@/lib/config'
+import { getConfigOrDefaults } from '@/lib/config'
 
 import { initialThemeStyles } from './initial-theme-styles'
 
@@ -7,7 +7,7 @@ export async function ThemeInitializer({
 }: {
   recovery?: boolean
 }) {
-  const config = await getConfig()
+  const config = await getConfigOrDefaults()
   return (
     <style
       id="theme-initializer"

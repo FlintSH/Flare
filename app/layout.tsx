@@ -14,7 +14,7 @@ import { ThemeInitializer } from '@/components/theme/theme-initializer'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 
-import { getConfig } from '@/lib/config'
+import { getConfigOrDefaults } from '@/lib/config'
 import { faviconUrl } from '@/lib/customization/favicon'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
@@ -41,7 +41,7 @@ const inter = localFont({
   variable: '--font-inter',
 })
 
-const requestConfig = cache(getConfig)
+const requestConfig = cache(getConfigOrDefaults)
 
 export async function generateMetadata(): Promise<Metadata> {
   const favicon = faviconUrl(
