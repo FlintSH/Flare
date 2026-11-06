@@ -5,7 +5,7 @@ description: Save reusable sharing choices, understand inheritance, and use the 
 
 # Upload profiles and defaults
 
-Managing saved profiles, importing/exporting recipes, and selecting an account default requires `uploadProfiles.manage`. Changing account upload defaults uses `profile.update`. Uploading with an existing profile still requires `files.upload`; a profile never grants a permission missing from your [roles](/admin/roles).
+Managing saved profiles, importing/exporting recipes, choosing a profile in the browser, and selecting an account default requires `uploadProfiles.manage`. Without it, Upload uses your saved defaults automatically and hides the unavailable picker; your sharing permissions still apply. Archive dialogs keep their explicit private, no-profile fallback. Changing account upload defaults uses `profile.update`. Uploading with an existing profile still requires `files.upload`; a profile never grants a permission missing from your [roles](/admin/roles).
 
 An upload profile saves how you want a new upload to behave. Make one for everyday screenshots, another for private work, and another for temporary clips. The same choices can follow uploads from the browser, pastes, screenshot tools, and your own integrations.
 
@@ -128,3 +128,5 @@ A saved profile can hold a setting this version of Flare doesn't have, such as t
 Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger file, and `POST /api/upload-profiles` answers `413` to a larger request, whether it carries a recipe or a new profile. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.
+
+On **Upload** and **Paste**, the summary under **Upload profile** describes the effective settings, including one-time overrides and the action taken at expiry. **Upload options** on Upload and **Sharing options** on Paste start closed; open the relevant disclosure to change the batch, then review the summary. Closing the disclosure does not reset an override or change profile precedence.

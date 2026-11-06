@@ -5,7 +5,7 @@ description: Protect password sign-in with an authenticator app, save recovery c
 
 # Two-factor authentication and passkeys
 
-Open **Profile → Account → Sign-in security** to manage your account's sign-in methods. Two-factor authentication (2FA) adds an authenticator code after your password. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that password.
+Open **Profile → Account** and choose the **Sign-in security** shortcut to manage your account's sign-in methods. On a phone, choose **Account** from the **Section** selector first. Two-factor authentication (2FA) adds an authenticator code after your password. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that password.
 
 These controls belong to your account and remain available without the `profile.update` role permission. They do not change your role, make private files public, or replace the instance's email-verification policy. New accounts start with two-factor authentication off and no registered passkeys. **Require passkey to sign in** is off for new and existing accounts until you explicitly enable it; registering a passkey alone does not turn it on.
 
@@ -25,7 +25,7 @@ For example, if recent recovery proof expires while **Add a passkey** is open, i
 
 ## Check where your account is signed in
 
-Use **Profile → Account → Active sessions** to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
+Choose **Active sessions** in the **Profile → Account** shortcuts to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
 
 ## Choose your sign-in method
 

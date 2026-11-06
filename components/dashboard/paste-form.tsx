@@ -10,6 +10,7 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
+import { CreationOptions } from '@/components/shared/creation-options'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -168,11 +169,6 @@ export function PasteForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <ProfilePicker
-        value={profileId}
-        onChange={setProfileId}
-        disabled={isSubmitting}
-      />
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label htmlFor="content">Content</Label>
@@ -193,7 +189,7 @@ export function PasteForm() {
           aria-describedby={error ? 'paste-error' : undefined}
         />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="filename">
             Filename{' '}
@@ -216,48 +212,69 @@ export function PasteForm() {
             Add an extension such as .js, .py, or .md for syntax highlighting.
           </p>
         </div>
-        {canShare && (
-          <div className="space-y-2">
-            <Label htmlFor="paste-visibility">Visibility</Label>
-            <Select
-              value={visibility}
-              onValueChange={setVisibility}
-              disabled={isSubmitting}
-            >
-              <SelectTrigger id="paste-visibility">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inherit">From upload profile</SelectItem>
-                <SelectItem value="PUBLIC">
-                  Public (anyone with the link)
-                </SelectItem>
-                <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
+      <ProfilePicker
+        value={profileId}
+        onChange={setProfileId}
+        disabled={isSubmitting}
+        overrides={{
+          visibility:
+            visibility === 'inherit'
+              ? undefined
+              : (visibility as 'PUBLIC' | 'PRIVATE'),
+          password: Boolean(password),
+          passwordInvalid: Boolean(password && filePasswordHint(password)),
+        }}
+      />
       {canShare && (
-        <div className="space-y-2">
-          <Label htmlFor="paste-password">
-            Password protection{' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <Input
-            id="paste-password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Leave empty for no password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            disabled={isSubmitting}
-            {...filePasswordFieldProps('paste-password-hint', password)}
-          />
-          <FilePasswordHint id="paste-password-hint" password={password} />
-        </div>
+        <CreationOptions
+          error={password ? filePasswordHint(password) : null}
+          passwordField="paste-password"
+          customized={Boolean(visibility !== 'inherit' || password)}
+        >
+          {canShare && (
+            <div className="space-y-2">
+              <Label htmlFor="paste-visibility">Visibility</Label>
+              <Select
+                value={visibility}
+                onValueChange={setVisibility}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="paste-visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">From upload profile</SelectItem>
+                  <SelectItem value="PUBLIC">
+                    Public (anyone with the link)
+                  </SelectItem>
+                  <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {canShare && (
+            <div className="space-y-2">
+              <Label htmlFor="paste-password">
+                Password protection{' '}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="paste-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Leave empty for no password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={isSubmitting}
+                {...filePasswordFieldProps('paste-password-hint', password)}
+              />
+              <FilePasswordHint id="paste-password-hint" password={password} />
+            </div>
+          )}
+        </CreationOptions>
       )}
       {error && (
         <Alert id="paste-error" variant="destructive">

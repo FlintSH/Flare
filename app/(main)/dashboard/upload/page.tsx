@@ -7,6 +7,7 @@ import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
+import { hasPermission } from '@/lib/permissions/catalog'
 import { formatBytes } from '@/lib/utils'
 
 import { requireDashboardPage } from '../page-access'
@@ -31,13 +32,17 @@ export default async function UploadPage() {
   const maxSizeBytes = maxUploadBytes(config)
 
   return (
-    <div className="container space-y-7">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         eyebrow="Your files"
         title="Upload files"
-        description="Upload and share files, with optional password protection."
+        description={
+          hasPermission(session.user, 'files.share')
+            ? 'Upload and share files, with optional password protection.'
+            : 'Upload files privately using your saved defaults.'
+        }
       />
-      <div className={pagePanelClassName}>
+      <div className={`${pagePanelClassName} max-w-4xl`}>
         <UploadForm
           user={user}
           maxSize={maxSizeBytes}

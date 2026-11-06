@@ -9,7 +9,11 @@ Your [roles](/admin/roles) determine which profile actions are available. Editin
 
 Select your avatar at the right of the dashboard bar and choose **Profile** to manage settings that belong to you. **Settings**, in the **Admin** menu, is the administrators' separate area for instance-wide behavior.
 
-<Screenshot src="/screenshots/roles/profile-roles.webp" alt="Profile Account section showing the demonstration account’s Moderator, Creator, and Everyone roles above its identity fields" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
+On a phone or narrow window, open the **Section** selector to see all your available Profile sections. On a wider screen, use the section list at the left; it stays within reach while you scroll. **Account** starts with shortcuts to **Identity**, **Sign-in security**, **Active sessions**, **Login history**, **Password**, and **Appearance**, where your permissions allow them. Choose a shortcut to move directly to that card. The section and card address can be bookmarked, and browser Back and Forward return to earlier choices.
+
+Switching sections keeps unfinished edits available in the same page, but does not save them. Use each card's save action before leaving or reloading Profile.
+
+<Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Profile Account section showing the demonstration account's Admin and Everyone roles above its identity fields, security, and personal preferences" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
 
 Verification, recovery-address enrollment, password recovery, and confirmed email-change flows remain available under their own identity and email-policy checks, even without `profile.update`. Role restrictions on application preferences do not remove those account-security paths.
 
@@ -21,7 +25,7 @@ Verification, recovery-address enrollment, password recovery, and confirmed emai
 
 ## Login history and active sessions
 
-Open **Profile → Account** and scroll to **Active sessions** and **Login history**. These account-security controls are available independently of `profile.update`; you do not need permission to manage other users. A session belongs to one completed browser sign-in, so several tabs in the same browser can share a session while another browser or private window has its own.
+Open **Profile → Account** and choose the **Active sessions** or **Login history** shortcut. These account-security controls are available independently of `profile.update`; you do not need permission to manage other users. A session belongs to one completed browser sign-in, so several tabs in the same browser can share a session while another browser or private window has its own.
 
 <Screenshot src="/screenshots/audit/sessions-desktop.webp" alt="Profile Account section showing active browser sessions, a This browser marker, individual Revoke session actions, and Revoke all sessions" caption="Review the sign-in time, last activity, method, and recorded client details before revoking a session." />
 
@@ -70,7 +74,7 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## Update your name and avatar
 
-Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
+Under **Profile → Account**, choose **Identity**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
 
 Choose **Change avatar** and select a PNG, JPEG, GIF, or WebP image of at most 2 MB to update your photo. A larger file shows **File too large** and another format, such as SVG, HEIC, or AVIF, shows **Invalid file type**; nothing is uploaded, so resize or convert the image and try again. The server checks the same rules again and also checks that the content really is a PNG, JPEG, GIF, or WebP image, though not necessarily the one its name says: a JPEG saved as `photo.png` works. Earlier versions accepted an image of any type and size, but refused one whose content was another format than its name said. When your instance enforces [storage quotas](#check-storage-and-usage), the image must fit in your remaining space, although it isn't added to your used space. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
@@ -82,7 +86,7 @@ Changing your username does not automatically change file URL paths. For a memor
 
 ## Change your password
 
-In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place. The new password also cancels an email address change you haven't finished, and links Flare already emailed you, such as verification links, stop working.
+In **Profile → Account**, choose the **Password** shortcut. Under **Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place. The new password also cancels an email address change you haven't finished, and links Flare already emailed you, such as verification links, stop working.
 
 If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
 

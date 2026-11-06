@@ -26,6 +26,7 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
+import { CreationOptions } from '@/components/shared/creation-options'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -151,14 +152,14 @@ export function UploadForm({
         className={cn(
           // The page's main input: a dashed 3:1 control outline, like the
           // fields below it.
-          'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 px-4 py-8 text-center outline-none transition-colors hover:border-primary hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 px-4 py-6 text-center outline-none transition-colors hover:border-primary hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           isDragActive && 'border-primary bg-primary/5',
           isUploading && 'pointer-events-none opacity-60'
         )}
       >
         <input {...getInputProps()} />
         <Upload
-          className="mb-3 h-9 w-9 text-muted-foreground"
+          className="mb-3 h-8 w-8 text-muted-foreground"
           aria-hidden="true"
         />
         <p className="text-balance text-base font-medium">
@@ -189,6 +190,7 @@ export function UploadForm({
             </h2>
             <button
               type="button"
+              data-flare-control="button"
               className={textActionClassName}
               onClick={clear}
               disabled={isUploading}
@@ -254,180 +256,186 @@ export function UploadForm({
       )}
 
       <div className="space-y-4">
-        {/* The paste form's arrangement: the upload profile first at full
-            width, so its summary sits above the choices it describes, then
-            the short choices paired, then the password. A lone choice in
-            the pair takes the full width. */}
         <ProfilePicker
           value={profileId}
           onChange={setProfileId}
           disabled={isUploading}
+          overrides={{
+            visibility,
+            expiresAt,
+            expiryAction,
+            password: Boolean(password),
+            passwordInvalid: Boolean(password && filePasswordHint(password)),
+          }}
         />
-        {(showFolders || canShare) && (
-          <div className="grid gap-4 md:grid-cols-2 md:[&>:only-child]:col-span-2">
-            {showFolders && (
-              <div className="min-w-0 space-y-2">
-                <Label htmlFor="upload-folder">Save to</Label>
-                <Select
-                  value={folderId ?? UNFILED}
-                  onValueChange={(value) =>
-                    setFolderId(folderDestination(value))
-                  }
-                  disabled={isUploading || foldersLoading}
-                >
-                  <SelectTrigger id="upload-folder" className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Folder
-                        className="h-4 w-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <SelectValue placeholder="Choose a folder" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={UNFILED}>Unfiled</SelectItem>
-                    {folderId && !selectedFolder && (
-                      <SelectItem value={folderId} disabled>
-                        {foldersLoading
-                          ? 'Loading folder…'
-                          : 'Folder unavailable'}
-                      </SelectItem>
-                    )}
-                    {[...folders]
-                      .sort((a, b) =>
-                        folderPath(folders, a.id).localeCompare(
-                          folderPath(folders, b.id)
-                        )
-                      )
-                      .map((folder) => (
-                        <SelectItem key={folder.id} value={folder.id}>
-                          {folderPath(folders, folder.id)}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                {unavailableFolder ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {foldersError
-                      ? 'Folders could not be loaded. Try refreshing the page.'
-                      : 'This folder is no longer available. Choose another destination.'}
-                  </p>
-                ) : selectedFolder?.shareToken ? (
-                  <p className="text-xs text-muted-foreground">
-                    Public files will also appear on this folder’s shared link.
-                  </p>
-                ) : null}
-              </div>
-            )}
-            {canShare && (
-              <div className="min-w-0 space-y-2">
-                <Label htmlFor="upload-visibility">Visibility</Label>
-                <Select
-                  value={visibility || 'inherit'}
-                  disabled={isUploading}
-                  onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
-                    setVisibility(value === 'inherit' ? undefined : value)
-                  }
-                >
-                  <SelectTrigger id="upload-visibility">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="inherit">From upload profile</SelectItem>
-                    <SelectItem value="PUBLIC">
-                      Public (anyone with the link)
+        {showFolders && (
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="upload-folder">Save to</Label>
+            <Select
+              value={folderId ?? UNFILED}
+              onValueChange={(value) => setFolderId(folderDestination(value))}
+              disabled={isUploading || foldersLoading}
+            >
+              <SelectTrigger id="upload-folder" className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Folder
+                    className="h-4 w-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <SelectValue placeholder="Choose a folder" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNFILED}>Unfiled</SelectItem>
+                {folderId && !selectedFolder && (
+                  <SelectItem value={folderId} disabled>
+                    {foldersLoading ? 'Loading folder…' : 'Folder unavailable'}
+                  </SelectItem>
+                )}
+                {[...folders]
+                  .sort((a, b) =>
+                    folderPath(folders, a.id).localeCompare(
+                      folderPath(folders, b.id)
+                    )
+                  )
+                  .map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      {folderPath(folders, folder.id)}
                     </SelectItem>
-                    <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                  ))}
+              </SelectContent>
+            </Select>
+            {unavailableFolder ? (
+              <p className="text-sm text-destructive" role="alert">
+                {foldersError
+                  ? 'Folders could not be loaded. Try refreshing the page.'
+                  : 'This folder is no longer available. Choose another destination.'}
+              </p>
+            ) : selectedFolder?.shareToken ? (
+              <p className="text-xs text-muted-foreground">
+                Public files will also appear on this folder’s shared link.
+              </p>
+            ) : null}
           </div>
         )}
-        {canShare && (
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="upload-password">
-              Password protection{' '}
+        <CreationOptions
+          label={canShare ? 'Upload options' : 'Expiration options'}
+          error={password ? filePasswordHint(password) : null}
+          passwordField="upload-password"
+          customized={Boolean(
+            visibility || password || expiresAt !== undefined
+          )}
+        >
+          {canShare && (
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor="upload-visibility">Visibility</Label>
+              <Select
+                value={visibility || 'inherit'}
+                disabled={isUploading}
+                onValueChange={(value: 'PUBLIC' | 'PRIVATE' | 'inherit') =>
+                  setVisibility(value === 'inherit' ? undefined : value)
+                }
+              >
+                <SelectTrigger id="upload-visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">From upload profile</SelectItem>
+                  <SelectItem value="PUBLIC">
+                    Public (anyone with the link)
+                  </SelectItem>
+                  <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {canShare && (
+            <div className="min-w-0 space-y-2">
+              <Label htmlFor="upload-password">
+                Password protection{' '}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="upload-password"
+                type="password"
+                autoComplete="new-password"
+                disabled={isUploading}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Leave empty for no password"
+                {...filePasswordFieldProps('upload-password-hint', password)}
+              />
+              <FilePasswordHint id="upload-password-hint" password={password} />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="upload-expiration">
+              File expiration{' '}
               <span className="font-normal text-muted-foreground">
                 (optional)
               </span>
             </Label>
-            <Input
-              id="upload-password"
-              type="password"
-              autoComplete="new-password"
-              disabled={isUploading}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Leave empty for no password"
-              {...filePasswordFieldProps('upload-password-hint', password)}
-            />
-            <FilePasswordHint id="upload-password-hint" password={password} />
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="upload-expiration">
-            File expiration{' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          {/* Sized and filled like the selects above it. */}
-          <Button
-            id="upload-expiration"
-            type="button"
-            variant="outline"
-            disabled={isUploading}
-            className="w-full justify-start bg-transparent px-3 text-left text-base font-normal md:text-sm"
-            onClick={() => setIsExpiryModalOpen(true)}
-          >
-            <CalendarClock
-              className="text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span className="min-w-0 truncate">
-              {expiresAt
-                ? format(expiresAt, 'PPP p')
-                : expiresAt === null
-                  ? 'No expiration for this upload'
-                  : 'From upload profile'}
-            </span>
-          </Button>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <button
+            {/* Sized and filled like the selects above it. */}
+            <Button
+              id="upload-expiration"
               type="button"
+              variant="outline"
               disabled={isUploading}
-              className={textActionClassName}
-              onClick={() => {
-                setExpiresAt(undefined)
-                setExpiryAction(undefined)
-              }}
+              className="w-full justify-start bg-transparent px-3 text-left text-base font-normal md:text-sm"
+              onClick={() => setIsExpiryModalOpen(true)}
             >
-              Use profile expiration
-            </button>
-            <button
-              type="button"
-              disabled={isUploading}
-              className={textActionClassName}
-              onClick={() => setExpiresAt(null)}
-            >
-              No expiration
-            </button>
-          </div>
-          {expiresAt && (
-            <p className="text-pretty rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-              These files will{' '}
-              {expiryAction === 'SET_PRIVATE'
-                ? 'become private'
-                : 'be permanently deleted'}{' '}
-              on {format(expiresAt, 'PPPP')}{' '}
-              <span className="whitespace-nowrap">
-                {format(expiresAt, 'p')}
+              <CalendarClock
+                className="text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate">
+                {expiresAt
+                  ? format(expiresAt, 'PPP p')
+                  : expiresAt === null
+                    ? 'No expiration for this upload'
+                    : 'From upload profile'}
               </span>
-              .
-            </p>
-          )}
-        </div>
+            </Button>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              <button
+                type="button"
+                disabled={isUploading}
+                data-flare-control="button"
+                className={textActionClassName}
+                onClick={() => {
+                  setExpiresAt(undefined)
+                  setExpiryAction(undefined)
+                }}
+              >
+                Use profile expiration
+              </button>
+              <button
+                type="button"
+                disabled={isUploading}
+                data-flare-control="button"
+                className={textActionClassName}
+                onClick={() => setExpiresAt(null)}
+              >
+                No expiration
+              </button>
+            </div>
+            {expiresAt && (
+              <p className="text-pretty rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                These files will{' '}
+                {expiryAction === 'SET_PRIVATE'
+                  ? 'become private'
+                  : 'be permanently deleted'}{' '}
+                on {format(expiresAt, 'PPPP')}{' '}
+                <span className="whitespace-nowrap">
+                  {format(expiresAt, 'p')}
+                </span>
+                .
+              </p>
+            )}
+          </div>
+        </CreationOptions>
         <Button
           className="w-full"
           onClick={() => {

@@ -13,8 +13,8 @@ Every account can choose how the signed-in workspace looks. Administrators can a
 
 ## Choose your workspace theme
 
-1. Open **Profile → Account**.
-2. Find **Your workspace, your preference**.
+1. Open **Profile → Account**. On a phone, choose **Account** from the **Section** selector.
+2. Choose the **Appearance** shortcut to reach **Your workspace, your preference**.
 3. Choose a mode.
 4. Select **Save preference**. It becomes available once you choose a mode other than your saved one.
 

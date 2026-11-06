@@ -191,7 +191,7 @@ function AccountSessions({ scope }: { scope: SessionScope }) {
   }
   return (
     <>
-      <Card id="active-sessions" className="scroll-mt-28">
+      <Card id="active-sessions" className="scroll-mt-28 outline-none">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1.5">
@@ -307,7 +307,7 @@ function AccountSessions({ scope }: { scope: SessionScope }) {
           </div>
         </CardContent>
       </Card>
-      <Card id="login-history" className="scroll-mt-28">
+      <Card id="login-history" className="scroll-mt-28 outline-none">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1.5">

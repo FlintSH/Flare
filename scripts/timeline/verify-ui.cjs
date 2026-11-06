@@ -657,6 +657,42 @@ async function main() {
       page.locator(`[data-file-index="${phoneAnchor}"]`)
     ).toBeInViewport()
     await sample(page, 'resized-desktop-oldest')
+    // Check the middle of history: near the bottom, native scroll clamping
+    // could conceal a lost width-only anchor while still showing the oldest.
+    const wideRail = page.getByRole('slider', { name: 'Browse files by date' })
+    const wideRailBox = await wideRail.boundingBox()
+    await page.mouse.click(
+      wideRailBox.x + wideRailBox.width / 2,
+      wideRailBox.y + wideRailBox.height / 2
+    )
+    await expect(page.locator('[data-file-index="6000"]')).toBeAttached()
+    await ready(page)
+    const monthBeforeResize = await wideRail.getAttribute('aria-valuetext')
+    const wideAnchor = await firstVisibleIndex(page)
+    const libraryList = page.getByRole('list', {
+      name: 'Your files',
+      exact: true,
+    })
+    const widthBeforeResize = (await libraryList.boundingBox()).width
+    await page.setViewportSize({ width: 1320, height: 1000 })
+    await columns(page, 4)
+    await expect
+      .poll(async () =>
+        Math.abs((await libraryList.boundingBox()).width - widthBeforeResize)
+      )
+      .toBeGreaterThan(1)
+    await ready(page)
+    await expect(
+      page.locator(`[data-file-index="${wideAnchor}"]`)
+    ).toBeInViewport()
+    await expect(
+      page.getByRole('slider', { name: 'Browse files by date' })
+    ).toHaveAttribute('aria-valuetext', monthBeforeResize)
+    await sample(page, 'resized-same-columns-middle')
+    await wideRail.press('End')
+    await expect(page.locator('[data-file-index="11999"]')).toBeAttached()
+    await expect(wideRail).toHaveAttribute('aria-valuetext', 'July 2018')
+    await ready(page)
     const desktopAnchor = await firstVisibleIndex(page)
     await page.setViewportSize({ width: 390, height: 844 })
     await columns(page, 1)
@@ -951,9 +987,36 @@ async function main() {
       .getByRole('button', { name: 'Reset filters', exact: true })
       .click()
     await ready(page)
+    const folderDisclosure = page
+      .getByRole('navigation', { name: 'File library', exact: true })
+      .getByRole('button', { name: /^Folders \d+$/ })
+    await expect(folderDisclosure).toHaveAttribute('aria-expanded', 'false')
+    await folderDisclosure.click()
+    await expect(folderDisclosure).toHaveAttribute('aria-expanded', 'true')
+    const folderDirectory = page.getByRole('region', {
+      name: 'Folders',
+      exact: true,
+    })
+    assert.equal(
+      await folderDirectory.evaluate(
+        (element) => element.scrollHeight > element.clientHeight
+      ),
+      false,
+      'The single-folder fixture has no internal overflow'
+    )
+    const directoryBox = await folderDirectory.boundingBox()
+    await page.mouse.move(
+      directoryBox.x + directoryBox.width / 2,
+      directoryBox.y + directoryBox.height / 2
+    )
+    await page.mouse.wheel(0, 500)
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(200)
+    passed(
+      'A non-overflowing folder directory chains wheel scrolling into the file library'
+    )
     await page
+      .getByRole('region', { name: 'Folders', exact: true })
       .getByRole('button', { name: 'Open folder Travel journal', exact: true })
-      .first()
       .click()
     await expect(
       page.getByText('1,714 files', { exact: true }).first()

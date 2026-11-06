@@ -25,7 +25,7 @@ These short, silent recordings capture actual browser interactions with Flare an
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. Open **Files** in the isolated demonstration account. The library shows **12,000 files** and its newest uploads from October 2026.
+1. Open **Files** in the isolated demonstration account. The library shows **12,000 files** and its newest uploads from October 2026. The folder directory starts collapsed, leaving the file cards close to search.
 2. Scroll down through the file cards. More files appear in the same continuous list, and the slim rail at the right shows the current upload period.
 3. Drag the date rail to the middle of the upload history, then press End to jump to the oldest uploads, from July 2018. Each destination loads directly without stepping through intervening pages.
 4. Return to the beginning, choose **Select**, and select visible files. Scroll until those cards leave the view; the selected count stays available in the selection bar. Return to the beginning and confirm the original cards remain selected.
@@ -39,7 +39,7 @@ This recording uses real application requests and a disposable account seeded wi
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 </div>
 
-1. Open the same demonstration library at a 390px viewport. The single-column cards and date label fit beside the narrow rail.
+1. Open the same demonstration library at a 390px viewport. Sorting and the labeled **Filters** control sit above the single-column cards; the folder directory starts collapsed. The date label fits beside the narrow rail.
 2. Scroll down through the newest uploads.
 3. Focus the rail and press End to reach July 2018, then Home to return to the newest uploads.
 

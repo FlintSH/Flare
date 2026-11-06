@@ -7,18 +7,32 @@ description: Investigate file activity, processing failures, account actions, ro
 
 Choose **Admin → Audit log** in the dashboard bar, or visit `/dashboard/audit`. You need `audit.read`; Administrator includes it. If `audit.read` is your only administration permission, **Audit log** sits in the bar by itself instead of in the **Admin** menu. The log brings recorded application activity into one view, with the time, actor, action, outcome, target, and available request or change details. It is useful for answering “who deleted this file?”, “why did processing fail?”, or “which account changed that role?”.
 
-<Screenshot src="/screenshots/audit/audit-desktop.webp" alt="Flare Audit log on desktop showing searchable instance events with time, actor, action, target filename, and outcome" caption="Start with recent instance activity, then narrow the investigation using the filters." />
+<Screenshot src="/screenshots/audit/audit-desktop.webp" alt="Flare Audit log on desktop showing investigation presets, search, filters, and compact recorded HTTP request events" caption="Choose Requests to focus on recorded HTTP activity, or another preset to investigate account and instance activity." />
 
 The viewer resets its filters and displayed events when you switch accounts or sign in with a new browser session. When the tab detects sign-out or loss of `audit.read`, it clears the previous viewer; a refresh rejected for either reason also clears the loaded events. Sign in with an authorized account before reopening the log. These checks do not remove events from the instance’s history.
 
 ## Find an event
 
 1. Open **Admin → Audit log**. The newest events appear first.
-2. Search for an actor name, action, filename, target ID, or request ID.
+2. Start with an investigation preset, or search for an actor name, action, filename, target ID, or request ID. Presets apply immediately; **All activity** is the starting view and still includes request events.
 3. Choose **Category**, **Action**, and **Outcome** as needed. **Time range** defaults to **All time**, with **Last 24 hours**, **Last 7 days**, **Last 30 days**, and **Custom range** options. Custom **From** and **To** use your browser’s local time; event details also show **Timestamp (UTC)**.
 4. Expand **Filter by actor, target, or request ID** when you know an exact identifier. Choose **Apply filters**, then **Previous** / **Next** for older matches. Each page shows up to 50 events. **Refresh** reloads the currently applied filters.
 5. Select an event row to expand **Recorded details**, available request context, and **Actor ID**, **Target ID**, and **Request ID**. Select one of those IDs to apply its exact filter immediately; the other applied filters remain in place.
-6. Choose **Clear filters** to return to all recent instance activity. Filter edits remain drafts until **Apply filters**; refreshing uses the applied choices.
+6. Choose **Clear filters** to return to all instance activity. Manual filter edits remain drafts until **Apply filters** or a preset is chosen; refreshing uses the applied choices. A message marks unapplied edits, and the activity panel lists the filters it is actually displaying.
+
+### Start an investigation
+
+| Preset              | Applied criteria                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **All activity**    | Clears category, action, and outcome. Request events remain included.                                                                                                    |
+| **Failed activity** | Outcome `failure`, across categories and actions. Denied requests are a separate outcome: select **Denied** under **Outcome** to investigate access refusals.            |
+| **Sign-ins**        | Category `authentication` and action `auth.login`, with all outcomes. Includes the login attempts Flare recorded, not every operation performed by an identity provider. |
+| **Account changes** | Category `accounts`, with all actions and outcomes in that category. Authentication, roles, and invitations have their own categories.                                   |
+| **Requests**        | Category `requests`, with all actions and outcomes in that category. This isolates recorded HTTP request outcomes; it is not a complete infrastructure access log.       |
+
+Choosing a preset applies your current search, time range, and exact actor/target/request IDs as well; it replaces only category, action, and outcome. The highlighted preset follows the applied criteria, rather than unapplied edits. **All activity** therefore keeps the rest of an investigation’s scope; **Clear filters** is the explicit way to clear everything. If a preset has no matches, widen or clear the retained scope. Existing audit events and retention rules are unchanged.
+
+Request events use a compact row: method and path, actor, and local time share one line on a wider screen; actor and time wrap below the request on a phone. Select the row to inspect the full request, exact IDs, and recorded context. Successful events use a quieter presentation without a repeated success badge. **Failure** and **Denied** remain visible badges, and every expanded event names its **Outcome**. The Outcome filter still distinguishes all three results.
 
 <Screenshot src="/screenshots/audit/audit-filtered.webp" alt="Audit log narrowed by filters to a smaller set of matching instance events" caption="Combine search, outcome, and time filters to focus an investigation." />
 
@@ -101,7 +115,7 @@ These records are ordinary application database data. Operators with database ac
 Open the navigation menu, select **Audit log** under **Admin**, and use the same filters and event details. Narrowing the result first helps when reviewing a busy instance on a small screen.
 
 <div style="max-width: 390px; margin-inline: auto">
-<Screenshot src="/screenshots/audit/audit-mobile.webp" alt="Mobile Audit log header with search, category, and outcome filters in a single-column layout" caption="Event filtering and details remain available on narrow screens." />
+<Screenshot src="/screenshots/audit/audit-mobile.webp" alt="Mobile Audit log with activity presets, search, and category filtering in a single-column layout" caption="Event filtering and details remain available on narrow screens." />
 </div>
 
 [Watch the recorded investigation](/demos#investigate-instance-activity) or use the [browser-session request examples](/api/activity#audit-query) against a disposable instance.

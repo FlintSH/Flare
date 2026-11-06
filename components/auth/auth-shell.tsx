@@ -41,7 +41,7 @@ export function AuthCard({
   return (
     <section
       aria-labelledby={titleId}
-      className="w-full max-w-[400px] rounded-2xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur-xl"
+      className="w-full max-w-[400px] rounded-2xl border border-border/60 bg-panel p-6 shadow-sm"
       data-flare-surface
     >
       <div className="mb-6 space-y-2 text-center">

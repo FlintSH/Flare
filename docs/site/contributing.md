@@ -525,6 +525,18 @@ As Alex, the script checks the four places, the **Admin** menu's pages, order, a
 
 `FLARE_NAVIGATION_TEST_ORIGIN` selects another loopback origin, `FLARE_NAVIGATION_PASSWORD` another fixture password, and `PW_CHROMIUM_EXECUTABLE_PATH` an installed Chromium. Set `FLARE_NAVIGATION_SCREENSHOTS` to a temporary directory, with a production build running, to capture `admin-menu.webp`, `account-menu.webp`, and `mobile-sheet.webp` for `docs/images/navigation/`, along with three images for review only. Captures use twice the pixel density, so the menus stay legible when the handbook scales them down. Inspect them before replacing the canonical copies.
 
+## Workspace interaction regression
+
+`scripts/ui-hillclimb/verify-ui.cjs` checks the shared controls and creation flows against a populated disposable local instance. Prepare a `.test` administrator session, a member named **Sam Okafor**, at least one uploaded file and folder, and the default roles. Keep its Playwright storage state outside Git. The script refuses non-local origins and an administrator without a `.test` email.
+
+```sh
+FLARE_HILLCLIMB_ORIGIN=http://localhost:3195 \
+FLARE_HILLCLIMB_AUTH="$PWD/.agent-artifacts/ui-check/admin-state.json" \
+node scripts/ui-hillclimb/verify-ui.cjs
+```
+
+Install the handbook's separate dependencies first so its Playwright is available. The suite creates and deletes disposable upload/paste files, opens and cancels account actions, and restores local Settings edits without saving them. It checks folder disclosure and remembered state, removable filters, section history and focus, audit presets, password recovery with closed options, real coarse-pointer switch/calendar controls, tablet tabs, and a 200% layout emulation. The latter uses a 720 CSS-pixel viewport at device scale 2; it is not an operating-system zoom or device test. Results and screenshots stay under `.agent-artifacts/visual-polish/qa/` unless `FLARE_HILLCLIMB_OUTPUT` selects another temporary directory.
+
 ## Local visual testing with Meticulous
 
 Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.

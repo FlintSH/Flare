@@ -7,7 +7,7 @@ description: Scroll through every file, jump through your upload history, combin
 
 Browsing your library requires `files.read`. File edits, sharing changes, and deletion use the separate `files.update`, `files.share`, and `files.delete` permissions. Bulk actions follow the same checks; missing actions may reflect your [roles](/admin/roles).
 
-**Files** is your home for uploaded files and pastes. Each card brings together a preview, filename, size, activity, and file actions. The library opens with all your files, newest first; organizing into folders or tags is optional.
+**Files** is your home for uploaded files and pastes. Each card brings together a preview, filename, size, activity, and file actions. The library opens with all your files, newest first; organizing into folders or tags is optional. The folder directory starts collapsed until you choose to keep it open on this device so your files stay close to search. Choose **Folders** and its count to browse it; **All files** and **Unfiled** stay available without expanding it. On phones, expand the directory to find **New folder** when folders already exist; the labeled **New folder** button stays beside navigation when the directory is empty. Inside a folder, the directory is named **Subfolders** and its path stays visible. Long folder directories scroll within their own region.
 
 Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upgrading-from-2-0-to-2-1) for plain copied links and URL-ID changes before updating saved links or custom clients. The dependency refresh keeps the filtering and viewer controls described here.
 
@@ -15,7 +15,7 @@ Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upg
 
 ## Read a file card
 
-Every card has the same layout and height, whether or not a file has tags or a folder. A file without an image preview shows an icon for its kind: video, audio, text or PDF, code, table for CSV and spreadsheets, archive, or a plain file. The icon follows the same rules as the [share page viewer](./sharing#what-recipients-can-preview), so a CSV file or archive saved under a generic type is recognized by its name, and **Users → View content** shows the same icons. Earlier builds chose the icon from the stored type alone and matched parts of it, so code types such as JSON, XML, Markdown, and shell scripts showed a text or plain file icon, while Java archives showed a code icon. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
+Every card has the same layout and height, whether or not a file has tags or a folder. A file without an image preview shows an icon for its kind: video, audio, text or PDF, code, table for CSV and spreadsheets, archive, or a plain file. The icon follows the same rules as the [share page viewer](./sharing#what-recipients-can-preview), so a CSV file or archive saved under a generic type is recognized by its name, and **Users → More actions → View content** shows the same icons. Earlier builds chose the icon from the stored type alone and matched parts of it, so code types such as JSON, XML, Markdown, and shell scripts showed a text or plain file icon, while Java archives showed a code icon. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
 
 A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
@@ -34,6 +34,8 @@ To use the rail from a keyboard, Tab to **Browse files by date**. Up/Down arrows
 <Screenshot src="/screenshots/timeline/library-date-jump.webp" alt="A historical section of the library with the right-hand date rail showing the upload period at the current scroll position" caption="Jump into your upload history while keeping the active search, folder, and filters." />
 
 The date rail follows the files matching your current filters. Size, view-count, and download-count sorts keep continuous scrolling but do not show a chronological rail. The rail is hidden for short lists.
+
+Resizing the window or rotating your device keeps the file you were browsing in view, including deep in a large library. Its position within a row can change as the number or width of columns changes; your search, folder, filters, and date grouping stay selected.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/timeline/library-mobile.webp" alt="The continuous file library on a narrow mobile screen with readable file cards and a date rail at the right edge" caption="The same library supports ordinary touch scrolling and date navigation on mobile." />
@@ -55,7 +57,7 @@ Filters in the page address remain bookmark settings. If an old folder or tag fi
 
 Type in the search field to find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.
 
-Use the controls beside search to narrow the current library:
+Use the controls beside search to narrow the current library. On a phone, sorting stays visible; choose **Filters** to reveal labeled tag, visibility, file-type, and upload-date controls. The number on **Filters** counts active tag, type, visibility, date-range, and grouping choices, and the applied values remain visible below search when these controls are closed:
 
 | Control         | Choices and behavior                                                                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -68,11 +70,13 @@ Use the controls beside search to narrow the current library:
 
 Separate controls combine. For example, a folder, an image type, and a search phrase narrow results to matching images in that folder. Visibility is the notable exception within its own menu: checking multiple values includes any selected value.
 
+Each applied filter appears as a removable chip below search. Choose its **×** to remove only that search, tag, file type, visibility choice, date range, or grouping; the other constraints and current folder stay selected. A date chip names the selected dates in your browser’s time zone.
+
 **Reset filters** clears search, tags, dates, types, visibility, sorting, and grouping while keeping the folder you are browsing. To leave the folder too, choose **All files** in the folder browser.
 
 The page address includes your filters. Bookmark it to return to the same view; browser Back and Forward restore the controls along with the results. Scrolling does not add a browser-history entry or save an exact position in the URL. The URL is a view of your signed-in library, not a public share link.
 
-If you follow a file's link from the library, browser Back restores your previous position in that list. This position belongs to the current browser-history entry; a copied URL or bookmark keeps the filters without carrying your scroll position.
+If you follow a file's link from the library, browser Back returns to the same file row. A row that was partly offscreen near the library's end can return fully into view below the navigation. This saved position belongs to the current browser-history entry; a copied URL or bookmark keeps the filters without carrying your scroll position.
 
 Existing bookmarks with `page` and `limit` still open near the corresponding file in the continuous list. Additions, deletions, or different filters can change which file occupies that position. After an upgrade, your files, folders, tags, and saved filters need no conversion.
 
@@ -80,11 +84,13 @@ Existing bookmarks with `page` and `limit` still open near the corresponding fil
 
 Open **Upload date → Group files** to choose **By week**, **By month**, or **By year**. Grouping works with **Newest first** and **Oldest first**. Choosing a size or activity sort turns date grouping off; enabling grouping from those sorts returns to newest first.
 
+On a short screen, the calendar scrolls within the popover. **Group files** and, after selecting dates, **Clear date range** stay visible below it.
+
 Grouping adds headings to the continuous list and adjusts the date rail to the same period. Upload dates use your browser's time zone; weeks begin on Monday. Without grouping, the rail shows the upload month. Grouping changes presentation without moving files or changing their upload dates.
 
 ## Inspect images
 
-Image cards show previews for public images and for your private or password-protected images. Protected previews use your browser session, and GIFs retain their animation. The thumbnail endpoint reads the original image; public raster cards can be resized by the image optimizer, while protected images and GIFs load the original bytes directly. Large originals can take longer to load. Only visible and nearby cards load as you scroll.
+Image cards show previews for public images and for your private or password-protected images. Protected previews use your browser session, and GIFs retain their animation. The thumbnail endpoint reads the original image; public raster cards can be resized by the image optimizer, while protected images, GIFs, and SVG previews load directly in the browser. SVG previews bypass the raster optimizer, so a public SVG no longer falls back to a generic icon because the optimizer refuses it. Large originals can take longer to load. Only visible and nearby cards load as you scroll.
 
 <Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
 
@@ -188,3 +194,5 @@ Storage and browser preview support are separate. Flare previews common images, 
 
 For a supported image showing a generic icon, reload the page to retry its preview. If it still fails, check the thumbnail request as described in [thumbnail troubleshooting](/hosting/troubleshooting#image-thumbnails-fail).
 :::
+
+File cards use a shorter 4:3 preview, so more of a mixed collection fits on screen. Files without an image preview show their type or extension under the icon. Opening a file, image preview, archive browsing, selection, and the date rail continue to work with the same controls.
