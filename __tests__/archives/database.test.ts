@@ -1365,7 +1365,9 @@ suite('archive publication against disposable PostgreSQL', () => {
     const profile = await prisma.uploadProfile.create({
       data: { userId: 'archive-owner', name: 'Reviewed profile', options },
     })
-    const response = await profileListing.GET()
+    const response = await profileListing.GET(
+      new Request('http://localhost/api/upload-profiles')
+    )
     expect(response.status).toBe(200)
     const data = (await response.json()).data
     const snapshot = data.profiles.find(
@@ -1536,7 +1538,13 @@ suite('archive publication against disposable PostgreSQL', () => {
       },
     })
     await changeEffectiveSettings('style')
-    const data = (await (await profileListing.GET()).json()).data
+    const data = (
+      await (
+        await profileListing.GET(
+          new Request('http://localhost/api/upload-profiles')
+        )
+      ).json()
+    ).data
     const refreshed = data.profiles.find(
       (entry: { id: string }) => entry.id === profile.id
     )

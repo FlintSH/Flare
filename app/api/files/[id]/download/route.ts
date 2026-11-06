@@ -1,16 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { parseByteRange } from '@/lib/http/byte-range'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
-const logger = loggers.files
+type Context = { params: Promise<{ id: string }> }
 
 function encodeFilename(filename: string): string {
   const safe = sanitizeDisplayName(filename)
@@ -29,11 +31,13 @@ function cacheHeaders(file: {
     : {}
 }
 
-async function handleGET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
+const api = routes('/api/files/[id]/download', {
+  failure: { message: 'Internal server error' },
+  logger: loggers.files,
+})
+
+export const GET = api(
+  async (request, { params }: Context) => {
     const session = await getAccessSession()
     const { id: fileId } = await params
     const url = new URL(request.url)
@@ -143,23 +147,18 @@ async function handleGET(
     return new NextResponse(stream as unknown as ReadableStream, {
       headers,
     })
-  } catch (error) {
-    logger.error('File download error', error as Error)
-    return new Response(null, { status: 500 })
-  }
-}
+  },
+  { audit: { action: 'file.download', category: 'files' } }
+)
 
-async function handlePOST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
+export const POST = api(
+  async (request, { params }: Context) => {
     const session = await getAccessSession()
     const { id: fileId } = await params
 
     let providedPassword: string | null = null
     try {
-      const body = await request.json()
+      const body = (await readJson(request)) as { password?: string }
       providedPassword = body.password || null
     } catch {}
 
@@ -230,30 +229,6 @@ async function handlePOST(
     return new NextResponse(stream as unknown as ReadableStream, {
       headers,
     })
-  } catch (error) {
-    logger.error('File download error', error as Error)
-    return new Response(null, { status: 500 })
-  }
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(request, { params }), {
-    route: '/api/files/[id]/download',
-    action: 'file.download',
-    category: 'files',
-  })(request)
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handlePOST(request, { params }), {
-    route: '/api/files/[id]/download',
-    action: 'file.download',
-    category: 'files',
-  })(request)
-}
+  },
+  { audit: { action: 'file.download', category: 'files' } }
+)

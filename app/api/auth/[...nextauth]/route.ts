@@ -1,18 +1,17 @@
 import NextAuth from 'next-auth/next'
 
-import { withAuditRoute } from '@/lib/audit'
+import { auditRequest } from '@/lib/audit'
 import { getAuthOptions } from '@/lib/auth'
 
 type Handler = ReturnType<typeof NextAuth>
 
+// NextAuth answers its own errors, so only the request audit wraps it.
 async function handler(...args: Parameters<Handler>) {
-  return withAuditRoute(
-    async () => {
-      const options = await getAuthOptions()
-      return NextAuth(options)(...args)
-    },
-    { route: '/api/auth/[...nextauth]' }
-  )(args[0] instanceof Request ? args[0] : undefined)
+  return auditRequest(
+    args[0] as Request,
+    { route: '/api/auth/[...nextauth]' },
+    async () => NextAuth(await getAuthOptions())(...args)
+  )
 }
 
 // Password and passkey authorizers own durable authentication limits. NextAuth

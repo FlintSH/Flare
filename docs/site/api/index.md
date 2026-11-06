@@ -72,7 +72,7 @@ The API has a few established response shapes. Check the HTTP status before read
 | Complete with `POST /api/files/chunks/{uploadId}/complete` | Upload links directly, with no `data` wrapper           |
 | Delete short link                                          | `204 No Content`, with no JSON body                     |
 
-Errors contain an `error` string. Some include `success: false`; others do not. Authentication failures are `401` with `{ "error": "Unauthorized" }`, including an expired token or a missing scope. Authenticated requests without the required role permission return `403`. Do not depend on a `success` field being present on every response.
+Errors contain an `error` string. Some include `success: false`; others do not. Authentication failures are `401` with `{ "error": "Unauthorized" }`, including an expired token or a missing scope. A body that isn't valid JSON returns `400` with `Invalid JSON.`, and a JSON body over 1 MiB returns `413` with `Request body is too large.`; endpoints that document a smaller limit apply it instead. Authenticated requests without the required role permission return `403`. Do not depend on a `success` field being present on every response.
 
 ## Limits and compatibility
 

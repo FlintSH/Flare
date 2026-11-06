@@ -10,6 +10,7 @@ import { lockEmailAddress, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
 import { getEmailConfigForUpdate } from './config'
+import { EmailHttpError } from './errors'
 import { MailLimitError, enqueueMail } from './outbox'
 import { canRecoverPassword, hasVerifiedEmail } from './policy'
 import type { EmailConfig } from './schema'
@@ -24,7 +25,7 @@ import {
 export async function lockEmailUser(tx: Prisma.TransactionClient, id: string) {
   await lockUserRow(tx, id)
   const user = await tx.user.findUnique({ where: { id } })
-  if (!user) throw new Error('Account not found.')
+  if (!user) throw new EmailHttpError('Account not found.')
   return user
 }
 
@@ -39,7 +40,7 @@ export async function assertRecentIdentity(
   }
   if (user.password) {
     if (!password || !(await compare(password, user.password)))
-      throw new Error('Confirm your current password to continue.')
+      throw new EmailHttpError('Confirm your current password to continue.')
     return
   }
   if (
@@ -48,7 +49,7 @@ export async function assertRecentIdentity(
     !session.user.authTime ||
     Date.now() - session.user.authTime > 5 * 60 * 1000
   ) {
-    throw new Error(
+    throw new EmailHttpError(
       'Sign in again with SSO, then try again within five minutes.'
     )
   }
@@ -61,7 +62,8 @@ export async function sendAccountToken(
   config: EmailConfig,
   email = user.email
 ) {
-  if (!config.enabled || !email) throw new Error('Email is unavailable.')
+  if (!config.enabled || !email)
+    throw new EmailHttpError('Email is unavailable.')
   const lifetime =
     purpose === 'reset'
       ? config.recovery.tokenMinutes * 60000
@@ -122,16 +124,16 @@ export async function resetPassword(
   config: EmailConfig
 ) {
   if (!(await isPasswordRecoveryAvailable(config)))
-    throw new Error('Password recovery is disabled.')
+    throw new EmailHttpError('Password recovery is disabled.')
   const passwordHash = await hash(password, 10)
   await prisma.$transaction(async (tx) => {
     config = await getEmailConfigForUpdate(tx)
     if (!(await isPasswordRecoveryAvailable(config, tx)))
-      throw new Error('Password recovery is disabled.')
+      throw new EmailHttpError('Password recovery is disabled.')
     const record = await consumeEmailToken(tx, token, ['reset'])
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
-      throw new Error('This email link is invalid or expired.')
+      throw new EmailHttpError('This email link is invalid or expired.')
     await tx.user.update({
       where: { id: user.id },
       data: {
@@ -178,12 +180,12 @@ export async function isPasswordRecoveryAvailable(
 }
 
 export async function confirmEmailToken(token: string, config: EmailConfig) {
-  if (!config.enabled) throw new Error('Email is disabled.')
+  if (!config.enabled) throw new EmailHttpError('Email is disabled.')
   return prisma.$transaction(async (tx) => {
     // Policy changes and account mutations share a lock; never approve against
     // a request snapshot captured before an administrator tightened the policy.
     config = await getEmailConfigForUpdate(tx)
-    if (!config.enabled) throw new Error('Email is disabled.')
+    if (!config.enabled) throw new EmailHttpError('Email is disabled.')
     const record = await consumeEmailToken(tx, token, [
       'verify',
       'change',
@@ -192,7 +194,7 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
     const user = await lockEmailUser(tx, record.userId)
     if (record.purpose === 'verify') {
       if (user.email !== record.email)
-        throw new Error('This email link is invalid or expired.')
+        throw new EmailHttpError('This email link is invalid or expired.')
       await tx.user.update({
         where: { id: user.id },
         data: {
@@ -204,10 +206,10 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
       return 'Your email address is verified.'
     }
     if (!config.changes.enabled || !user.pendingEmail)
-      throw new Error('This email change is no longer available.')
+      throw new EmailHttpError('This email change is no longer available.')
     if (record.purpose === 'change_approval') {
       if (record.email !== user.email)
-        throw new Error('This email link is invalid or expired.')
+        throw new EmailHttpError('This email link is invalid or expired.')
       await tx.user.update({
         where: { id: user.id },
         data: { pendingEmailOldConfirmed: true },
@@ -215,7 +217,7 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
       return 'Email change approved. Confirm the link sent to your new address to finish.'
     }
     if (record.email !== user.pendingEmail)
-      throw new Error('This email link is invalid or expired.')
+      throw new EmailHttpError('This email link is invalid or expired.')
     if (config.changes.requireOldEmail && !user.pendingEmailOldConfirmed) {
       const approval = await tx.emailToken.findFirst({
         where: {
@@ -228,10 +230,10 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
         },
       })
       if (!approval)
-        throw new Error(
+        throw new EmailHttpError(
           'This email change requires approval from your current address. Start the email change again to request an approval link.'
         )
-      throw new Error(
+      throw new EmailHttpError(
         'Approve the change using the link sent to your current address first.'
       )
     }
@@ -242,7 +244,7 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
         email: { equals: record.email, mode: 'insensitive' },
       },
     })
-    if (conflict) throw new Error('This email address is unavailable.')
+    if (conflict) throw new EmailHttpError('This email address is unavailable.')
     const oldEmail = user.email
     await tx.user.update({
       where: { id: user.id },

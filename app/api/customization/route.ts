@@ -1,94 +1,52 @@
 import { NextResponse } from 'next/server'
 
-import { ZodError } from 'zod'
-
-import { withAuditRoute } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
 import { getConfig } from '@/lib/config'
-import { appearanceMutationGuard } from '@/lib/customization/http'
 import { appearanceCommandSchema } from '@/lib/customization/schema'
-import { CustomizationError } from '@/lib/customization/state'
 import { saveAppearance } from '@/lib/customization/store'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { requirePermission } from '@/lib/permissions/server'
 
-async function handleGET() {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return NextResponse.json(
-      { error: 'Sign in to customize Flare.' },
-      { status: 401 }
-    )
+const api = routes('/api/customization', {
+  invalid: (error) =>
+    new HttpError(
+      400,
+      error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ')
+    ),
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(async () => {
+  const { user } = await requireSession()
   const { customization } = (await getConfig()).settings
   return NextResponse.json(
     {
-      data: hasPermission(session.user, 'appearance.manage')
+      data: hasPermission(user, 'appearance.manage')
         ? customization
         : { published: customization.published },
     },
     { headers: { 'Cache-Control': 'private, no-store' } }
   )
-}
+})
 
-async function handlePOST(request: Request) {
-  const { session, response: permissionDenied } =
-    await requirePermission('appearance.manage')
-  if (permissionDenied) return permissionDenied
-  if (!session?.user)
-    return NextResponse.json(
-      { error: 'Sign in to customize Flare.' },
-      { status: 401 }
+export const POST = api(
+  async (request) => {
+    await requireSession('appearance.manage')
+    assertJsonMutation(request)
+    const command = appearanceCommandSchema.parse(
+      await readJson(request, { limit: 1_000_000 })
     )
-  const rejected = appearanceMutationGuard(request)
-  if (rejected) return rejected
-  try {
-    const text = await request.text()
-    if (text.length > 1_000_000)
-      return NextResponse.json(
-        { error: 'Appearance packs must be smaller than 1 MB.' },
-        { status: 413 }
-      )
-    const command = appearanceCommandSchema.parse(JSON.parse(text))
     const state = await saveAppearance(command)
-    return NextResponse.json({ data: state })
-  } catch (error) {
-    if (error instanceof ZodError)
-      return NextResponse.json(
-        {
-          error: error.issues
-            .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-            .join('; '),
-        },
-        { status: 400 }
-      )
-    if (error instanceof SyntaxError)
-      return NextResponse.json(
-        { error: 'Upload a valid JSON appearance pack.' },
-        { status: 400 }
-      )
-    if (error instanceof CustomizationError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
-    return NextResponse.json(
-      {
-        error:
-          'Appearance could not be saved. Your live appearance is unchanged.',
-      },
-      { status: 500 }
-    )
+    return { data: state }
+  },
+  {
+    failure: {
+      message:
+        'Appearance could not be saved. Your live appearance is unchanged.',
+    },
   }
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/customization',
-  })()
-}
-
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/customization',
-  })(request)
-}
+)

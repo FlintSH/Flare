@@ -1,48 +1,36 @@
-import { NextResponse } from 'next/server'
+import { ZodError } from 'zod'
 
-import { z } from 'zod'
-
-import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertSameOrigin } from '@/lib/http/request'
+import type { RouteContract } from '@/lib/http/route'
 
-export async function emailAdminAccess(request: Request) {
-  const auth = await requirePermission('settings.email')
-  if (auth.response) return auth.response
-  const origin = request.headers.get('origin')
-  const allowed = [new URL(request.url).origin]
-  if (process.env.NEXTAUTH_URL)
-    allowed.push(new URL(process.env.NEXTAUTH_URL).origin)
-  if (
-    !['GET', 'HEAD'].includes(request.method) &&
-    origin &&
-    !allowed.includes(origin)
-  ) {
-    return NextResponse.json(
-      { error: 'Invalid request origin' },
-      { status: 403 }
-    )
-  }
-  return null
+/** Email settings need settings.email; their writes must come from this app. */
+export async function requireEmailAdmin(request: Request) {
+  const access = await requireSession('settings.email')
+  if (!['GET', 'HEAD'].includes(request.method)) assertSameOrigin(request)
+  return access
 }
 
-export function emailSettingsError(error: unknown) {
-  if (error instanceof z.ZodError) {
-    return NextResponse.json(
-      {
-        error: error.issues
-          .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-          .join('; '),
-      },
-      { status: 400 }
-    )
-  }
+export const emailSettingsRoutes: RouteContract = {
+  invalid: (error) =>
+    new HttpError(
+      400,
+      error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ')
+    ),
   // SMTP and crypto wrappers expose only sanitized error messages. Prisma
-  // errors may include queries, so do not serialize arbitrary exceptions.
-  const message =
-    error instanceof Error && !('clientVersion' in error)
-      ? error.message
-      : 'Could not update email settings'
-  return NextResponse.json({ error: message }, { status: 400 })
+  // errors may include queries, so do not serialize them.
+  translate: (error) =>
+    error instanceof Error &&
+    !(error instanceof HttpError) &&
+    !(error instanceof ZodError) &&
+    !('clientVersion' in error)
+      ? new HttpError(400, error.message)
+      : undefined,
+  failure: { status: 400, message: 'Could not update email settings' },
 }
 
 export async function emailDiagnostics(enabled: boolean) {

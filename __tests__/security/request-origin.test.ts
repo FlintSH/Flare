@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { appearanceMutationGuard } from '@/lib/customization/http'
+import { HttpError } from '@/lib/http/errors'
+import {
+  assertJsonMutation,
+  assertMediaType,
+  assertSameOrigin,
+} from '@/lib/http/request'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 const publicOrigin = 'https://preview-flare.up.railway.app'
@@ -12,6 +17,16 @@ const request = (headers: Record<string, string> = {}) =>
     body: '{}',
   })
 
+/** The refusal's status, or null when the request may proceed. */
+function refusal(check: () => void) {
+  try {
+    check()
+    return null
+  } catch (error) {
+    return (error as HttpError).status
+  }
+}
+
 afterEach(() => vi.unstubAllEnvs())
 
 describe('proxied browser request origins', () => {
@@ -22,7 +37,7 @@ describe('proxied browser request origins', () => {
       'Sec-Fetch-Site': 'same-origin',
     })
     expect(isSameOriginRequest(proxied)).toBe(true)
-    expect(appearanceMutationGuard(proxied)).toBeNull()
+    expect(refusal(() => assertJsonMutation(proxied))).toBeNull()
   })
 
   it('normalizes the configured origin without trusting an arbitrary path in Origin', () => {
@@ -49,7 +64,7 @@ describe('proxied browser request origins', () => {
     'null',
   ])('rejects an unrelated origin: %s', (origin) => {
     vi.stubEnv('NEXTAUTH_URL', publicOrigin)
-    expect(appearanceMutationGuard(request({ Origin: origin }))?.status).toBe(
+    expect(refusal(() => assertJsonMutation(request({ Origin: origin })))).toBe(
       403
     )
   })
@@ -100,18 +115,21 @@ describe('proxied browser request origins', () => {
   it('retains JSON and image content-type checks for allowed proxy requests', () => {
     vi.stubEnv('NEXTAUTH_URL', publicOrigin)
     expect(
-      appearanceMutationGuard(
-        request({ Origin: publicOrigin, 'Content-Type': 'text/plain' })
-      )?.status
-    ).toBe(415)
-    expect(
-      appearanceMutationGuard(
-        request({
-          Origin: publicOrigin,
-          'Content-Type': 'multipart/form-data; boundary=fixture',
-        }),
-        'image'
+      refusal(() =>
+        assertJsonMutation(
+          request({ Origin: publicOrigin, 'Content-Type': 'text/plain' })
+        )
       )
+    ).toBe(415)
+    const upload = request({
+      Origin: publicOrigin,
+      'Content-Type': 'multipart/form-data; boundary=fixture',
+    })
+    expect(
+      refusal(() => {
+        assertSameOrigin(upload)
+        assertMediaType(upload, 'multipart/form-data')
+      })
     ).toBeNull()
   })
 })

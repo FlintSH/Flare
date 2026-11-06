@@ -1,54 +1,31 @@
-import { apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
-import { folderErrorResponse, folderMutationGuard } from '@/lib/folders/http'
+import { folderRoutes } from '@/lib/folders/http'
 import { folderUpdateSchema } from '@/lib/folders/schema'
 import { deleteFolder, updateFolder } from '@/lib/folders/service'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { hasPermission } from '@/lib/permissions/catalog'
 
 type Context = { params: Promise<{ id: string }> }
 
-async function handlePATCH(request: Request, { params }: Context) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const guarded = folderMutationGuard(request)
-    if (guarded) return guarded
-    const { id } = await params
-    const input = folderUpdateSchema.parse(await request.json())
-    if (input.sharing !== undefined && !hasPermission(user, 'folders.share'))
-      return Response.json(
-        { error: 'You do not have permission to share folders.' },
-        { status: 403 }
-      )
-    return apiResponse(await updateFolder(user.id, id, input))
-  } catch (error) {
-    return folderErrorResponse(error)
-  }
-}
+const api = routes('/api/folders/[id]', folderRoutes)
 
-async function handleDELETE(request: Request, { params }: Context) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const guarded = folderMutationGuard(request, false)
-    if (guarded) return guarded
-    const { id } = await params
-    await deleteFolder(user.id, id)
-    return apiResponse({ deleted: true })
-  } catch (error) {
-    return folderErrorResponse(error)
-  }
-}
+export const PATCH = api(async (request, { params }: Context) => {
+  const user = await requireAccount(request)
+  assertJsonMutation(request)
+  const { id } = await params
+  const input = folderUpdateSchema.parse(await readJson(request))
+  if (input.sharing !== undefined && !hasPermission(user, 'folders.share'))
+    throw new HttpError(403, 'You do not have permission to share folders.')
+  return apiResponse(await updateFolder(user.id, id, input))
+})
 
-export async function PATCH(request: Request, { params }: Context) {
-  return withAuditRoute(async () => handlePATCH(request, { params }), {
-    route: '/api/folders/[id]',
-  })(request)
-}
-
-export async function DELETE(request: Request, { params }: Context) {
-  return withAuditRoute(async () => handleDELETE(request, { params }), {
-    route: '/api/folders/[id]',
-  })(request)
-}
+export const DELETE = api(async (request, { params }: Context) => {
+  const user = await requireAccount(request)
+  assertJsonMutation(request, { body: false })
+  const { id } = await params
+  await deleteFolder(user.id, id)
+  return apiResponse({ deleted: true })
+})

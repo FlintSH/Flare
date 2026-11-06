@@ -2,11 +2,11 @@ import { GET } from '@/app/api/files/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  requireAuth: vi.fn(),
+  requireAccount: vi.fn(),
   file: { count: vi.fn(), findMany: vi.fn() },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({ requireAuth: mocks.requireAuth }))
+vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: { file: mocks.file } }))
 vi.mock('@/lib/logger', () => ({ loggers: { files: { error: vi.fn() } } }))
 vi.mock('@/lib/config', () => ({ getConfig: vi.fn() }))
@@ -31,7 +31,7 @@ vi.mock('@/lib/uploads/options', () => ({}))
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.requireAuth.mockResolvedValue({ user: { id: 'library-owner' } })
+  mocks.requireAccount.mockResolvedValue({ id: 'library-owner' })
   mocks.file.count.mockResolvedValue(0)
   mocks.file.findMany.mockResolvedValue([])
 })

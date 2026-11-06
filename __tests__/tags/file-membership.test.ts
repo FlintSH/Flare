@@ -1,11 +1,13 @@
 import { GET } from '@/app/api/files/tags/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AccessError } from '@/lib/http/errors'
+
 const mocks = vi.hoisted(() => ({
-  requireAuth: vi.fn(),
+  requireAccount: vi.fn(),
   query: vi.fn(),
 }))
-vi.mock('@/lib/auth/api-auth', () => ({ requireAuth: mocks.requireAuth }))
+vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { $queryRaw: mocks.query },
 }))
@@ -16,17 +18,16 @@ function request(query: string) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.requireAuth.mockResolvedValue({ user: { id: 'owner' }, response: null })
+  mocks.requireAccount.mockResolvedValue({ id: 'owner' })
 })
 
 describe('current file tag memberships', () => {
   it.each([401, 403])(
     'stops before querying when authentication returns %s',
     async (status) => {
-      mocks.requireAuth.mockResolvedValue({
-        user: null,
-        response: new Response(null, { status }),
-      })
+      mocks.requireAccount.mockRejectedValue(
+        new AccessError(status as 401 | 403, 'Denied')
+      )
       expect((await GET(request('fileIds=one'))).status).toBe(status)
       expect(mocks.query).not.toHaveBeenCalled()
     }

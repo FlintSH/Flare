@@ -39,7 +39,7 @@ Saved email settings, including the access policy, apply from the next request w
 | **Required for new users** | Accounts created after activation must verify for protected features | Earlier accounts keep access                                 |
 | **Required for all users** | New accounts must verify immediately                                 | Unverified existing accounts get the configured grace period |
 
-The default is **Off**. The default existing-user grace period is **7 days**, configurable from 0–90 days. Activating all-user enforcement requires reviewing the affected-user count in the dashboard. At least one administrator must already have trusted verification proof or an explicit exemption before that policy can be saved.
+The default is **Off**. The default existing-user grace period is **7 days**, configurable from 0–90 days. Activating all-user enforcement requires reviewing the affected-user count in the dashboard. At least one administrator must already have trusted verification proof or an explicit exemption before that policy can be saved; otherwise saving is refused with a `409` and the previous policy stays in force.
 
 Turning enforcement off and back on establishes a new activation boundary. Moving into all-user mode starts a new existing-user grace window. Do not treat a policy toggle as a permanent record of which historical users were once required to verify.
 

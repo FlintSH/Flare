@@ -1,11 +1,10 @@
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
-import { filePasswordIssue } from '@/lib/files/password-policy'
-import { FolderError, validateOwnedFolderId } from '@/lib/folders/service'
-import { loggers } from '@/lib/logger'
+import { validateOwnedFolderId } from '@/lib/folders/service'
+import { HttpError } from '@/lib/http/errors'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { TagError, validateOwnedTagIds } from '@/lib/tags/service'
+import { validateOwnedTagIds } from '@/lib/tags/service'
 
 import {
   accountUploadOptions,
@@ -22,12 +21,10 @@ import {
 export { uploadProfileOptionsSchema } from './schema'
 export type { UploadProfileOptions, ResolvedUploadOptions } from './schema'
 
-export class UploadError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class UploadError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
+    this.name = 'UploadError'
   }
 }
 
@@ -248,26 +245,4 @@ export function applyUploadOverrides(
     password:
       request.password !== undefined ? request.password : resolved.password,
   }
-}
-
-export function uploadErrorResponse(error: unknown): Response {
-  if (
-    error instanceof UploadError ||
-    error instanceof TagError ||
-    error instanceof FolderError
-  )
-    return Response.json({ error: error.message }, { status: error.status })
-  if (error && typeof error === 'object' && 'issues' in error)
-    return Response.json(
-      { error: filePasswordIssue(error) ?? 'Invalid upload options.' },
-      { status: 400 }
-    )
-  loggers.files.error(
-    'Upload request failed',
-    error instanceof Error ? error : new Error('Unknown upload error')
-  )
-  return Response.json(
-    { error: 'Upload could not be completed.' },
-    { status: 500 }
-  )
 }

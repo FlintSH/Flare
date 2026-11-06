@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server'
-
 import { getServerSession } from 'next-auth'
-import { ZodError, z } from 'zod'
+import { z } from 'zod'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
+import { mediaType, readJson } from '@/lib/http/request'
+import type { RouteContract } from '@/lib/http/route'
 
 import { SecurityError, securityLimit, validateSecurityOrigin } from './shared'
 
@@ -26,32 +27,14 @@ export const challengeResponseSchema = z.object({
     .passthrough(),
 })
 
-export async function securityRoute(action: () => Promise<unknown>) {
-  try {
-    const result = await action()
-    if (result instanceof Response) return result
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
-    })
-  } catch (error) {
-    const status = error instanceof SecurityError ? error.status : 400
-    const message =
-      error instanceof SecurityError
-        ? error.message
-        : error instanceof ZodError
-          ? 'Invalid security request.'
-          : 'Unable to complete this security request. Please try again.'
-    return NextResponse.json(
-      { error: message },
-      {
-        status,
-        headers: {
-          'Cache-Control': 'no-store',
-          ...(status === 429 ? { 'Retry-After': '900' } : {}),
-        },
-      }
-    )
-  }
+/** Account security routes never cache, and explain only their own refusals. */
+export const securityRoutes: RouteContract = {
+  headers: { 'Cache-Control': 'no-store' },
+  invalid: () => new HttpError(400, 'Invalid security request.'),
+  failure: {
+    status: 400,
+    message: 'Unable to complete this security request. Please try again.',
+  },
 }
 
 export async function securitySession(req: Request, mutation = true) {
@@ -67,31 +50,16 @@ export async function securitySession(req: Request, mutation = true) {
   return { session, user }
 }
 
+/** Security writes are small JSON documents. */
 export async function securityBody(req: Request) {
-  if (
-    !req.headers
-      .get('content-type')
-      ?.toLowerCase()
-      .startsWith('application/json')
-  )
+  if (mediaType(req) !== 'application/json')
     throw new SecurityError('Use application/json for security requests.', 415)
-  const reader = req.body?.getReader()
-  if (!reader) throw new SecurityError('Invalid security request.')
-  const chunks: Uint8Array[] = []
-  let size = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > 65536) {
-      await reader.cancel()
-      throw new SecurityError('Security request is too large.', 413)
-    }
-    chunks.push(value)
-  }
+  if (!req.body) throw new SecurityError('Invalid security request.')
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  } catch {
+    return await readJson(req, { limit: 65536 })
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 413)
+      throw new SecurityError('Security request is too large.', 413)
     throw new SecurityError('Invalid security request.')
   }
 }

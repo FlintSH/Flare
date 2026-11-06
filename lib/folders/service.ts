@@ -8,13 +8,11 @@ import type {
   FolderUpdate,
   FolderView,
 } from '@/lib/folders/schema'
+import { HttpError } from '@/lib/http/errors'
 
-export class FolderError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class FolderError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
     this.name = 'FolderError'
   }
 }

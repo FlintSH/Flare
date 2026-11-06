@@ -1,25 +1,19 @@
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
 import {
   securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { setPasskeyRequired } from '@/lib/auth/security/required-passkeys'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    const { required } = z
-      .object({ required: z.boolean() })
-      .parse(await securityBody(req))
-    return setPasskeyRequired(session, required)
-  })
-}
+const api = routes('/api/auth/security/passkeys/require', securityRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/security/passkeys/require',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { session } = await securitySession(request)
+  const { required } = z
+    .object({ required: z.boolean() })
+    .parse(await securityBody(request))
+  return setPasskeyRequired(session, required)
+})

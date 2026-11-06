@@ -3,18 +3,17 @@ import { DELETE, PATCH } from '@/app/api/folders/[id]/route'
 import { GET, POST } from '@/app/api/folders/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ requireAuth: vi.fn(), query: vi.fn() }))
-vi.mock('@/lib/auth/api-auth', () => ({ requireAuth: mocks.requireAuth }))
+import { AccessError } from '@/lib/http/errors'
+
+const mocks = vi.hoisted(() => ({ requireAccount: vi.fn(), query: vi.fn() }))
+vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { vaultFolder: { findMany: mocks.query }, $transaction: mocks.query },
 }))
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.requireAuth.mockResolvedValue({
-    user: { id: 'owner', role: 'ADMIN' },
-    response: null,
-  })
+  mocks.requireAccount.mockResolvedValue({ id: 'owner', role: 'ADMIN' })
 })
 
 const context = { params: Promise.resolve({ id: 'folder' }) }
@@ -47,9 +46,7 @@ describe('folder API permission boundaries', () => {
   it.each(mutations)(
     'requires authentication for %s',
     async (_name, method, handler) => {
-      mocks.requireAuth.mockResolvedValue({
-        response: new Response(null, { status: 401 }),
-      })
+      mocks.requireAccount.mockRejectedValue(new AccessError(401, 'Denied'))
       expect(
         (
           await handler(
@@ -77,9 +74,7 @@ describe('folder API permission boundaries', () => {
   )
 
   it('requires authentication for folder names, counts, and sharing tokens', async () => {
-    mocks.requireAuth.mockResolvedValue({
-      response: new Response(null, { status: 401 }),
-    })
+    mocks.requireAccount.mockRejectedValue(new AccessError(401, 'Denied'))
     expect(
       (await GET(new Request('https://flare.test/api/folders'))).status
     ).toBe(401)

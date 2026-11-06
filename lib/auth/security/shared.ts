@@ -2,16 +2,19 @@ import { Prisma } from '@prisma/client'
 
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
 import { clientIp } from '@/lib/security/client-ip'
 
 import { securityHash } from './crypto'
 
-export class SecurityError extends Error {
+export class SecurityError extends HttpError {
   constructor(
     message: string,
-    public status = 400
+    status = 400,
+    options: { headers?: Record<string, string> } = {}
   ) {
-    super(message)
+    super(status, message, options)
+    this.name = 'SecurityError'
   }
 }
 
@@ -68,7 +71,8 @@ export async function securityLimit(key: string, limit = 20, seconds = 900) {
   if (rows[0].count > limit)
     throw new SecurityError(
       'Too many security attempts. Try again in 15 minutes.',
-      429
+      429,
+      { headers: { 'Retry-After': String(seconds) } }
     )
 }
 

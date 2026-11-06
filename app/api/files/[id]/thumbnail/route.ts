@@ -1,20 +1,23 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
-const logger = loggers.files
+type Context = { params: Promise<{ id: string }> }
 
-async function handleGET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
+const api = routes('/api/files/[id]/thumbnail', {
+  failure: { message: 'Error serving thumbnail' },
+  logger: loggers.files,
+})
+
+export const GET = api(
+  async (request, { params }: Context) => {
     const [session, { id }] = await Promise.all([getAccessSession(), params])
 
     const url = new URL(request.url)
@@ -74,19 +77,6 @@ async function handleGET(
             : 'public, max-age=31536000, immutable',
       },
     })
-  } catch (error) {
-    logger.error('Error serving thumbnail:', error as Error)
-    return new NextResponse('Error serving thumbnail', { status: 500 })
-  }
-}
-
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(request, { params }), {
-    action: 'file.thumbnail',
-    category: 'files',
-    route: '/api/files/[id]/thumbnail',
-  })(request)
-}
+  },
+  { audit: { action: 'file.thumbnail', category: 'files' } }
+)

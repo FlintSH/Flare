@@ -3,6 +3,7 @@ import type { User } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
+import { AccessError } from '@/lib/http/errors'
 
 const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
@@ -24,11 +25,10 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requirePermission: mocks.requirePermission,
+vi.mock('@/lib/http/access', () => ({
+  requireSession: mocks.requirePermission,
 }))
 vi.mock('@/lib/permissions/server', () => ({
-  PermissionError: class PermissionError extends Error {},
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),
@@ -362,9 +362,9 @@ describe('optional administrator vanity URLs', () => {
 
 describe('user directory', () => {
   it('keeps directory search behind the administrator guard', async () => {
-    mocks.requirePermission.mockResolvedValue({
-      response: new Response(null, { status: 403 }),
-    })
+    mocks.requirePermission.mockRejectedValue(
+      new AccessError(403, 'Permission denied')
+    )
     const response = await GET(
       new Request('https://flare.example/api/users?search=person')
     )

@@ -1,13 +1,5 @@
 import { FileMetadata } from '@/types/dto/file'
 
-import {
-  HTTP_STATUS,
-  apiError,
-  apiResponse,
-  paginatedResponse,
-} from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
@@ -17,8 +9,12 @@ import {
   fileListSelect,
   fileOrderBy,
 } from '@/lib/files/gallery-navigation'
-import { FileListInputError, fileListFilters } from '@/lib/files/list-filters'
+import { fileListFilters } from '@/lib/files/list-filters'
 import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { apiResponse, paginatedResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
@@ -28,6 +24,7 @@ import {
   finalizeUpload,
   prepareUploadDestination,
 } from '@/lib/uploads/finalize'
+import { uploadRoutes } from '@/lib/uploads/http'
 import { uploadLinks } from '@/lib/uploads/links'
 import {
   UploadError,
@@ -35,26 +32,25 @@ import {
   parseUploadFields,
   requestUploadOptions,
   resolveUploadOptions,
-  uploadErrorResponse,
 } from '@/lib/uploads/options'
 
 const logger = loggers.files
-export const runtime = 'nodejs'
 
-async function handlePOST(req: Request) {
-  const limited = await rateLimit(req, uploadLimiter)
+const api = routes('/api/files', uploadRoutes)
+
+export const POST = api(async (request) => {
+  const limited = await rateLimit(request, uploadLimiter)
   if (limited) return limited
+  const user = await requireAccount(request)
+  const isPaste = request.headers.get('X-Flare-Paste') === 'true'
+  if (isPaste && !hasPermission(user, 'pastes.create'))
+    throw new HttpError(403, 'You do not have permission to create pastes.')
   let filePath = ''
   let storage: StorageProvider | undefined
   try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
-    const isPaste = req.headers.get('X-Flare-Paste') === 'true'
-    if (isPaste && !hasPermission(user, 'pastes.create'))
-      return apiError('You do not have permission to create pastes.', 403)
-    if (!req.headers.get('content-type')?.includes('multipart/form-data'))
+    if (!request.headers.get('content-type')?.includes('multipart/form-data'))
       throw new UploadError('Content-Type must be multipart/form-data.')
-    const selection = requestUploadOptions(req)
+    const selection = requestUploadOptions(request)
     const initialOptions = await resolveUploadOptions(user, selection)
     const config = await getConfig()
     const maxBytes = maxUploadBytes(config)
@@ -67,7 +63,7 @@ async function handlePOST(req: Request) {
       throw new UploadError('You have reached your storage quota.', 413)
     storage = await getStorageProvider()
     const { upload, fields, limitHit } = await parseSingleFileUpload({
-      req,
+      req: request,
       storageProvider: storage,
       maxBytes,
       quotaLimitBytes,
@@ -116,14 +112,13 @@ async function handlePOST(req: Request) {
   } catch (error) {
     if (storage && filePath) await cleanupUncommittedUpload(storage, filePath)
     logger.error('Upload failed', error as Error)
-    return uploadErrorResponse(error)
+    throw error
   }
-}
+})
 
-async function handleGET(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
+export const GET = api(
+  async (request) => {
+    const user = await requireAccount(request)
 
     const { searchParams } = new URL(request.url)
     const page = Number(searchParams.get('page') || '1')
@@ -134,10 +129,7 @@ async function handleGET(request: Request) {
       !Number.isSafeInteger(requestedLimit) ||
       requestedLimit < 1
     )
-      return apiError(
-        'Page and limit must be positive integers',
-        HTTP_STATUS.BAD_REQUEST
-      )
+      throw new HttpError(400, 'Page and limit must be positive integers')
     const limit = Math.min(requestedLimit, 100)
     const galleryAnchor = searchParams.get('galleryAnchor')
     const galleryDirection = searchParams.get('galleryDirection')
@@ -146,14 +138,14 @@ async function handleGET(request: Request) {
       (!galleryAnchor ||
         (galleryDirection !== 'next' && galleryDirection !== 'previous'))
     )
-      return apiError(
-        'An image anchor and a next or previous direction are required',
-        HTTP_STATUS.BAD_REQUEST
+      throw new HttpError(
+        400,
+        'An image anchor and a next or previous direction are required'
       )
     const sortBy = searchParams.get('sortBy') || 'newest'
     const offset = (page - 1) * limit
     if (!Number.isSafeInteger(offset))
-      return apiError('Page is too large', HTTP_STATUS.BAD_REQUEST)
+      throw new HttpError(400, 'Page is too large')
     const { where } = fileListFilters(user.id, searchParams)
 
     let resultPage
@@ -165,7 +157,7 @@ async function handleGET(request: Request) {
         direction: galleryDirection,
         limit,
       })
-      if (!resultPage) return apiError('Image not found', HTTP_STATUS.NOT_FOUND)
+      if (!resultPage) throw new HttpError(404, 'Image not found')
     } else {
       const total = await prisma.file.count({ where })
       const files = await prisma.file.findMany({
@@ -206,22 +198,9 @@ async function handleGET(request: Request) {
     )
     result.headers.set('Cache-Control', 'private, no-store')
     return result
-  } catch (error) {
-    if (error instanceof FileListInputError)
-      return apiError(error.message, HTTP_STATUS.BAD_REQUEST)
-    logger.error('Error fetching files', error as Error)
-    return apiError('Failed to fetch files', HTTP_STATUS.INTERNAL_SERVER_ERROR)
+  },
+  {
+    envelope: 'api',
+    failure: { message: 'Failed to fetch files' },
   }
-}
-
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), { route: '/api/files' })(
-    req
-  )
-}
-
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/files',
-  })(request)
-}
+)

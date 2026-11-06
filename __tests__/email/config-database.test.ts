@@ -20,11 +20,8 @@ vi.mock('next-auth', async (original) => ({
     },
   }),
 }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.id },
-    response: null,
-  }),
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({ id: authentication.id }),
 }))
 
 const databaseUrl = process.env.FLARE_EMAIL_CONFIG_DATABASE_URL

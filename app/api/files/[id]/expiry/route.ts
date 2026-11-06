@@ -1,70 +1,64 @@
 import { ExpiryAction } from '@/types/events'
 
-import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import {
   cancelFileExpiration,
   getFileExpirationInfo,
   scheduleFileExpiration,
 } from '@/lib/events/handlers/file-expiry'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 
-const logger = loggers.files
+type Context = { params: Promise<{ id: string }> }
 
-async function handleGET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+const api = routes('/api/files/[id]/expiry', {
+  envelope: 'api',
+  failure: { message: 'Failed to get file expiry' },
+  logger: loggers.files,
+})
 
-    const { id } = await params
+export const GET = api(async (request, { params }: Context) => {
+  const user = await requireAccount(request)
 
-    const file = await prisma.file.findUnique({
-      where: { id },
-      select: { userId: true, name: true },
-    })
+  const { id } = await params
 
-    if (!file || file.userId !== user.id) {
-      return apiError('File not found', HTTP_STATUS.NOT_FOUND)
-    }
+  const file = await prisma.file.findUnique({
+    where: { id },
+    select: { userId: true, name: true },
+  })
 
-    const expiresAt = await getFileExpirationInfo(id)
-
-    return apiResponse({ expiresAt })
-  } catch (error) {
-    logger.error('Error getting file expiry:', error as Error)
-    return apiError(
-      'Failed to get file expiry',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
+  if (!file || file.userId !== user.id) {
+    throw new HttpError(404, 'File not found')
   }
-}
 
-async function handlePOST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+  const expiresAt = await getFileExpirationInfo(id)
+
+  return apiResponse({ expiresAt })
+})
+
+export const POST = api(
+  async (request, { params }: Context) => {
+    const user = await requireAccount(request)
 
     const { id } = await params
-    const { expiresAt, action = ExpiryAction.DELETE } = await req.json()
+    const { expiresAt, action = ExpiryAction.DELETE } = (await readJson(
+      request
+    )) as { expiresAt?: string; action?: ExpiryAction }
 
     if (!expiresAt) {
-      return apiError('Expiration date is required', HTTP_STATUS.BAD_REQUEST)
+      throw new HttpError(400, 'Expiration date is required')
     }
 
     const expirationDate = new Date(expiresAt)
     if (isNaN(expirationDate.getTime()) || expirationDate <= new Date()) {
-      return apiError(
-        'Invalid expiration date. Must be in the future.',
-        HTTP_STATUS.BAD_REQUEST
+      throw new HttpError(
+        400,
+        'Invalid expiration date. Must be in the future.'
       )
     }
 
@@ -74,18 +68,18 @@ async function handlePOST(
     })
 
     if (!file || file.userId !== user.id) {
-      return apiError('File not found', HTTP_STATUS.NOT_FOUND)
+      throw new HttpError(404, 'File not found')
     }
 
     if (![ExpiryAction.DELETE, ExpiryAction.SET_PRIVATE].includes(action))
-      return apiError('Invalid expiration action', HTTP_STATUS.BAD_REQUEST)
+      throw new HttpError(400, 'Invalid expiration action')
 
     const actionPermission =
       action === ExpiryAction.DELETE ? 'files.delete' : 'files.share'
     if (!hasPermission(user, actionPermission))
-      return apiError(
-        'You do not have permission for this expiration action.',
-        403
+      throw new HttpError(
+        403,
+        'You do not have permission for this expiration action.'
       )
 
     await scheduleFileExpiration(id, user.id, file.name, expirationDate, action)
@@ -94,22 +88,13 @@ async function handlePOST(
       message: 'File expiration scheduled successfully',
       expiresAt: expirationDate,
     })
-  } catch (error) {
-    logger.error('Error scheduling file expiry:', error as Error)
-    return apiError(
-      'Failed to schedule file expiry',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
-  }
-}
+  },
+  { failure: { message: 'Failed to schedule file expiry' } }
+)
 
-async function handleDELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+export const DELETE = api(
+  async (request, { params }: Context) => {
+    const user = await requireAccount(request)
 
     const { id } = await params
 
@@ -119,7 +104,7 @@ async function handleDELETE(
     })
 
     if (!file || file.userId !== user.id) {
-      return apiError('File not found', HTTP_STATUS.NOT_FOUND)
+      throw new HttpError(404, 'File not found')
     }
 
     const cancelled = await cancelFileExpiration(id)
@@ -128,38 +113,6 @@ async function handleDELETE(
       message: cancelled ? 'File expiration cancelled' : 'No expiration found',
       cancelled,
     })
-  } catch (error) {
-    logger.error('Error cancelling file expiry:', error as Error)
-    return apiError(
-      'Failed to cancel file expiry',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
-  }
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, { params }), {
-    route: '/api/files/[id]/expiry',
-  })(req)
-}
-
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handlePOST(req, { params }), {
-    route: '/api/files/[id]/expiry',
-  })(req)
-}
-
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleDELETE(req, { params }), {
-    route: '/api/files/[id]/expiry',
-  })(req)
-}
+  },
+  { failure: { message: 'Failed to cancel file expiry' } }
+)

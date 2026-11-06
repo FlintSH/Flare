@@ -1,50 +1,38 @@
-import { HTTP_STATUS, apiError } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
-const logger = loggers.api
+type Context = { params: Promise<{ id: string }> }
 
-async function handleDELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+const api = routes('/api/urls/[id]', {
+  envelope: 'api',
+  failure: { message: 'Internal server error' },
+  logger: loggers.api,
+})
 
-    const { id } = await params
+export const DELETE = api(async (request, { params }: Context) => {
+  const user = await requireAccount(request)
 
-    const url = await prisma.shortenedUrl.findUnique({
-      where: { id },
-      select: { userId: true },
-    })
+  const { id } = await params
 
-    if (!url) {
-      return apiError('URL not found', HTTP_STATUS.NOT_FOUND)
-    }
+  const url = await prisma.shortenedUrl.findUnique({
+    where: { id },
+    select: { userId: true },
+  })
 
-    if (url.userId !== user.id) {
-      return apiError('Unauthorized', HTTP_STATUS.FORBIDDEN)
-    }
-
-    await prisma.shortenedUrl.delete({
-      where: { id },
-    })
-
-    return new Response(null, { status: HTTP_STATUS.NO_CONTENT })
-  } catch (error) {
-    logger.error('URL deletion error', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
+  if (!url) {
+    throw new HttpError(404, 'URL not found')
   }
-}
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleDELETE(req, { params }), {
-    route: '/api/urls/[id]',
-  })(req)
-}
+  if (url.userId !== user.id) {
+    throw new HttpError(403, 'Unauthorized')
+  }
+
+  await prisma.shortenedUrl.delete({
+    where: { id },
+  })
+
+  return new Response(null, { status: 204 })
+})

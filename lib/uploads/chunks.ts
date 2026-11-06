@@ -17,6 +17,7 @@ import { getConfig, readConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { readJson } from '@/lib/http/request'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import {
@@ -172,7 +173,7 @@ export async function initializeChunkUpload(
     mimeType,
     size,
     ...bodyOptions
-  } = initSchema.parse(discardLegacyCopyFormat(await req.json()))
+  } = initSchema.parse(discardLegacyCopyFormat(await readJson(req)))
   // A path in `filename` names the file, never a storage location.
   const filename = uploadDisplayName(requestedName)
   if (!filename) throw new UploadError('Invalid filename.')

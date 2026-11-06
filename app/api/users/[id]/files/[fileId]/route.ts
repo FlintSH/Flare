@@ -3,164 +3,125 @@ import { NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
-import { recordAudit, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { recordAudit, setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import {
   filePasswordIssue,
   newFilePasswordSchema,
 } from '@/lib/files/password-policy'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertSameOrigin, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-async function handleDELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string; fileId: string }> }
-): Promise<NextResponse> {
-  if (!isSameOriginRequest(request))
-    return new NextResponse('Invalid request origin', { status: 403 })
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('content.delete')
-    if (permissionDenied) return permissionDenied
-    const { id: userId, fileId } = await params
+type Context = { params: Promise<{ id: string; fileId: string }> }
 
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
+const api = routes('/api/users/[id]/files/[fileId]', {
+  failure: { message: 'Internal Server Error' },
+  logger,
+})
 
-    const file = await prisma.file.findUnique({
-      where: {
-        id: fileId,
-        userId,
-      },
-    })
+export const DELETE = api(async (request, { params }: Context) => {
+  assertSameOrigin(request)
+  await requireSession('content.delete')
+  const { id: userId, fileId } = await params
 
-    if (!file) {
-      return new NextResponse('File not found', { status: 404 })
-    }
+  const file = await prisma.file.findUnique({
+    where: {
+      id: fileId,
+      userId,
+    },
+  })
 
-    setAuditTarget({ type: 'file', id: file.id, name: file.name })
-    try {
-      const storageProvider = await getStorageProvider()
-      await storageProvider.deleteFile(file.path)
-      await recordAudit({
-        action: 'storage.deleted',
-        category: 'storage',
-        targetType: 'file',
-        targetId: file.id,
-        targetName: file.name,
-      })
-    } catch (error) {
-      await recordAudit({
-        action: 'storage.delete_failed',
-        category: 'storage',
-        outcome: 'failure',
-        targetType: 'file',
-        targetId: file.id,
-        targetName: file.name,
-        details: {
-          reason: 'Storage deletion failed; file metadata deletion continues',
-          ownerId: file.userId,
-        },
-      })
-      logger.error('Error deleting file from storage:', error as Error)
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.file.delete({
-        where: {
-          id: fileId,
-          userId,
-        },
-      })
-
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          storageUsed: {
-            decrement: file.size,
-          },
-        },
-      })
-    })
-
-    return new NextResponse(null, { status: 204 })
-  } catch (error) {
-    logger.error('Error deleting file:', error as Error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+  if (!file) {
+    throw new HttpError(404, 'File not found')
   }
-}
 
-async function handlePATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string; fileId: string }> }
-): Promise<NextResponse> {
-  if (!isSameOriginRequest(request))
-    return new NextResponse('Invalid request origin', { status: 403 })
+  setAuditTarget({ type: 'file', id: file.id, name: file.name })
   try {
-    const { session, response: permissionDenied } =
-      await requirePermission('content.update')
-    if (permissionDenied) return permissionDenied
-    const { id: userId, fileId } = await params
+    const storageProvider = await getStorageProvider()
+    await storageProvider.deleteFile(file.path)
+    await recordAudit({
+      action: 'storage.deleted',
+      category: 'storage',
+      targetType: 'file',
+      targetId: file.id,
+      targetName: file.name,
+    })
+  } catch (error) {
+    await recordAudit({
+      action: 'storage.delete_failed',
+      category: 'storage',
+      outcome: 'failure',
+      targetType: 'file',
+      targetId: file.id,
+      targetName: file.name,
+      details: {
+        reason: 'Storage deletion failed; file metadata deletion continues',
+        ownerId: file.userId,
+      },
+    })
+    logger.error('Error deleting file from storage:', error as Error)
+  }
 
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 })
-    }
-
-    const body = await request.json()
-    const parsed = z
-      .object({
-        visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-        password: newFilePasswordSchema.nullable().optional(),
-      })
-      .strict()
-      .safeParse(body)
-    if (!parsed.success)
-      return NextResponse.json(
-        { error: filePasswordIssue(parsed.error) ?? 'Invalid file settings' },
-        { status: 400 }
-      )
-    const { visibility, password } = parsed.data
-
-    const file = await prisma.file.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.file.delete({
       where: {
         id: fileId,
         userId,
       },
+    })
+
+    await tx.user.update({
+      where: { id: userId },
       data: {
-        visibility,
-        ...(password !== undefined && {
-          password: password ? await hash(password, 10) : null,
-        }),
+        storageUsed: {
+          decrement: file.size,
+        },
       },
     })
+  })
 
-    const { password: secret, ...metadata } = file
-    return NextResponse.json({ ...metadata, hasPassword: Boolean(secret) })
-  } catch (error) {
-    logger.error('Error updating file:', error as Error)
-    return new NextResponse('Internal Server Error', { status: 500 })
-  }
-}
+  return new NextResponse(null, { status: 204 })
+})
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string; fileId: string }> }
-): Promise<NextResponse> {
-  return withAuditRoute(async () => handleDELETE(request, { params }), {
-    route: '/api/users/[id]/files/[fileId]',
-  })(request)
-}
+export const PATCH = api(async (request, { params }: Context) => {
+  assertSameOrigin(request)
+  await requireSession('content.update')
+  const { id: userId, fileId } = await params
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string; fileId: string }> }
-): Promise<NextResponse> {
-  return withAuditRoute(async () => handlePATCH(request, { params }), {
-    route: '/api/users/[id]/files/[fileId]',
-  })(request)
-}
+  const body = await readJson(request)
+  const parsed = z
+    .object({
+      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+      password: newFilePasswordSchema.nullable().optional(),
+    })
+    .strict()
+    .safeParse(body)
+  if (!parsed.success)
+    throw new HttpError(
+      400,
+      filePasswordIssue(parsed.error) ?? 'Invalid file settings'
+    )
+  const { visibility, password } = parsed.data
+
+  const file = await prisma.file.update({
+    where: {
+      id: fileId,
+      userId,
+    },
+    data: {
+      visibility,
+      ...(password !== undefined && {
+        password: password ? await hash(password, 10) : null,
+      }),
+    },
+  })
+
+  const { password: secret, ...metadata } = file
+  return NextResponse.json({ ...metadata, hasPassword: Boolean(secret) })
+})

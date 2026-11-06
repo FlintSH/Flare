@@ -1,21 +1,16 @@
-import { withAuditRoute } from '@/lib/audit'
-import { securityRoute, securitySession } from '@/lib/auth/security/http'
+import { securityRoutes, securitySession } from '@/lib/auth/security/http'
 import { SecurityError } from '@/lib/auth/security/shared'
 import { revokeBrowserSessions } from '@/lib/auth/sessions'
+import { routes } from '@/lib/http/route'
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(
-    async () =>
-      securityRoute(async () => {
-        const { session } = await securitySession(req)
-        const { id } = await params
-        if (!id || id.length > 100)
-          throw new SecurityError('Invalid session identifier.')
-        return revokeBrowserSessions(session, id)
-      }),
-    { route: '/api/profile/sessions/[id]' }
-  )(req)
-}
+type Context = { params: Promise<{ id: string }> }
+
+const api = routes('/api/profile/sessions/[id]', securityRoutes)
+
+export const DELETE = api(async (request, { params }: Context) => {
+  const { session } = await securitySession(request)
+  const { id } = await params
+  if (!id || id.length > 100)
+    throw new SecurityError('Invalid session identifier.')
+  return revokeBrowserSessions(session, id)
+})

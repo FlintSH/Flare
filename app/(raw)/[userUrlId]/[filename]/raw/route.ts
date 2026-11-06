@@ -4,18 +4,21 @@ import { once } from 'node:events'
 import { ReadStream } from 'node:fs'
 import { Readable } from 'stream'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
 import { parseByteRange } from '@/lib/http/byte-range'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
+
+type Context = { params: Promise<{ userUrlId: string; filename: string }> }
 
 function encodeFilename(filename: string): string {
   const safe = sanitizeDisplayName(filename)
@@ -130,81 +133,103 @@ async function createFileResponse(
   }
 }
 
-async function handleGET(
-  req: Request,
-  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
-) {
-  try {
-    const session = await getAccessSession()
-    const { userUrlId, filename } = await params
-    const url = new URL(req.url)
-    const providedPassword = url.searchParams.get('password')
+const api = routes('/[userUrlId]/[filename]/raw', {
+  failure: { message: 'Internal server error' },
+  logger,
+})
 
-    const urlPath = await resolveFileUrlPath(userUrlId, filename)
+export const GET = api(
+  async (request, { params }: Context) => {
+    try {
+      const session = await getAccessSession()
+      const { userUrlId, filename } = await params
+      const url = new URL(request.url)
+      const providedPassword = url.searchParams.get('password')
 
-    if (!urlPath) {
-      return new Response(null, { status: 404 })
-    }
+      const urlPath = await resolveFileUrlPath(userUrlId, filename)
 
-    const file = await prisma.file.findUnique({
-      where: { urlPath },
-    })
+      if (!urlPath) {
+        return new Response(null, { status: 404 })
+      }
 
-    if (!file) {
-      return new Response(null, { status: 404 })
-    }
-
-    setAuditTarget({ type: 'file', id: file.id, name: file.name })
-
-    const access = await checkFileAccess(file, session, providedPassword, {
-      requester: requestIp(req.headers),
-    })
-    if (!access.allowed) {
-      setAuditOutcome('denied')
-      return new Response(null, {
-        status: access.status,
-        headers: {
-          'Cache-Control': 'private, no-store',
-          ...fileAccessDeniedHeaders(access),
-        },
+      const file = await prisma.file.findUnique({
+        where: { urlPath },
       })
-    }
-    // Shared caches key on the URL alone; never let them keep protected bytes.
-    const cacheHeaders: Record<string, string> =
-      file.visibility === 'PRIVATE' || file.password
-        ? { 'Cache-Control': 'private, no-store' }
-        : {}
 
-    const storageProvider = await getStorageProvider()
-    const range = req.headers.get('range')
+      if (!file) {
+        return new Response(null, { status: 404 })
+      }
 
-    const size = await storageProvider.getFileSize(file.path)
+      setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
-    const byteRange = parseByteRange(range, size)
-    if (byteRange === 'unsatisfiable') {
-      return new Response(null, {
-        status: 416,
-        headers: {
-          'Content-Range': `bytes */${size}`,
+      const access = await checkFileAccess(file, session, providedPassword, {
+        requester: requestIp(request.headers),
+      })
+      if (!access.allowed) {
+        setAuditOutcome('denied')
+        return new Response(null, {
+          status: access.status,
+          headers: {
+            'Cache-Control': 'private, no-store',
+            ...fileAccessDeniedHeaders(access),
+          },
+        })
+      }
+      // Shared caches key on the URL alone; never let them keep protected bytes.
+      const cacheHeaders: Record<string, string> =
+        file.visibility === 'PRIVATE' || file.password
+          ? { 'Cache-Control': 'private, no-store' }
+          : {}
+
+      const storageProvider = await getStorageProvider()
+      const range = request.headers.get('range')
+
+      const size = await storageProvider.getFileSize(file.path)
+
+      const byteRange = parseByteRange(range, size)
+      if (byteRange === 'unsatisfiable') {
+        return new Response(null, {
+          status: 416,
+          headers: {
+            'Content-Range': `bytes */${size}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Security-Policy': 'sandbox',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+      }
+      if (byteRange) {
+        const { start, end } = byteRange
+        const chunkSize = end - start + 1
+
+        const stream = await storageProvider.getFileStream(file.path, {
+          start,
+          end,
+        })
+
+        const headers = {
+          'Content-Range': `bytes ${start}-${end}/${size}`,
           'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize.toString(),
+          'Content-Type': file.mimeType,
+          'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
           'Content-Security-Policy': 'sandbox',
           'X-Content-Type-Options': 'nosniff',
-        },
-      })
-    }
-    if (byteRange) {
-      const { start, end } = byteRange
-      const chunkSize = end - start + 1
+          Connection: 'keep-alive',
+          'Keep-Alive': 'timeout=300, max=1000',
+          ...cacheHeaders,
+        }
 
-      const stream = await storageProvider.getFileStream(file.path, {
-        start,
-        end,
-      })
+        return await createFileResponse(stream, request, file.id, {
+          status: 206,
+          headers,
+        })
+      }
 
+      const stream = await storageProvider.getFileStream(file.path)
       const headers = {
-        'Content-Range': `bytes ${start}-${end}/${size}`,
         'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize.toString(),
+        'Content-Length': size.toString(),
         'Content-Type': file.mimeType,
         'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
         'Content-Security-Policy': 'sandbox',
@@ -214,42 +239,15 @@ async function handleGET(
         ...cacheHeaders,
       }
 
-      return await createFileResponse(stream, req, file.id, {
-        status: 206,
-        headers,
-      })
+      return await createFileResponse(stream, request, file.id, { headers })
+    } catch (error) {
+      // A stored object that S3 no longer has is a missing file.
+      if (error instanceof Error && error.message.includes('NoSuchKey')) {
+        logger.error('File serve error:', error)
+        return new Response(null, { status: 404 })
+      }
+      throw error
     }
-
-    const stream = await storageProvider.getFileStream(file.path)
-    const headers = {
-      'Accept-Ranges': 'bytes',
-      'Content-Length': size.toString(),
-      'Content-Type': file.mimeType,
-      'Content-Disposition': `inline; filename=${encodeFilename(file.name)}`,
-      'Content-Security-Policy': 'sandbox',
-      'X-Content-Type-Options': 'nosniff',
-      Connection: 'keep-alive',
-      'Keep-Alive': 'timeout=300, max=1000',
-      ...cacheHeaders,
-    }
-
-    return await createFileResponse(stream, req, file.id, { headers })
-  } catch (error) {
-    logger.error('File serve error:', error as Error)
-    if (error instanceof Error && error.message.includes('NoSuchKey')) {
-      return new Response(null, { status: 404 })
-    }
-    return new Response(null, { status: 500 })
-  }
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, { params }), {
-    action: 'file.read',
-    category: 'files',
-    route: '/[userUrlId]/[filename]/raw',
-  })(req)
-}
+  },
+  { audit: { action: 'file.read', category: 'files' } }
+)

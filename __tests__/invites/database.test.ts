@@ -324,7 +324,9 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     ).toHaveLength(1)
 
     authentication.userId = 'admin'
-    const read = await policy.GET()
+    const read = await policy.GET(
+      new Request('http://localhost/api/settings/invites')
+    )
     expect(await read.json()).toEqual({
       everyoneCanInvite: true,
       limits: { activeInvites: 5, usesPerInvite: 1, lifetimeDays: 30 },
@@ -602,7 +604,9 @@ suite.sequential('invites against disposable PostgreSQL', () => {
         },
       })
     )
-    const read = await (await policy.GET()).json()
+    const read = await (
+      await policy.GET(new Request('http://localhost/api/settings/invites'))
+    ).json()
     expect(read.limits).toEqual({
       activeInvites: 2,
       usesPerInvite: 3,

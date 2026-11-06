@@ -1,42 +1,30 @@
-import { withAuditRoute } from '@/lib/audit'
 import {
   passkeyName,
   proofSchema,
   securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { changePasskey } from '@/lib/auth/security/passkeys'
+import { routes } from '@/lib/http/route'
 
 type Context = { params: Promise<{ id: string }> }
-async function handleDELETE(req: Request, { params }: Context) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    return changePasskey(
-      session,
-      (await params).id,
-      proofSchema.parse(await securityBody(req))
-    )
-  })
-}
-async function handlePATCH(req: Request, { params }: Context) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    const data = proofSchema
-      .extend({ name: passkeyName })
-      .parse(await securityBody(req))
-    return changePasskey(session, (await params).id, data, data.name)
-  })
-}
 
-export async function DELETE(req: Request, { params }: Context) {
-  return withAuditRoute(async () => handleDELETE(req, { params }), {
-    route: '/api/auth/security/passkeys/[id]',
-  })(req)
-}
+const api = routes('/api/auth/security/passkeys/[id]', securityRoutes)
 
-export async function PATCH(req: Request, { params }: Context) {
-  return withAuditRoute(async () => handlePATCH(req, { params }), {
-    route: '/api/auth/security/passkeys/[id]',
-  })(req)
-}
+export const DELETE = api(async (request, { params }: Context) => {
+  const { session } = await securitySession(request)
+  return changePasskey(
+    session,
+    (await params).id,
+    proofSchema.parse(await securityBody(request))
+  )
+})
+
+export const PATCH = api(async (request, { params }: Context) => {
+  const { session } = await securitySession(request)
+  const data = proofSchema
+    .extend({ name: passkeyName })
+    .parse(await securityBody(request))
+  return changePasskey(session, (await params).id, data, data.name)
+})

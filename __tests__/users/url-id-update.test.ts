@@ -22,11 +22,10 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requirePermission: mocks.requirePermission,
+vi.mock('@/lib/http/access', () => ({
+  requireSession: mocks.requirePermission,
 }))
 vi.mock('@/lib/permissions/server', () => ({
-  PermissionError: class PermissionError extends Error {},
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),

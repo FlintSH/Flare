@@ -1,59 +1,42 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import {
-  emailAdminAccess,
   emailDiagnostics,
-  emailSettingsError,
+  emailSettingsRoutes,
+  requireEmailAdmin,
 } from '@/lib/email/admin'
 import { getEmailSettingsView, saveEmailConfig } from '@/lib/email/config'
 import { startMailWorker } from '@/lib/email/worker'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 
-async function handleGET(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const view = await getEmailSettingsView()
-    return NextResponse.json({
-      data: {
-        ...view,
-        diagnostics: await emailDiagnostics(view.config.enabled),
-      },
-    })
-  } catch (error) {
-    return emailSettingsError(error)
+const api = routes('/api/settings/email', emailSettingsRoutes)
+
+export const GET = api(async (request) => {
+  await requireEmailAdmin(request)
+  const view = await getEmailSettingsView()
+  return {
+    data: {
+      ...view,
+      diagnostics: await emailDiagnostics(view.config.enabled),
+    },
   }
-}
+})
 
-async function handlePUT(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const body = await request.json()
-    const view = await saveEmailConfig(body.config, {
-      clearPassword: body.clearPassword === true,
-      applyToExisting: body.applyToExisting === true,
-    })
-    if (view.config.enabled) startMailWorker()
-    return NextResponse.json({
-      data: {
-        ...view,
-        diagnostics: await emailDiagnostics(view.config.enabled),
-      },
-    })
-  } catch (error) {
-    return emailSettingsError(error)
+export const PUT = api(async (request) => {
+  await requireEmailAdmin(request)
+  const body = (await readJson(request)) as {
+    config?: unknown
+    clearPassword?: unknown
+    applyToExisting?: unknown
   }
-}
-
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/settings/email',
-  })(request)
-}
-
-export async function PUT(request: Request) {
-  return withAuditRoute(async () => handlePUT(request), {
-    route: '/api/settings/email',
-  })(request)
-}
+  const view = await saveEmailConfig(body.config, {
+    clearPassword: body.clearPassword === true,
+    applyToExisting: body.applyToExisting === true,
+  })
+  if (view.config.enabled) startMailWorker()
+  return {
+    data: {
+      ...view,
+      diagnostics: await emailDiagnostics(view.config.enabled),
+    },
+  }
+})

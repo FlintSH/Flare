@@ -124,132 +124,59 @@ export async function recordAuditMany(
   }
 }
 
-/** Route templates only. Actual IDs and names belong in explicit target fields. */
-export function auditRoutePath(url: string): string {
-  const segments = new URL(url).pathname.split('/').filter(Boolean)
-  const known = new Set([
-    'api',
-    'auth',
-    'login',
-    'logout',
-    'register',
-    'callback',
-    'signin',
-    'signout',
-    'session',
-    'csrf',
-    'providers',
-    'credentials',
-    'oidc',
-    'passkeys',
-    'options',
-    'verify',
-    'authenticate',
-    'registration',
-    'recovery',
-    'codes',
-    'totp',
-    'profile',
-    'users',
-    'roles',
-    'invites',
-    'settings',
-    'appearance',
-    'assets',
-    'avatar',
-    'files',
-    'upload',
-    'paste',
-    'download',
-    'raw',
-    'thumbnail',
-    'ocr',
-    'tags',
-    'folders',
-    'share',
-    'unshare',
-    'urls',
-    'shorten',
-    'tokens',
-    'webhooks',
-    'deliveries',
-    'test',
-    'retry',
-    'export',
-    'email',
-    'verification',
-    'resend',
-    'confirm',
-    'change',
-    'password',
-    'reset',
-    'forgot',
-    'sessions',
-    'history',
-    'security',
-    'setup',
-    'config',
-    'upload-profiles',
-    'preferences',
-    'f',
-    's',
-  ])
-  return (
-    '/' +
-    segments.map((segment) => (known.has(segment) ? segment : ':id')).join('/')
-  )
-}
-
-export function withAuditRoute<Args extends unknown[], Result extends Response>(
-  handler: (...args: Args) => Promise<Result>,
+/**
+ * Record one HTTP request under its route template (never the actual path:
+ * IDs and names belong in explicit target fields), with the actor and target
+ * the handler sets, the outcome and the duration.
+ */
+export async function auditRequest(
+  request: Request,
   options: {
+    route: string
     action?: string
     category?: string
-    route?: string
     skipSuccess?: boolean
-  } = {}
-): (...args: Args extends [] ? [request?: Request] : Args) => Promise<Result> {
-  return async (...args) => {
-    const request = args[0] instanceof Request ? args[0] : undefined
-    const route =
-      options.route ?? (request ? auditRoutePath(request.url) : undefined)
-    const method = request?.method ?? 'GET'
-    const started = Date.now()
-    return auditContext.run(
-      { requestId: randomUUID(), method, route },
-      async () => {
-        try {
-          const response = await handler(...(args as Args))
-          const outcome =
-            auditContext.getStore()?.outcome ??
-            (response.status === 401 || response.status === 403
-              ? 'denied'
-              : response.status >= 400
-                ? 'failure'
-                : 'success')
-          if (options.skipSuccess && outcome === 'success') return response
-          await recordAudit({
-            action: options.action ?? `http.${method.toLowerCase()}`,
-            category: options.category ?? 'requests',
-            outcome,
-            status: response.status,
-            details: { durationMs: Date.now() - started },
-          })
-          return response
-        } catch (error) {
-          await recordAudit({
-            action: options.action ?? `http.${method.toLowerCase()}`,
-            category: options.category ?? 'requests',
-            outcome: 'failure',
-            status: 500,
-            details: {
-              durationMs: Date.now() - started,
-              reason: 'Unhandled request error',
-            },
-          })
-          throw error
-        }
+  },
+  handle: () => Promise<Response>
+): Promise<Response> {
+  const method = request.method
+  const started = Date.now()
+  const action = options.action ?? `http.${method.toLowerCase()}`
+  const category = options.category ?? 'requests'
+  return auditContext.run(
+    { requestId: randomUUID(), method, route: options.route },
+    async () => {
+      try {
+        const response = await handle()
+        const outcome =
+          auditContext.getStore()?.outcome ??
+          (response.status === 401 || response.status === 403
+            ? 'denied'
+            : response.status >= 400
+              ? 'failure'
+              : 'success')
+        if (options.skipSuccess && outcome === 'success') return response
+        await recordAudit({
+          action,
+          category,
+          outcome,
+          status: response.status,
+          details: { durationMs: Date.now() - started },
+        })
+        return response
+      } catch (error) {
+        await recordAudit({
+          action,
+          category,
+          outcome: 'failure',
+          status: 500,
+          details: {
+            durationMs: Date.now() - started,
+            reason: 'Unhandled request error',
+          },
+        })
+        throw error
       }
-    )
-  }
+    }
+  )
 }

@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-
 import archiver from 'archiver'
 import { once } from 'node:events'
 import { ReadStream, createReadStream, existsSync } from 'node:fs'
@@ -7,10 +5,11 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
 import { exportEntryNamer } from '@/lib/files/export-entry-names'
+import { requireAccount } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 import type { StorageProvider } from '@/lib/storage'
@@ -197,15 +196,15 @@ function exportArchive(
   return archive
 }
 
-async function handleGET(req: Request) {
-  let userId: string | null = null
+const api = routes('/api/profile/export', {
+  failure: { message: 'Internal server error' },
+  logger,
+})
+
+export const GET = api(async (request) => {
+  const { id: userId } = await requireAccount(request)
 
   try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
-
-    userId = user.id
-
     const userData = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -241,7 +240,7 @@ async function handleGET(req: Request) {
     })
 
     if (!userData) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      throw new HttpError(404, 'User not found')
     }
 
     const storageProvider = await getStorageProvider()
@@ -274,26 +273,14 @@ async function handleGET(req: Request) {
       userId,
       userDataForExport,
       storageProvider,
-      req.signal
+      request.signal
     )
     return new Response(Readable.toWeb(archive) as ReadableStream<Uint8Array>, {
       headers,
     })
   } catch (error) {
-    if (userId) {
-      clearProgress(userId)
-    }
-
-    logger.error('Data export error:', error as Error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    // A failed export must not leave its progress behind.
+    clearProgress(userId)
+    throw error
   }
-}
-
-export async function GET(req: Request) {
-  return withAuditRoute(async () => handleGET(req), {
-    route: '/api/profile/export',
-  })(req)
-}
+})

@@ -1,24 +1,19 @@
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
 import { confirmEmailToken } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
-import { emailRoute } from '@/lib/email/http'
+import { emailRoutes } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return emailRoute(async () => {
-    const { token } = z
-      .object({ token: z.string().max(128) })
-      .parse(await req.json())
-    const config = await getEmailConfig()
-    await limitEmailRequest(req, config)
-    return { message: await confirmEmailToken(token, config) }
-  })
-}
+const api = routes('/api/auth/email/verify', emailRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/email/verify',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { token } = z
+    .object({ token: z.string().max(128) })
+    .parse(await readJson(request))
+  const config = await getEmailConfig()
+  await limitEmailRequest(request, config)
+  return { message: await confirmEmailToken(token, config) }
+})

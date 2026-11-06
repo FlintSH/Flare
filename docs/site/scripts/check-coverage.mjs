@@ -60,7 +60,7 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
   const source = await readFile(file, 'utf8')
   const methods = [
     ...source.matchAll(
-      /export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g
+      /export\s+(?:(?:async\s+)?function|const)\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g
     ),
   ].map((match) => match[1])
   for (const method of methods) {

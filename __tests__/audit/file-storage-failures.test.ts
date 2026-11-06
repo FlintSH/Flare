@@ -29,20 +29,22 @@ vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({ deleteFile: state.remove }),
 }))
 vi.mock('@/lib/logger', () => ({ loggers: { files: { error: vi.fn() } } }))
-vi.mock('@/lib/permissions/server', () => ({
-  requirePermission: async () => {
-    if (state.denied)
+vi.mock('@/lib/http/access', async () => {
+  const { AccessError } = await import('@/lib/http/errors')
+  return {
+    requireSession: async () => {
+      if (state.denied) throw new AccessError(403, 'Denied')
+      setAuditActor({
+        id: state.actorId,
+        name: state.actorId === 'owner' ? 'File owner' : 'Admin reviewer',
+      })
       return {
-        response: new Response('Denied', { status: 403 }),
-        session: null,
+        session: { user: { id: state.actorId } },
+        user: { id: state.actorId },
       }
-    setAuditActor({
-      id: state.actorId,
-      name: state.actorId === 'owner' ? 'File owner' : 'Admin reviewer',
-    })
-    return { response: null, session: { user: { id: state.actorId } } }
-  },
-}))
+    },
+  }
+})
 
 const recorded: Array<Record<string, unknown>> = []
 const file = {

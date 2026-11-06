@@ -1,38 +1,27 @@
 import { FileTypesResponse } from '@/types/dto/file'
 
-import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireAccount } from '@/lib/http/access'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
-const logger = loggers.files
+const api = routes('/api/files/types', {
+  envelope: 'api',
+  failure: { message: 'Failed to fetch file types' },
+  logger: loggers.files,
+})
 
-async function handleGET(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
+export const GET = api(async (request) => {
+  const user = await requireAccount(request)
 
-    const files = await prisma.file.findMany({
-      where: { userId: user.id },
-      select: { mimeType: true },
-      distinct: ['mimeType'],
-    })
+  const files = await prisma.file.findMany({
+    where: { userId: user.id },
+    select: { mimeType: true },
+    distinct: ['mimeType'],
+  })
 
-    const types = files.map((file) => file.mimeType).sort()
+  const types = files.map((file) => file.mimeType).sort()
 
-    return apiResponse<FileTypesResponse>({ types })
-  } catch (error) {
-    logger.error('Error fetching file types:', error as Error)
-    return apiError(
-      'Failed to fetch file types',
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    )
-  }
-}
-
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/files/types',
-  })(request)
-}
+  return apiResponse<FileTypesResponse>({ types })
+})

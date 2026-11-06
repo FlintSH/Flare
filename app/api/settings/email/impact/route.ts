@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
-import { emailAdminAccess, emailSettingsError } from '@/lib/email/admin'
+import { emailSettingsRoutes, requireEmailAdmin } from '@/lib/email/admin'
 import { getEmailConfig, prepareEmailConfig } from '@/lib/email/config'
 import { hasVerifiedEmail } from '@/lib/email/policy'
 import type { EmailConfig } from '@/lib/email/schema'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 
 async function impact(config: EmailConfig) {
   const users = await prisma.user.findMany({
@@ -18,46 +17,29 @@ async function impact(config: EmailConfig) {
     },
   })
   const unverified = users.filter((user) => !hasVerifiedEmail(user, config))
-  return NextResponse.json({
+  return {
     data: {
       unverifiedUsers: unverified.length,
       affectedUsers: unverified.filter((user) => !user.emailExempt).length,
     },
-  })
-}
-
-async function handleGET(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    return await impact(await getEmailConfig())
-  } catch (error) {
-    return emailSettingsError(error)
   }
 }
 
-async function handlePOST(request: Request) {
-  const denied = await emailAdminAccess(request)
-  if (denied) return denied
-  try {
-    const body = await request.json()
-    return await impact(
-      (await prepareEmailConfig(body.config, body.clearPassword === true))
-        .effective
-    )
-  } catch (error) {
-    return emailSettingsError(error)
+const api = routes('/api/settings/email/impact', emailSettingsRoutes)
+
+export const GET = api(async (request) => {
+  await requireEmailAdmin(request)
+  return impact(await getEmailConfig())
+})
+
+export const POST = api(async (request) => {
+  await requireEmailAdmin(request)
+  const body = (await readJson(request)) as {
+    config?: unknown
+    clearPassword?: unknown
   }
-}
-
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), {
-    route: '/api/settings/email/impact',
-  })(request)
-}
-
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/settings/email/impact',
-  })(request)
-}
+  return impact(
+    (await prepareEmailConfig(body.config, body.clearPassword === true))
+      .effective
+  )
+})

@@ -1,63 +1,26 @@
-import { NextResponse } from 'next/server'
-
 import { getServerSession } from 'next-auth'
-import { ZodError } from 'zod'
 
 import { authOptions } from '@/lib/auth'
-import { SecurityError } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
-import { PermissionError } from '@/lib/permissions/server'
+import { HttpError } from '@/lib/http/errors'
+import type { RouteContract } from '@/lib/http/route'
 
 import { getEmailConfig } from './config'
+import { EmailHttpError } from './errors'
 import { EmailRateLimitError } from './rate-limit'
 
-export class EmailHttpError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
-  }
-}
-
-export async function emailRoute(action: () => Promise<unknown>) {
-  try {
-    return NextResponse.json(await action())
-  } catch (error) {
-    if (
-      error instanceof EmailHttpError ||
-      error instanceof PermissionError ||
-      error instanceof SecurityError
-    )
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
+/** Account email routes. Provider errors, credentials, database details and token values never reach the response. */
+export const emailRoutes: RouteContract = {
+  translate: (error) => {
     if (error instanceof EmailRateLimitError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 429, headers: { 'Retry-After': '60' } }
-      )
-    if (error instanceof ZodError)
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    // Never expose provider errors, credentials, database details, or token values.
-    const safe =
-      error instanceof Error &&
-      /^(This email|Confirm your current|Sign in again|Account not found|Email is |Password recovery is |Approve the change|Your current email)/.test(
-        error.message
-      )
-    return NextResponse.json(
-      {
-        error: safe
-          ? (error as Error).message
-          : 'Unable to complete this email request. Please try again.',
-      },
-      { status: 400 }
-    )
-  }
+      return new HttpError(429, error.message, {
+        headers: { 'Retry-After': '60' },
+      })
+  },
+  failure: {
+    status: 400,
+    message: 'Unable to complete this email request. Please try again.',
+  },
 }
 
 export function validateEmailOrigin(req: Request, publicUrl?: string) {

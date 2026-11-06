@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
+import { routes } from '@/lib/http/route'
 
 const state = vi.hoisted(() => ({
   session: null as unknown,
@@ -69,9 +70,12 @@ describe('account security HTTP boundary', () => {
     ).toEqual({ code: '123456' })
   })
   it('never exposes database or provider errors and disables response caching', async () => {
-    const response = await securityRoute(async () => {
+    const response = await routes(
+      '/api/auth/security',
+      securityRoutes
+    )(async () => {
       throw new Error('secret database connection credentials')
-    })
+    })(new Request('https://flare.example/api/auth/security'))
     expect(await response.text()).not.toContain('credentials')
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })

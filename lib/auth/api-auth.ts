@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-
 import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
@@ -10,15 +8,8 @@ import {
   hashApiToken,
   tokenAllowsRequest,
 } from '@/lib/integrations/tokens'
-import {
-  type Permission,
-  type RoleSummary,
-  hasPermission,
-} from '@/lib/permissions/catalog'
-import { requestPermissions } from '@/lib/permissions/requests'
+import type { RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
-
-export { requirePermission } from '@/lib/permissions/server'
 
 export type AuthenticatedUser = {
   id: string
@@ -126,29 +117,4 @@ export async function getAuthenticatedUser(
   }
 
   return null
-}
-
-export async function requireAuth(req: Request, permissions?: Permission[]) {
-  const user = await getAuthenticatedUser(req)
-  if (!user) {
-    return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-      user: null,
-    }
-  }
-  const required =
-    permissions ?? requestPermissions(req.method, new URL(req.url).pathname)
-  if (
-    !required ||
-    required.some((permission) => !hasPermission(user, permission))
-  ) {
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: 'You do not have permission to perform this action.' },
-        { status: 403 }
-      ),
-    }
-  }
-  return { user, response: null }
 }

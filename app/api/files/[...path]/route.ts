@@ -1,16 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { parseByteRange } from '@/lib/http/byte-range'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
+
+type Context = { params: Promise<{ path: string[] }> }
 
 function encodeFilename(filename: string): string {
   const safe = sanitizeDisplayName(filename)
@@ -18,10 +21,12 @@ function encodeFilename(filename: string): string {
   return `"${encoded.replace(/["\\]/g, '\\$&')}"; filename*=UTF-8''${encoded}`
 }
 
-async function handleGET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-): Promise<Response> {
+const api = routes('/api/files/[...path]', {
+  failure: { message: 'Internal server error' },
+  logger,
+})
+
+async function serveFile(request: Request, { params }: Context) {
   try {
     const { path } = await params
     const session = await getAccessSession()
@@ -133,23 +138,20 @@ async function handleGET(
       headers,
     })
   } catch (error) {
+    // Every failure answers like a missing file.
     logger.error('File serve error:', error as Error)
     return new Response(null, { status: 404 })
   }
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-): Promise<Response> {
-  return withAuditRoute(async () => handleGET(request, { params }), {
-    // The downloads counter is not a separate change event, so the request
-    // event records whether this was a download.
-    action:
+// The downloads counter is not a separate change event, so the request event
+// records whether this was a download.
+export const GET = api(serveFile, {
+  audit: {
+    action: (request) =>
       new URL(request.url).searchParams.get('download') === 'true'
         ? 'file.download'
         : 'file.read',
     category: 'files',
-    route: '/api/files/[...path]',
-  })(request)
-}
+  },
+})

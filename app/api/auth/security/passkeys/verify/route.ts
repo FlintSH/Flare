@@ -1,28 +1,22 @@
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 
-import { withAuditRoute } from '@/lib/audit'
 import {
   challengeResponseSchema,
   securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { registerPasskey } from '@/lib/auth/security/passkeys'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    const data = challengeResponseSchema.parse(await securityBody(req))
-    return registerPasskey(
-      session,
-      data.challengeId,
-      data.response as unknown as RegistrationResponseJSON
-    )
-  })
-}
+const api = routes('/api/auth/security/passkeys/verify', securityRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/security/passkeys/verify',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { session } = await securitySession(request)
+  const data = challengeResponseSchema.parse(await securityBody(request))
+  return registerPasskey(
+    session,
+    data.challengeId,
+    data.response as unknown as RegistrationResponseJSON
+  )
+})

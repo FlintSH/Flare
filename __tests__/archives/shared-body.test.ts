@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { archiveRoute } from '@/lib/archives/http'
+import { archiveRoutes } from '@/lib/archives/http'
 import { ArchiveOperation } from '@/lib/archives/operation'
 import {
   SHARED_ARCHIVE_BODY_TIMEOUT_MS,
   SHARED_ARCHIVE_PENDING_BODIES,
   sharedArchiveBody,
 } from '@/lib/archives/sharing'
+import { routes } from '@/lib/http/route'
+
+const archiveRoute = (action: () => Promise<unknown>) =>
+  routes('/api/files/[id]/archive/share', archiveRoutes)(action)(
+    new Request('http://localhost/api/files/archive-file/archive/share')
+  )
 
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => null }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: {} }))

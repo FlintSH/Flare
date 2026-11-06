@@ -16,8 +16,3 @@ export interface PaginationMeta {
 export interface PaginatedApiResponse<T> extends ApiResponse<T> {
   pagination: PaginationMeta
 }
-
-export interface ApiErrorResponse {
-  error: string
-  success: false
-}

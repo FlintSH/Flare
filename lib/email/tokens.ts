@@ -3,6 +3,8 @@ import { createHash, randomBytes } from 'node:crypto'
 
 import { lockUserRow } from '@/lib/database/locks'
 
+import { EmailHttpError } from './errors'
+
 export type EmailTokenPurpose =
   'verify' | 'reset' | 'change' | 'change_approval'
 
@@ -36,7 +38,7 @@ export async function consumeEmailToken(
   purposes: EmailTokenPurpose[]
 ) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token))
-    throw new Error('This email link is invalid or expired.')
+    throw new EmailHttpError('This email link is invalid or expired.')
   const record = await tx.emailToken.findUnique({
     where: { tokenHash: hashEmailToken(token) },
   })
@@ -46,7 +48,7 @@ export async function consumeEmailToken(
     record.expiresAt <= new Date() ||
     !purposes.includes(record.purpose as EmailTokenPurpose)
   ) {
-    throw new Error('This email link is invalid or expired.')
+    throw new EmailHttpError('This email link is invalid or expired.')
   }
   // Account mutations and issuance take the same lock before touching tokens.
   await lockUserRow(tx, record.userId)
@@ -55,7 +57,7 @@ export async function consumeEmailToken(
     data: { consumedAt: new Date() },
   })
   if (consumed.count !== 1)
-    throw new Error('This email link is invalid or expired.')
+    throw new EmailHttpError('This email link is invalid or expired.')
   return record
 }
 

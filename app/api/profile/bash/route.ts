@@ -1,75 +1,61 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
-import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
 import { generatorProfile } from '@/lib/uploads/profiles'
 
-const logger = loggers.users
+const api = routes('/api/profile/bash', {
+  failure: { message: 'Failed to generate bash script' },
+  logger: loggers.users,
+})
 
-async function handleGET(req: Request) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('tokens.manage')
-    if (permissionDenied) return permissionDenied
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+export const GET = api(async (request) => {
+  const { session } = await requireSession('tokens.manage')
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { uploadToken: true, name: true },
-    })
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { uploadToken: true, name: true },
+  })
 
-    if (!user?.uploadToken) {
-      return NextResponse.json(
-        { error: 'Upload token not found' },
-        { status: 404 }
-      )
-    }
-
-    const profileId = await generatorProfile(
-      session.user.id,
-      new URL(req.url).searchParams.get('profileId')
-    )
-
-    const baseUrl =
-      process.env.NODE_ENV === 'development'
-        ? 'http://localhost:3000'
-        : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
-
-    let script = generateBashScript({
-      uploadToken: user.uploadToken,
-      baseUrl,
-    })
-
-    if (profileId)
-      script = script.replaceAll(
-        '/api/files"',
-        `/api/files?profileId=${encodeURIComponent(profileId)}"`
-      )
-
-    const sanitizedName = (user.name || 'user')
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-
-    return new NextResponse(script, {
-      headers: {
-        'Content-Type': 'text/plain',
-        'Content-Disposition': `attachment; filename="${sanitizedName}-upload.sh"`,
-      },
-    })
-  } catch (error) {
-    if (error instanceof UploadError) return uploadErrorResponse(error)
-    logger.error('Error generating bash script:', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to generate bash script' },
-      { status: 500 }
-    )
+  if (!user?.uploadToken) {
+    throw new HttpError(404, 'Upload token not found')
   }
-}
+
+  const profileId = await generatorProfile(
+    session.user.id,
+    new URL(request.url).searchParams.get('profileId')
+  )
+
+  const baseUrl =
+    process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
+      : process.env.NEXTAUTH_URL?.replace(/\/$/, '') || ''
+
+  let script = generateBashScript({
+    uploadToken: user.uploadToken,
+    baseUrl,
+  })
+
+  if (profileId)
+    script = script.replaceAll(
+      '/api/files"',
+      `/api/files?profileId=${encodeURIComponent(profileId)}"`
+    )
+
+  const sanitizedName = (user.name || 'user')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+
+  return new NextResponse(script, {
+    headers: {
+      'Content-Type': 'text/plain',
+      'Content-Disposition': `attachment; filename="${sanitizedName}-upload.sh"`,
+    },
+  })
+})
 
 interface ScriptOptions {
   uploadToken: string
@@ -193,10 +179,4 @@ echo "File uploaded successfully!"
 echo "URL: $URL"
 echo "URL has been copied to clipboard (if a clipboard tool was available)"
 exit 0`
-}
-
-export async function GET(req: Request) {
-  return withAuditRoute(async () => handleGET(req), {
-    route: '/api/profile/bash',
-  })(req)
 }

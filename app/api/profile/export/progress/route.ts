@@ -1,19 +1,16 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { requirePermission } from '@/lib/permissions/server'
+import { requireSession } from '@/lib/http/access'
+import { routes } from '@/lib/http/route'
 import { clearProgress, getProgress } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-async function handleGET() {
-  const { session, response: permissionDenied } =
-    await requirePermission('profile.export')
-  if (permissionDenied) return permissionDenied
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+const api = routes('/api/profile/export/progress', {
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(async () => {
+  const { session } = await requireSession('profile.export')
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -58,10 +55,4 @@ async function handleGET() {
   headers.set('Connection', 'keep-alive')
 
   return new Response(stream, { headers })
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/profile/export/progress',
-  })()
-}
+})

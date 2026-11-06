@@ -1,6 +1,14 @@
 import { Prisma } from '@prisma/client'
 
-export class FileListInputError extends Error {}
+import { HttpError } from '@/lib/http/errors'
+
+/** A list query value the client must fix. */
+export class FileListInputError extends HttpError {
+  constructor(message: string) {
+    super(400, message)
+    this.name = 'FileListInputError'
+  }
+}
 
 function dateValue(value: string, name: string): Date {
   const date = new Date(value)

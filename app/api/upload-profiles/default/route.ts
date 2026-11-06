@@ -1,47 +1,37 @@
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { requirePermission } from '@/lib/permissions/server'
-import { profileMutationGuard } from '@/lib/uploads/profiles'
-import { profileError } from '@/lib/uploads/profiles'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { uploadProfileRoutes } from '@/lib/uploads/http'
 
-async function handlePUT(req: Request) {
-  const { user, response } = await requirePermission('uploadProfiles.manage')
-  if (response) return response
-  const guarded = profileMutationGuard(req)
-  if (guarded) return guarded
-  try {
-    const { profileId } = z
-      .object({ profileId: z.string().max(100).nullable() })
-      .strict()
-      .parse(await req.json())
-    const saved = await prisma.$transaction(async (tx) => {
-      await lockUserRow(tx, user.id)
-      if (
-        profileId &&
-        !(await tx.uploadProfile.findFirst({
-          where: { id: profileId, userId: user.id },
-        }))
-      )
-        return false
-      await tx.user.update({
-        where: { id: user.id },
-        data: { defaultUploadProfileId: profileId },
-      })
-      return true
+const api = routes('/api/upload-profiles/default', uploadProfileRoutes)
+
+export const PUT = api(async (request) => {
+  const { user } = await requireSession('uploadProfiles.manage')
+  assertJsonMutation(request)
+  const { profileId } = z
+    .object({ profileId: z.string().max(100).nullable() })
+    .strict()
+    .parse(await readJson(request))
+  const saved = await prisma.$transaction(async (tx) => {
+    await lockUserRow(tx, user.id)
+    if (
+      profileId &&
+      !(await tx.uploadProfile.findFirst({
+        where: { id: profileId, userId: user.id },
+      }))
+    )
+      return false
+    await tx.user.update({
+      where: { id: user.id },
+      data: { defaultUploadProfileId: profileId },
     })
-    return saved
-      ? Response.json({ data: { defaultProfileId: profileId } })
-      : Response.json({ error: 'Profile not found.' }, { status: 404 })
-  } catch (error) {
-    return profileError(error)
-  }
-}
-
-export async function PUT(req: Request) {
-  return withAuditRoute(async () => handlePUT(req), {
-    route: '/api/upload-profiles/default',
-  })(req)
-}
+    return true
+  })
+  if (!saved) throw new HttpError(404, 'Profile not found.')
+  return Response.json({ data: { defaultProfileId: profileId } })
+})

@@ -1,37 +1,27 @@
 import { NextResponse } from 'next/server'
 
-import { withAuditRoute } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { PERMISSION_GROUPS, hasPermission } from '@/lib/permissions/catalog'
-import { readRoleJson, roleMutationGuard } from '@/lib/permissions/http'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
+import { PERMISSION_GROUPS } from '@/lib/permissions/catalog'
 import { roleCreateSchema } from '@/lib/permissions/schema'
 import {
   PermissionError,
   assertCanGrantPermissions,
   assertCanManageRole,
   requireActorPermission,
-  requirePermission,
   roleSelect,
 } from '@/lib/permissions/server'
 
-async function handleGET() {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return NextResponse.json(
-      { error: 'Authentication required' },
-      { status: 401 }
-    )
-  if (
-    !['roles.manage', 'users.roles', 'users.read'].some((permission) =>
-      hasPermission(
-        session.user,
-        permission as 'roles.manage' | 'users.roles' | 'users.read'
-      )
-    )
-  )
-    return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+const api = routes('/api/roles', {
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(async () => {
+  await requireSession(['roles.manage', 'users.roles', 'users.read'])
   const [roles, userCount] = await Promise.all([
     prisma.role.findMany({
       select: { ...roleSelect, _count: { select: { users: true } } },
@@ -49,22 +39,19 @@ async function handleGET() {
     },
     { headers: { 'Cache-Control': 'private, no-store' } }
   )
-}
+})
 
-async function handlePOST(request: Request) {
-  const { user, response } = await requirePermission('roles.manage')
-  if (response) return response
-  const rejected = roleMutationGuard(request)
-  if (rejected) return rejected
-  const body = await readRoleJson(request)
-  if (body.response) return body.response
-  const parsed = roleCreateSchema.safeParse(body.data)
-  if (!parsed.success)
-    return NextResponse.json(
-      { error: 'Invalid role', details: parsed.error.flatten() },
-      { status: 400 }
+export const POST = api(
+  async (request) => {
+    const { user } = await requireSession('roles.manage')
+    assertJsonMutation(request)
+    const parsed = roleCreateSchema.safeParse(
+      await readJson(request, { limit: 32 * 1024 })
     )
-  try {
+    if (!parsed.success)
+      throw new HttpError(400, 'Invalid role', {
+        body: { details: parsed.error.flatten() },
+      })
     const role = await prisma.$transaction(async (tx) => {
       await lockRoleChanges(tx)
       const actor = await requireActorPermission(tx, user.id, 'roles.manage')
@@ -78,26 +65,6 @@ async function handlePOST(request: Request) {
       return tx.role.create({ data: parsed.data, select: roleSelect })
     })
     return NextResponse.json(role, { status: 201 })
-  } catch (error) {
-    if (error instanceof PermissionError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      )
-    console.error('Failed to create role:', error)
-    return NextResponse.json(
-      { error: 'Failed to create role' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), { route: '/api/roles' })()
-}
-
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/roles',
-  })(request)
-}
+  },
+  { failure: { message: 'Failed to create role' } }
+)

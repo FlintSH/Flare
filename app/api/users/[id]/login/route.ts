@@ -1,48 +1,34 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
-import { requirePermission } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
-const logger = loggers.users
+type Context = { params: Promise<{ id: string }> }
 
-async function handlePOST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  const { response } = await requirePermission('users.read')
-  if (response) return response
+const api = routes('/api/users/[id]/login', {
+  failure: { message: 'Internal Server Error' },
+  logger: loggers.users,
+})
 
-  try {
-    const { id } = await params
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        roles: true,
-      },
-    })
+export const POST = api(async (request, { params }: Context) => {
+  await requireSession('users.read')
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
+  const { id } = await params
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      roles: true,
+    },
+  })
 
-    return NextResponse.json(user)
-  } catch (error) {
-    logger.error('Error getting user:', error as Error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+  if (!user) {
+    throw new HttpError(404, 'User not found')
   }
-}
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<NextResponse> {
-  return withAuditRoute(async () => handlePOST(request, { params }), {
-    route: '/api/users/[id]/login',
-  })(request)
-}
+  return user
+})

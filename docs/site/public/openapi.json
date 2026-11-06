@@ -1124,7 +1124,7 @@
         "operationId": "createShortLink",
         "summary": "Create a short link",
         "tags": ["Short links"],
-        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON currently reaches the 500 handler. The token owner must currently have links.create; role revocation applies on the next request.",
+        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON returns 400. The token owner must currently have links.create; role revocation applies on the next request.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:write",
         "responses": {

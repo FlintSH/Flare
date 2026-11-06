@@ -239,13 +239,26 @@ suite('customization contracts against disposable PostgreSQL', () => {
         )
       ).status
     ).toBe(404)
-    expect((await profiles.GET()).status).toBe(200)
-    expect((await (await profiles.GET()).json()).data.profiles).toHaveLength(0)
+    expect(
+      (await profiles.GET(new Request('http://localhost/api/upload-profiles')))
+        .status
+    ).toBe(200)
+    expect(
+      (
+        await (
+          await profiles.GET(
+            new Request('http://localhost/api/upload-profiles')
+          )
+        ).json()
+      ).data.profiles
+    ).toHaveLength(0)
   })
 
   it('lists, exports and imports old profiles without the retired copy-format option', async () => {
     const profile = await routeFixture('download')
-    const listed = await profiles.GET()
+    const listed = await profiles.GET(
+      new Request('http://localhost/api/upload-profiles')
+    )
     expect(listed.status).toBe(200)
     const listedBody = (await listed.json()).data
     expect(listedBody.profiles[0].options).not.toHaveProperty('copyFormat')
@@ -492,7 +505,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(
       await auth.getAuthenticatedUser(tokenRequest('/api/profile/upload-token'))
     ).toBeNull()
-    expect((await integrations.GET()).status).toBe(401)
+    expect(
+      (await integrations.GET(new Request('http://localhost/api/integrations')))
+        .status
+    ).toBe(401)
     expect((await options.resolveUploadOptions(user!)).visibility).toBe(
       'PRIVATE'
     )

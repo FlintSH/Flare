@@ -1,12 +1,14 @@
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { requirePermission } from '@/lib/permissions/server'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { validateOwnedTagIds } from '@/lib/tags/service'
-import { profileMutationGuard } from '@/lib/uploads/profiles'
-import { profileError, profileView } from '@/lib/uploads/profiles'
+import { uploadProfileRoutes } from '@/lib/uploads/http'
+import { profileView } from '@/lib/uploads/profiles'
 import { uploadProfileInputSchema } from '@/lib/uploads/schema'
 
 type Context = { params: Promise<{ id: string }> }
@@ -14,71 +16,47 @@ const updateSchema = uploadProfileInputSchema
   .extend({ revision: z.string().datetime() })
   .strict()
 
-async function handlePUT(req: Request, { params }: Context) {
-  const { user, response } = await requirePermission('uploadProfiles.manage')
-  if (response) return response
-  const guarded = profileMutationGuard(req)
-  if (guarded) return guarded
-  try {
-    const { id } = await params
-    const { revision, ...input } = updateSchema.parse(await req.json())
-    const profile = await prisma.$transaction(async (tx) => {
-      await lockUserRow(tx, user.id)
-      if (input.options.tagIds)
-        input.options.tagIds = await validateOwnedTagIds(
-          user.id,
-          input.options.tagIds,
-          tx
-        )
-      const result = await tx.uploadProfile.updateMany({
-        where: { id, userId: user.id, updatedAt: new Date(revision) },
-        data: input,
-      })
-      if (!result.count) return null
-      return tx.uploadProfile.findUniqueOrThrow({ where: { id } })
-    })
-    if (!profile)
-      return Response.json(
-        {
-          error: 'Profile changed or was removed. Reload it before saving.',
-        },
-        { status: 409 }
+const api = routes('/api/upload-profiles/[id]', uploadProfileRoutes)
+
+export const PUT = api(async (request, { params }: Context) => {
+  const { user } = await requireSession('uploadProfiles.manage')
+  assertJsonMutation(request)
+  const { id } = await params
+  const { revision, ...input } = updateSchema.parse(await readJson(request))
+  const profile = await prisma.$transaction(async (tx) => {
+    await lockUserRow(tx, user.id)
+    if (input.options.tagIds)
+      input.options.tagIds = await validateOwnedTagIds(
+        user.id,
+        input.options.tagIds,
+        tx
       )
-    return Response.json({ data: profileView(profile) })
-  } catch (error) {
-    return profileError(error)
-  }
-}
-
-async function handleDELETE(req: Request, { params }: Context) {
-  const { user, response } = await requirePermission('uploadProfiles.manage')
-  if (response) return response
-  const guarded = profileMutationGuard(req, false)
-  if (guarded) return guarded
-  try {
-    const { id } = await params
-    await prisma.$transaction(async (tx) => {
-      await lockUserRow(tx, user.id)
-      await tx.user.updateMany({
-        where: { id: user.id, defaultUploadProfileId: id },
-        data: { defaultUploadProfileId: null },
-      })
-      await tx.uploadProfile.deleteMany({ where: { id, userId: user.id } })
+    const result = await tx.uploadProfile.updateMany({
+      where: { id, userId: user.id, updatedAt: new Date(revision) },
+      data: input,
     })
-    return Response.json({ data: { deleted: true } })
-  } catch (error) {
-    return profileError(error)
-  }
-}
+    if (!result.count) return null
+    return tx.uploadProfile.findUniqueOrThrow({ where: { id } })
+  })
+  if (!profile)
+    throw new HttpError(
+      409,
+      'Profile changed or was removed. Reload it before saving.'
+    )
+  return Response.json({ data: profileView(profile) })
+})
 
-export async function PUT(req: Request, { params }: Context) {
-  return withAuditRoute(async () => handlePUT(req, { params }), {
-    route: '/api/upload-profiles/[id]',
-  })(req)
-}
-
-export async function DELETE(req: Request, { params }: Context) {
-  return withAuditRoute(async () => handleDELETE(req, { params }), {
-    route: '/api/upload-profiles/[id]',
-  })(req)
-}
+export const DELETE = api(async (request, { params }: Context) => {
+  const { user } = await requireSession('uploadProfiles.manage')
+  assertJsonMutation(request, { body: false })
+  const { id } = await params
+  await prisma.$transaction(async (tx) => {
+    await lockUserRow(tx, user.id)
+    await tx.user.updateMany({
+      where: { id: user.id, defaultUploadProfileId: id },
+      data: { defaultUploadProfileId: null },
+    })
+    await tx.uploadProfile.deleteMany({ where: { id, userId: user.id } })
+  })
+  return Response.json({ data: { deleted: true } })
+})

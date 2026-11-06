@@ -1,23 +1,13 @@
-import { NextResponse } from 'next/server'
-
-import { withAuditRoute } from '@/lib/audit'
 import { checkSetupCompletion } from '@/lib/database/setup'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
-const logger = loggers.startup
+const api = routes('/api/setup/check', {
+  failure: { message: 'Internal server error' },
+  logger: loggers.startup,
+})
 
-async function handleGET() {
-  try {
-    const completed = await checkSetupCompletion()
-    return NextResponse.json({ completed })
-  } catch (error) {
-    logger.error('Setup check error:', error as Error)
-    return NextResponse.json({ completed: false })
-  }
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/setup/check',
-  })()
-}
+// checkSetupCompletion answers false itself when the database can't be read.
+export const GET = api(async () => ({
+  completed: await checkSetupCompletion(),
+}))

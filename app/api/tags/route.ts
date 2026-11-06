@@ -1,57 +1,37 @@
-import { apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
-import { tagErrorResponse, tagMutationGuard } from '@/lib/tags/http'
+import { requireAccount } from '@/lib/http/access'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
+import { tagRoutes } from '@/lib/tags/http'
 import { tagInputSchema } from '@/lib/tags/schema'
 import { tagView, tagViewSelect } from '@/lib/tags/service'
 
-async function handleGET(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const tags = await prisma.vaultTag.findMany({
-      where: { userId: user.id },
-      orderBy: { normalizedName: 'asc' },
-      select: tagViewSelect,
-    })
-    const result = apiResponse(tags.map(tagView))
-    result.headers.set('Cache-Control', 'private, no-store')
-    return result
-  } catch (error) {
-    return tagErrorResponse(error)
-  }
-}
+const api = routes('/api/tags', tagRoutes)
 
-async function handlePOST(request: Request) {
-  try {
-    const { user, response } = await requireAuth(request)
-    if (response) return response
-    const guarded = tagMutationGuard(request)
-    if (guarded) return guarded
-    const input = tagInputSchema.parse(await request.json())
-    const tag = await prisma.vaultTag.create({
-      data: {
-        ...input,
-        userId: user.id,
-        normalizedName: input.name.toLowerCase(),
-      },
-      select: tagViewSelect,
-    })
-    return apiResponse(tagView(tag))
-  } catch (error) {
-    return tagErrorResponse(error)
-  }
-}
+export const GET = api(async (request) => {
+  const user = await requireAccount(request)
+  const tags = await prisma.vaultTag.findMany({
+    where: { userId: user.id },
+    orderBy: { normalizedName: 'asc' },
+    select: tagViewSelect,
+  })
+  const result = apiResponse(tags.map(tagView))
+  result.headers.set('Cache-Control', 'private, no-store')
+  return result
+})
 
-export async function GET(request: Request) {
-  return withAuditRoute(async () => handleGET(request), { route: '/api/tags' })(
-    request
-  )
-}
-
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/tags',
-  })(request)
-}
+export const POST = api(async (request) => {
+  const user = await requireAccount(request)
+  assertJsonMutation(request)
+  const input = tagInputSchema.parse(await readJson(request))
+  const tag = await prisma.vaultTag.create({
+    data: {
+      ...input,
+      userId: user.id,
+      normalizedName: input.name.toLowerCase(),
+    },
+    select: tagViewSelect,
+  })
+  return apiResponse(tagView(tag))
+})

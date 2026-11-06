@@ -1,15 +1,17 @@
 import { GET } from '@/app/api/files/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AccessError } from '@/lib/http/errors'
+
 const mocks = vi.hoisted(() => ({
-  requireAuth: vi.fn(),
+  requireAccount: vi.fn(),
   transaction: vi.fn(),
   file: { count: vi.fn(), findMany: vi.fn() },
   transactionFile: { findFirst: vi.fn(), count: vi.fn(), findMany: vi.fn() },
   expiration: vi.fn(),
 }))
 
-vi.mock('@/lib/auth/api-auth', () => ({ requireAuth: mocks.requireAuth }))
+vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: mocks.file, $transaction: mocks.transaction },
 }))
@@ -79,7 +81,7 @@ function request(params: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mocks.requireAuth.mockResolvedValue({ user: { id: 'owner' } })
+  mocks.requireAccount.mockResolvedValue({ id: 'owner' })
   mocks.transaction.mockImplementation(async (callback) =>
     callback({ file: mocks.transactionFile })
   )
@@ -421,9 +423,7 @@ describe('anchored image navigation API', () => {
   })
 
   it('requires authentication before accessing an anchor', async () => {
-    mocks.requireAuth.mockResolvedValue({
-      response: new Response(null, { status: 401 }),
-    })
+    mocks.requireAccount.mockRejectedValue(new AccessError(401, 'Denied'))
     expect((await request()).status).toBe(401)
     expect(mocks.transaction).not.toHaveBeenCalled()
   })

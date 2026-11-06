@@ -1,14 +1,12 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
 import { type RuleSource, matchesTagRule } from '@/lib/tags/schema'
 
-export class TagError extends Error {
-  constructor(
-    message: string,
-    public status = 400
-  ) {
-    super(message)
+export class TagError extends HttpError {
+  constructor(message: string, status = 400) {
+    super(status, message)
     this.name = 'TagError'
   }
 }

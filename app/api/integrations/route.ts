@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
 import { lockIntegrationChanges, lockWebhookQueue } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { encryptSecret } from '@/lib/email/crypto'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { resolveWebhookTarget } from '@/lib/integrations/security'
 import { API_SCOPES, createRandomApiToken } from '@/lib/integrations/tokens'
 import {
@@ -16,9 +18,7 @@ import {
   WEBHOOK_SECRET_PURPOSE,
 } from '@/lib/integrations/webhooks'
 import { hasPermission } from '@/lib/permissions/catalog'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
 
-export const runtime = 'nodejs'
 const name = z.string().trim().min(1).max(80)
 const command = z.discriminatedUnion('action', [
   z
@@ -75,22 +75,13 @@ const webhookSelect = {
   createdAt: true,
 } as const
 
-async function handleGET() {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return NextResponse.json(
-      { error: 'Sign in to manage integrations.' },
-      { status: 401 }
-    )
-  if (
-    !hasPermission(session.user, 'tokens.manage') &&
-    !hasPermission(session.user, 'webhooks.manage')
-  )
-    return NextResponse.json(
-      { error: 'You do not have permission to manage integrations.' },
-      { status: 403 }
-    )
-  const userId = session.user.id
+const api = routes('/api/integrations', {
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(async () => {
+  const { user } = await requireSession(['tokens.manage', 'webhooks.manage'])
+  const userId = user.id
   const [tokens, webhooks, deliveries, profiles] = await Promise.all([
     prisma.apiToken.findMany({
       where: { userId },
@@ -127,67 +118,39 @@ async function handleGET() {
   ])
   return NextResponse.json(
     {
-      tokens: hasPermission(session.user, 'tokens.manage') ? tokens : [],
-      webhooks: hasPermission(session.user, 'webhooks.manage') ? webhooks : [],
-      deliveries: hasPermission(session.user, 'webhooks.manage')
-        ? deliveries
-        : [],
-      profiles: hasPermission(session.user, 'tokens.manage') ? profiles : [],
+      tokens: hasPermission(user, 'tokens.manage') ? tokens : [],
+      webhooks: hasPermission(user, 'webhooks.manage') ? webhooks : [],
+      deliveries: hasPermission(user, 'webhooks.manage') ? deliveries : [],
+      profiles: hasPermission(user, 'tokens.manage') ? profiles : [],
     },
     { headers: { 'cache-control': 'no-store' } }
   )
-}
+})
 
-async function handlePOST(request: Request) {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return NextResponse.json(
-      { error: 'Sign in to manage integrations.' },
-      { status: 401 }
-    )
-  if (!isSameOriginRequest(request))
-    return NextResponse.json(
-      { error: 'Cross-origin changes are not allowed.' },
-      { status: 403 }
-    )
-  if (!request.headers.get('content-type')?.startsWith('application/json'))
-    return NextResponse.json(
-      { error: 'Use application/json.' },
-      { status: 415 }
-    )
-  const userId = session.user.id
-  try {
-    const raw = await request.text()
-    if (raw.length > 16_384)
-      return NextResponse.json(
-        { error: 'Request is too large.' },
-        { status: 413 }
-      )
-    const parsed = command.safeParse(JSON.parse(raw))
+export const POST = api(
+  async (request) => {
+    const { user } = await requireSession()
+    assertJsonMutation(request)
+    const userId = user.id
+    const parsed = command.safeParse(await readJson(request, { limit: 16_384 }))
     if (!parsed.success)
-      return NextResponse.json(
-        { error: 'Check the integration settings and try again.' },
-        { status: 400 }
-      )
+      throw new HttpError(400, 'Check the integration settings and try again.')
     const input = parsed.data
     const required = input.action.endsWith('token')
       ? 'tokens.manage'
       : 'webhooks.manage'
-    if (!hasPermission(session.user, required))
-      return NextResponse.json(
-        { error: 'You do not have permission to perform this action.' },
-        { status: 403 }
+    if (!hasPermission(user, required))
+      throw new HttpError(
+        403,
+        'You do not have permission to perform this action.'
       )
     if (input.action === 'create-webhook') {
       try {
         await resolveWebhookTarget(input.url)
       } catch (error) {
-        return NextResponse.json(
-          {
-            error:
-              error instanceof Error ? error.message : 'Invalid destination.',
-          },
-          { status: 400 }
+        throw new HttpError(
+          400,
+          error instanceof Error ? error.message : 'Invalid destination.'
         )
       }
     }
@@ -385,27 +348,11 @@ async function handlePOST(request: Request) {
       status: 'error' in result ? 400 : 200,
       headers: { 'cache-control': 'no-store' },
     })
-  } catch (error) {
-    if (error instanceof SyntaxError)
-      return NextResponse.json({ error: 'Invalid JSON.' }, { status: 400 })
-    return NextResponse.json(
-      {
-        error:
-          'Could not update integrations. Check the server database and encryption configuration.',
-      },
-      { status: 500 }
-    )
+  },
+  {
+    failure: {
+      message:
+        'Could not update integrations. Check the server database and encryption configuration.',
+    },
   }
-}
-
-export async function GET() {
-  return withAuditRoute(async () => handleGET(), {
-    route: '/api/integrations',
-  })()
-}
-
-export async function POST(request: Request) {
-  return withAuditRoute(async () => handlePOST(request), {
-    route: '/api/integrations',
-  })(request)
-}
+)

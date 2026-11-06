@@ -1,44 +1,34 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { routes } from '@/lib/http/route'
 
-async function handleGET(
-  req: Request,
-  { params }: { params: Promise<{ shortCode: string }> }
-) {
-  try {
-    const { shortCode } = await params
+type Context = { params: Promise<{ shortCode: string }> }
 
-    const url = await prisma.shortenedUrl.findUnique({
-      where: { shortCode },
-    })
+const api = routes('/u/[shortCode]', {
+  failure: { message: 'Internal server error' },
+})
 
-    if (!url) {
-      return new NextResponse(null, { status: 404 })
-    }
+export const GET = api(async (request, { params }: Context) => {
+  const { shortCode } = await params
 
-    // The click counter is not a separate change event; this request event
-    // identifies which link was opened.
-    setAuditTarget({ type: 'link', id: url.id, name: url.shortCode })
+  const url = await prisma.shortenedUrl.findUnique({
+    where: { shortCode },
+  })
 
-    await prisma.shortenedUrl.update({
-      where: { id: url.id },
-      data: { clicks: { increment: 1 } },
-    })
-
-    return NextResponse.redirect(url.targetUrl)
-  } catch (error) {
-    console.error('URL redirect error:', error)
-    return new NextResponse(null, { status: 500 })
+  if (!url) {
+    return new NextResponse(null, { status: 404 })
   }
-}
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ shortCode: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, { params }), {
-    route: '/u/[shortCode]',
-  })(req)
-}
+  // The click counter is not a separate change event; this request event
+  // identifies which link was opened.
+  setAuditTarget({ type: 'link', id: url.id, name: url.shortCode })
+
+  await prisma.shortenedUrl.update({
+    where: { id: url.id },
+    data: { clicks: { increment: 1 } },
+  })
+
+  return NextResponse.redirect(url.targetUrl)
+})

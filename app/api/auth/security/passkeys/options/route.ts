@@ -1,25 +1,19 @@
-import { withAuditRoute } from '@/lib/audit'
 import {
   passkeyName,
   proofSchema,
   securityBody,
-  securityRoute,
+  securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { registrationOptions } from '@/lib/auth/security/passkeys'
+import { routes } from '@/lib/http/route'
 
-async function handlePOST(req: Request) {
-  return securityRoute(async () => {
-    const { session } = await securitySession(req)
-    const data = proofSchema
-      .extend({ name: passkeyName })
-      .parse(await securityBody(req))
-    return registrationOptions(session, data, data.name)
-  })
-}
+const api = routes('/api/auth/security/passkeys/options', securityRoutes)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/auth/security/passkeys/options',
-  })(req)
-}
+export const POST = api(async (request) => {
+  const { session } = await securitySession(request)
+  const data = proofSchema
+    .extend({ name: passkeyName })
+    .parse(await securityBody(request))
+  return registrationOptions(session, data, data.name)
+})

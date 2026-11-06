@@ -4,13 +4,10 @@ import { POST as sharedListing } from '@/app/api/files/[id]/archive/share/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArchiveError } from '@/lib/archives/errors'
-import { archiveRoute } from '@/lib/archives/http'
-import {
-  configureAuditWriter,
-  setAuditTarget,
-  withAuditRoute,
-} from '@/lib/audit'
+import { archiveRoutes } from '@/lib/archives/http'
+import { configureAuditWriter, setAuditTarget } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
+import { routes } from '@/lib/http/route'
 
 const state = vi.hoisted(() => ({
   session: null as null | { user: { id: string; sessionVersion: number } },
@@ -87,6 +84,14 @@ beforeEach(() => {
   })
 })
 
+const archiveRoute = (
+  action: () => Promise<unknown>,
+  audit?: { action: string; category: string }
+) =>
+  routes('/api/files/[id]/archive/share', archiveRoutes)(action, { audit })(
+    new Request('http://localhost/api/files/archive-file/archive/share')
+  )
+
 describe('archive route audit integration', () => {
   it('reports a request the browser cancelled as 408, not a server failure', async () => {
     const { loggers } = await import('@/lib/logger')
@@ -100,15 +105,14 @@ describe('archive route audit integration', () => {
   })
 
   it('propagates a final masked denial from transaction context to the request outcome', async () => {
-    const response = await withAuditRoute(
-      async () =>
-        archiveRoute(async () => {
-          await auditContext.run({ ...auditContext.getStore() }, async () => {
-            throw new ArchiveError('Archive not found.', 404, true)
-          })
-        }),
+    const response = await archiveRoute(
+      async () => {
+        await auditContext.run({ ...auditContext.getStore() }, async () => {
+          throw new ArchiveError('Archive not found.', 404, true)
+        })
+      },
       { action: 'archive.browse', category: 'archives' }
-    )(new Request('http://localhost/api/files/archive-file/archive/share'))
+    )
     expect(response.status).toBe(404)
     expect(events[0]).toMatchObject({ outcome: 'denied' })
   })

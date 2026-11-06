@@ -8,7 +8,9 @@ import {
   filePasswordHint,
   newFilePasswordSchema,
 } from '@/lib/files/password-policy'
-import { parseUploadFields, uploadErrorResponse } from '@/lib/uploads/options'
+import { errorResponse } from '@/lib/http/route'
+import { uploadRoutes } from '@/lib/uploads/http'
+import { parseUploadFields } from '@/lib/uploads/options'
 import { uploadRequestOptionsSchema } from '@/lib/uploads/schema'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn() }))
@@ -16,10 +18,10 @@ const mocks = vi.hoisted(() => ({ update: vi.fn() }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: vi.fn(), update: mocks.update } },
 }))
-vi.mock('@/lib/permissions/server', () => ({
-  requirePermission: async () => ({
+vi.mock('@/lib/http/access', () => ({
+  requireSession: async () => ({
     session: { user: { id: 'moderator' } },
-    response: null,
+    user: { id: 'moderator' },
   }),
 }))
 vi.mock('@/lib/security/request-origin', () => ({
@@ -61,7 +63,7 @@ describe('new file password rules', () => {
     } catch (error) {
       failure = error
     }
-    const response = uploadErrorResponse(failure)
+    const response = errorResponse(failure, uploadRoutes)
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       error: 'File passwords must be at least 8 characters.',

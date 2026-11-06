@@ -1,21 +1,25 @@
 import { NextResponse } from 'next/server'
 
-import { setAuditOutcome, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { checkFileAccess, fileAccessDeniedHeaders } from '@/lib/files/access'
 import { resolveFileUrlPath } from '@/lib/files/resolve'
+import { routes } from '@/lib/http/route'
 import { getStorageProvider } from '@/lib/storage'
 
-async function handleGET(
-  req: Request,
-  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
-) {
-  try {
+type Context = { params: Promise<{ userUrlId: string; filename: string }> }
+
+const api = routes('/[userUrlId]/[filename]/direct', {
+  failure: { message: 'Internal server error' },
+})
+
+export const GET = api(
+  async (request, { params }: Context) => {
     const session = await getAccessSession()
     const { userUrlId, filename } = await params
-    const url = new URL(req.url)
+    const url = new URL(request.url)
     const providedPassword = url.searchParams.get('password')
 
     const urlPath = await resolveFileUrlPath(userUrlId, filename)
@@ -35,7 +39,7 @@ async function handleGET(
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
 
     const access = await checkFileAccess(file, session, providedPassword, {
-      requester: requestIp(req.headers),
+      requester: requestIp(request.headers),
     })
     if (!access.allowed) {
       setAuditOutcome('denied')
@@ -62,19 +66,6 @@ async function handleGET(
 
     const rawUrl = `${file.urlPath}/raw${providedPassword ? `?${new URLSearchParams({ password: providedPassword })}` : ''}`
     return NextResponse.json({ url: rawUrl })
-  } catch (error) {
-    console.error('Direct URL error:', error)
-    return new Response(null, { status: 500 })
-  }
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ userUrlId: string; filename: string }> }
-) {
-  return withAuditRoute(async () => handleGET(req, { params }), {
-    action: 'file.read',
-    category: 'files',
-    route: '/[userUrlId]/[filename]/direct',
-  })(req)
-}
+  },
+  { audit: { action: 'file.read', category: 'files' } }
+)

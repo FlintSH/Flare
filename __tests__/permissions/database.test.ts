@@ -428,15 +428,21 @@ suite.sequential('roles against disposable PostgreSQL', () => {
 
   it('requires session permissions, reports member counts, and returns useful validation errors', async () => {
     authentication.signedIn = false
-    expect((await collection.GET()).status).toBe(401)
+    expect(
+      (await collection.GET(new Request('http://localhost/api/roles'))).status
+    ).toBe(401)
     expect(
       (await collection.POST(request('POST', { name: 'Denied' }))).status
     ).toBe(401)
     authentication.signedIn = true
     authentication.permissions = []
-    expect((await collection.GET()).status).toBe(403)
+    expect(
+      (await collection.GET(new Request('http://localhost/api/roles'))).status
+    ).toBe(403)
     authentication.permissions = ['users.read']
-    const response = await collection.GET()
+    const response = await collection.GET(
+      new Request('http://localhost/api/roles')
+    )
     expect(
       (await response.json()).roles.find(
         (role: { systemKey: string }) => role.systemKey === 'everyone'
@@ -507,9 +513,11 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         .status
     ).toBe(413)
     expect(await prisma.role.count()).toBe(2)
-    expect((await collection.GET()).headers.get('cache-control')).toBe(
-      'private, no-store'
-    )
+    expect(
+      (
+        await collection.GET(new Request('http://localhost/api/roles'))
+      ).headers.get('cache-control')
+    ).toBe('private, no-store')
   })
 
   it('enforces the instance role limit under the mutation lock', async () => {

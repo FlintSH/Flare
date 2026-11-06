@@ -2,14 +2,13 @@ import { NextResponse } from 'next/server'
 
 import { z } from 'zod'
 
-import { withAuditRoute } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
-import { UploadError, uploadErrorResponse } from '@/lib/uploads/options'
 import { generatorProfile } from '@/lib/uploads/profiles'
-
-const logger = loggers.users
 
 const spectacleSchema = z.object({
   profileId: z.string().max(100).optional(),
@@ -21,72 +20,52 @@ const spectacleSchema = z.object({
   delay: z.number().min(0).max(10000),
 })
 
-async function handlePOST(req: Request) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('tokens.manage')
-    if (permissionDenied) return permissionDenied
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+const api = routes('/api/profile/spectacle', {
+  failure: { message: 'Failed to generate Spectacle script' },
+  logger: loggers.users,
+})
 
-    const json = await req.json()
-    const body = spectacleSchema.parse(json)
+export const POST = api(async (request) => {
+  const { session } = await requireSession('tokens.manage')
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { uploadToken: true, urlId: true, name: true },
-    })
+  const body = spectacleSchema.parse(await readJson(request))
 
-    if (!user?.uploadToken) {
-      return NextResponse.json(
-        { error: 'Upload token not found' },
-        { status: 404 }
-      )
-    }
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { uploadToken: true, urlId: true, name: true },
+  })
 
-    const profileId = await generatorProfile(
-      session.user.id,
-      body.profileId ?? new URL(req.url).searchParams.get('profileId')
-    )
-
-    let script = generateSpectacleScript({
-      uploadToken: user.uploadToken,
-      ...body,
-    })
-
-    if (profileId)
-      script = script.replaceAll(
-        '/api/files"',
-        `/api/files?profileId=${encodeURIComponent(profileId)}"`
-      )
-
-    const sanitizedName = (user.name || 'user')
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-
-    return new NextResponse(script, {
-      headers: {
-        'Content-Type': 'text/plain',
-        'Content-Disposition': `attachment; filename="${sanitizedName}-spectacle-${body.scriptType}.sh"`,
-      },
-    })
-  } catch (error) {
-    if (error instanceof UploadError) return uploadErrorResponse(error)
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: error.issues[0].message },
-        { status: 400 }
-      )
-    }
-
-    logger.error('Error generating Spectacle script:', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to generate Spectacle script' },
-      { status: 500 }
-    )
+  if (!user?.uploadToken) {
+    throw new HttpError(404, 'Upload token not found')
   }
-}
+
+  const profileId = await generatorProfile(
+    session.user.id,
+    body.profileId ?? new URL(request.url).searchParams.get('profileId')
+  )
+
+  let script = generateSpectacleScript({
+    uploadToken: user.uploadToken,
+    ...body,
+  })
+
+  if (profileId)
+    script = script.replaceAll(
+      '/api/files"',
+      `/api/files?profileId=${encodeURIComponent(profileId)}"`
+    )
+
+  const sanitizedName = (user.name || 'user')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+
+  return new NextResponse(script, {
+    headers: {
+      'Content-Type': 'text/plain',
+      'Content-Disposition': `attachment; filename="${sanitizedName}-spectacle-${body.scriptType}.sh"`,
+    },
+  })
+})
 
 interface ScriptOptions {
   uploadToken: string
@@ -510,10 +489,4 @@ fi
 echo "Recording completed."
 upload_recording "$TEMP_FILE"
 exit 0`
-}
-
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), {
-    route: '/api/profile/spectacle',
-  })(req)
 }

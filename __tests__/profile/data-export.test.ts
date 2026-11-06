@@ -57,8 +57,8 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({ user: { id: 'export-owner' }, response: null }),
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({ id: 'export-owner' }),
 }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {

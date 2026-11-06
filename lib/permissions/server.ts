@@ -1,8 +1,5 @@
-import { NextResponse } from 'next/server'
-
 import { Prisma } from '@prisma/client'
 
-import { getAccessSession } from '@/lib/auth'
 import { readConfig } from '@/lib/config'
 import { oidcSubjectPrefix } from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
@@ -12,6 +9,7 @@ import {
   requiresEmailVerification,
 } from '@/lib/email/policy'
 import type { EmailConfig } from '@/lib/email/schema'
+import { HttpError } from '@/lib/http/errors'
 
 import {
   DEFAULT_PERMISSIONS,
@@ -37,12 +35,9 @@ export interface UserAccess {
   permissions: Permission[]
 }
 
-export class PermissionError extends Error {
-  constructor(
-    message: string,
-    public readonly status = 403
-  ) {
-    super(message)
+export class PermissionError extends HttpError {
+  constructor(message: string, status = 403) {
+    super(status, message)
     this.name = 'PermissionError'
   }
 }
@@ -124,30 +119,6 @@ export async function getUsersAccess(
   return new Map(
     users.map((user) => [user.id, combineAccess(user.roles, everyone)])
   )
-}
-
-/** Session-only guard. A named or legacy API token can never authorize role management. */
-export async function requirePermission(permission: Permission) {
-  const session = await getAccessSession()
-  if (!session?.user)
-    return {
-      user: null,
-      session: null,
-      response: NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      ),
-    } as const
-  if (!hasPermission(session.user, permission))
-    return {
-      user: null,
-      session: null,
-      response: NextResponse.json(
-        { error: 'Permission denied' },
-        { status: 403 }
-      ),
-    } as const
-  return { user: session.user, session, response: null } as const
 }
 
 /** Recheck authority after acquiring the mutation lock, never trust a pre-lock session snapshot. */

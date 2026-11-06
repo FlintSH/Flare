@@ -11,10 +11,10 @@ import {
 } from 'vitest'
 
 const authentication = vi.hoisted(() => ({ userId: 'tag-owner' }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.userId, permissions: ['administrator'] },
-    response: null,
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({
+    id: authentication.userId,
+    permissions: ['administrator'],
   }),
 }))
 

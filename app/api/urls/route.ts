@@ -5,87 +5,63 @@ import {
 } from '@/types/dto/url'
 import { nanoid } from 'nanoid'
 
-import { HTTP_STATUS, apiError, apiResponse } from '@/lib/api/response'
-import { withAuditRoute } from '@/lib/audit'
-import { requireAuth } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
+import { requireAccount } from '@/lib/http/access'
+import { readJson } from '@/lib/http/request'
+import { apiResponse } from '@/lib/http/response'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-
-const logger = loggers.api
 
 function generateShortCode() {
   return nanoid(6)
 }
 
-async function handlePOST(req: Request) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+const api = routes('/api/urls', {
+  envelope: 'api',
+  failure: { message: 'Internal server error' },
+  logger: loggers.api,
+})
 
-    const json = await req.json()
+export const POST = api(async (request) => {
+  const user = await requireAccount(request)
 
-    const result = CreateUrlSchema.safeParse(json)
-    if (!result.success) {
-      return apiError(result.error.issues[0].message, HTTP_STATUS.BAD_REQUEST)
-    }
+  const { url } = CreateUrlSchema.parse(await readJson(request))
 
-    const { url } = result.data
-
-    let shortCode = generateShortCode()
-    let isUnique = false
-    while (!isUnique) {
-      const existing = await prisma.shortenedUrl.findUnique({
-        where: { shortCode },
-      })
-      if (!existing) {
-        isUnique = true
-      } else {
-        shortCode = generateShortCode()
-      }
-    }
-
-    const shortenedUrl = await prisma.shortenedUrl.create({
-      data: {
-        shortCode,
-        targetUrl: url,
-        userId: user.id,
-      },
+  let shortCode = generateShortCode()
+  let isUnique = false
+  while (!isUnique) {
+    const existing = await prisma.shortenedUrl.findUnique({
+      where: { shortCode },
     })
-
-    return apiResponse<CreateUrlResponse>(shortenedUrl)
-  } catch (error) {
-    logger.error('URL creation error', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
+    if (!existing) {
+      isUnique = true
+    } else {
+      shortCode = generateShortCode()
+    }
   }
-}
 
-async function handleGET(req: Request) {
-  try {
-    const { user, response } = await requireAuth(req)
-    if (response) return response
+  const shortenedUrl = await prisma.shortenedUrl.create({
+    data: {
+      shortCode,
+      targetUrl: url,
+      userId: user.id,
+    },
+  })
 
-    const urls = await prisma.shortenedUrl.findMany({
-      where: {
-        userId: user.id,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
+  return apiResponse<CreateUrlResponse>(shortenedUrl)
+})
 
-    return apiResponse<UrlListResponse>({ urls })
-  } catch (error) {
-    logger.error('URL list error', error as Error)
-    return apiError('Internal server error', HTTP_STATUS.INTERNAL_SERVER_ERROR)
-  }
-}
+export const GET = api(async (request) => {
+  const user = await requireAccount(request)
 
-export async function POST(req: Request) {
-  return withAuditRoute(async () => handlePOST(req), { route: '/api/urls' })(
-    req
-  )
-}
+  const urls = await prisma.shortenedUrl.findMany({
+    where: {
+      userId: user.id,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  })
 
-export async function GET(req: Request) {
-  return withAuditRoute(async () => handleGET(req), { route: '/api/urls' })(req)
-}
+  return apiResponse<UrlListResponse>({ urls })
+})

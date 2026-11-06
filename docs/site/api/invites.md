@@ -122,7 +122,7 @@ The invite is used in the same transaction that creates the account. A rejected 
 | `invite_revoked` | The invite was revoked.                                                             |
 | `invite_paused`  | The creator can no longer create invites or grant the invite's roles.               |
 
-The existing rate limit, email-verification policy, and validation rules apply. The response keeps its existing `{ "user": { … }, "nextAction": "sign_in" }` shape; `nextAction` is `verify_email` when the new account must verify its address. The created account appears in `GET /api/users` with `invitedBy: { "id": "…", "name": "…" }`; see [account contract changes](./roles#account-contract-changes).
+The existing rate limit, email-verification policy, and validation rules apply. When the new account is sent a verification email, the email request limits apply too, and a limited request returns `429` with `Retry-After`. The response keeps its existing `{ "user": { … }, "nextAction": "sign_in" }` shape; `nextAction` is `verify_email` when the new account must verify its address. The created account appears in `GET /api/users` with `invitedBy: { "id": "…", "name": "…" }`; see [account contract changes](./roles#account-contract-changes).
 
 ## Run requests against a disposable instance
 

@@ -10,11 +10,8 @@ import {
 } from 'vitest'
 
 const authentication = vi.hoisted(() => ({ userId: 'timeline-owner' }))
-vi.mock('@/lib/auth/api-auth', () => ({
-  requireAuth: async () => ({
-    user: { id: authentication.userId },
-    response: null,
-  }),
+vi.mock('@/lib/http/access', () => ({
+  requireAccount: async () => ({ id: authentication.userId }),
 }))
 
 const databaseUrl = process.env.FLARE_TIMELINE_DATABASE_URL

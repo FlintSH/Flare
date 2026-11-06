@@ -1,122 +1,88 @@
-import { NextResponse } from 'next/server'
-
 import { hash } from 'bcryptjs'
 import { z } from 'zod'
 
-import { recordAudit, setAuditTarget, withAuditRoute } from '@/lib/audit'
+import { recordAudit, setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import {
   filePasswordIssue,
   newFilePasswordSchema,
 } from '@/lib/files/password-policy'
+import { requireSession } from '@/lib/http/access'
+import { HttpError } from '@/lib/http/errors'
+import { readJson } from '@/lib/http/request'
+import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { requirePermission } from '@/lib/permissions/server'
 import { getStorageProvider } from '@/lib/storage'
 
 const logger = loggers.files
 
-async function handlePATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params
-    const body = await request.json()
-    const schema = z.object({
-      visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
-      password: newFilePasswordSchema.nullable().optional(),
-    })
-    const result = schema.safeParse(body)
-    if (!result.success) {
-      return NextResponse.json(
-        { error: filePasswordIssue(result.error) ?? 'Invalid request body' },
-        { status: 400 }
-      )
-    }
+type Context = { params: Promise<{ id: string }> }
 
-    const { session, response: permissionDenied } =
-      await requirePermission('files.share')
-    if (permissionDenied) return permissionDenied
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+const fileUpdateSchema = z.object({
+  visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+  password: newFilePasswordSchema.nullable().optional(),
+})
 
-    const file = await prisma.file.findUnique({
-      where: { id },
-    })
+const api = routes('/api/files/[id]', {
+  invalid: (error) =>
+    new HttpError(400, filePasswordIssue(error) ?? 'Invalid request body'),
+  failure: { message: 'Failed to update file' },
+  logger,
+})
 
-    if (!file) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 })
-    }
+export const PATCH = api(async (request, { params }: Context) => {
+  const { id } = await params
+  const { visibility, password } = fileUpdateSchema.parse(
+    await readJson(request)
+  )
 
-    if (file.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const { user } = await requireSession('files.share')
 
-    const {
-      visibility,
-      password,
-    }: {
-      visibility?: 'PUBLIC' | 'PRIVATE'
-      password?: string | null
-    } = result.data
+  const file = await prisma.file.findUnique({
+    where: { id },
+  })
 
-    const updates: {
-      visibility?: 'PUBLIC' | 'PRIVATE'
-      password?: string | null
-    } = {}
+  if (!file) throw new HttpError(404, 'File not found')
 
-    if (visibility) {
-      updates.visibility = visibility
-    }
+  if (file.userId !== user.id) throw new HttpError(401, 'Unauthorized')
 
-    if (typeof password !== 'undefined') {
-      updates.password = password ? await hash(password, 10) : null
-    }
+  const updates: {
+    visibility?: 'PUBLIC' | 'PRIVATE'
+    password?: string | null
+  } = {}
 
-    const updatedFile = await prisma.file.update({
-      where: { id },
-      data: updates,
-    })
-
-    const { password: passwordHash, ...fileMetadata } = updatedFile
-    return NextResponse.json({
-      ...fileMetadata,
-      hasPassword: Boolean(passwordHash),
-    })
-  } catch (error) {
-    logger.error('File update error', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to update file' },
-      { status: 500 }
-    )
+  if (visibility) {
+    updates.visibility = visibility
   }
-}
 
-async function handleDELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { session, response: permissionDenied } =
-      await requirePermission('files.delete')
-    if (permissionDenied) return permissionDenied
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  if (typeof password !== 'undefined') {
+    updates.password = password ? await hash(password, 10) : null
+  }
+
+  const updatedFile = await prisma.file.update({
+    where: { id },
+    data: updates,
+  })
+
+  const { password: passwordHash, ...fileMetadata } = updatedFile
+  return {
+    ...fileMetadata,
+    hasPassword: Boolean(passwordHash),
+  }
+})
+
+export const DELETE = api(
+  async (request, { params }: Context) => {
+    const { user } = await requireSession('files.delete')
 
     const { id: fileId } = await params
     const file = await prisma.file.findUnique({
       where: { id: fileId },
     })
 
-    if (!file) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 })
-    }
+    if (!file) throw new HttpError(404, 'File not found')
 
-    if (file.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (file.userId !== user.id) throw new HttpError(401, 'Unauthorized')
 
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
     try {
@@ -154,7 +120,7 @@ async function handleDELETE(
       })
 
       await tx.user.update({
-        where: { id: session.user.id },
+        where: { id: user.id },
         data: {
           storageUsed: {
             decrement: file.size,
@@ -163,30 +129,7 @@ async function handleDELETE(
       })
     })
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    logger.error('File delete error', error as Error)
-    return NextResponse.json(
-      { error: 'Failed to delete file' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handlePATCH(request, { params }), {
-    route: '/api/files/[id]',
-  })(request)
-}
-
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return withAuditRoute(async () => handleDELETE(req, { params }), {
-    route: '/api/files/[id]',
-  })(req)
-}
+    return { success: true }
+  },
+  { failure: { message: 'Failed to delete file' } }
+)

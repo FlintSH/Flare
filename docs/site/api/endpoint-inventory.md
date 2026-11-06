@@ -160,7 +160,7 @@ These routes require the caller's own current browser session and do not require
 
 ## Dashboard routes using the shared account helper
 
-These routes use `requireAuth`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
+These routes use `requireAccount`, whose compatibility path accepts a browser session or the **legacy account upload token**. They are absent from the named-token allowlist, so an `flr_…` token cannot authorize them. This is why the legacy token should not be described as a narrowly scoped credential.
 
 | Path                        | Methods           | Purpose                                                                                                                                                                                                                       |
 | --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
