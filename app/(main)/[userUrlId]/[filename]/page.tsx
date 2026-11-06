@@ -38,6 +38,12 @@ interface FilePageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
+/** The `password` the page was opened with; of repeated ones, the first. */
+async function passwordParam(searchParams: FilePageProps['searchParams']) {
+  const { password } = await searchParams
+  return Array.isArray(password) ? password[0] : password
+}
+
 const sharedFileFields = {
   id: true,
   name: true,
@@ -65,7 +71,7 @@ export async function generateMetadata({
   const { userUrlId, filename } = await params
   const appearance = (await getConfig()).settings.customization.published
   const headersList = await headers()
-  const providedPassword = (await searchParams).password as string | undefined
+  const providedPassword = await passwordParam(searchParams)
 
   const file = await findSharedFile(userUrlId, filename)
 
@@ -178,7 +184,7 @@ export default async function FilePage({
     config.settings.general.credits.showFooter
   )
   const { userUrlId, filename } = await params
-  const providedPassword = (await searchParams).password as string | undefined
+  const providedPassword = await passwordParam(searchParams)
 
   const file = await findSharedFile(userUrlId, filename)
 

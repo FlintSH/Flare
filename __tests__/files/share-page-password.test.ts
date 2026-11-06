@@ -60,7 +60,7 @@ vi.mock('@/components/layout/dynamic-background', () => ({
   DynamicBackground: () => null,
 }))
 
-function open(guess: string) {
+function open(guess: string | string[]) {
   return FilePage({
     params: Promise.resolve({ userUrlId: 'owner', filename: 'contract.pdf' }),
     searchParams: Promise.resolve({ password: guess }),
@@ -120,5 +120,13 @@ describe('share page views', () => {
       where: { id: viewed.id },
       data: { views: { increment: 1 } },
     })
+  })
+
+  it('reads the first of repeated passwords', async () => {
+    await open([password, 'not-the-password'])
+    expect(mocks.update).toHaveBeenCalledOnce()
+    mocks.update.mockReset()
+    renderToStaticMarkup(await open(['not-the-password', password]))
+    expect(mocks.update).not.toHaveBeenCalled()
   })
 })
