@@ -55,6 +55,8 @@ View the installed version and release channel. Official rolling images include 
 
 Most Settings forms maintain a working copy until you save. Changed fields are marked and can be discarded before saving. The appearance studio has its own **Save draft / Publish appearance** workflow, and Email has dedicated testing, policy review, and save behavior. A saved studio draft does not alter the live site.
 
+When a save fails, its message gives Flare's reason. If something between your browser and Flare, such as a reverse proxy or a sign-in gateway, answers with its own page instead, the screen shows its usual failure message, for example **Appearance could not be saved.** in the appearance studio, **Could not save this role.** in **Roles**, or **Failed to update user** in **Users**. Earlier versions showed a script error such as `Unexpected token '<'` on those screens.
+
 Environment-managed email controls are read-only in the dashboard. Adjust the deployment override or remove it to restore the saved fallback. [Configuration precedence](/hosting/configuration#how-changes-take-effect) explains the distinction.
 
 ## A good first-day checklist

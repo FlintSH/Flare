@@ -106,6 +106,8 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 
 **Deletion is permanent in Flare.** Download or export anything you need before deleting a file or account. There is no user-facing trash or undo flow.
 
+**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.**; earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Ask the operator if such messages keep appearing.
+
 ## Where to go next
 
 - [Browse, search, and preview your library](./library)

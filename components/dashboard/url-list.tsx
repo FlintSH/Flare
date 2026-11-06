@@ -34,6 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { type ShortLink, shortLinkUrl } from '@/lib/links/schema'
 
 import { useToast } from '@/hooks/use-toast'
@@ -57,20 +58,19 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
   const fetchUrls = useCallback(async (signal?: AbortSignal) => {
     const requestId = ++requestVersion.current
     try {
-      const response = await fetch('/api/urls', { signal })
-      if (!response.ok)
-        throw new Error('Could not load your links. Please try again.')
-      const data = await response.json()
+      const data = await apiRequest<{ urls?: ShortLink[] }>('/api/urls', {
+        signal,
+      })
       if (!signal?.aborted && requestId === requestVersion.current) {
-        setUrls(data.data?.urls || [])
+        setUrls(data.urls || [])
         setError('')
       }
     } catch (failure) {
       if (!signal?.aborted && requestId === requestVersion.current)
         setError(
-          failure instanceof Error
-            ? failure.message
-            : 'Could not load your links. Please try again.'
+          failure instanceof RefusedRequest || !(failure instanceof Error)
+            ? 'Could not load your links. Please try again.'
+            : failure.message
         )
     } finally {
       if (!signal?.aborted && requestId === requestVersion.current)
@@ -105,19 +105,22 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
     if (!deleting || isDeleting) return
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/urls/${deleting.id}`, {
+      await apiRequest(`/api/urls/${deleting.id}`, {
         method: 'DELETE',
+        fallback: 'Your link is still available. Please try again.',
       })
-      if (!response.ok) throw new Error('Failed to delete link')
       setUrls((previous) => previous.filter((url) => url.id !== deleting.id))
       onUrlDeleted?.(deleting.shortCode)
       setDeleting(null)
       toast({ title: 'Short link deleted' })
       void fetchUrls()
-    } catch {
+    } catch (error) {
       toast({
         title: 'Could not delete link',
-        description: 'Your link is still available. Please try again.',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Your link is still available. Please try again.',
         variant: 'destructive',
       })
     } finally {

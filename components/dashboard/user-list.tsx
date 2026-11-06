@@ -100,6 +100,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { fileUrls } from '@/lib/files/urls'
 import {
@@ -117,6 +118,7 @@ import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
 import { UserFormData, useUserManagement } from '@/hooks/use-user-management'
 
@@ -404,23 +406,14 @@ export function UserList() {
   const router = useRouter()
   const { update: refreshSession } = useSession()
   const { can, user: actor } = usePermissions()
-  const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
-  const [roleLoadError, setRoleLoadError] = useState('')
+  const roles = useRoles({ retry: false })
+  const availableRoles = roles.data?.roles ?? []
+  const roleLoadError = roles.error?.message ?? ''
   const canManageUser = (target: User) =>
     !userManagementRefusal(actor, {
       ...target,
       permissions: resolvePermissions(target.roles),
     })
-  useEffect(() => {
-    fetch('/api/roles')
-      .then(async (response) => {
-        const result = await response.json()
-        if (!response.ok)
-          throw new Error(result.error || 'Could not load roles.')
-        setAvailableRoles(result.roles)
-      })
-      .catch((error) => setRoleLoadError(error.message))
-  }, [])
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [role, setRole] = useState('ALL')
@@ -500,9 +493,9 @@ export function UserList() {
           params.set('type', fileFilters.type)
         }
 
-        const response = await fetch(`/api/users/${userId}/files?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch user files')
-        const data: FileResponse = await response.json()
+        const data = await apiRequest<FileResponse>(
+          `/api/users/${userId}/files?${params}`
+        )
         if (requestId !== filesRequest.current) return
         setUserFiles(data.files)
         setFilePagination(data.pagination)
@@ -537,9 +530,9 @@ export function UserList() {
           params.set('search', urlSearch)
         }
 
-        const response = await fetch(`/api/users/${userId}/urls?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch user URLs')
-        const data: AccountShortLinkPage = await response.json()
+        const data = await apiRequest<AccountShortLinkPage>(
+          `/api/users/${userId}/urls?${params}`
+        )
         if (requestId !== urlsRequest.current) return
         setUserUrls(data.urls)
         setUrlPagination(data.pagination)
@@ -688,16 +681,10 @@ export function UserList() {
     if (!viewingUser) return
 
     try {
-      const response = await fetch(
-        `/api/users/${viewingUser.id}/files/${fileId}`,
-        {
-          method: 'DELETE',
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to delete file')
-      }
+      await apiRequest(`/api/users/${viewingUser.id}/files/${fileId}`, {
+        method: 'DELETE',
+        fallback: 'Failed to delete file',
+      })
 
       toast({
         title: 'Success',
@@ -712,7 +699,10 @@ export function UserList() {
       console.error('Error deleting file:', error)
       toast({
         title: 'Error',
-        description: 'Failed to delete file',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to delete file',
         variant: 'destructive',
       })
     }
@@ -722,16 +712,10 @@ export function UserList() {
     if (!viewingUser) return
 
     try {
-      const response = await fetch(
-        `/api/users/${viewingUser.id}/urls/${urlId}`,
-        {
-          method: 'DELETE',
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Failed to delete URL')
-      }
+      await apiRequest(`/api/users/${viewingUser.id}/urls/${urlId}`, {
+        method: 'DELETE',
+        fallback: 'Failed to delete URL',
+      })
 
       toast({
         title: 'Success',
@@ -746,7 +730,10 @@ export function UserList() {
       console.error('Error deleting URL:', error)
       toast({
         title: 'Error',
-        description: 'Failed to delete URL',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to delete URL',
         variant: 'destructive',
       })
     }
@@ -759,18 +746,14 @@ export function UserList() {
     if (!viewingUser || !selectedFile) return
 
     try {
-      const response = await fetch(
+      await apiRequest(
         `/api/users/${viewingUser.id}/files/${selectedFile.id}`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ visibility, password }),
+          body: { visibility, password },
+          fallback: 'Failed to update file settings',
         }
       )
-
-      if (!response.ok) {
-        throw new Error('Failed to update file settings')
-      }
 
       toast({
         title: 'Success',
@@ -782,7 +765,10 @@ export function UserList() {
       console.error('Error updating file settings:', error)
       toast({
         title: 'Error',
-        description: 'Failed to update file settings',
+        description:
+          error instanceof RefusedRequest
+            ? error.message
+            : 'Failed to update file settings',
         variant: 'destructive',
       })
     }
@@ -800,13 +786,10 @@ export function UserList() {
     if (!userToSignOut) return
     setSigningOut(true)
     try {
-      const response = await fetch(`/api/users/${userToSignOut.id}/sessions`, {
+      await apiRequest(`/api/users/${userToSignOut.id}/sessions`, {
         method: 'DELETE',
+        fallback: 'Could not revoke sessions.',
       })
-      if (!response.ok) {
-        const result = await response.json().catch(() => null)
-        throw new Error(result?.error || 'Could not revoke sessions.')
-      }
       toast({
         title: 'Sessions revoked',
         description: `${userToSignOut.name} will need to sign in again.`,

@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { Monitor, Moon, SlidersHorizontal, Sun } from 'lucide-react'
 
+import { PERSONAL_APPEARANCE } from '@/components/customization/appearance-provider'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -13,9 +14,11 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+import { apiRequest } from '@/lib/client/request'
 import type { PersonalAppearance } from '@/lib/customization/schema'
 import { cn } from '@/lib/utils'
 
+import { useAccountRefresh } from '@/hooks/use-account-query'
 import { useToast } from '@/hooks/use-toast'
 
 export function PersonalAppearanceSettings({
@@ -24,6 +27,7 @@ export function PersonalAppearanceSettings({
   initialPreference: PersonalAppearance
 }) {
   const { toast } = useToast()
+  const refreshAppearance = useAccountRefresh(PERSONAL_APPEARANCE)
   const [preference, setPreference] = useState(initialPreference)
   const [savedPreference, setSavedPreference] = useState(initialPreference)
   const [busy, setBusy] = useState(false)
@@ -33,16 +37,13 @@ export function PersonalAppearanceSettings({
     setBusy(true)
     setError('')
     try {
-      const response = await fetch('/api/customization/preferences', {
+      await apiRequest('/api/customization/preferences', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(preference),
+        body: preference,
+        fallback: 'Preferences could not be saved.',
       })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Preferences could not be saved.')
       setSavedPreference(preference)
-      window.dispatchEvent(new Event('flare:appearance-preference'))
+      void refreshAppearance()
       toast({ title: 'Your workspace appearance is saved' })
     } catch (cause) {
       setError(

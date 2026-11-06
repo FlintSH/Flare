@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { folderPath } from '@/lib/folders/navigation'
 import { FOLDER_NAME_MAX_LENGTH } from '@/lib/folders/schema'
 import { libraryHref } from '@/lib/library/contract'
@@ -39,12 +40,11 @@ import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 
 import { ArchiveDestination } from './archive-destination'
 import {
+  ARCHIVE_REQUEST_FAILED,
   type ArchiveFileRef,
   type ArchiveProfileSnapshot,
-  ArchiveRequestError,
   archiveErrorMessage,
   archiveProfileRequest,
-  archiveRequest,
 } from './archive-utils'
 
 export function ArchiveExtractForm({
@@ -109,28 +109,28 @@ export function ArchiveExtractForm({
     onBusyChange(true)
     setError('')
     try {
-      const next = await archiveRequest<{
+      const next = await apiRequest<{
         folderId: string
         fileCount: number
         totalBytes: number
-      }>(
-        `/api/files/${encodeURIComponent(file.id)}/archive/extract`,
-        {
+      }>(`/api/files/${encodeURIComponent(file.id)}/archive/extract`, {
+        body: {
           folderId,
           name: name.trim(),
           ...archiveProfileRequest(profileId, profileSnapshot),
         },
-        signal
-      )
+        signal,
+        fallback: ARCHIVE_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       setResult(next)
     } catch (cause) {
       if (signal.aborted) return
       setError(archiveErrorMessage(cause))
       if (
         profileId &&
-        cause instanceof ArchiveRequestError &&
+        cause instanceof RefusedRequest &&
         cause.status === 409
       ) {
         setProfileSnapshot(null)

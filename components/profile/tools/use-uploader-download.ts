@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { RefusedRequest, refusal } from '@/lib/client/account-request'
+import { RefusedRequest, refusal } from '@/lib/client/request'
 import {
   type UploaderClientId,
   type UploaderOptions,

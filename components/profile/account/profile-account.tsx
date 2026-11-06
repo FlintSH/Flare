@@ -18,7 +18,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { updateProfile } from '@/lib/client/account-request'
+import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
+import { updateProfile } from '@/lib/client/profile'
+import { apiRequest } from '@/lib/client/request'
 import { AVATAR_ACCEPT, avatarProblem } from '@/lib/storage/avatar-policy'
 import { ACCOUNT_NAME_MIN_LENGTH } from '@/lib/users/account-policy'
 
@@ -71,14 +73,10 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/profile/avatar', {
-        method: 'POST',
+      await apiRequest('/api/profile/avatar', {
         body: formData,
+        fallback: 'Failed to upload avatar',
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to upload avatar')
-      }
 
       await updateSession()
 
@@ -294,7 +292,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                           autoComplete="one-time-code"
                           autoCapitalize="none"
                           spellCheck={false}
-                          maxLength={32}
+                          maxLength={RECOVERY_CODE_INPUT_LENGTH}
                           placeholder="Enter an authenticator or recovery code"
                           required
                           disabled={isLoading}

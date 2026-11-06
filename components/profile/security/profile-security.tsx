@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
-import { updateProfile } from '@/lib/client/account-request'
+import { updateProfile } from '@/lib/client/profile'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'

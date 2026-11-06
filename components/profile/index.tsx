@@ -223,6 +223,7 @@ export function ProfileClient({
       <PreferencesPanel active={displayedSection === 'integrations'}>
         <IntegrationsPanel
           embedded
+          active={displayedSection === 'integrations'}
           onSetupTool={() => setSection('uploads', { updateHistory: false })}
         />
       </PreferencesPanel>

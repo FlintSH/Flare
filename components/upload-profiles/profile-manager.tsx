@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { accountRequest } from '@/lib/client/account-request'
+import { apiRequest } from '@/lib/client/request'
 import {
   PROFILE_NAME_MAX_LENGTH,
   PROFILE_TAG_LIMIT,
@@ -44,10 +44,11 @@ import {
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
+import { useAccountRefresh } from '@/hooks/use-account-query'
 import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
-import { useUploadProfiles } from './profile-picker'
+import { UPLOAD_PROFILES, useUploadProfiles } from './profile-picker'
 
 // Profiles and recipes are insets inside their cards; both lists share it.
 const listItemClassName =
@@ -177,8 +178,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const [message, setMessage] = useState('')
   const [tagSearch, setTagSearch] = useState('')
   const importInput = useRef<HTMLInputElement>(null)
-  const refresh = () =>
-    window.dispatchEvent(new Event('flare:upload-profiles-changed'))
+  const refresh = useAccountRefresh(UPLOAD_PROFILES)
   const choose = (profile: UploadProfileView | null) => {
     setEditing(profile)
     setName(profile?.name || '')
@@ -188,7 +188,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   }
 
   function request<T>(url: string, method: string, body?: unknown) {
-    return accountRequest<T>(url, {
+    return apiRequest<T>(url, {
       method,
       body,
       fallback: 'Could not save your changes.',
@@ -199,7 +199,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     setMessage('')
     try {
       await action()
-      refresh()
+      void refresh()
     } catch (failure) {
       setMessage(
         failure instanceof Error ? failure.message : 'Please try again.'

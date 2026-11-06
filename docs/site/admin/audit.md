@@ -54,7 +54,7 @@ View, download, and short-link click counters are not change events. Each counte
 
 Direct S3 requests after a signed URL has been issued, CDN hits, external identity-provider activity, direct database/storage edits, and actions outside the Flare process are outside this audit boundary. File-access events show what the application served or authorized, not proof of a completed download or a person reading a file. A request status is recorded when the handler returns its response; streaming may still be in progress, and a later network disconnect may not produce a second audit event. Use your reverse proxy, provider, and database logs when an investigation crosses those boundaries.
 
-Successful audit-list reads do not add a new event on every refresh. Failed or denied audit requests can appear as `audit.read`, so malformed filter checks and access refusals remain visible without the viewer filling itself with successful reads.
+Successful audit-list reads, and the reloads of **Profile → Integrations**, do not add a new event on every refresh. Earlier versions recorded every Integrations reload, one every five seconds while the panel was open. Failed or denied audit requests can appear as `audit.read`, so malformed filter checks and access refusals remain visible without the viewer filling itself with successful reads.
 
 ### Follow an OCR or storage failure
 

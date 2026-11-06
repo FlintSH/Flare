@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { ocrDialogState } from '@/components/shared/ocr-dialog'
-
 import { takeOcrRequest } from '@/lib/ocr/limits'
+
+import { ocrDialogState } from '@/hooks/use-ocr'
 
 describe('OCR dialog state', () => {
   it('keeps a retry when the request itself fails, such as a lost connection', () => {

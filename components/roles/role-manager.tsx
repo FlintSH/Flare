@@ -42,11 +42,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
-import {
-  PERMISSION_GROUPS,
-  type RoleSummary,
-  hasPermission,
-} from '@/lib/permissions/catalog'
+import { apiRequest } from '@/lib/client/request'
+import { PERMISSION_GROUPS, hasPermission } from '@/lib/permissions/catalog'
 import {
   ROLE_DEFAULTS,
   ROLE_LIMITS,
@@ -58,9 +55,9 @@ import {
 } from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 
+import { type ListedRole as Role, readRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
 
-type Role = RoleSummary & { memberCount: number }
 type Draft = {
   name: string
   description: string
@@ -123,11 +120,9 @@ export function RoleManager() {
     setQuery('')
   }, [])
   const load = useCallback(async () => {
-    const response = await fetch('/api/roles', { cache: 'no-store' })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error || 'Could not load roles.')
-    setRoles(data.roles)
-    return data.roles as Role[]
+    const { roles } = await readRoles()
+    setRoles(roles)
+    return roles
   }, [])
   useEffect(() => {
     let cancelled = false
@@ -194,17 +189,14 @@ export function RoleManager() {
             permissions: draft.permissions,
           }
         : draft
-      const response = await fetch(
+      const result = await apiRequest<{ id?: string; role?: { id: string } }>(
         selectedId ? `/api/roles/${selectedId}` : '/api/roles',
         {
           method: selectedId ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
+          fallback: 'Could not save this role.',
         }
       )
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not save this role.')
       const loaded = await load()
       const saved =
         loaded.find(
@@ -231,13 +223,10 @@ export function RoleManager() {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch(`/api/roles/${selected.id}`, {
+      await apiRequest(`/api/roles/${selected.id}`, {
         method: 'DELETE',
+        fallback: 'Could not delete this role.',
       })
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || 'Could not delete this role.')
-      }
       const loaded = await load()
       if (loaded[0]) select(loaded[0])
       await update()

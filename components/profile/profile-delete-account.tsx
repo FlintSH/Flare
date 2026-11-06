@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 
-import { accountRequest } from '@/lib/client/account-request'
+import { apiRequest } from '@/lib/client/request'
 
 import { useSignOut } from '@/hooks/use-sign-out'
 
@@ -35,7 +35,7 @@ export function ProfileDeleteAccount() {
     setBusy(true)
     setError('')
     try {
-      await accountRequest('/api/profile', {
+      await apiRequest('/api/profile', {
         method: 'DELETE',
         fallback: 'Your account could not be deleted.',
       })

@@ -13,17 +13,13 @@ import {
 } from 'lucide-react'
 
 import type { FileViewerFile } from '@/components/file/viewer/types'
-import {
-  OcrDialog,
-  type OcrDialogState,
-  ocrDialogState,
-  requestOcr,
-} from '@/components/shared/ocr-dialog'
+import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
 import { type FileUrls, fileUrls } from '@/lib/files/urls'
 import { cn } from '@/lib/utils'
 
+import { useOcr } from '@/hooks/use-ocr'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileActionsProps {
@@ -40,14 +36,8 @@ export function FileActions({
   isTextBased = false,
 }: FileActionsProps) {
   const { toast } = useToast()
-  const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
-  const [ocrText, setOcrText] = useState<string | null>(null)
-  const [ocrError, setOcrError] = useState<string | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
-  const [canRetryOcr, setCanRetryOcr] = useState(false)
-  const [isLoadingOcr, setIsLoadingOcr] = useState(false)
-  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const [urls, setUrls] = useState<FileUrls>()
+  const ocr = useOcr(urls?.ocr)
 
   const [copied, setCopied] = useState(false)
   const [isCopyingText, setIsCopyingText] = useState(false)
@@ -119,29 +109,6 @@ export function FileActions({
     }
   }
 
-  const applyOcrState = (state: OcrDialogState) => {
-    setOcrText(state.text)
-    setOcrConfidence(state.confidence)
-    setOcrNotice(state.notice)
-    setOcrError(state.error)
-    setCanRetryOcr(state.canRetry)
-  }
-
-  const handleOcr = async () => {
-    if (!urls) return
-    try {
-      setIsLoadingOcr(true)
-      setOcrError(null)
-      setOcrNotice(null)
-      setIsOcrDialogOpen(true)
-      applyOcrState(ocrDialogState(await requestOcr(urls.ocr)))
-    } catch {
-      applyOcrState(ocrDialogState(null))
-    } finally {
-      setIsLoadingOcr(false)
-    }
-  }
-
   // Phones get an even two-column grid; an odd count gives Download a row.
   // The grid asks for the screen's width so a card sized to its content
   // still spans the phone.
@@ -195,16 +162,16 @@ export function FileActions({
         <Button
           variant="outline"
           size="sm"
-          onClick={handleOcr}
-          disabled={!urls || isLoadingOcr}
+          onClick={() => void ocr.extract()}
+          disabled={!urls || ocr.loading}
           className={buttonClassName}
         >
-          {isLoadingOcr ? (
+          {ocr.loading ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <ScanText className="h-4 w-4" aria-hidden="true" />
           )}
-          {isLoadingOcr ? 'Reading image…' : 'Extract text'}
+          {ocr.loading ? 'Reading image…' : 'Extract text'}
         </Button>
       )}
       <Button
@@ -217,16 +184,7 @@ export function FileActions({
         <ExternalLink className="h-4 w-4" aria-hidden="true" />
         Open original<span className="sr-only"> in a new tab</span>
       </Button>
-      <OcrDialog
-        isOpen={isOcrDialogOpen}
-        onOpenChange={setIsOcrDialogOpen}
-        isLoading={isLoadingOcr}
-        error={ocrError}
-        notice={ocrNotice}
-        onRetry={canRetryOcr ? () => void handleOcr() : undefined}
-        text={ocrText}
-        confidence={ocrConfidence}
-      />
+      <OcrDialog {...ocr.dialog} />
     </div>
   )
 }

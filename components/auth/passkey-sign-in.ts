@@ -4,11 +4,11 @@ import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/brow
 import { signIn } from 'next-auth/react'
 
 import { SignInError, TOO_MANY_SIGN_IN_ATTEMPTS } from '@/lib/auth/sign-in'
-import { accountRequest } from '@/lib/client/account-request'
+import { apiRequest } from '@/lib/client/request'
 
 /** expectedUserId keeps an in-place confirmation bound to the open account. */
 export async function signInWithPasskey(expectedUserId?: string) {
-  const { options, challengeId } = await accountRequest<{
+  const { options, challengeId } = await apiRequest<{
     options: PublicKeyCredentialRequestOptionsJSON
     challengeId: string
   }>('/api/auth/passkeys/options', { body: {} })

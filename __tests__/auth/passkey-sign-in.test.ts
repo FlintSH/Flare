@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
 }))
 
-vi.mock('@/lib/client/account-request', () => ({
-  accountRequest: mocks.request,
+vi.mock('@/lib/client/request', () => ({
+  apiRequest: mocks.request,
 }))
 vi.mock('@simplewebauthn/browser', () => ({
   startAuthentication: mocks.authenticate,

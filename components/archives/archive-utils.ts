@@ -6,7 +6,12 @@ import {
   type ArchiveListingProgress,
   type ArchiveOutputFormat,
 } from '@/lib/archives/shared'
+import { readAnswer, refusal, sendRequest } from '@/lib/client/request'
 import { fileKind } from '@/lib/files/file-kind'
+
+/** What an archive request that gives no reason fails with. */
+export const ARCHIVE_REQUEST_FAILED =
+  'The archive request could not be completed. Please try again.'
 
 /** File-library metadata uses MiB; archive contracts use bytes. */
 export function archiveSelectionSize(files: { size: number }[]) {
@@ -64,15 +69,6 @@ export function archiveFolderCount(entries: ArchiveEntry[]) {
       folders.add(parts.slice(0, index).join('/'))
   }
   return folders.size
-}
-
-export class ArchiveRequestError extends Error {
-  constructor(
-    message: string,
-    public status: number
-  ) {
-    super(message)
-  }
 }
 
 /** Whether the library offers Browse archive, including for RAR and 7z. */
@@ -279,44 +275,8 @@ export async function readPreviewBytes(response: Response, limit: number) {
   return { bytes, truncated }
 }
 
-export async function archiveRequest<T>(
-  url: string,
-  body?: unknown,
-  signal?: AbortSignal
-): Promise<T> {
-  const response = await archiveFetch(url, body, signal)
-  const result = await response.json().catch(() => ({}))
-  if (!response.ok)
-    throw new ArchiveRequestError(
-      result.error ||
-        'The archive request could not be completed. Please try again.',
-      response.status
-    )
-  return result.data as T
-}
-
-export function archiveFetch(
-  url: string,
-  body?: unknown,
-  signal?: AbortSignal
-) {
-  return fetch(url, {
-    method: body === undefined ? 'GET' : 'POST',
-    cache: 'no-store',
-    signal,
-    ...(body === undefined
-      ? {}
-      : {
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }),
-  })
-}
-
 export function archiveErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : 'The archive request could not be completed. Please try again.'
+  return error instanceof Error ? error.message : ARCHIVE_REQUEST_FAILED
 }
 
 function sleep(ms: number, signal?: AbortSignal) {
@@ -360,33 +320,30 @@ export async function loadArchiveListing(
       progress: true,
       after: entries.length,
     })
-    const response = await archiveFetch(
-      request.url,
-      request.body,
-      options.signal
-    )
-    const result = await response.json().catch(() => ({}))
-    if (response.status === 202) {
-      const progress = result.data as ArchiveListingProgress
-      entries = entries.concat(progress.entries)
-      options.onUpdate({ status: 'indexing', entries, progress })
-      await sleep(1000, options.signal)
-      continue
-    }
-    if (response.status === 429 && busyRetries < 6) {
+    const response = await sendRequest(request.url, {
+      body: request.body,
+      signal: options.signal,
+    })
+    if (!response.ok) {
+      const refused = await refusal(response, ARCHIVE_REQUEST_FAILED)
+      if (refused.status !== 429 || busyRetries >= 6) throw refused
       busyRetries++
       options.onUpdate({ status: 'busy' })
-      const seconds = Number(response.headers.get('Retry-After')) || 5
-      await sleep(Math.min(seconds, 60) * 1000, options.signal)
+      await sleep(Math.min(refused.retryAfter || 5, 60) * 1000, options.signal)
       continue
     }
-    if (!response.ok)
-      throw new ArchiveRequestError(
-        result.error ||
-          'The archive request could not be completed. Please try again.',
-        response.status
-      )
-    const listing = result.data as ArchiveListing
-    return { ...listing, entries: entries.concat(listing.entries) }
+    const answer = await readAnswer<ArchiveListing | ArchiveListingProgress>(
+      response,
+      { signal: options.signal, fallback: ARCHIVE_REQUEST_FAILED }
+    )
+    entries = entries.concat(answer.entries)
+    if (response.status !== 202)
+      return { ...(answer as ArchiveListing), entries }
+    options.onUpdate({
+      status: 'indexing',
+      entries,
+      progress: answer as ArchiveListingProgress,
+    })
+    await sleep(1000, options.signal)
   }
 }

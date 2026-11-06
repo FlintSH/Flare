@@ -74,6 +74,8 @@ Under **Profile → Account**, update **Username** and choose **Save changes**, 
 
 Choose **Change avatar** and select a PNG, JPEG, GIF, or WebP image of at most 2 MB to update your photo. A larger file shows **File too large** and another format, such as SVG, HEIC, or AVIF, shows **Invalid file type**; nothing is uploaded, so resize or convert the image and try again. The server checks the same rules again and also checks that the content really is the format the file claims to be. Earlier versions accepted an image of any type and size. When your instance enforces [storage quotas](#check-storage-and-usage), the image must fit in your remaining space, although it isn't added to your used space. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
+If Flare refuses the image, **Upload failed** gives its reason, for example **Storage quota exceeded** or **File content does not match claimed image type**. Earlier versions said **Failed to upload avatar** whatever the reason, which is still the message when Flare gives none.
+
 Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
 
 Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults).
@@ -166,13 +168,15 @@ Two files with the same name from the same day both appear. The older one keeps 
 
 This is a personal content export. It is not a full instance backup or a one-click restore package. Current exports do not include folder/tag organization, upload profiles, appearance preferences, API credentials, webhook configuration, authenticator setup secrets, either recovery-code set, passkeys, the passkey requirement, active-session records, login history, or instance audit events. Export profile recipes separately if you want to keep those settings.
 
+If Flare refuses to start the export, the error gives its reason, for example **Permission denied** after your role changed, or **Failed to export data** when it gives none. Earlier versions showed only the status, such as **Export failed with status: 403**.
+
 Inspect the archive and open important files before deleting their originals. A file that storage cannot open, for example because it is missing, is skipped and the rest of the export continues. If storage fails partway through a file, the download stops with an error rather than saving an archive with a cut-off file; start the export again. If an expected file is absent, or an export keeps failing, download the file individually if possible and ask the administrator to check storage.
 
 ## Integrations and connected tools
 
 **Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
 
-**Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
+**Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 
 ## Invite people
 

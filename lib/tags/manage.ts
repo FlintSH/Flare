@@ -5,7 +5,7 @@ import { prisma } from '@/lib/database/prisma'
 import { nameKey } from '@/lib/library/names'
 import { removeTagFromProfiles } from '@/lib/uploads/profiles'
 
-import type { RuleSource, TagInput } from './schema'
+import type { RuleSource, TagInput, TagView } from './schema'
 import { TagError } from './service'
 
 // An account's tags themselves. Kept apart from service.ts because deleting a
@@ -21,7 +21,7 @@ const tagViewSelect = {
 
 function tagView(
   tag: Prisma.VaultTagGetPayload<{ select: typeof tagViewSelect }>
-) {
+): TagView {
   return {
     id: tag.id,
     name: tag.name,

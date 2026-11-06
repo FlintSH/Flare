@@ -8,6 +8,15 @@ export const TAG_RULE_MAX_LENGTH = 200
 
 export const tagNameSchema = nameSchema('tag', TAG_NAME_MAX_LENGTH)
 
+/** A tag as the API lists it. */
+export interface TagView {
+  id: string
+  name: string
+  ruleSource: RuleSource | null
+  ruleText: string | null
+  fileCount: number
+}
+
 export const tagInputSchema = z
   .object({
     name: tagNameSchema,

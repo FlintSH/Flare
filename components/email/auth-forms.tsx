@@ -19,13 +19,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { apiRequest } from '@/lib/client/request'
 import {
   ACCOUNT_PASSWORD_MIN_LENGTH,
   PASSWORD_MAX_BYTES,
 } from '@/lib/users/account-policy'
 
 import { AccountEmail, useAccountEmailStatus } from './account-email'
-import { emailPost, fetchEmailCapabilities } from './api'
+import { fetchEmailCapabilities } from './api'
 
 function Feedback({ error, message }: { error: string; message: string }) {
   return (
@@ -67,9 +68,9 @@ export function ForgotPasswordForm() {
     setError('')
     setMessage('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/request-reset',
-        { email }
+        { body: { email } }
       )
       setMessage(result.message)
     } catch (error) {
@@ -147,9 +148,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
     setBusy(true)
     setError('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/reset',
-        { token, password: data.get('password') }
+        { body: { token, password: data.get('password') } }
       )
       setComplete(true)
       setMessage(
@@ -243,9 +244,9 @@ export function VerifyEmailForm({ token }: { token: string }) {
     setBusy(true)
     setError('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         '/api/auth/email/verify',
-        { token }
+        { body: { token } }
       )
       setMessage(result.message || 'Email confirmed.')
       setComplete(true)

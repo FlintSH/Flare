@@ -36,6 +36,7 @@ import {
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { ARCHIVE_LIMITS, type ArchiveOutputFormat } from '@/lib/archives/shared'
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { UNFILED, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes, formatFileSize } from '@/lib/utils'
@@ -48,13 +49,12 @@ import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { ArchiveDestination } from './archive-destination'
 import {
   ARCHIVE_FORM_DIALOG_CLASS,
+  ARCHIVE_REQUEST_FAILED,
   type ArchiveFileRef,
   type ArchiveProfileSnapshot,
-  ArchiveRequestError,
   archiveErrorMessage,
   archiveOutputName,
   archiveProfileRequest,
-  archiveRequest,
   archiveSelectionSize,
 } from './archive-utils'
 
@@ -121,29 +121,29 @@ export function CreateArchiveDialog({
     setBusy(true)
     setError('')
     try {
-      const next = await archiveRequest<{
+      const next = await apiRequest<{
         file: ArchiveFileRef
         totalBytes: number
-      }>(
-        '/api/files/archive',
-        {
+      }>('/api/files/archive', {
+        body: {
           fileIds: files.map((file) => file.id),
           name: archiveOutputName(name, format),
           format,
           folderId,
           ...archiveProfileRequest(profileId, profileSnapshot),
         },
-        signal
-      )
+        signal,
+        fallback: ARCHIVE_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       setResult(next)
     } catch (cause) {
       if (signal.aborted) return
       setError(archiveErrorMessage(cause))
       if (
         profileId &&
-        cause instanceof ArchiveRequestError &&
+        cause instanceof RefusedRequest &&
         cause.status === 409
       ) {
         setProfileSnapshot(null)

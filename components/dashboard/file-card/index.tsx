@@ -31,12 +31,7 @@ import {
 } from '@/components/dashboard/file-card/actions'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
-import {
-  OcrDialog,
-  type OcrDialogState,
-  ocrDialogState,
-  requestOcr,
-} from '@/components/shared/ocr-dialog'
+import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -59,11 +54,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
+import { useOcr } from '@/hooks/use-ocr'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
@@ -75,6 +72,11 @@ import { useToast } from '@/hooks/use-toast'
 const labelClassName =
   'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
+
+// What a failed action says when the server gives no reason.
+const TRY_AGAIN = 'Please try again.'
+const failure = (error: unknown) =>
+  error instanceof RefusedRequest ? error.message : TRY_AGAIN
 
 interface FileCardProps {
   file: FileType
@@ -91,8 +93,12 @@ interface FileCardProps {
   onSelect?: () => void
 }
 
+/**
+ * One file in the library. It shows the file it is given; each action ends
+ * by asking the library to reload, which brings the changed file.
+ */
 export function FileCard({
-  file: initialFile,
+  file,
   onDelete,
   onUpdate,
   onPreview,
@@ -113,27 +119,14 @@ export function FileCard({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [password, setPassword] = useState('')
   const passwordHint = password ? filePasswordHint(password) : null
-  const [file, setFile] = useState(() => {
-    const { password: legacyPassword, ...metadata } = initialFile
-    return {
-      ...metadata,
-      hasPassword: initialFile.hasPassword ?? Boolean(legacyPassword),
-    }
-  })
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
     file.visibility
   )
-  const [isDeleted, setIsDeleted] = useState(false)
   const [mutation, setMutation] = useState<
     'delete' | 'password' | 'visibility' | null
   >(null)
-  const [isLoadingOcr, setIsLoadingOcr] = useState(false)
-  const [ocrText, setOcrText] = useState<string | null>(null)
-  const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
-  const [ocrError, setOcrError] = useState<string | null>(null)
-  const [ocrNotice, setOcrNotice] = useState<string | null>(null)
-  const [canRetryOcr, setCanRetryOcr] = useState(false)
-  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const urls = fileUrls(file)
+  const ocr = useOcr(urls.ocr)
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
 
@@ -170,24 +163,23 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('delete')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'DELETE',
         signal,
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       setIsDeleteDialogOpen(false)
-      setIsDeleted(true)
       onDelete?.(file.id)
       toast({
         title: 'File deleted',
         description: 'The file has been permanently deleted.',
       })
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t delete this file',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
@@ -200,14 +192,13 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('password')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'PATCH',
+        body: { password: password || null },
         signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password || null }),
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       toast({
         title: password
           ? 'Password protection enabled'
@@ -216,15 +207,14 @@ export function FileCard({
           ? 'Visitors need your password to open this file.'
           : 'The file no longer requires a password.',
       })
-      setFile((previous) => ({ ...previous, hasPassword: Boolean(password) }))
       setPassword('')
       setIsPasswordDialogOpen(false)
       onUpdate?.()
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update the password',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
@@ -237,58 +227,28 @@ export function FileCard({
     if (mutation || signal.aborted) return
     setMutation('visibility')
     try {
-      const response = await fetch(`/api/files/${file.id}`, {
+      await apiRequest(`/api/files/${file.id}`, {
         method: 'PATCH',
+        body: { visibility },
         signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visibility }),
+        fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
-      if (!response.ok) throw new Error()
       toast({
         title: 'Visibility updated',
         description: `This file is now ${visibility.toLowerCase()}.`,
       })
       setIsVisibilityDialogOpen(false)
-      setFile((previous) => ({ ...previous, visibility }))
       onUpdate?.()
-    } catch {
+    } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update visibility',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
     } finally {
       if (!signal.aborted) setMutation(null)
-    }
-  }
-
-  const handleFetchOcr = async () => {
-    const { signal } = lifetime.current
-    if (signal.aborted) return
-    setIsLoadingOcr(true)
-    setOcrError(null)
-    setOcrNotice(null)
-    // Busy, limited, still-running and failed requests are all shown in the
-    // dialog with a way to ask again, including a retry that never arrived.
-    const show = (state: OcrDialogState) => {
-      setOcrText(state.text)
-      setOcrConfidence(state.confidence)
-      setOcrNotice(state.notice)
-      setOcrError(state.error)
-      setCanRetryOcr(state.canRetry)
-      setIsOcrDialogOpen(true)
-    }
-    try {
-      const outcome = await requestOcr(fileUrls(file).ocr, signal)
-      if (signal.aborted) return
-      show(ocrDialogState(outcome))
-    } catch {
-      if (signal.aborted) return
-      show(ocrDialogState(null))
-    } finally {
-      if (!signal.aborted) setIsLoadingOcr(false)
     }
   }
 
@@ -299,39 +259,32 @@ export function FileCard({
     const { signal } = lifetime.current
     if (signal.aborted) return
     try {
-      const response = await fetch(
-        `/api/files/${file.id}/expiry`,
-        expiresAt
+      await apiRequest(`/api/files/${file.id}/expiry`, {
+        ...(expiresAt
           ? {
-              method: 'POST',
-              signal,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+              body: {
                 expiresAt: expiresAt.toISOString(),
                 action: action || ExpiryAction.DELETE,
-              }),
+              },
             }
-          : { method: 'DELETE', signal }
-      )
+          : { method: 'DELETE' }),
+        signal,
+        fallback: TRY_AGAIN,
+      })
       if (signal.aborted) return
-      if (!response.ok) throw new Error('Failed to update expiration')
       toast({
         title: expiresAt ? 'Expiration scheduled' : 'Expiration removed',
         description: expiresAt
           ? 'Your file’s expiration has been updated.'
           : 'This file will no longer expire.',
       })
-      setFile((previous) => ({
-        ...previous,
-        expiresAt: expiresAt?.toISOString() || null,
-      }))
       setIsExpiryModalOpen(false)
       onUpdate?.()
     } catch (error) {
       if (signal.aborted) return
       toast({
         title: 'Couldn’t update expiration',
-        description: 'Please try again.',
+        description: failure(error),
         variant: 'destructive',
       })
       // ExpiryModal keeps the form open when saving fails.
@@ -339,13 +292,10 @@ export function FileCard({
     }
   }
 
-  if (isDeleted) return null
-
   const isImage = file.mimeType.startsWith('image/')
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
-  const urls = fileUrls(file)
-  const tags = initialFile.tags ?? []
+  const tags = file.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
   const permitted = (id: FileActionId) => fileActionAllowed(user, id)
   const browseArchive = permitted('browseArchive') ? onBrowseArchive : undefined
@@ -371,7 +321,7 @@ export function FileCard({
     password: { run: () => handlePasswordDialogOpenChange(true) },
     expiration: { run: () => setIsExpiryModalOpen(true) },
     ...(isImage && {
-      ocr: { run: () => void handleFetchOcr(), disabled: isLoadingOcr },
+      ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
     }),
     delete: { run: () => setIsDeleteDialogOpen(true) },
   }
@@ -555,7 +505,7 @@ export function FileCard({
                         {typeof menu === 'function'
                           ? menu({
                               hasPassword: file.hasPassword,
-                              busy: isLoadingOcr,
+                              busy: ocr.loading,
                             })
                           : menu}
                       </>
@@ -623,7 +573,7 @@ export function FileCard({
             </span>
           </button>
         )}
-        {isLoadingOcr && (
+        {ocr.loading && (
           <div
             role="status"
             className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
@@ -919,17 +869,7 @@ export function FileCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <OcrDialog
-        isOpen={isOcrDialogOpen}
-        onOpenChange={setIsOcrDialogOpen}
-        isLoading={isLoadingOcr}
-        text={ocrText}
-        error={ocrError}
-        notice={ocrNotice}
-        onRetry={canRetryOcr ? () => void handleFetchOcr() : undefined}
-        confidence={ocrConfidence}
-        filename={file.name}
-      />
+      <OcrDialog {...ocr.dialog} filename={file.name} />
       <ExpiryModal
         isOpen={isExpiryModalOpen}
         onOpenChange={setIsExpiryModalOpen}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { UploadToken } from '@/types/components/profile'
 
-import { RefusedRequest, accountRequest } from '@/lib/client/account-request'
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
 
 import { useToast } from './use-toast'
 
@@ -18,7 +18,7 @@ export function useUploadToken(): UploadToken {
     const failed = 'Failed to fetch upload token'
     setIsLoadingToken(true)
     try {
-      const data = await accountRequest<{ uploadToken: string }>(TOKEN_PATH, {
+      const data = await apiRequest<{ uploadToken: string }>(TOKEN_PATH, {
         fallback: failed,
       })
       setUploadToken(data.uploadToken)
@@ -42,7 +42,7 @@ export function useUploadToken(): UploadToken {
     const failed = 'Failed to refresh upload token'
     setIsLoadingToken(true)
     try {
-      const data = await accountRequest<{ uploadToken: string }>(TOKEN_PATH, {
+      const data = await apiRequest<{ uploadToken: string }>(TOKEN_PATH, {
         method: 'POST',
         fallback: failed,
       })

@@ -21,12 +21,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
+import { apiRequest } from '@/lib/client/request'
 import { folderPath } from '@/lib/folders/navigation'
 import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
-import { folderRequest, useFolders } from '@/hooks/use-folders'
+import { FOLDER_REQUEST_FAILED, useFolders } from '@/hooks/use-folders'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
 
@@ -68,17 +69,16 @@ export function MoveFilesDialog({
     setBusy(true)
     setError('')
     try {
-      await folderRequest(
-        '/api/files/folders',
-        'POST',
-        {
+      await apiRequest('/api/files/folders', {
+        body: {
           fileIds: files.map((file) => file.id),
           folderId: destination,
         },
-        signal
-      )
+        signal,
+        fallback: FOLDER_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       toast({
         title:
           files.length === 1 ? 'File moved' : `${files.length} files moved`,
@@ -103,18 +103,16 @@ export function MoveFilesDialog({
     setBusy(true)
     setError('')
     try {
-      const folder = await folderRequest<FolderView>(
-        '/api/folders',
-        'POST',
-        {
+      const folder = await apiRequest<FolderView>('/api/folders', {
+        body: {
           name: name.trim(),
           parentId: destination ?? null,
         },
-        signal
-      )
+        signal,
+        fallback: FOLDER_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
-      await reload()
+      await changed()
       if (signal.aborted) return
       setDestination(folder.id)
       setCreating(false)

@@ -83,6 +83,8 @@ Earlier builds also showed **Preview not available** for video, audio, and text 
 
 Text, code, and CSV previews load at most 1 MiB of a file. A larger file shows **Preview unavailable** with a note that it's too large to preview; **Download** and **Copy text** still give you the whole file. Earlier builds capped only CSV files and loaded text and code of any size into the page.
 
+Before a video plays, the page asks Flare where to play it from. If that fails, for example because the file was deleted or the connection dropped, the page shows **Preview unavailable** with **This video couldn’t be loaded.**, or Flare's own message when it sends one. Earlier builds showed the request's status instead, such as **Failed to fetch direct URL: 404**.
+
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
 <Screenshot src="/screenshots/workspace/share-video.png" alt="Video share page with playback controls" caption="Recordings can play directly in the browser when their codec is supported." />

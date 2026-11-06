@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { apiRequest } from '@/lib/client/request'
 import { shortLinkInputSchema } from '@/lib/links/schema'
 
 import { useToast } from '@/hooks/use-toast'
@@ -34,23 +35,17 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
 
     try {
       const validatedData = shortLinkInputSchema.parse({ url: url.trim() })
-      const response = await fetch('/api/urls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: validatedData.url }),
+      const created = await apiRequest<{ shortCode?: string }>('/api/urls', {
+        body: { url: validatedData.url },
+        fallback: 'Could not create a short link. Please try again.',
       })
-      const data = await response.json().catch(() => null)
-      if (!response.ok)
-        throw new Error(
-          data?.error || 'Could not create a short link. Please try again.'
-        )
       setCopied(false)
       setUrl('')
       toast({
         title: 'Short link created',
         description: 'Your link is ready to share.',
       })
-      onUrlAdded(data?.data?.shortCode)
+      onUrlAdded(created.shortCode)
     } catch (failure) {
       setError(
         failure instanceof z.ZodError

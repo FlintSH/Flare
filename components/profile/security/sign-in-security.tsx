@@ -39,7 +39,7 @@ import {
   TOTP_DIGITS,
   TOTP_PLACEHOLDER,
 } from '@/lib/auth/security/policy'
-import { accountRequest } from '@/lib/client/account-request'
+import { apiRequest } from '@/lib/client/request'
 
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useSecurityStatus } from '@/hooks/use-security-status'
@@ -188,7 +188,7 @@ function AccountSignInSecurity() {
       }
       if (action === 'setup') {
         if (!setup) {
-          const next = await accountRequest<Setup>(
+          const next = await apiRequest<Setup>(
             '/api/auth/security/totp/setup',
             { body: proof, signal }
           )
@@ -203,7 +203,7 @@ function AccountSignInSecurity() {
           if (signal.aborted) return
           setSetup({ ...next, qr })
         } else {
-          const result = await accountRequest<{ recoveryCodes: string[] }>(
+          const result = await apiRequest<{ recoveryCodes: string[] }>(
             '/api/auth/security/totp/enable',
             {
               body: {
@@ -217,19 +217,19 @@ function AccountSignInSecurity() {
           setCodes(result.recoveryCodes)
         }
       } else if (action === 'codes') {
-        const result = await accountRequest<{ recoveryCodes: string[] }>(
+        const result = await apiRequest<{ recoveryCodes: string[] }>(
           '/api/auth/security/recovery-codes',
           { body: proof, signal }
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'disable') {
-        await accountRequest('/api/auth/security/totp/disable', {
+        await apiRequest('/api/auth/security/totp/disable', {
           body: proof,
           signal,
         })
         setComplete(true)
       } else if (action === 'require-passkey' || action === 'passkey-codes') {
-        const result = await accountRequest<{ recoveryCodes: string[] }>(
+        const result = await apiRequest<{ recoveryCodes: string[] }>(
           action === 'require-passkey'
             ? '/api/auth/security/passkeys/require'
             : '/api/auth/security/passkeys/recovery-codes',
@@ -240,14 +240,14 @@ function AccountSignInSecurity() {
         )
         setCodes(result.recoveryCodes)
       } else if (action === 'allow-other-methods') {
-        await accountRequest('/api/auth/security/passkeys/require', {
+        await apiRequest('/api/auth/security/passkeys/require', {
           body: { required: false },
           signal,
         })
         setComplete(true)
       } else if (action === 'add-passkey') {
         const { startRegistration } = await import('@simplewebauthn/browser')
-        const result = await accountRequest<{
+        const result = await apiRequest<{
           options: PublicKeyCredentialCreationOptionsJSON
           challengeId: string
         }>('/api/auth/security/passkeys/options', {
@@ -257,13 +257,13 @@ function AccountSignInSecurity() {
         const response = await startRegistration({
           optionsJSON: result.options,
         })
-        await accountRequest('/api/auth/security/passkeys/verify', {
+        await apiRequest('/api/auth/security/passkeys/verify', {
           body: { challengeId: result.challengeId, response },
           signal,
         })
         setComplete(true)
       } else if (selectedPasskey) {
-        await accountRequest(
+        await apiRequest(
           `/api/auth/security/passkeys/${encodeURIComponent(selectedPasskey.id)}`,
           {
             method: action === 'rename-passkey' ? 'PATCH' : 'DELETE',

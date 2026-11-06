@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 
+import { RefusedRequest, apiRequest } from '@/lib/client/request'
+
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
+
+const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 
 /** `lookupUrl` answers with where the video plays from. */
 export function VideoViewer({
@@ -17,28 +21,21 @@ export function VideoViewer({
   useEffect(() => {
     const controller = new AbortController()
     setDirect({})
-    fetch(lookupUrl, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Failed to fetch direct URL: ${response.status}`)
-        }
-        const data = await response.json()
-        return data.url as string | undefined
-      })
-      .then(
-        (url) => {
-          if (!controller.signal.aborted) setDirect({ url })
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted)
-            setDirect({
-              error:
-                error instanceof Error
-                  ? error.message
-                  : 'Failed to fetch direct URL',
-            })
-        }
-      )
+    apiRequest<{ url?: string }>(lookupUrl, {
+      signal: controller.signal,
+      fallback: LOOKUP_FAILED,
+    }).then(
+      ({ url }) => {
+        if (!controller.signal.aborted) setDirect({ url })
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted)
+          setDirect({
+            error:
+              error instanceof RefusedRequest ? error.message : LOOKUP_FAILED,
+          })
+      }
+    )
     return () => controller.abort()
   }, [lookupUrl])
 

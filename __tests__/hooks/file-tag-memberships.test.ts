@@ -11,7 +11,8 @@ const harness = vi.hoisted(() => ({
 
 // Dependency-aware effects preserve real asynchronous request ownership, as in
 // the gallery/timeline hook tests; fresh array props still model a React render.
-vi.mock('react', () => ({
+vi.mock('react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react')>()),
   useState: (initial: unknown) => {
     const index = harness.cursor++
     if (!(index in harness.slots)) harness.slots[index] = initial

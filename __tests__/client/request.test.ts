@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { emailPost, emailRequest } from '@/components/email/api'
+import { fetchEmailCapabilities } from '@/components/email/api'
 
+import { updateProfile } from '@/lib/client/profile'
 import {
   RefusedRequest,
-  accountRequest,
+  apiRequest,
   refusal,
-  updateProfile,
-} from '@/lib/client/account-request'
+  retryable,
+  sendRequest,
+} from '@/lib/client/request'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -22,29 +24,41 @@ afterEach(() => {
 
 const sent = () => fetchMock.mock.calls[0][1] as RequestInit
 
-describe('accountRequest', () => {
-  it('reads one shape from every account endpoint envelope', async () => {
+describe('apiRequest', () => {
+  it('reads one shape from every endpoint envelope', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ data: { name: 'Alex' }, success: true })
     )
-    await expect(accountRequest('/api/profile')).resolves.toEqual({
+    await expect(apiRequest('/api/profile')).resolves.toEqual({
       name: 'Alex',
     })
 
     fetchMock.mockResolvedValueOnce(Response.json({ sessions: [] }))
-    await expect(accountRequest('/api/profile/sessions')).resolves.toEqual({
+    await expect(apiRequest('/api/profile/sessions')).resolves.toEqual({
       sessions: [],
     })
 
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
     await expect(
-      accountRequest('/api/profile', { method: 'DELETE' })
+      apiRequest('/api/profile', { method: 'DELETE' })
     ).resolves.toEqual({})
+  })
+
+  it('keeps a whole answer when asked, such as a page with its pagination', async () => {
+    const page = {
+      data: [{ id: 'user-1' }],
+      pagination: { page: 1, pageCount: 1, total: 1, limit: 25 },
+      success: true,
+    }
+    fetchMock.mockResolvedValueOnce(Response.json(page))
+    await expect(apiRequest('/api/users', { whole: true })).resolves.toEqual(
+      page
+    )
   })
 
   it('sends a body as JSON with POST unless a method is given', async () => {
     fetchMock.mockImplementation(async () => Response.json({}))
-    await accountRequest('/api/auth/security/totp/disable', {
+    await apiRequest('/api/auth/security/totp/disable', {
       body: { currentPassword: 'secret' },
     })
     expect(fetchMock).toHaveBeenLastCalledWith(
@@ -57,17 +71,26 @@ describe('accountRequest', () => {
       })
     )
 
-    await accountRequest('/api/upload-profiles/default', {
+    await apiRequest('/api/upload-profiles/default', {
       method: 'PUT',
       body: { profileId: null },
     })
     expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ method: 'PUT' })
   })
 
+  it('sends form data as it is, so the browser sets its boundary', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }))
+    const form = new FormData()
+    form.append('file', new Blob(['avatar']), 'avatar.png')
+    await apiRequest('/api/profile/avatar', { body: form })
+    expect(sent()).toMatchObject({ method: 'POST', body: form })
+    expect(sent().headers).toBeUndefined()
+  })
+
   it('reads with GET and no content type when there is no body', async () => {
     const controller = new AbortController()
     fetchMock.mockResolvedValue(Response.json({ attempts: [] }))
-    await accountRequest('/api/profile/login-history?outcome=all', {
+    await apiRequest('/api/profile/login-history?outcome=all', {
       signal: controller.signal,
     })
     expect(sent()).toMatchObject({
@@ -86,7 +109,7 @@ describe('accountRequest', () => {
         { status: 400 }
       )
     )
-    const refused = accountRequest('/api/profile', {
+    const refused = apiRequest('/api/profile', {
       method: 'PUT',
       body: { vanityId: 'taken' },
       fallback: 'Failed to update vanity URL',
@@ -98,14 +121,14 @@ describe('accountRequest', () => {
       new Response('<html>Bad gateway</html>', { status: 502 })
     )
     await expect(
-      accountRequest('/api/upload-profiles', {
+      apiRequest('/api/upload-profiles', {
         body: {},
         fallback: 'Could not save your changes.',
       })
     ).rejects.toThrow('Could not save your changes.')
 
     fetchMock.mockResolvedValueOnce(Response.json({}, { status: 500 }))
-    await expect(accountRequest('/api/auth/security')).rejects.toThrow(
+    await expect(apiRequest('/api/auth/security')).rejects.toThrow(
       'Unable to complete this request. Please try again.'
     )
   })
@@ -117,7 +140,7 @@ describe('accountRequest', () => {
       return Response.json({ signedOut: true, revokedCount: 1 })
     })
     await expect(
-      accountRequest('/api/profile/sessions', {
+      apiRequest('/api/profile/sessions', {
         method: 'DELETE',
         signal: controller.signal,
       })
@@ -126,7 +149,7 @@ describe('accountRequest', () => {
 
   it('passes network failures through unchanged', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    const failed = accountRequest('/api/profile/upload-token')
+    const failed = apiRequest('/api/profile/upload-token')
     await expect(failed).rejects.toThrow('Failed to fetch')
     await expect(failed).rejects.not.toBeInstanceOf(RefusedRequest)
   })
@@ -137,7 +160,7 @@ describe('accountRequest', () => {
         headers: { 'Content-Type': 'text/html' },
       })
     )
-    const answered = accountRequest('/api/profile/sessions', {
+    const answered = apiRequest('/api/profile/sessions', {
       fallback: 'Unable to load account activity. Please try again.',
     })
     await expect(answered).rejects.toBeInstanceOf(RefusedRequest)
@@ -147,59 +170,84 @@ describe('accountRequest', () => {
   })
 })
 
-describe('email requests', () => {
-  it('read like account requests and send the same requests as before', async () => {
-    fetchMock.mockResolvedValueOnce(
-      Response.json({ enabled: true, recoveryEnabled: false })
-    )
-    await expect(emailRequest('/api/auth/email/capabilities')).resolves.toEqual(
-      { enabled: true, recoveryEnabled: false }
-    )
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/email/capabilities', {
-      cache: 'no-store',
-    })
-
-    const settings = { config: {}, clearPassword: false }
-    const init = {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    }
-    fetchMock.mockResolvedValueOnce(Response.json({ data: { config: {} } }))
-    await expect(emailRequest('/api/settings/email', init)).resolves.toEqual({
-      config: {},
-    })
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/settings/email', {
-      cache: 'no-store',
-      ...init,
-    })
-
-    fetchMock.mockResolvedValueOnce(Response.json({ message: 'Email sent.' }))
-    await expect(emailPost('/api/auth/email/resend', {})).resolves.toEqual({
-      message: 'Email sent.',
-    })
-    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({
+describe('sendRequest', () => {
+  it('sends the request apiRequest sends and hands back the raw answer', async () => {
+    const answer = new Response('{}', { status: 202 })
+    fetchMock.mockResolvedValueOnce(answer)
+    await expect(
+      sendRequest('/api/files/id/archive/share', { body: { after: 3 } })
+    ).resolves.toBe(answer)
+    expect(sent()).toMatchObject({
       method: 'POST',
       cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
-      body: '{}',
+      body: '{"after":3}',
+    })
+  })
+})
+
+describe('refusal', () => {
+  it('keeps the server’s reason, status, code and wait', async () => {
+    const error = await refusal(
+      Response.json(
+        { error: 'This invite has been used.', code: 'invite_used' },
+        { status: 409, headers: { 'Retry-After': '30' } }
+      ),
+      'Failed to register'
+    )
+    expect(error).toBeInstanceOf(RefusedRequest)
+    expect(error).toMatchObject({
+      message: 'This invite has been used.',
+      status: 409,
+      code: 'invite_used',
+      retryAfter: 30,
     })
   })
 
-  it('reject with the server’s reason or the general message', async () => {
-    fetchMock.mockResolvedValueOnce(
-      Response.json(
-        { error: 'This email address is unavailable.' },
-        { status: 400 }
-      )
+  it('falls back to the caller’s message and leaves what the answer lacks empty', async () => {
+    const error = await refusal(
+      new Response('<html>Gateway timeout</html>', {
+        status: 504,
+        headers: { 'Retry-After': 'soon' },
+      }),
+      'Failed to download ShareX configuration'
     )
-    await expect(
-      emailPost('/api/auth/email/change', { email: 'taken@example.test' })
-    ).rejects.toThrow('This email address is unavailable.')
+    expect(error).toMatchObject({
+      message: 'Failed to download ShareX configuration',
+      status: 504,
+      code: null,
+      retryAfter: null,
+    })
+  })
+})
 
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 503 }))
-    await expect(emailRequest('/api/auth/email/status')).rejects.toThrow(
-      'Unable to complete this request. Please try again.'
+describe('retryable', () => {
+  it('offers another attempt only when one can help', async () => {
+    expect(retryable(new TypeError('Failed to fetch'))).toBe(true)
+    for (const status of [408, 429, 500, 503])
+      expect(retryable(new RefusedRequest('Busy', status)), `${status}`).toBe(
+        true
+      )
+    for (const status of [400, 401, 403, 404, 409, 413])
+      expect(
+        retryable(new RefusedRequest('Refused', status)),
+        `${status}`
+      ).toBe(false)
+  })
+})
+
+describe('email capabilities', () => {
+  it('are read uncached like every other request', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ enabled: true, recoveryEnabled: false })
+    )
+    await expect(fetchEmailCapabilities()).resolves.toEqual({
+      enabled: true,
+      recoveryEnabled: false,
+    })
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/auth/email/capabilities',
+      expect.objectContaining({ method: 'GET', cache: 'no-store' })
     )
   })
 })
@@ -228,24 +276,5 @@ describe('updateProfile', () => {
         body: '{"randomizeFileUrls":true}',
       })
     )
-  })
-})
-
-describe('refusal', () => {
-  it('turns a refused download into an error with the server’s reason', async () => {
-    const error = await refusal(
-      Response.json({ error: 'Upload profile not found.' }, { status: 404 }),
-      'Failed to download ShareX configuration'
-    )
-    expect(error).toBeInstanceOf(RefusedRequest)
-    expect(error.message).toBe('Upload profile not found.')
-    expect(
-      (
-        await refusal(
-          new Response('', { status: 500 }),
-          'Failed to download ShareX configuration'
-        )
-      ).message
-    ).toBe('Failed to download ShareX configuration')
   })
 })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { FileType } from '@/types/components/file'
 
+import { apiRequest } from '@/lib/client/request'
 import { BATCH_LIMIT } from '@/lib/library/contract'
 
 /** Resolve retained IDs again before bulk dialogs interpret mutable metadata. */
@@ -34,15 +35,12 @@ export function useFreshFileSelection(files: FileType[], scope: unknown) {
         ids: files.map((file) => file.id).join(','),
         limit: String(BATCH_LIMIT),
       })
-      const response = await fetch(`/api/files?${params}`, {
-        cache: 'no-store',
+      const answer = await apiRequest<unknown>(`/api/files?${params}`, {
         signal: controller.signal,
+        fallback: 'Couldn’t refresh selected files. Please try again.',
       })
-      if (!response.ok)
-        throw new Error('Couldn’t refresh selected files. Please try again.')
-      const result = await response.json()
       if (controller.signal.aborted || currentKey.current !== key) return null
-      const fresh: FileType[] = Array.isArray(result.data) ? result.data : []
+      const fresh: FileType[] = Array.isArray(answer) ? answer : []
       const byId = new Map(fresh.map((file) => [file.id, file]))
       if (
         fresh.length !== files.length ||

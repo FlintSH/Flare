@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect } from 'react'
 
 import { usePathname } from 'next/navigation'
 
@@ -10,9 +10,13 @@ import { useTheme } from 'next-themes'
 import {
   type AppearanceDocument,
   DEFAULT_APPEARANCE,
-  type PersonalAppearance,
   personalAppearanceSchema,
 } from '@/lib/customization/schema'
+
+import { useAccountQuery } from '@/hooks/use-account-query'
+
+/** The account query that holds the signed-in person's own appearance choice. */
+export const PERSONAL_APPEARANCE = 'appearance-preference'
 
 const AppearanceContext = createContext<AppearanceDocument>(DEFAULT_APPEARANCE)
 export const useAppearance = () => useContext(AppearanceContext)
@@ -26,42 +30,18 @@ export function AppearanceProvider({
   legacyTheme: string
   children: React.ReactNode
 }) {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const pathname = usePathname()
   const { setTheme } = useTheme()
-  const [preference, setPreference] = useState<PersonalAppearance>({
-    themeMode: 'inherit',
-  })
-  const [preferenceOwner, setPreferenceOwner] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setPreferenceOwner(null)
-      return
-    }
-    let active = true
-    const userId = session.user.id
-    const refresh = async () => {
-      try {
-        const response = await fetch('/api/customization/preferences')
-        if (!response.ok) return
-        const body = await response.json()
-        const parsed = personalAppearanceSchema.safeParse(body?.data)
-        if (active && parsed.success) {
-          setPreference(parsed.data)
-          setPreferenceOwner(userId)
-        }
-      } catch {
-        /* Keep the instance appearance if preferences are unavailable. */
-      }
-    }
-    void refresh()
-    window.addEventListener('flare:appearance-preference', refresh)
-    return () => {
-      active = false
-      window.removeEventListener('flare:appearance-preference', refresh)
-    }
-  }, [session?.user?.id])
+  // The instance appearance stays if preferences are unavailable.
+  const preference = personalAppearanceSchema.safeParse(
+    useAccountQuery<{ data?: unknown }>(
+      PERSONAL_APPEARANCE,
+      '/api/customization/preferences',
+      { whole: true, retry: false }
+    ).data?.data
+  )
+  const personalMode = preference.success ? preference.data.themeMode : null
 
   useEffect(() => {
     if (status === 'loading') return
@@ -70,9 +50,9 @@ export function AppearanceProvider({
       : legacyTheme
     const mode =
       pathname.startsWith('/dashboard') &&
-      preferenceOwner === session?.user?.id &&
-      preference.themeMode !== 'inherit'
-        ? preference.themeMode
+      personalMode &&
+      personalMode !== 'inherit'
+        ? personalMode
         : instanceMode
     setTheme(mode)
   }, [
@@ -80,9 +60,7 @@ export function AppearanceProvider({
     appearance.theme.enabled,
     legacyTheme,
     pathname,
-    preference.themeMode,
-    preferenceOwner,
-    session?.user?.id,
+    personalMode,
     setTheme,
     status,
   ])

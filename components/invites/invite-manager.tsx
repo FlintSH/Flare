@@ -2,7 +2,6 @@
 
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import {
   AlertCircle,
@@ -15,7 +14,6 @@ import {
   Share2,
   TriangleAlert,
 } from 'lucide-react'
-import { useSession } from 'next-auth/react'
 
 import { useAppearance } from '@/components/customization/appearance-provider'
 import { MetaLine } from '@/components/profile/meta-line'
@@ -58,6 +56,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { apiRequest } from '@/lib/client/request'
 import {
   INVITE_NOTE_MAX,
   type InvitePolicyView,
@@ -68,12 +67,13 @@ import {
   inviteUrl,
   usesOptionsFor,
 } from '@/lib/invites/policy'
-import type { RoleSummary } from '@/lib/permissions/catalog'
 import { canGrantRole } from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
+import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
+import { useRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
 
 type ListResponse = {
@@ -84,13 +84,7 @@ type ListResponse = {
 type Scope = 'mine' | 'all'
 type StatusFilter = 'active' | 'ended' | 'all'
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...options })
-  const result = await response.json().catch(() => ({}))
-  if (!response.ok)
-    throw new Error(result.error || 'Invites are unavailable. Try again.')
-  return result
-}
+const INVITES_FAILED = 'Invites are unavailable. Try again.'
 
 const statusVariants = {
   active: 'success',
@@ -139,25 +133,18 @@ function usage(invite: InviteView) {
 
 /** Remounts per account and browser session so another account's invites never flash. */
 export function InviteManager({ context }: { context: 'profile' | 'users' }) {
-  const { data: session, status } = useSession()
-  if (status !== 'authenticated' || !session?.user?.id) return null
   return (
-    <InviteWorkspace
-      key={JSON.stringify([session.user.id, session.user.sessionId])}
-      userId={session.user.id}
-      sessionId={session.user.sessionId}
-      context={context}
-    />
+    <SessionScoped>
+      {({ userId }) => <InviteWorkspace userId={userId} context={context} />}
+    </SessionScoped>
   )
 }
 
 function InviteWorkspace({
   userId,
-  sessionId,
   context,
 }: {
   userId: string
-  sessionId?: string
   context: 'profile' | 'users'
 }) {
   const { can } = usePermissions()
@@ -178,18 +165,15 @@ function InviteWorkspace({
       if (lifecycle.current === controller) lifecycle.current = null
     }
   }, [])
-  const list = useQuery({
-    queryKey: ['invites', userId, sessionId, scope, status, page],
-    queryFn: ({ signal }) =>
-      request<ListResponse>(
-        `/api/invites?scope=${scope}&status=${status}&page=${page}&limit=20`,
-        { signal }
-      ),
-    staleTime: 0,
-    gcTime: 0,
-    placeholderData: (previous) => previous,
-    refetchOnWindowFocus: true,
-  })
+  const list = useAccountQuery<ListResponse>(
+    'invites',
+    `/api/invites?scope=${scope}&status=${status}&page=${page}&limit=20`,
+    {
+      fallback: INVITES_FAILED,
+      placeholderData: (previous) => previous,
+      refetchOnWindowFocus: true,
+    }
+  )
   const policy = list.data?.policy
   const limits = policy?.limits ?? null
   const atLimit = Boolean(
@@ -203,9 +187,10 @@ function InviteWorkspace({
       lifecycle.current === controller && !controller.signal.aborted
     setBusy(true)
     try {
-      await request(`/api/invites/${encodeURIComponent(revoking.id)}`, {
+      await apiRequest(`/api/invites/${encodeURIComponent(revoking.id)}`, {
         method: 'DELETE',
         signal: controller.signal,
+        fallback: INVITES_FAILED,
       })
       if (!active()) return
       setRevoking(null)
@@ -529,8 +514,6 @@ function InviteWorkspace({
           open={creating}
           onOpenChange={setCreating}
           policy={policy}
-          userId={userId}
-          sessionId={sessionId}
           onCreated={() => {
             setStatus('active')
             setPage(1)
@@ -581,15 +564,11 @@ function CreateInviteDialog({
   open,
   onOpenChange,
   policy,
-  userId,
-  sessionId,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   policy: InvitePolicyView
-  userId: string
-  sessionId?: string
   onCreated: () => void
 }) {
   const { user } = usePermissions()
@@ -609,14 +588,7 @@ function CreateInviteDialog({
   const [saving, setSaving] = useState(false)
   const [created, setCreated] = useState<InviteView | null>(null)
   const [copied, setCopied] = useState(false)
-  const roles = useQuery({
-    queryKey: ['invite-roles', userId, sessionId],
-    queryFn: ({ signal }) =>
-      request<{ roles: RoleSummary[] }>('/api/roles', { signal }),
-    enabled: open && policy.canGrantRoles,
-    staleTime: 0,
-    gcTime: 0,
-  })
+  const roles = useRoles({ enabled: open && policy.canGrantRoles })
   const grantable = (roles.data?.roles ?? []).filter((role) =>
     canGrantRole(user, role)
   )
@@ -643,15 +615,14 @@ function CreateInviteDialog({
     setSaving(true)
     setError('')
     try {
-      const result = await request<{ invite: InviteView }>('/api/invites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await apiRequest<{ invite: InviteView }>('/api/invites', {
+        body: {
           note,
           maxUses: uses === 'unlimited' ? null : Number(uses),
           expiresInHours: expiry === 'never' ? null : Number(expiry),
           roleIds,
-        }),
+        },
+        fallback: INVITES_FAILED,
       })
       setCreated(result.invite)
       onCreated()

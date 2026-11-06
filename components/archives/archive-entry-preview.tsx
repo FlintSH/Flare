@@ -13,11 +13,11 @@ import { ExpandImageButton } from '@/components/file/viewer/components/expand-im
 import { Button } from '@/components/ui/button'
 
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
+import { refusal, retryable } from '@/lib/client/request'
 import { formatBytes } from '@/lib/utils'
 
 import {
   type ArchiveFileRef,
-  ArchiveRequestError,
   type ArchiveRow,
   type ArchiveSource,
   IMAGE_PREVIEW_BYTES,
@@ -177,13 +177,11 @@ function TextPreview({ src, size }: { src: string; size: number }) {
             Range: `bytes=${offset}-${offset + TEXT_PREVIEW_BYTES - 1}`,
           },
         })
-        if (!response.ok) {
-          const result = await response.json().catch(() => ({}))
-          throw new ArchiveRequestError(
-            result.error || 'This entry could not be loaded. Please try again.',
-            response.status
+        if (!response.ok)
+          throw await refusal(
+            response,
+            'This entry could not be loaded. Please try again.'
           )
-        }
         const { bytes } = await readPreviewBytes(response, TEXT_PREVIEW_BYTES)
         if (current.signal.aborted) return
         if (!offset && bytes.subarray(0, 8000).includes(0)) {
@@ -197,11 +195,10 @@ function TextPreview({ src, size }: { src: string; size: number }) {
         setState('ready')
       } catch (cause) {
         if (current.signal.aborted) return
-        const status = (cause as { status?: number }).status
         setError({
           message: archiveErrorMessage(cause),
           // Damaged or unsupported entries fail the same way every time.
-          retry: !status || status === 408 || status === 429 || status >= 500,
+          retry: retryable(cause),
         })
         setState('failed')
       }

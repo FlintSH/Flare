@@ -125,6 +125,8 @@ The card menu and the buttons shown when you hover a file follow the same permis
 
 <Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
 
+If a visibility, password, expiration, or delete action fails, its message gives Flare's reason when there is one, for example **File not found** for a file deleted in another tab, or **Permission denied** after your role changed. Without a reason, for example when the connection drops, it says **Please try again.** Earlier versions said **Please try again.** for every failure. After any of these actions succeeds, the library reloads to show the changed file.
+
 When you confirm **Delete file**, the file's size stops counting toward your storage use in **Profile → Your data** at once. Flare removes the stored copy in the same step. If the storage service fails at that moment, the file is still deleted from your library and you see **File deleted**; Flare records the failure for your administrator, who may need to remove the leftover copy.
 
 ## Work with several files
@@ -149,7 +151,7 @@ With `files.read` and `files.upload`, **Create archive** packages up to 100 sele
 
 ## Read text in images with OCR
 
-For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
+For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the card shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
 
 If the administrator enables automatic OCR, images can be processed after upload without a manual request. Upload completion does not mean OCR has completed. Manual extraction remains useful when automatic processing is disabled.
 

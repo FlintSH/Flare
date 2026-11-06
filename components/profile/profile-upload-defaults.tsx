@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-import { type ProfilePatch, updateProfile } from '@/lib/client/account-request'
+import { type ProfilePatch, updateProfile } from '@/lib/client/profile'
 
 import { useToast } from '@/hooks/use-toast'
 

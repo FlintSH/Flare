@@ -15,13 +15,19 @@ const api = routes('/api/integrations', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async (request) => {
-  const { user } = await requireSession(request, [
-    'tokens.manage',
-    'webhooks.manage',
-  ])
-  return NextResponse.json(await listIntegrations(user), { headers: noStore })
-})
+// The panel reloads this every five seconds while it is open.
+export const GET = api(
+  async (request) => {
+    const { user } = await requireSession(request, [
+      'tokens.manage',
+      'webhooks.manage',
+    ])
+    return NextResponse.json(await listIntegrations(user), {
+      headers: noStore,
+    })
+  },
+  { audit: { skipSuccess: true } }
+)
 
 export const POST = api(
   async (request) => {

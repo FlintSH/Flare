@@ -63,6 +63,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { apiRequest } from '@/lib/client/request'
 import type { FlareConfig } from '@/lib/config'
 import {
   FAVICON_TYPE,
@@ -194,15 +195,11 @@ export function InstanceSettings({
       if (pendingFaviconFile) {
         const formData = new FormData()
         formData.append('file', pendingFaviconFile)
-        const upload = await fetch('/api/settings/favicon', {
-          method: 'POST',
-          body: formData,
-        })
-        const answer = await upload.json().catch(() => null)
-        if (!upload.ok)
-          throw new Error(answer?.error || 'Failed to upload favicon')
         // The upload saved the icon's new address; record it, never send it.
-        const favicon: string = answer.url
+        const { url: favicon } = await apiRequest<{ url: string }>(
+          '/api/settings/favicon',
+          { body: formData, fallback: 'Failed to upload favicon', whole: true }
+        )
         const withFavicon = (config: FlareConfig): FlareConfig => ({
           ...config,
           settings: {
@@ -219,15 +216,11 @@ export function InstanceSettings({
       }
       const settings = changedFields(saved.settings, snapshot.settings)
       if (settings !== undefined) {
-        const response = await fetch('/api/settings', {
+        await apiRequest('/api/settings', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ settings }),
+          body: { settings },
+          fallback: 'Settings could not be saved.',
         })
-        if (!response.ok) {
-          const body = await response.json().catch(() => null)
-          throw new Error(body?.error || 'Settings could not be saved.')
-        }
         // Appearance publication and email own their own saves. Preserve any
         // changes they completed while the general settings request was running.
         setSavedConfig((previous) => ({
@@ -241,17 +234,11 @@ export function InstanceSettings({
       }
       if (inviteAccessChanged) {
         const requested = everyoneCanInvite
-        const response = await fetch('/api/settings/invites', {
+        await apiRequest('/api/settings/invites', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ everyoneCanInvite: requested }),
+          body: { everyoneCanInvite: requested },
+          fallback: 'Who can create invites could not be saved.',
         })
-        if (!response.ok) {
-          const body = await response.json().catch(() => null)
-          throw new Error(
-            body?.error || 'Who can create invites could not be saved.'
-          )
-        }
         setSavedEveryoneCanInvite(requested)
       }
       router.refresh()

@@ -1,12 +1,6 @@
 'use client'
 
-import {
-  FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from 'react'
+import { FormEvent, type ReactNode, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -45,11 +39,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import { apiRequest } from '@/lib/client/request'
 import {
   API_SCOPE_CATALOG,
   scopeUsable,
 } from '@/lib/integrations/bearer-routes'
 
+import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
 
 type Token = {
@@ -135,14 +131,30 @@ function Tip({
 
 export function IntegrationsPanel({
   embedded = false,
+  active = true,
   onSetupTool,
 }: {
   embedded?: boolean
+  /** False while the panel's section is hidden; it then stops polling. */
+  active?: boolean
   onSetupTool?: () => void
 }) {
   const { can } = usePermissions()
-  const [data, setData] = useState<Snapshot | null>(null)
-  const [error, setError] = useState('')
+  // Delivery statuses change on their own, so a visible panel polls.
+  const snapshot = useAccountQuery<Snapshot>(
+    'integrations',
+    '/api/integrations',
+    {
+      enabled: active,
+      refetchInterval: 5000,
+      retry: false,
+      fallback: 'Could not load integrations.',
+    }
+  )
+  const data = snapshot.data
+  const refresh = snapshot.refetch
+  const [actionError, setError] = useState('')
+  const error = actionError || snapshot.error?.message
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<'token' | 'webhook' | null>(null)
@@ -151,40 +163,22 @@ export function IntegrationsPanel({
   )
   const [copied, setCopied] = useState(false)
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
-  const refresh = useCallback(async () => {
-    try {
-      const response = await fetch('/api/integrations', { cache: 'no-store' })
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not load integrations.')
-      setData(result)
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : 'Could not load integrations.'
-      )
-    }
-  }, [])
-  useEffect(() => {
-    void refresh()
-    const timer = setInterval(() => void refresh(), 5000)
-    return () => clearInterval(timer)
-  }, [refresh])
 
   async function run(command: Record<string, unknown>, message: string) {
     setBusy(true)
     setError('')
     setNotice('')
     try {
-      const response = await fetch('/api/integrations', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(command),
+      const result = await apiRequest<{
+        secret?: string
+        secretKind?: string
+      }>('/api/integrations', {
+        body: command,
+        fallback: 'Could not save integration.',
+        whole: true,
       })
-      const result = await response.json()
-      if (!response.ok)
-        throw new Error(result.error || 'Could not save integration.')
       if (result.secret) {
-        setSecret({ value: result.secret, kind: result.secretKind })
+        setSecret({ value: result.secret, kind: result.secretKind ?? '' })
         setCopied(false)
         setForm(null)
       }

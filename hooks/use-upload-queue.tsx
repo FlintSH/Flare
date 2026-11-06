@@ -4,8 +4,11 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { useRouter } from 'next/navigation'
 
+import { useQueryClient } from '@tanstack/react-query'
+
 import { ToastAction } from '@/components/ui/toast'
 
+import { libraryChanged } from '@/lib/library/changes'
 import type { UploadOptions, UploadResponse } from '@/lib/uploads/client'
 import { type UploadBatch, createUploadQueue } from '@/lib/uploads/queue'
 
@@ -93,6 +96,7 @@ export function useUploadQueue() {
     queue.getState
   )
   const router = useRouter()
+  const client = useQueryClient()
   useEffect(() => queue.dispose, [queue])
 
   const settle = (
@@ -101,7 +105,7 @@ export function useUploadQueue() {
   ) => {
     if (!batch) return null
     if (batch.uploaded.length) {
-      window.dispatchEvent(new Event('flare:files-changed'))
+      void libraryChanged(client)
       router.refresh()
     }
     if (!batch.failure) notifyUploaded(batch.uploaded)

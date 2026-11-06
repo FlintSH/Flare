@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { apiRequest } from '@/lib/client/request'
 import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
 import {
   type AppearanceCommand,
@@ -246,15 +247,10 @@ export function CustomizationStudio({
     setBusy(true)
     setError('')
     try {
-      const response = await fetch('/api/customization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(command),
+      const next = await apiRequest<CustomizationState>('/api/customization', {
+        body: command,
+        fallback: 'Appearance could not be saved.',
       })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Appearance could not be saved.')
-      const next = body.data as CustomizationState
       setState(next)
       onStateChange?.(next)
       setDocument(next.draft || next.published)
@@ -293,14 +289,11 @@ export function CustomizationStudio({
         throw new Error('Choose a logo smaller than 256 KB.')
       const form = new FormData()
       form.append('file', file)
-      const response = await fetch('/api/customization/assets', {
-        method: 'POST',
-        body: form,
-      })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Logo could not be uploaded.')
-      change('brand', { [variant]: body.data.url })
+      const { url } = await apiRequest<{ url: string }>(
+        '/api/customization/assets',
+        { body: form, fallback: 'Logo could not be uploaded.' }
+      )
+      change('brand', { [variant]: url })
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Logo could not be uploaded.'

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { FileType } from '@/types/components/file'
 
+import { apiRequest } from '@/lib/client/request'
 import {
   type FileTimeline,
   type LibraryFilters,
@@ -68,23 +69,16 @@ export function useFileTimeline(
     params.set('groupBy', grouping)
     params.set('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone)
     if (scope)
-      void fetch(`/api/files/timeline?${params}`, {
+      void apiRequest<FileTimeline>(`/api/files/timeline?${params}`, {
         signal: controller.signal,
-        cache: 'no-store',
       })
-        .then(async (response) => {
-          if (!response.ok) throw new Error('Could not load the library')
-          const result = await response.json()
+        .then((data) => {
           if (
             !controller.signal.aborted &&
             generation.current === started &&
             currentKey.current === resultKey
           )
-            setResult({
-              key: resultKey,
-              data: result.data,
-              generation: started,
-            })
+            setResult({ key: resultKey, data, generation: started })
         })
         .catch(() => {
           if (
@@ -161,26 +155,19 @@ export function useFileTimeline(
           page,
           TIMELINE_PAGE_SIZE
         )
-        void fetch(`/api/files?${pageRequest.query}`, {
+        void apiRequest<unknown>(`/api/files?${pageRequest.query}`, {
           signal: controller.signal,
-          cache: 'no-store',
         })
-          .then(async (response) => {
-            if (!response.ok)
-              throw new Error('Could not load this part of the library')
-            const result = await response.json()
+          .then((files) => {
             if (
               controller.signal.aborted ||
               generation.current !== started ||
               currentKey.current !== resultKey
             )
               return
-            if (
-              !Array.isArray(result.data) ||
-              result.data.length !== pageRequest.length
-            )
+            if (!Array.isArray(files) || files.length !== pageRequest.length)
               throw new Error('The library changed. Refresh to continue.')
-            pages.current.set(key, result.data)
+            pages.current.set(key, files)
             while (pages.current.size > TIMELINE_CACHE_PAGES) {
               const evict = [...pages.current.keys()].find(
                 (entry) => !requiredKeys.current.has(entry)

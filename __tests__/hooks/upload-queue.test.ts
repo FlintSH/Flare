@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { onLibraryChange } from '@/lib/library/changes'
 import type { UploadOptions, UploadResponse } from '@/lib/uploads/client'
 
 import { useUploadQueue } from '@/hooks/use-upload-queue'
@@ -10,6 +11,7 @@ const harness = vi.hoisted(() => ({
   toast: vi.fn(),
   refresh: vi.fn(),
   upload: vi.fn(),
+  invalidate: vi.fn(async () => {}),
 }))
 
 // One render is enough: the hook's actions work on the queue, not on render state.
@@ -24,6 +26,9 @@ vi.mock('react', async (importOriginal) => ({
 }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: harness.refresh }),
+}))
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: harness.invalidate }),
 }))
 vi.mock('@/hooks/use-toast', () => ({ toast: harness.toast }))
 vi.mock('@/lib/uploads/client', async (importOriginal) => ({
@@ -55,6 +60,7 @@ const lastToast = () =>
     action?: ReactElement<{ onClick: () => void; children: unknown }>
   }
 const filesChanged = vi.fn()
+let unsubscribe = () => {}
 
 beforeEach(() => {
   uploading = []
@@ -65,12 +71,12 @@ beforeEach(() => {
         uploading.push({ file, options, resolve, reject })
       )
   )
-  const page = new EventTarget()
-  page.addEventListener('flare:files-changed', filesChanged)
-  vi.stubGlobal('window', Object.assign(page, { open: vi.fn() }))
+  unsubscribe = onLibraryChange(filesChanged)
+  vi.stubGlobal('window', { open: vi.fn() })
 })
 
 afterEach(() => {
+  unsubscribe()
   vi.unstubAllGlobals()
 })
 
@@ -92,7 +98,9 @@ describe('useUploadQueue', () => {
       description: 'Successfully uploaded a.txt',
     })
     expect(harness.refresh).toHaveBeenCalledTimes(1)
+    // An open library reloads its files, and its lists load again, once each.
     expect(filesChanged).toHaveBeenCalledTimes(1)
+    expect(harness.invalidate).toHaveBeenCalledTimes(1)
   })
 
   it('offers Retry after a dropped batch fails, for exactly the files left and the same destination', async () => {

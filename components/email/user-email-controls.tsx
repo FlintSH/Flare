@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 
+import { apiRequest } from '@/lib/client/request'
 import type { UserEmailStatus } from '@/lib/email/eligibility'
 
-import { emailPost, emailRequest, fetchEmailCapabilities } from './api'
+import { fetchEmailCapabilities } from './api'
 
 export function UserEmailControls({ userId }: { userId: string }) {
   const [status, setStatus] = useState<UserEmailStatus | null>(null)
@@ -15,7 +16,7 @@ export function UserEmailControls({ userId }: { userId: string }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const refresh = useCallback(async () => {
-    const result = await emailRequest<UserEmailStatus>(
+    const result = await apiRequest<UserEmailStatus>(
       `/api/users/${encodeURIComponent(userId)}/email`
     )
     setStatus(result)
@@ -40,9 +41,9 @@ export function UserEmailControls({ userId }: { userId: string }) {
     setError('')
     setMessage('')
     try {
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         `/api/users/${encodeURIComponent(userId)}/email`,
-        { action: value }
+        { body: { action: value } }
       )
       setMessage(result.message)
       await refresh()

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { refusal, sendRequest } from '@/lib/client/request'
 import { exportUrls, newExportId } from '@/lib/users/export-id'
 
 import { useToast } from './use-toast'
@@ -14,11 +15,9 @@ export function useDataExport() {
     const urls = exportUrls(newExportId())
     let events: EventSource | null = null
     try {
-      const response = await fetch(urls.download, { cache: 'no-store' })
+      const response = await sendRequest(urls.download)
 
-      if (!response.ok) {
-        throw new Error(`Export failed with status: ${response.status}`)
-      }
+      if (!response.ok) throw await refusal(response, 'Failed to export data')
 
       // The export is running once its response arrives, so follow it now.
       events = new EventSource(urls.progress)

@@ -200,19 +200,34 @@ describe('account data export in the browser', () => {
     expect(render()).toMatchObject({ isExporting: false, progress: 0 })
   })
 
-  it('reports a refused export without following its progress', async () => {
+  it('reports a refused export with the server’s reason, without following its progress', async () => {
     harness.fetch.mockResolvedValue(
-      Response.json({ error: 'Internal server error' }, { status: 500 })
+      Response.json({ error: 'Permission denied' }, { status: 403 })
     )
 
     await render().handleExport()
 
     expect(FakeEventSource.opened).toHaveLength(0)
+    // Earlier builds said "Export failed with status: 403".
     expect(harness.toast).toHaveBeenCalledWith({
       title: 'Error',
-      description: 'Export failed with status: 500',
+      description: 'Permission denied',
       variant: 'destructive',
     })
     expect(render()).toMatchObject({ isExporting: false, progress: 0 })
+  })
+
+  it('says the export failed when the refusal gives no reason', async () => {
+    harness.fetch.mockResolvedValue(
+      new Response('<html>Bad gateway</html>', { status: 502 })
+    )
+
+    await render().handleExport()
+
+    expect(harness.toast).toHaveBeenCalledWith({
+      title: 'Error',
+      description: 'Failed to export data',
+      variant: 'destructive',
+    })
   })
 })

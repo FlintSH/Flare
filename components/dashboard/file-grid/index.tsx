@@ -9,6 +9,7 @@ import {
 import Link from 'next/link'
 
 import type { FileType, PaginationInfo } from '@/types/components/file'
+import { useQueryClient } from '@tanstack/react-query'
 import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
@@ -20,7 +21,6 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useSession } from 'next-auth/react'
 import type { DateRange } from 'react-day-picker'
 
 import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
@@ -51,6 +51,11 @@ import { Button } from '@/components/ui/button'
 
 import { fileUrls } from '@/lib/files/urls'
 import {
+  LIBRARY_LISTS,
+  libraryChanged,
+  onLibraryChange,
+} from '@/lib/library/changes'
+import {
   BATCH_LIMIT,
   DEFAULT_SORT,
   UNFILED,
@@ -64,6 +69,7 @@ import {
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
 
+import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 import { useFileTimeline } from '@/hooks/use-file-timeline'
@@ -96,18 +102,16 @@ function emptyFolderHint(user: PermissionSubject | null | undefined) {
 }
 
 export function FileGrid() {
-  const { data: session, status } = useSession()
-  if (status === 'loading') return <p role="status">Loading files…</p>
-  if (
-    status !== 'authenticated' ||
-    !session?.user?.id ||
-    !session.user.sessionId
-  )
-    return <p role="status">Sign in to view your files.</p>
-  const scope = JSON.stringify([session.user.id, session.user.sessionId])
   // Replacing an account or browser session discards every retained card,
   // selection, dialog, gallery and pending action together before rendering.
-  return <AccountFileGrid key={scope} scope={scope} />
+  return (
+    <SessionScoped
+      loading={<p role="status">Loading files…</p>}
+      signedOut={<p role="status">Sign in to view your files.</p>}
+    >
+      {(scope) => <AccountFileGrid scope={scope.key} />}
+    </SessionScoped>
+  )
 }
 
 function AccountFileGrid({ scope }: { scope: string }) {
@@ -121,13 +125,26 @@ function AccountFileGrid({ scope }: { scope: string }) {
 
 function FileLibrary({ scope }: { scope: string }) {
   const lifetime = useRequestLifetime()
+  const client = useQueryClient()
   const { user } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const selectionBar = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [selectedFiles, setSelectedFiles] = useState<FileType[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
-  const [fileTypes, setFileTypes] = useState<string[]>([])
+  // A library change, made here or anywhere else, reloads these files once;
+  // the same change reloads the tag, folder and file type lists.
+  useEffect(
+    () => onLibraryChange(() => setRefreshKey((value) => value + 1)),
+    []
+  )
+  const refreshFiles = useCallback(() => void libraryChanged(client), [client])
+  const fileTypes = useAccountQuery<{ types?: unknown }>(
+    LIBRARY_LISTS.fileTypes,
+    '/api/files/types',
+    // Suggestions are optional; the library stays searchable without them.
+    { retry: false }
+  ).data?.types
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
   const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
@@ -154,7 +171,7 @@ function FileLibrary({ scope }: { scope: string }) {
         !allVisibleSelected && someVisibleSelected
   })
   const clearSelection = () => setSelectedFiles([])
-  const { tags, reload: reloadTags } = useTags()
+  const { tags } = useTags()
   const {
     folders,
     loading: foldersLoading,
@@ -176,13 +193,7 @@ function FileLibrary({ scope }: { scope: string }) {
     resetFilters,
   } = useFileFilters()
   const { position: anchorIndex, record: recordPosition } =
-    useFileLibraryPosition(
-      filters,
-      pathname,
-      urlQuery,
-      () => setRefreshKey((value) => value + 1),
-      scope
-    )
+    useFileLibraryPosition(filters, pathname, urlQuery, refreshFiles, scope)
   const library = useFileTimeline(filters, refreshKey, scope)
   const selection = useFreshFileSelection(selectedFiles, [scope, filters])
   const openSelection = async (action: BatchAction) => {
@@ -250,10 +261,6 @@ function FileLibrary({ scope }: { scope: string }) {
     navigationPending,
     navigationStale,
   } = useImageGallery(filters, files, paginationInfo, refreshKey, true)
-  const refreshFiles = useCallback(
-    () => setRefreshKey((value) => value + 1),
-    []
-  )
   const hasActiveFilters = Boolean(
     filters.tag ||
     filters.search ||
@@ -278,19 +285,6 @@ function FileLibrary({ scope }: { scope: string }) {
     setSelectedFiles([])
   }, [filters])
 
-  useEffect(() => {
-    void reloadTags()
-  }, [refreshKey, reloadTags])
-
-  useEffect(() => {
-    void reloadFolders()
-  }, [refreshKey, reloadFolders])
-
-  useEffect(() => {
-    window.addEventListener('flare:files-changed', refreshFiles)
-    return () => window.removeEventListener('flare:files-changed', refreshFiles)
-  }, [refreshFiles])
-
   const handleDateChange = useCallback(
     (range: DateRange | undefined) => {
       setDateRange(
@@ -300,25 +294,6 @@ function FileLibrary({ scope }: { scope: string }) {
     },
     [setDateRange]
   )
-
-  useEffect(() => {
-    const controller = new AbortController()
-    async function fetchFileTypes() {
-      try {
-        const response = await fetch('/api/files/types', {
-          signal: controller.signal,
-        })
-        if (!response.ok) return
-        const data = await response.json()
-        if (!controller.signal.aborted)
-          setFileTypes(Array.isArray(data.data?.types) ? data.data.types : [])
-      } catch {
-        // File type suggestions are optional; the library remains searchable.
-      }
-    }
-    void fetchFileTypes()
-    return () => controller.abort()
-  }, [refreshKey])
 
   const dateRangeValue =
     filters.dateFrom || filters.dateTo
@@ -399,7 +374,7 @@ function FileLibrary({ scope }: { scope: string }) {
             onSortChange={setSortBy}
             selectedTypes={filters.types}
             onTypesChange={setTypes}
-            fileTypes={fileTypes}
+            fileTypes={Array.isArray(fileTypes) ? fileTypes : []}
             date={dateRangeValue}
             onDateChange={handleDateChange}
             groupBy={filters.groupBy}
@@ -726,7 +701,6 @@ function FileLibrary({ scope }: { scope: string }) {
                 (file) => updated.find((entry) => entry.id === file.id) || file
               )
             )
-            refreshFiles()
           }}
         />
       )}

@@ -37,6 +37,7 @@ import {
   type ArchiveManifest,
   detectArchiveFormat,
 } from '@/lib/archives/shared'
+import { retryable, sendRequest } from '@/lib/client/request'
 import { fileIdUrls } from '@/lib/files/urls'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -50,7 +51,6 @@ import {
   archiveEntryHref,
   archiveEntryName,
   archiveErrorMessage,
-  archiveFetch,
   archiveFolderRows,
   archiveListingRequest,
   archivePreviewKind,
@@ -181,13 +181,11 @@ export function ArchiveBrowserContent({
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
-        const status = (cause as { status?: number }).status
         setState({
           status: 'error',
           message: archiveErrorMessage(cause),
           // Damaged or unsupported archives fail the same way every time.
-          retryable:
-            !status || status === 408 || status === 429 || status >= 500,
+          retryable: retryable(cause),
         })
       })
     return () => controller.abort()
@@ -203,7 +201,7 @@ export function ArchiveBrowserContent({
         { kind: 'share', password },
         { after: listed }
       )
-      void archiveFetch(request.url, request.body).catch(() => {})
+      void sendRequest(request.url, { body: request.body }).catch(() => {})
     }, UNLOCK_RENEW_MS)
     return () => clearInterval(timer)
   }, [file.id, sourceKind, password, listed])

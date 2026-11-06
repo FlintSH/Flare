@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 import Link from 'next/link'
 
@@ -14,13 +14,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { RefusedRequest, accountRequest } from '@/lib/client/account-request'
+import { RefusedRequest } from '@/lib/client/request'
+import { allows } from '@/lib/permissions/actions'
 import {
   UPLOAD_DEFAULTS,
   type UploadProfileOptions,
   type UploadProfileView,
 } from '@/lib/uploads/schema'
 
+import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
 
 export type ProfilesData = {
@@ -31,37 +33,25 @@ export type ProfilesData = {
   canShare: boolean
 }
 
+/** The account query that holds the signed-in person's upload profiles. */
+export const UPLOAD_PROFILES = 'upload-profiles'
+
+/** The upload profiles; a new `refreshKey` reads them again from scratch. */
 export function useUploadProfiles(refreshKey = 0) {
-  const [data, setData] = useState<ProfilesData | null>(null)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    let alive = true
-    setData(null)
-    setError('')
-    const load = () =>
-      accountRequest<ProfilesData>('/api/upload-profiles')
-        .then((profiles) => {
-          if (alive) {
-            setData(profiles)
-            setError('')
-          }
-        })
-        .catch((failure) => {
-          if (alive)
-            setError(
-              failure instanceof RefusedRequest
-                ? 'Could not load upload profiles.'
-                : failure.message
-            )
-        })
-    void load()
-    window.addEventListener('flare:upload-profiles-changed', load)
-    return () => {
-      alive = false
-      window.removeEventListener('flare:upload-profiles-changed', load)
-    }
-  }, [refreshKey])
-  return { data, error }
+  const profiles = useAccountQuery<ProfilesData>(
+    UPLOAD_PROFILES,
+    '/api/upload-profiles',
+    { key: [refreshKey], retry: false }
+  )
+  const failure = profiles.error
+  return {
+    data: profiles.data ?? null,
+    error: !failure
+      ? ''
+      : failure instanceof RefusedRequest
+        ? 'Could not load upload profiles.'
+        : failure.message,
+  }
 }
 
 export function ProfilePicker({
@@ -85,11 +75,13 @@ export function ProfilePicker({
     } | null
   ) => void
 }) {
-  const { can } = usePermissions()
+  const { user } = usePermissions()
   const { data, error } = useUploadProfiles(refreshKey)
   const archiveMode = mode === 'archive'
   // Archive summaries and their revision must use the same authority snapshot.
-  const canShare = archiveMode ? data?.canShare === true : can('files.share')
+  const canShare = archiveMode
+    ? data?.canShare === true
+    : allows(user, 'shareFiles')
   const selectedId = archiveMode
     ? (value ?? null)
     : value === undefined

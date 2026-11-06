@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Laptop, RefreshCw } from 'lucide-react'
-import { useSession } from 'next-auth/react'
 
 import { MetaLine } from '@/components/profile/meta-line'
 import {
@@ -39,8 +38,15 @@ import {
   BROWSER_SESSION_DAYS,
   LOGIN_HISTORY_DAYS,
 } from '@/lib/auth/security/policy'
-import { accountRequest } from '@/lib/client/account-request'
+import { apiRequest } from '@/lib/client/request'
 
+import {
+  ACCOUNT_DATA,
+  type SessionScope,
+  SessionScoped,
+  accountKey,
+  useAccountQuery,
+} from '@/hooks/use-account-query'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
@@ -112,47 +118,30 @@ function date(value: string) {
 }
 
 export function ProfileSessions() {
-  const { data: session, status } = useSession()
-  if (status !== 'authenticated' || !session?.user?.id) return null
   return (
-    <AccountSessions
-      key={JSON.stringify([session.user.id, session.user.sessionId])}
-      userId={session.user.id}
-      sessionId={session.user.sessionId}
-    />
+    <SessionScoped>
+      {(scope) => <AccountSessions scope={scope} />}
+    </SessionScoped>
   )
 }
 
-function AccountSessions({
-  userId,
-  sessionId,
-}: {
-  userId: string
-  sessionId?: string
-}) {
+function AccountSessions({ scope }: { scope: SessionScope }) {
   const { toast } = useToast()
   const lifetime = useRequestLifetime()
   const [pending, setPending] = useState<BrowserSession | 'all' | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [outcome, setOutcome] = useState('all')
-  const sessions = useQuery({
-    queryKey: ['profile-sessions', userId, sessionId],
-    queryFn: ({ signal }) =>
-      accountRequest<{ sessions: BrowserSession[] }>('/api/profile/sessions', {
-        signal,
-        fallback: activityFailed,
-      }),
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: true,
-  })
+  const sessions = useAccountQuery<{ sessions: BrowserSession[] }>(
+    'profile-sessions',
+    '/api/profile/sessions',
+    { fallback: activityFailed, refetchOnWindowFocus: true }
+  )
   const history = useInfiniteQuery({
-    queryKey: ['profile-login-history', userId, sessionId, outcome],
-    staleTime: 0,
-    gcTime: 0,
+    queryKey: accountKey('profile-login-history', scope, outcome),
+    ...ACCOUNT_DATA,
     initialPageParam: '',
     queryFn: ({ pageParam, signal }) =>
-      accountRequest<HistoryPage>(
+      apiRequest<HistoryPage>(
         `/api/profile/login-history?outcome=${outcome}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
         { signal, fallback: activityFailed }
       ),
@@ -174,7 +163,7 @@ function AccountSessions({
     if (!pending || revoking || signal.aborted) return
     setRevoking(true)
     try {
-      const result = await accountRequest<{
+      const result = await apiRequest<{
         signedOut: boolean
         revokedCount: number
       }>(

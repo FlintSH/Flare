@@ -16,14 +16,16 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
+import { apiRequest } from '@/lib/client/request'
 import { nameKey, normalizeName } from '@/lib/library/names'
 import { TAG_NAME_MAX_LENGTH } from '@/lib/tags/schema'
+import type { TagView } from '@/lib/tags/schema'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useFileTagMemberships } from '@/hooks/use-file-tag-memberships'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
-import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
+import { TAG_REQUEST_FAILED, useTags } from '@/hooks/use-tags'
 
 /** Each change is additive/removing, so bulk edits preserve every other tag. */
 export function FileTagsDialog({
@@ -62,7 +64,7 @@ export function FileTagsDialog({
         tags: freshTags.get(file.id) ?? [],
       }))
     )
-    changed()
+    void changed()
     setAnnouncement(`${tag.name} ${action === 'add' ? 'added' : 'removed'}.`)
   }
   const toggle = async (tag: TagView, all: boolean) => {
@@ -90,16 +92,13 @@ export function FileTagsDialog({
       const key = nameKey(normalizeName(search))
       const tag =
         tags.find((tag) => nameKey(tag.name) === key) ??
-        (await tagRequest<TagView>(
-          '/api/tags',
-          'POST',
-          {
-            name: search.trim(),
-          },
-          signal
-        ))
+        (await apiRequest<TagView>('/api/tags', {
+          body: { name: search.trim() },
+          signal,
+          fallback: TAG_REQUEST_FAILED,
+        }))
       if (signal.aborted) return
-      changed()
+      void reload()
       await update(tag, 'add')
       if (signal.aborted) return
       setSearch('')

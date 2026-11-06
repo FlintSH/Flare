@@ -24,12 +24,14 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { apiRequest } from '@/lib/client/request'
 import { allows } from '@/lib/permissions/actions'
 import { TAG_NAME_MAX_LENGTH, TAG_RULE_MAX_LENGTH } from '@/lib/tags/schema'
+import type { TagView } from '@/lib/tags/schema'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
-import { TagView, tagRequest, useTags } from '@/hooks/use-tags'
+import { TAG_REQUEST_FAILED, useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
 export function TagManager({
@@ -81,18 +83,18 @@ export function TagManager({
     setBusy(true)
     setError('')
     try {
-      await tagRequest(
-        existing ? `/api/tags/${existing.id}` : '/api/tags',
-        existing ? 'PATCH' : 'POST',
-        {
+      await apiRequest(existing ? `/api/tags/${existing.id}` : '/api/tags', {
+        method: existing ? 'PATCH' : 'POST',
+        body: {
           name: name.trim(),
           ruleSource: automatic ? source : null,
           ruleText: automatic ? phrase.trim() : null,
         },
-        signal
-      )
+        signal,
+        fallback: TAG_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       setEditing(null)
       toast({ title: existing ? 'Tag saved' : 'Tag created' })
     } catch (error) {
@@ -111,9 +113,13 @@ export function TagManager({
     setBusy(true)
     setError('')
     try {
-      await tagRequest(`/api/tags/${existing.id}`, 'DELETE', undefined, signal)
+      await apiRequest(`/api/tags/${existing.id}`, {
+        method: 'DELETE',
+        signal,
+        fallback: TAG_REQUEST_FAILED,
+      })
       if (signal.aborted) return
-      changed()
+      void changed()
       onDeleted(existing.id)
       setEditing(null)
       toast({
@@ -136,14 +142,12 @@ export function TagManager({
     setBusy(true)
     setError('')
     try {
-      const result = await tagRequest<{ count: number }>(
+      const result = await apiRequest<{ count: number }>(
         `/api/tags/${existing.id}/apply`,
-        'POST',
-        undefined,
-        signal
+        { method: 'POST', signal, fallback: TAG_REQUEST_FAILED }
       )
       if (signal.aborted) return
-      changed()
+      void changed()
       setConfirmApply(false)
       toast({
         title: 'Rule applied',

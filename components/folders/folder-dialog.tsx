@@ -16,10 +16,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { apiRequest } from '@/lib/client/request'
 import { sharedFolderUrl } from '@/lib/files/urls'
 import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
 
-import { folderRequest, useFolders } from '@/hooks/use-folders'
+import { FOLDER_REQUEST_FAILED, useFolders } from '@/hooks/use-folders'
 import { useToast } from '@/hooks/use-toast'
 
 export type FolderAction =
@@ -37,7 +38,7 @@ export function FolderDialog({
   onCreated: (folder: FolderView) => void
   onDeleted: (folder: FolderView) => void
 }) {
-  const { folders, loading, error: loadError, changed, reload } = useFolders()
+  const { folders, loading, error: loadError, changed } = useFolders()
   const snapshot = action.kind === 'create' ? null : action.folder
   const current = folders.find((folder) => folder.id === snapshot?.id)
   const existing = current ?? snapshot
@@ -81,18 +82,21 @@ export function FolderDialog({
   }
   const save = () =>
     run(async () => {
-      const folder = await folderRequest<FolderView>(
+      const folder = await apiRequest<FolderView>(
         existing ? `/api/folders/${existing.id}` : '/api/folders',
-        existing ? 'PATCH' : 'POST',
         {
-          name: name.trim(),
-          ...(action.kind === 'create' && { parentId: action.parentId }),
+          method: existing ? 'PATCH' : 'POST',
+          body: {
+            name: name.trim(),
+            ...(action.kind === 'create' && { parentId: action.parentId }),
+          },
+          fallback: FOLDER_REQUEST_FAILED,
         }
       )
-      changed()
+      const loaded = changed()
       toast({ title: existing ? 'Folder renamed' : 'Folder created' })
       if (!existing) {
-        await reload()
+        await loaded
         onCreated(folder)
       }
       onClose()
@@ -100,8 +104,11 @@ export function FolderDialog({
   const remove = () =>
     run(async () => {
       if (!existing) return
-      await folderRequest(`/api/folders/${existing.id}`, 'DELETE')
-      changed()
+      await apiRequest(`/api/folders/${existing.id}`, {
+        method: 'DELETE',
+        fallback: FOLDER_REQUEST_FAILED,
+      })
+      void changed()
       onDeleted(existing)
       toast({
         title: 'Folder removed',
@@ -112,14 +119,13 @@ export function FolderDialog({
   const share = (sharing: boolean) =>
     run(async () => {
       if (!existing) return
-      const folder = await folderRequest<FolderView>(
+      const folder = await apiRequest<FolderView>(
         `/api/folders/${existing.id}`,
-        'PATCH',
-        { sharing }
+        { method: 'PATCH', body: { sharing }, fallback: FOLDER_REQUEST_FAILED }
       )
       setToken(folder.shareToken)
       setCopied(false)
-      changed()
+      void changed()
       toast({ title: sharing ? 'Folder link created' : 'Folder link disabled' })
     })
   return (

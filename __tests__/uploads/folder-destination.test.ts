@@ -1,5 +1,6 @@
 import React from 'react'
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -45,11 +46,18 @@ vi.mock('@/components/upload-profiles/profile-picker', () => ({
 
 const renderForm = () =>
   renderToStaticMarkup(
-    React.createElement(UploadForm, {
-      maxSize: 100,
-      formattedMaxSize: '100 B',
-      user: { defaultFileExpiration: null, defaultFileExpirationAction: null },
-    })
+    React.createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      React.createElement(UploadForm, {
+        maxSize: 100,
+        formattedMaxSize: '100 B',
+        user: {
+          defaultFileExpiration: null,
+          defaultFileExpirationAction: null,
+        },
+      })
+    )
   )
 
 beforeEach(() => {

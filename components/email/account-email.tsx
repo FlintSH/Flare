@@ -10,21 +10,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { apiRequest } from '@/lib/client/request'
 import type { AccountEmailStatus } from '@/lib/email/eligibility'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useSignOut } from '@/hooks/use-sign-out'
-
-import { emailPost, emailRequest } from './api'
 
 export function useAccountEmailStatus() {
   const [status, setStatus] = useState<AccountEmailStatus | null>(null)
   const [error, setError] = useState('')
   const refresh = useCallback(async () => {
     try {
-      setStatus(
-        await emailRequest<AccountEmailStatus>('/api/auth/email/status')
-      )
+      setStatus(await apiRequest<AccountEmailStatus>('/api/auth/email/status'))
       setError('')
     } catch (error) {
       setError(
@@ -111,9 +108,9 @@ export function AccountEmail({
           return
         }
       }
-      const result = await emailPost<{ message: string }>(
+      const result = await apiRequest<{ message: string }>(
         `/api/auth/email/${path}`,
-        body
+        { body }
       )
       setMessage(result.message)
       setPassword('')
