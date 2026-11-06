@@ -43,6 +43,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { apiRequest } from '@/lib/client/request'
+import { LOGO_ACCEPT, logoProblem } from '@/lib/customization/logo'
 import { PALETTE_PRESETS, presetPalettes } from '@/lib/customization/presets'
 import {
   type AppearanceCommand,
@@ -285,8 +286,8 @@ export function CustomizationStudio({
     setLogoBusy(variant)
     setError('')
     try {
-      if (file.size > 256 * 1024)
-        throw new Error('Choose a logo smaller than 256 KB.')
+      const problem = logoProblem(file)
+      if (problem) throw new Error(problem.message)
       const form = new FormData()
       form.append('file', file)
       const { url } = await apiRequest<{ url: string }>(
@@ -507,7 +508,7 @@ export function CustomizationStudio({
                                     : 'Dark logo'}
                                   <input
                                     type="file"
-                                    accept="image/png,image/jpeg,image/webp"
+                                    accept={LOGO_ACCEPT}
                                     className="sr-only"
                                     disabled={!!logoBusy || busy}
                                     onChange={(event) => {

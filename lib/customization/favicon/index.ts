@@ -1,33 +1,20 @@
 // The favicon's rules and address, shared by the settings control and the
 // server, so this module must stay browser-safe.
+import { type ImagePolicy, imageProblem } from '../image'
 
 export const FAVICON_TYPE = 'image/png'
 export const FAVICON_MAX_BYTES = 1024 * 1024
 
-export interface FaviconProblem {
-  status: 413 | 415
-  title: string
-  message: string
+export const FAVICON_POLICY: ImagePolicy = {
+  types: [FAVICON_TYPE],
+  maxBytes: FAVICON_MAX_BYTES,
+  tooLarge: 'Please upload a file smaller than 1 MB.',
+  wrongType: 'Please upload a PNG image file.',
 }
 
 /** Why a chosen file can't become the favicon, or null when it can. */
-export function faviconProblem(file: {
-  size: number
-  type: string
-}): FaviconProblem | null {
-  if (file.size > FAVICON_MAX_BYTES)
-    return {
-      status: 413,
-      title: 'File too large',
-      message: 'Please upload a file smaller than 1 MB.',
-    }
-  if (file.type !== FAVICON_TYPE)
-    return {
-      status: 415,
-      title: 'Invalid file type',
-      message: 'Please upload a PNG image file.',
-    }
-  return null
+export function faviconProblem(file: { size: number; type: string }) {
+  return imageProblem(FAVICON_POLICY, file)
 }
 
 const ROUTE = '/api/favicon'

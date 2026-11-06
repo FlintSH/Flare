@@ -8,35 +8,25 @@ import { getConfig, updateConfig } from '@/lib/config'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 
-import { CustomizationError } from '../state'
 import {
   FAVICON_MAX_BYTES,
   FAVICON_TYPE,
   faviconAddress,
-  faviconProblem,
   faviconUrl,
 } from './index'
 
 const KEY = 'uploads/favicon.png'
-const PNG_SIGNATURE = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-])
 
 /** The first 16 hex digits of the icon's SHA-256, which its address carries. */
 function contentVersion(bytes: Buffer) {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16)
 }
 
-/** Replace the favicon with `file` and return the address pages now link to. */
-export async function saveFavicon(file: File): Promise<string> {
-  const problem = faviconProblem(file)
-  if (problem) throw new CustomizationError(problem.message, problem.status)
-  const bytes = Buffer.from(await file.arrayBuffer())
-  if (!bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE))
-    throw new CustomizationError('File content is not a PNG image.')
+/** Replace the favicon with this PNG and return the address pages now link to. */
+export async function saveFavicon(png: Buffer): Promise<string> {
   const storage = await getStorageProvider()
-  await storage.uploadFile(bytes, KEY, FAVICON_TYPE)
-  const url = faviconAddress(contentVersion(bytes))
+  await storage.uploadFile(png, KEY, FAVICON_TYPE)
+  const url = faviconAddress(contentVersion(png))
   await updateConfig({ settings: { appearance: { favicon: url } } })
   return url
 }

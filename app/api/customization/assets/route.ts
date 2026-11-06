@@ -1,36 +1,14 @@
-import { fileTypeFromBuffer } from 'file-type'
-
+import { readImageUpload } from '@/lib/customization/image-upload'
+import { LOGO_POLICY } from '@/lib/customization/logo'
 import { requireSession } from '@/lib/http/access'
-import { HttpError } from '@/lib/http/errors'
-import { readForm } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
-const unreadable = 'This image could not be read.'
-
 const api = routes('/api/customization/assets', {
-  invalid: () => new HttpError(400, unreadable),
-  failure: { message: unreadable },
+  failure: { message: 'This image could not be read.' },
 })
 
 export const POST = api(async (request) => {
   await requireSession(request, 'appearance.manage')
-  const data = await readForm(request, {
-    limit: 300_000,
-    tooLarge: 'Logos must be smaller than 256 KB.',
-  })
-  const file = data.get('file')
-  if (!(file instanceof File) || file.size > 256 * 1024)
-    throw new HttpError(
-      400,
-      'Choose a PNG, JPEG, or WebP logo smaller than 256 KB.'
-    )
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const type = await fileTypeFromBuffer(buffer)
-  if (!type || !['image/png', 'image/jpeg', 'image/webp'].includes(type.mime))
-    throw new HttpError(400, 'Only PNG, JPEG, and WebP images are supported.')
-  return {
-    data: {
-      url: `data:${type.mime};base64,${buffer.toString('base64')}`,
-    },
-  }
+  const { bytes, type } = await readImageUpload(request, LOGO_POLICY)
+  return { data: { url: `data:${type};base64,${bytes.toString('base64')}` } }
 })

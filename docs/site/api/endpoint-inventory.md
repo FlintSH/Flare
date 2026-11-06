@@ -222,7 +222,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/settings/email/test`       | POST           | `settings.email`; test SMTP or send a test message.                                                                                                       |
 | `/api/settings/email/retry`      | POST           | `settings.email`; retry an eligible outbox entry.                                                                                                         |
 | `/api/customization`             | POST           | `appearance.manage`; save/import/publish/restore appearance.                                                                                              |
-| `/api/customization/assets`      | POST           | `appearance.manage`; turn a PNG, JPEG, or WebP logo of at most 256 KB into a data URL. A body over 300,000 bytes answers `413` before it is read.         |
+| `/api/customization/assets`      | POST           | `appearance.manage`; turn a multipart `file`, a PNG, JPEG, or WebP of at most 256 KB, into a data URL, else `413`, `415` or `400`, as for the favicon.    |
 | `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 
 Administration writes follow the [browser-session write rule](./authentication#browser-session-writes). Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
