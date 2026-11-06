@@ -17,6 +17,7 @@ import {
   createWebhookSecret,
   hashApiToken,
   tokenAllowsRequest,
+  tokenUsable,
 } from '@/lib/integrations/tokens'
 import type { Permission } from '@/lib/permissions/catalog'
 
@@ -37,6 +38,15 @@ describe('scoped API tokens', () => {
     expect(hashApiToken(first.token)).toBe(first.hash)
     expect(first.token).not.toBe(second.token)
     expect(first.hash).not.toBe(second.hash)
+  })
+  it('accepts a token until it is revoked or reaches its expiry', () => {
+    const now = Date.now()
+    const token = (revokedAt: Date | null, expiresAt: Date | null) =>
+      tokenUsable({ revokedAt, expiresAt })
+    expect(token(null, null)).toBe(true)
+    expect(token(null, new Date(now + 60_000))).toBe(true)
+    expect(token(null, new Date(now - 1))).toBe(false)
+    expect(token(new Date(now - 60_000), null)).toBe(false)
   })
   it('mints high entropy webhook signing secrets', () => {
     const secret = createWebhookSecret()

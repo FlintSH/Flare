@@ -20,6 +20,14 @@ export function createWebhookSecret(): string {
   return 'whsec_' + randomBytes(32).toString('base64url')
 }
 
+/** A named token works until it is revoked or reaches its expiry. */
+export function tokenUsable(token: {
+  revokedAt: Date | null
+  expiresAt: Date | null
+}): boolean {
+  return !token.revokedAt && !(token.expiresAt && token.expiresAt <= new Date())
+}
+
 export function tokenAllowsRequest(
   scopes: readonly string[],
   request: Pick<Request, 'method' | 'url'>

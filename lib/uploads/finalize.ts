@@ -15,6 +15,7 @@ import {
 import { urlSafeFilename } from '@/lib/files/filename'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { validateOwnedFolderId } from '@/lib/folders/service'
+import { tokenUsable } from '@/lib/integrations/tokens'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
@@ -151,14 +152,8 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       const token = await tx.apiToken.findUnique({
         where: { id: user.apiToken.id },
       })
-      if (
-        !token ||
-        token.revokedAt ||
-        (token.expiresAt && token.expiresAt <= new Date())
-      )
+      if (!token || !tokenUsable(token))
         throw new UploadError('Upload token has expired or been revoked.', 403)
-      if (token.userId !== user.id || !token.scopes.includes('files:upload'))
-        throw new UploadError('This token cannot upload files.', 403)
       if (token.profileId && options.profileId !== token.profileId)
         throw new UploadError(
           'This token is restricted to its upload profile.',

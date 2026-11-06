@@ -1,4 +1,3 @@
-import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { getFilesExpirationInfo } from '@/lib/files/expiry'
 import {
@@ -8,33 +7,14 @@ import {
   fileOrderBy,
 } from '@/lib/files/gallery-navigation'
 import { fileListFilters } from '@/lib/files/list-filters'
-import { parseSingleFileUpload } from '@/lib/files/streaming-upload'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/lib/library/contract'
-import { loggers } from '@/lib/logger'
-import { hasPermission } from '@/lib/permissions/catalog'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
-import { type StorageProvider, getStorageProvider } from '@/lib/storage'
-import { overCapacity, uploadCapacity } from '@/lib/uploads/capacity'
-import {
-  cleanupUncommittedUpload,
-  finalizeUpload,
-  prepareUploadDestination,
-} from '@/lib/uploads/finalize'
+import { directUpload } from '@/lib/uploads/direct'
 import { uploadRoutes } from '@/lib/uploads/http'
-import { uploadLinks } from '@/lib/uploads/links'
-import {
-  UploadError,
-  applyUploadOverrides,
-  parseUploadFields,
-  requestUploadOptions,
-  resolveUploadOptions,
-} from '@/lib/uploads/options'
-
-const logger = loggers.files
 
 const api = routes('/api/files', uploadRoutes)
 
@@ -42,65 +22,7 @@ export const POST = api(async (request) => {
   const limited = await rateLimit(request, uploadLimiter)
   if (limited) return limited
   const user = await requireAccount(request)
-  const isPaste = request.headers.get('X-Flare-Paste') === 'true'
-  if (isPaste && !hasPermission(user, 'pastes.create'))
-    throw new HttpError(403, 'You do not have permission to create pastes.')
-  let filePath = ''
-  let storage: StorageProvider | undefined
-  try {
-    if (!request.headers.get('content-type')?.includes('multipart/form-data'))
-      throw new UploadError('Content-Type must be multipart/form-data.')
-    const selection = requestUploadOptions(request)
-    const initialOptions = await resolveUploadOptions(user, selection)
-    const capacity = uploadCapacity(await getConfig(), user, user.storageUsed)
-    if (capacity.quotaBytes <= 0) throw overCapacity('quota')
-    storage = await getStorageProvider()
-    const { upload, fields, limitHit } = await parseSingleFileUpload({
-      req: request,
-      storageProvider: storage,
-      maxBytes: capacity.fileBytes,
-      quotaLimitBytes: capacity.quotaBytes,
-      resolveDestination: async ({ filename }) => {
-        const destination = await prepareUploadDestination(
-          user,
-          filename,
-          initialOptions
-        )
-        filePath = destination.filePath
-        return destination
-      },
-    })
-    if (limitHit) throw overCapacity(limitHit)
-    if (!upload) throw new UploadError('No file provided.')
-    const overrides = parseUploadFields(fields)
-    // Profile and naming are fixed before any bytes are written. Other fields remain
-    // compatible with existing multipart clients regardless of field ordering.
-    if (
-      overrides.profileId !== undefined &&
-      overrides.profileId !== initialOptions.profileId
-    )
-      throw new UploadError(
-        'Select the profile using X-Upload-Profile before uploading.'
-      )
-    if (
-      overrides.randomizeFileUrls !== undefined &&
-      overrides.randomizeFileUrls !== initialOptions.randomizeFileUrls
-    )
-      throw new UploadError('Select a naming strategy in your upload profile.')
-    const options = applyUploadOverrides(user, initialOptions, overrides)
-    const file = await finalizeUpload({
-      user,
-      storage,
-      ...upload,
-      options,
-      isPaste,
-    })
-    return apiResponse(uploadLinks(file, user))
-  } catch (error) {
-    if (storage && filePath) await cleanupUncommittedUpload(storage, filePath)
-    logger.error('Upload failed', error as Error)
-    throw error
-  }
+  return apiResponse(await directUpload(request, user))
 })
 
 export const GET = api(

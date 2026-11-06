@@ -308,7 +308,7 @@
             }
           },
           "403": {
-            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed.",
+            "description": "Required current role permission is missing. Profile binding, ownership, or final token validity check failed, or a profileId form field names another profile than the X-Upload-Profile header or profileId query chose.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" }

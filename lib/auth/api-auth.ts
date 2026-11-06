@@ -9,6 +9,7 @@ import {
   TOKEN_PREFIX,
   hashApiToken,
   tokenAllowsRequest,
+  tokenUsable,
 } from '@/lib/integrations/tokens'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
@@ -41,8 +42,7 @@ export async function getAuthenticatedUser(
     })
     if (
       !token ||
-      token.revokedAt ||
-      (token.expiresAt && token.expiresAt <= new Date()) ||
+      !tokenUsable(token) ||
       !tokenAllowsRequest(token.scopes, req) ||
       requiresEmailVerification(token.user, await getEmailConfig())
     )
