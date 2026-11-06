@@ -69,6 +69,7 @@ import {
   usesOptionsFor,
 } from '@/lib/invites/policy'
 import type { RoleSummary } from '@/lib/permissions/catalog'
+import { canGrantRole } from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -616,22 +617,8 @@ function CreateInviteDialog({
     staleTime: 0,
     gcTime: 0,
   })
-  const administrator = user?.permissions?.includes('administrator')
-  const highest = Math.max(
-    0,
-    ...(user?.roles ?? []).map((role) => role.position)
-  )
-  const grantable = (roles.data?.roles ?? []).filter(
-    (role) =>
-      role.systemKey !== 'everyone' &&
-      (administrator ||
-        (role.position < highest &&
-          !role.permissions.includes('administrator') &&
-          role.permissions.every((permission) =>
-            (user?.permissions as readonly string[] | undefined)?.includes(
-              permission
-            )
-          )))
+  const grantable = (roles.data?.roles ?? []).filter((role) =>
+    canGrantRole(user, role)
   )
   const grantsAdministrator = grantable.some(
     (role) =>

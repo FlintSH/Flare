@@ -90,6 +90,8 @@ Editing or deleting a role affects every account assigned that role, including a
 
 A delegated manager cannot grant a permission they do not currently hold, including through editing an existing role, creating a role, or assigning a more powerful role. Editing or deleting an existing role also requires every permission it currently grants to be within the manager’s own grants, even for a rename or removal of a permission. **Manage roles** does not itself include **Assign roles** (`users.roles`), and **Edit users** does not allow changing role assignments. Give both role and account capabilities only where needed.
 
+**Users** applies these same checks before it enables an account's actions and role choices. For the account, it compares effective permissions, as the server does: a stored permission key that this version of Flare doesn't recognize, such as one left behind by a downgrade, grants nothing and doesn't stop you from managing the account. A role's own stored keys still count when you assign, edit, or delete that role, so a delegated manager can't do any of those with a role that holds such a key.
+
 Example responsibilities:
 
 | Role                 | Useful grants beyond Everyone                                    | Intended scope                                                                            |

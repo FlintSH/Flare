@@ -460,6 +460,30 @@ suite.sequential('invites against disposable PostgreSQL', () => {
     expect((await setEveryone(true, 'member')).status).toBe(403)
   })
 
+  it('shows an invite as paused whenever registration would refuse it', async () => {
+    const invite = (await create()).body.invite
+    const everyone = await prisma.role.findUniqueOrThrow({
+      where: { systemKey: 'everyone' },
+    })
+    // Only a direct database edit can attach Everyone; the API refuses it.
+    await prisma.invite.update({
+      where: { id: invite.id },
+      data: { roles: { connect: { id: everyone.id } } },
+    })
+    expect((await list('scope=mine')).body.invites).toEqual([
+      expect.objectContaining({ id: invite.id, status: 'paused' }),
+    ])
+    expect(await invites.inspectInvite(invite.token)).toEqual({
+      status: 'paused',
+    })
+    expect((await join(invite.token, 'Everyone Person')).body.code).toBe(
+      'invite_paused'
+    )
+    expect(
+      await prisma.invite.findUniqueOrThrow({ where: { id: invite.id } })
+    ).toMatchObject({ uses: 0 })
+  })
+
   it('rechecks delegated role grants when the invite is used', async () => {
     const helper = await prisma.role.create({
       data: { name: 'Helper', position: 10, permissions: ['users.read'] },

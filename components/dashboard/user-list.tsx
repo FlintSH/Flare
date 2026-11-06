@@ -111,7 +111,12 @@ import {
   type AccountShortLinkPage,
   shortLinkUrl,
 } from '@/lib/links/schema'
-import type { RoleSummary } from '@/lib/permissions/catalog'
+import { type RoleSummary, resolvePermissions } from '@/lib/permissions/catalog'
+import {
+  canGrantRole,
+  isEveryoneRole,
+  userManagementRefusal,
+} from '@/lib/permissions/policy'
 import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { sanitizeUrl } from '@/lib/utils/url'
@@ -407,22 +412,10 @@ export function UserList() {
   const [availableRoles, setAvailableRoles] = useState<RoleSummary[]>([])
   const [roleLoadError, setRoleLoadError] = useState('')
   const canManageUser = (target: User) =>
-    can('administrator') ||
-    (target.id !== actor?.id &&
-      !target.roles.some((role) =>
-        role.permissions.some(
-          (permission) =>
-            !(actor?.permissions as readonly string[] | undefined)?.includes(
-              permission
-            )
-        )
-      ) &&
-      Math.max(0, ...target.roles.map((role) => role.position)) <
-        highestPosition)
-  const highestPosition = Math.max(
-    0,
-    ...(actor?.roles ?? []).map((role) => role.position)
-  )
+    !userManagementRefusal(actor, {
+      ...target,
+      permissions: resolvePermissions(target.roles),
+    })
   useEffect(() => {
     fetch('/api/roles')
       .then(async (response) => {
@@ -626,7 +619,7 @@ export function UserList() {
       name: user.name,
       email: user.email,
       roleIds: user.roles
-        .filter((role) => role.systemKey !== 'everyone')
+        .filter((role) => !isEveryoneRole(role))
         .map((role) => role.id),
       urlId: user.urlId,
       vanityId: user.vanityId || '',
@@ -899,7 +892,7 @@ export function UserList() {
           <SelectContent>
             <SelectItem value="ALL">All roles</SelectItem>
             {availableRoles
-              .filter((role) => role.systemKey !== 'everyone')
+              .filter((role) => !isEveryoneRole(role))
               .map((role) => (
                 <SelectItem key={role.id} value={role.id}>
                   {role.name}
@@ -1345,23 +1338,13 @@ export function UserList() {
                   )}
                   <RoleChecklist
                     roles={availableRoles.filter(
-                      (role) => role.systemKey !== 'everyone'
+                      (role) => !isEveryoneRole(role)
                     )}
                     selected={formData.roleIds ?? []}
                     onChange={(roleIds) =>
                       setFormData({ ...formData, roleIds })
                     }
-                    isDisabled={(role) =>
-                      !can('administrator') &&
-                      (role.position >= highestPosition ||
-                        role.permissions.some(
-                          (permission) =>
-                            !(
-                              actor?.permissions as
-                                readonly string[] | undefined
-                            )?.includes(permission)
-                        ))
-                    }
+                    isDisabled={(role) => !canGrantRole(actor, role)}
                   />
                   {!can('users.roles') && (
                     <p className="text-xs text-muted-foreground">

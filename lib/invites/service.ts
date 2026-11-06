@@ -4,21 +4,18 @@ import { z } from 'zod'
 import { readConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { getEmailConfig } from '@/lib/email/config'
-import { requiresEmailVerification } from '@/lib/email/policy'
 import {
   type Permission,
   type RoleSummary,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import { EVERYONE_ROLE, canGrantRole } from '@/lib/permissions/policy'
+import { setEveryonePermission } from '@/lib/permissions/roles'
 import {
   PermissionError,
   type UserAccess,
-  assertCanGrantPermissions,
-  assertCanManageRole,
-  ensureBuiltInRoles,
+  getActingAccess,
   getUserAccess,
-  getUsersAccess,
   requireActorPermission,
   roleSelect,
   validateRoleAssignment,
@@ -109,80 +106,35 @@ function limitsFor(access: UserAccess, limits: InviteLimits) {
 }
 
 /**
- * Display-only mirror of the checks repeated under lock during registration.
- * Returns whether each creator could still use each invite's role grants.
+ * Whether the creator could still create this invite, by the checks
+ * registration repeats under the lock: `requireActorPermission`, then
+ * `validateRoleAssignment` for its roles. `creator` comes from
+ * `getActingAccess`.
  */
-async function creatorEligibility(records: InviteRecord[]) {
-  const creators = [
-    ...new Set(
-      records
-        .filter((record) => inviteStatus(record) === 'active')
-        .map((record) => record.creatorId)
-    ),
-  ]
-  if (!creators.length) return new Map<string, UserAccess | null>()
-  // A constant number of reads, however many creators appear on the page.
-  const [users, accessById, email] = await Promise.all([
-    prisma.user.findMany({
-      where: { id: { in: creators } },
-      select: {
-        id: true,
-        email: true,
-        emailVerified: true,
-        emailVerifiedFor: true,
-        emailVerificationSource: true,
-        emailExempt: true,
-        createdAt: true,
-      },
-    }),
-    getUsersAccess(creators),
-    getEmailConfig(),
-  ])
-  const eligible = new Map<string, UserAccess | null>()
-  for (const id of creators) {
-    const user = users.find((candidate) => candidate.id === id)
-    const access = accessById.get(id)
-    eligible.set(
-      id,
-      user &&
-        access &&
-        !requiresEmailVerification(user, email) &&
-        hasPermission(access, 'invites.create')
-        ? access
-        : null
-    )
-  }
-  return eligible
-}
-
-function canStillGrant(
-  access: UserAccess,
-  roles: Pick<RoleSummary, 'position' | 'permissions'>[]
+function canStillInvite(
+  creator: UserAccess | null | undefined,
+  roles: Pick<RoleSummary, 'position' | 'permissions' | 'systemKey'>[]
 ) {
-  if (!roles.length) return true
-  if (!hasPermission(access, 'users.roles')) return false
-  try {
-    for (const role of roles) {
-      assertCanManageRole(access, role)
-      assertCanGrantPermissions(access, role.permissions)
-    }
-    return true
-  } catch {
-    return false
-  }
+  return (
+    hasPermission(creator, 'invites.create') &&
+    (!roles.length ||
+      (hasPermission(creator, 'users.roles') &&
+        roles.every((role) => canGrantRole(creator, role))))
+  )
 }
 
 function present(
   record: InviteRecord,
   viewerId: string,
   viewer: UserAccess,
-  eligibility: Map<string, UserAccess | null>
+  creators: Map<string, UserAccess | null>
 ): InviteView {
   let status: InviteStatus = inviteStatus(record)
-  if (status === 'active') {
-    const creator = eligibility.get(record.creatorId)
-    if (!creator || !canStillGrant(creator, record.roles)) status = 'paused'
-  }
+  if (
+    status === 'active' &&
+    !canStillInvite(creators.get(record.creatorId), record.roles)
+  )
+    status = 'paused'
   const own = record.creatorId === viewerId
   const current = status === 'active' || status === 'paused'
   return {
@@ -264,11 +216,15 @@ export async function listInvites(
     skip: (page - 1) * query.limit,
     take: query.limit,
   })
-  const eligibility = await creatorEligibility(records)
-  return {
-    invites: records.map((record) =>
-      present(record, userId, access, eligibility)
+  const creators = await getActingAccess([
+    ...new Set(
+      records
+        .filter((record) => inviteStatus(record) === 'active')
+        .map((record) => record.creatorId)
     ),
+  ])
+  return {
+    invites: records.map((record) => present(record, userId, access, creators)),
     pagination: { total, pageCount, page, limit: query.limit },
     policy: await getInvitePolicy(userId, access),
   }
@@ -398,8 +354,8 @@ export async function inspectInvite(token: unknown): Promise<
   if (!record) return { status: 'invalid' }
   const status = inviteStatus(record)
   if (status !== 'active') return { status }
-  const creator = (await creatorEligibility([record])).get(record.creatorId)
-  if (!creator || !canStillGrant(creator, record.roles))
+  const creators = await getActingAccess([record.creatorId])
+  if (!canStillInvite(creators.get(record.creatorId), record.roles))
     return { status: 'paused' }
   return {
     status,
@@ -454,16 +410,18 @@ export async function redeemInvite(
 
 export async function everyoneCanInvite(client: Client = prisma) {
   const everyone = await client.role.findUnique({
-    where: { systemKey: 'everyone' },
+    where: { systemKey: EVERYONE_ROLE },
     select: { permissions: true },
   })
   return Boolean(everyone?.permissions.includes('invites.create'))
 }
 
-/** The Settings switch is a shortcut for Everyone's Create invites grant. */
+/**
+ * The Settings switch is a shortcut for Everyone's Create invites grant. It
+ * needs security settings and your own Create invites, not role management.
+ */
 export async function setEveryoneCanInvite(actorId: string, enabled: boolean) {
-  return prisma.$transaction(async (tx) => {
-    await lockRoleChanges(tx)
+  await setEveryonePermission('invites.create', enabled, async (tx) => {
     const access = await requireActorPermission(
       tx,
       actorId,
@@ -473,18 +431,6 @@ export async function setEveryoneCanInvite(actorId: string, enabled: boolean) {
       throw new PermissionError(
         'You can only change who may invite people when you can create invites yourself'
       )
-    const { everyone } = await ensureBuiltInRoles(tx)
-    if (everyone.permissions.includes('invites.create') !== enabled)
-      await tx.role.update({
-        where: { id: everyone.id },
-        data: {
-          permissions: enabled
-            ? [...everyone.permissions, 'invites.create']
-            : everyone.permissions.filter(
-                (permission) => permission !== 'invites.create'
-              ),
-        },
-      })
-    return { everyoneCanInvite: enabled }
   })
+  return { everyoneCanInvite: enabled }
 }

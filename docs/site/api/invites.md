@@ -43,16 +43,16 @@ Invite data is private: these routes send `Cache-Control: private, no-store` wit
 }
 ```
 
-| Field                    | Meaning                                                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`                 | `active`, `paused`, `used`, `expired`, or `revoked`. `paused` means the creator can no longer create invites or grant the listed roles; it can become `active` again. Treat unknown values as unusable. |
-| `maxUses`, `uses`        | Use limit, or `null` for no limit, and how many accounts the link has created.                                                                                                                          |
-| `expiresAt`, `revokedAt` | ISO timestamps or `null`. `expiresAt: null` never expires.                                                                                                                                              |
-| `creator`                | Account that created the invite. `name` can be `null`.                                                                                                                                                  |
-| `roles`                  | Additional roles the link grants. Everyone always applies and is never listed.                                                                                                                          |
-| `members`, `memberCount` | Up to ten accounts that joined with the link, oldest first, and their total. Deleted accounts are no longer counted, while `uses` keeps counting them.                                                  |
-| `token`                  | The link's secret, returned only to its creator while the invite is `active` or `paused`. `null` for ended invites, other people's invites, and links that can no longer be decrypted.                  |
-| `canRevoke`              | Whether the current session can revoke this invite now.                                                                                                                                                 |
+| Field                    | Meaning                                                                                                                                                                                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                 | `active`, `paused`, `used`, `expired`, or `revoked`. `paused` means the creator can no longer create invites or grant the listed roles, or must verify an email address first; it can become `active` again. Treat unknown values as unusable. |
+| `maxUses`, `uses`        | Use limit, or `null` for no limit, and how many accounts the link has created.                                                                                                                                                                 |
+| `expiresAt`, `revokedAt` | ISO timestamps or `null`. `expiresAt: null` never expires.                                                                                                                                                                                     |
+| `creator`                | Account that created the invite. `name` can be `null`.                                                                                                                                                                                         |
+| `roles`                  | Additional roles the link grants. Everyone always applies and is never listed.                                                                                                                                                                 |
+| `members`, `memberCount` | Up to ten accounts that joined with the link, oldest first, and their total. Deleted accounts are no longer counted, while `uses` keeps counting them.                                                                                         |
+| `token`                  | The link's secret, returned only to its creator while the invite is `active` or `paused`. `null` for ended invites, other people's invites, and links that can no longer be decrypted.                                                         |
+| `canRevoke`              | Whether the current session can revoke this invite now.                                                                                                                                                                                        |
 
 Build a link with the instance's public origin: `https://files.example.com/auth/register?invite=<token>`. Tokens contain 43 URL-safe Base64 characters. They are secrets: never log them, place them in issue reports, or send them to a third-party service.
 
@@ -102,7 +102,7 @@ Attaching roles requires `users.roles` and follows role delegation: each role mu
 
 ## Change who can invite
 
-`GET /api/settings/invites` returns `{ "everyoneCanInvite": false, "limits": { "activeInvites": 5, "usesPerInvite": 1, "lifetimeDays": 30 } }`. `PUT /api/settings/invites` accepts exactly `{ "everyoneCanInvite": true }` or `false` and adds or removes `invites.create` on the Everyone role. Repeating the current value succeeds without another change. Change member limits through the [delegated settings route](./roles#delegated-settings-writes) using `settings.general.registrations.inviteLimits`, which requires `settings.security`.
+`GET /api/settings/invites` returns `{ "everyoneCanInvite": false, "limits": { "activeInvites": 5, "usesPerInvite": 1, "lifetimeDays": 30 } }`. `PUT /api/settings/invites` accepts exactly `{ "everyoneCanInvite": true }` or `false` and adds or removes `invites.create` on the Everyone role. It changes no other permission and doesn't need `roles.manage` or the delegation checks of [`PATCH /api/roles/{id}`](./roles#delegation-and-errors). Repeating the current value succeeds without another change. Change member limits through the [delegated settings route](./roles#delegated-settings-writes) using `settings.general.registrations.inviteLimits`, which requires `settings.security`.
 
 ## Register with an invite
 
@@ -114,13 +114,13 @@ The invite is used in the same transaction that creates the account. A rejected 
 { "error": "This invite link has already been used.", "code": "invite_used" }
 ```
 
-| `code`           | Meaning                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `invite_invalid` | Malformed or unknown token, including an invite deleted with its creator's account. |
-| `invite_expired` | The invite expired.                                                                 |
-| `invite_used`    | The invite reached its use limit.                                                   |
-| `invite_revoked` | The invite was revoked.                                                             |
-| `invite_paused`  | The creator can no longer create invites or grant the invite's roles.               |
+| `code`           | Meaning                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `invite_invalid` | Malformed or unknown token, including an invite deleted with its creator's account.                          |
+| `invite_expired` | The invite expired.                                                                                          |
+| `invite_used`    | The invite reached its use limit.                                                                            |
+| `invite_revoked` | The invite was revoked.                                                                                      |
+| `invite_paused`  | The creator can no longer create invites or grant the invite's roles, or must verify an email address first. |
 
 The existing rate limit, email-verification policy, and validation rules apply. When the new account is sent a verification email, the email request limits apply too, and a limited request returns `429` with `Retry-After`. The response keeps its existing `{ "user": { … }, "nextAction": "sign_in" }` shape; `nextAction` is `verify_email` when the new account must verify its address. The created account appears in `GET /api/users` with `invitedBy: { "id": "…", "name": "…" }`; see [account contract changes](./roles#account-contract-changes).
 

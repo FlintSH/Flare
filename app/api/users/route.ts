@@ -14,6 +14,7 @@ import { assertJsonMutation, readJson } from '@/lib/http/request'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
+import { EVERYONE_ROLE } from '@/lib/permissions/policy'
 import {
   assertAccessibleAdministrator,
   assertCanManageUser,
@@ -61,7 +62,7 @@ export const GET = api(async (request) => {
   const search = (searchParams.get('search') || '').trim().slice(0, 200)
   const roleId = searchParams.get('roleId')
   const everyone = await prisma.role.findUnique({
-    where: { systemKey: 'everyone' },
+    where: { systemKey: EVERYONE_ROLE },
   })
   const where: Prisma.UserWhereInput = {
     ...(roleId && roleId !== everyone?.id
@@ -116,7 +117,10 @@ export const GET = api(async (request) => {
   return paginatedResponse<UserResponse[]>(
     users.map(({ invite, ...user }) => ({
       ...user,
-      roles: [...user.roles, ...(everyone ? [everyone] : [])],
+      roles: [
+        ...user.roles.filter((role) => role.id !== everyone?.id),
+        ...(everyone ? [everyone] : []),
+      ],
       invitedBy: invite?.creator ?? null,
     })),
     pagination

@@ -535,6 +535,77 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     expect(await prisma.role.count()).toBe(100)
   })
 
+  it('explains each role rule it refuses', async () => {
+    const everyone = await prisma.role.findUniqueOrThrow({
+      where: { systemKey: 'everyone' },
+    })
+    const other = await role('Other', [], 5)
+    async function answer(response: Promise<Response>) {
+      const settled = await response
+      return { status: settled.status, body: await settled.json() }
+    }
+    expect(
+      await answer(
+        detail.PATCH(
+          request('PATCH', { name: 'Renamed' }),
+          context(everyone.id)
+        )
+      )
+    ).toEqual({
+      status: 400,
+      body: {
+        error:
+          'Everyone must keep its name and position and cannot grant Administrator',
+      },
+    })
+    // Everyone's own name and position pass, because neither changes.
+    expect(
+      (
+        await detail.PATCH(
+          request('PATCH', { name: everyone.name, position: 0 }),
+          context(everyone.id)
+        )
+      ).status
+    ).toBe(200)
+    expect(
+      await answer(
+        detail.PATCH(request('PATCH', { position: 0 }), context(other.id))
+      )
+    ).toEqual({
+      status: 400,
+      body: { error: 'Only Everyone may use position zero' },
+    })
+    expect(
+      await answer(detail.DELETE(request('DELETE'), context(everyone.id)))
+    ).toEqual({ status: 400, body: { error: 'Everyone cannot be deleted' } })
+    expect(
+      await answer(
+        detail.PATCH(request('PATCH', { color: '#123456' }), context('missing'))
+      )
+    ).toEqual({ status: 404, body: { error: 'Role not found' } })
+    expect(
+      await answer(collection.POST(request('POST', { name: '' })))
+    ).toMatchObject({
+      status: 400,
+      body: {
+        error: 'Invalid role',
+        details: { fieldErrors: { name: [expect.any(String)] } },
+      },
+    })
+    await prisma.role.createMany({
+      data: Array.from({ length: 97 }, (_, i) => ({
+        name: `Role ${i}`,
+        permissions: [],
+      })),
+    })
+    expect(
+      await answer(collection.POST(request('POST', { name: 'Over limit' })))
+    ).toEqual({
+      status: 400,
+      body: { error: 'This instance has reached the limit of 100 roles' },
+    })
+  })
+
   it('prevents taking over a lower-ranked account with permissions the manager cannot grant', async () => {
     const manager = await role(
       'Account manager',
@@ -577,6 +648,50 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         service.validateRoleAssignment(tx, 'member', target.id, [])
       )
     ).rejects.toMatchObject({ status: 403 })
+  })
+
+  it('ignores unknown stored permission keys for account management, as the dashboard does', async () => {
+    const { canGrantRole, userManagementRefusal } =
+      await import('@/lib/permissions/policy')
+    const manager = await role('Manager', ['users.update', 'users.roles'], 50)
+    // Only a direct database edit or another Flare version stores such a key.
+    const legacy = await role(
+      'Legacy',
+      ['users.update', 'legacy.permission'],
+      10
+    )
+    await assign('member', manager.id)
+    const target = await prisma.user.create({
+      data: {
+        id: 'legacy',
+        urlId: 'legac',
+        uploadToken: 'legacy-fixture',
+        roles: { connect: { id: legacy.id } },
+      },
+    })
+    const [actor, account] = await Promise.all([
+      service.getUserAccess('member'),
+      service.getUserAccess(target.id),
+    ])
+    expect(
+      userManagementRefusal(
+        { ...actor, id: 'member' },
+        { ...account, id: target.id }
+      )
+    ).toBeNull()
+    await expect(
+      locked((tx) => service.assertCanManageUser(tx, 'member', target.id))
+    ).resolves.toBeUndefined()
+    // The role itself still stores the key, so only an administrator can grant or remove it.
+    expect(canGrantRole(actor, legacy)).toBe(false)
+    await expect(
+      locked((tx) =>
+        service.validateRoleAssignment(tx, 'member', target.id, [])
+      )
+    ).rejects.toMatchObject({
+      status: 403,
+      message: 'You can only grant permissions you already have',
+    })
   })
 
   it('keeps delegated settings atomic, protects executable markup, and preserves redacted storage credentials', async () => {

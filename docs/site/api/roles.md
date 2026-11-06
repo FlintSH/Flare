@@ -53,7 +53,7 @@ A role has this shape; this example is demonstration data:
 | `position`    | `1` by default; integer from 1 through 1,000,000. Higher is above. |
 | `permissions` | Empty array by default; unique keys from the permission catalog.   |
 
-PATCH accepts a nonempty subset of these fields and leaves omitted fields unchanged; the defaults above apply only when creating a role. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`.
+PATCH accepts a nonempty subset of these fields and leaves omitted fields unchanged; the defaults above apply only when creating a role. Unknown fields, duplicate permissions, unknown permission keys, and invalid values produce `400`. The maximum is **100 roles**, including built-in roles. Everyone's position is zero and cannot change; only it can use zero. Its name is fixed, it cannot be deleted, and it cannot receive `administrator`. Sending Everyone's current `name` or `position: 0` is accepted, because neither value changes.
 
 `systemKey` identifies the built-in roles and is server-owned. The initial Admin role can be renamed, recolored, reordered, edited, or deleted subject to the administrator recovery safeguard. Permission checks use its grants, not its system key or name.
 
@@ -62,6 +62,22 @@ PATCH accepts a nonempty subset of these fields and leaves omitted fields unchan
 A non-administrator can change only roles below their own highest role and grant only permissions they currently hold. Both a role’s current and proposed position and full permission set are checked. A delegated manager cannot rename or delete a lower role that currently contains a permission the manager lacks, even when the proposed edit would remove that permission. Assigning/removing a role also checks the affected role's grants; removing an assignment is not an escape from the delegation boundary.
 
 Errors use an `error` string; validation errors may additionally include `details`. A missing session returns `401`; insufficient permission/hierarchy returns `403`; an unknown role returns `404`. A mutation that would remove the last accessible administrator returns `409` and rolls back. Invalid Everyone changes and the total role limit return `400`; cross-origin writes return `403`, oversized JSON `413`, and an unsupported content type `415`.
+
+The role rules answer with these `error` strings:
+
+| Status | `error`                                                                             | When                                                                                         |
+| ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `400`  | `Invalid role`                                                                      | The body breaks a field rule above; `details` lists what failed.                             |
+| `400`  | `Everyone must keep its name and position and cannot grant Administrator`           | A new name or a position other than `0` for Everyone, or `administrator` in its permissions. |
+| `400`  | `Only Everyone may use position zero`                                               | `position: 0` for any other role.                                                            |
+| `400`  | `Everyone cannot be deleted`                                                        | `DELETE` for Everyone.                                                                       |
+| `400`  | `This instance has reached the limit of 100 roles`                                  | Creating a role when 100 exist.                                                              |
+| `403`  | `You can only manage roles below your highest role`                                 | The role is at or above your highest role, or holds `administrator`.                         |
+| `403`  | `You can only grant permissions you already have`                                   | The role's current or proposed permissions include one you lack.                             |
+| `404`  | `Role not found`                                                                    | No role has that ID.                                                                         |
+| `409`  | `Keep at least one administrator who can sign in and meets the email access policy` | The change would leave no accessible administrator.                                          |
+
+A missing session answers `401` with `Authentication required`, and a session without `roles.manage` `403` with `Permission denied`. Each write then rechecks your account under a lock: losing `roles.manage` since the session was read answers `403` with `You no longer have permission for this action`, and an email policy that now requires you to verify your address answers `403` with `Your account no longer has access`.
 
 Role edits/deletion apply to all members, including accounts with other, higher roles; authorization checks the edited role itself. Direct account writes and assignments instead check the target account’s full hierarchy and grants. Deleting a role removes its assignments. It does not delete accounts or files. Everyone and other roles continue granting their own permissions, so deleting one role is not a guarantee that all its former members lose each permission.
 

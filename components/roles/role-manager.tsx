@@ -47,6 +47,15 @@ import {
   type RoleSummary,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import {
+  ROLE_DEFAULTS,
+  ROLE_LIMITS,
+  canGrantPermissions,
+  canManageRole,
+  highestRolePosition,
+  isEveryoneRole,
+  roleCanHold,
+} from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 
 import { useToast } from '@/hooks/use-toast'
@@ -59,16 +68,11 @@ type Draft = {
   position: number
   permissions: string[]
 }
-const blank: Draft = {
-  name: '',
-  description: '',
-  color: '#64748b',
-  position: 1,
-  permissions: [],
-}
+const blank: Draft = { name: '', ...ROLE_DEFAULTS, permissions: [] }
 
 export function RoleManager() {
   const { data: session, update } = useSession()
+  const actor = session?.user
   const router = useRouter()
   const { toast } = useToast()
   const [roles, setRoles] = useState<Role[]>([])
@@ -93,22 +97,18 @@ export function RoleManager() {
   // hand focus back to the button that opened it as it closes.
   const focusNameOnClose = useRef(false)
   const selected = roles.find((role) => role.id === selectedId)
-  const isEveryone = selected?.systemKey === 'everyone'
-  const isAdministrator = hasPermission(session?.user, 'administrator')
-  const highest = Math.max(
-    0,
-    ...(session?.user?.roles ?? []).map((role) => role.position)
-  )
-  const editable =
-    isAdministrator ||
-    ((selected?.position ?? draft?.position ?? 1) < highest &&
-      !selected?.permissions.includes('administrator'))
+  const isEveryone = isEveryoneRole(selected)
+  const isAdministrator = hasPermission(actor, 'administrator')
+  const editable = canManageRole(actor, selected ?? draft ?? blank)
+  const canToggle = (permission: string) =>
+    roleCanHold(selected, permission) &&
+    canGrantPermissions(actor, [permission])
   const dirty = draft !== null && JSON.stringify(draft) !== savedDraft
 
   const select = useCallback((role: Role | 'new') => {
     const next =
       role === 'new'
-        ? { ...blank, position: 1 }
+        ? { ...blank }
         : {
             name: role.name,
             description: role.description,
@@ -275,7 +275,7 @@ export function RoleManager() {
         actions={
           <Button
             onClick={() => requestSelection('new')}
-            disabled={busy || (!isAdministrator && highest <= 1)}
+            disabled={busy || !canManageRole(actor, blank)}
           >
             <Plus className="h-4 w-4" />
             Create role
@@ -335,7 +335,7 @@ export function RoleManager() {
                       {role.name}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground">
-                      {role.systemKey === 'everyone'
+                      {isEveryoneRole(role)
                         ? 'Every account'
                         : `${role.memberCount} ${role.memberCount === 1 ? 'member' : 'members'}`}
                     </span>
@@ -415,7 +415,7 @@ export function RoleManager() {
                         id="role-name"
                         ref={nameRef}
                         required
-                        maxLength={50}
+                        maxLength={ROLE_LIMITS.name}
                         disabled={isEveryone}
                         placeholder="For example, Moderator"
                         value={draft.name}
@@ -448,7 +448,7 @@ export function RoleManager() {
                       </Label>
                       <Input
                         id="role-description"
-                        maxLength={300}
+                        maxLength={ROLE_LIMITS.description}
                         placeholder="What is this role for?"
                         value={draft.description}
                         onChange={(event) =>
@@ -467,9 +467,14 @@ export function RoleManager() {
                           className={numberFieldClassName}
                           type="number"
                           inputMode="numeric"
-                          min={1}
+                          min={ROLE_LIMITS.position.min}
                           max={
-                            isAdministrator ? 1000000 : Math.max(1, highest - 1)
+                            isAdministrator
+                              ? ROLE_LIMITS.position.max
+                              : Math.max(
+                                  ROLE_LIMITS.position.min,
+                                  highestRolePosition(actor) - 1
+                                )
                           }
                           required
                           value={draft.position}
@@ -534,13 +539,8 @@ export function RoleManager() {
                   )}
                   {groups.map((group) => {
                     const grantable = group.permissions
-                      .filter(
-                        (permission) =>
-                          (permission.key !== 'administrator' ||
-                            (isAdministrator && !isEveryone)) &&
-                          hasPermission(session?.user, permission.key)
-                      )
                       .map((permission) => permission.key)
+                      .filter(canToggle)
                     const allEnabled =
                       grantable.length > 0 &&
                       grantable.every((key) => draft.permissions.includes(key))
@@ -583,9 +583,7 @@ export function RoleManager() {
                               !editable ||
                               busy ||
                               administratorOverride ||
-                              !hasPermission(session?.user, permission.key) ||
-                              (permission.key === 'administrator' &&
-                                (!isAdministrator || isEveryone))
+                              !canToggle(permission.key)
                             return (
                               <div
                                 key={permission.key}
