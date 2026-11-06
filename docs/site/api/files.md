@@ -549,7 +549,7 @@ This endpoint returns the **upload-link object directly**:
 }
 ```
 
-Alternatively, **`PUT /api/files/chunks`** accepts the same body plus `uploadId` and returns **`{ "data": { ...uploadLinks } }`**. Use one completion route consistently in your client.
+Alternatively, **`PUT /api/files/chunks`** accepts the same body plus `uploadId` and returns **`{ "data": { ...uploadLinks } }`**. Use one completion route consistently in your client. A body without a string `uploadId` answers `400` with `Upload ID is required.`, a JSON `null` body included, which earlier builds answered with `500`.
 
 Completion accepts permitted upload-option overrides, but cannot change the profile, folder, or naming strategy chosen at initialization. Bound-token restrictions still apply. Repeating completion after a lost response returns the existing file while the upload session remains available; it does not publish another copy or enqueue another normal file-ready event.
 

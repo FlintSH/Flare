@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { requireAccount } from '@/lib/http/access'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -21,12 +23,15 @@ export const POST = api(async (request) => {
   return { data: await initializeChunkUpload(request, user) }
 })
 
+/** The completion names its upload; `completeChunkUpload` reads the rest. */
+const completion = z.looseObject({ uploadId: z.string() })
+
 export const PUT = api(async (request) => {
   const user = await requireAccount(request)
-  const body = (await readJson(request)) as { uploadId?: unknown }
-  if (typeof body.uploadId !== 'string')
-    throw new UploadError('Upload ID is required.')
-  return { data: await completeChunkUpload(user, body.uploadId, body) }
+  const body = await readJson(request)
+  const named = completion.safeParse(body)
+  if (!named.success) throw new UploadError('Upload ID is required.')
+  return { data: await completeChunkUpload(user, named.data.uploadId, body) }
 })
 
 export const GET = api(async (request) => {

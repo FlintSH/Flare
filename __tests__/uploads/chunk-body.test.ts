@@ -1,5 +1,8 @@
 import { POST as completeChunks } from '@/app/api/files/chunks/[uploadId]/complete/route'
-import { POST as startChunks } from '@/app/api/files/chunks/route'
+import {
+  PUT as finishChunks,
+  POST as startChunks,
+} from '@/app/api/files/chunks/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ account: vi.fn() }))
@@ -70,5 +73,24 @@ describe('chunk upload request bodies', () => {
     })
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'Invalid filename.' })
+  })
+
+  it('asks for the upload ID of a completion body without one, null included', async () => {
+    for (const body of [null, [], {}, { uploadId: 5 }]) {
+      const response = await finishChunks(
+        new Request('https://flare.test/api/files/chunks', {
+          method: 'PUT',
+          headers: {
+            Authorization: 'Bearer flr_token',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        })
+      )
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error: 'Upload ID is required.',
+      })
+    }
   })
 })
