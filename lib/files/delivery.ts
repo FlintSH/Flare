@@ -12,6 +12,7 @@ import { parseByteRange } from '@/lib/http/byte-range'
 import { readJson } from '@/lib/http/request'
 import { loggers } from '@/lib/logger'
 import { clientIp } from '@/lib/security/client-ip'
+import { sanitizeDisplayName } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 
@@ -320,9 +321,12 @@ export async function serveFile(
     ...(delivery.sandbox ? { 'Content-Security-Policy': 'sandbox' } : {}),
     'X-Content-Type-Options': 'nosniff',
   }
+  // The header keeps a `..` in a name, as archive members need, but stored
+  // files have always been sent without one.
+  const name = sanitizeDisplayName(file.name)
   try {
     if (delivery.signedRedirect) {
-      const url = await storage.getDownloadUrl(file.path, file.name)
+      const url = await storage.getDownloadUrl(file.path, name)
       if (url)
         return new Response(null, {
           status: 302,
@@ -332,10 +336,7 @@ export async function serveFile(
     const contentHeaders = {
       'Content-Type': file.mimeType,
       ...(delivery.disposition && {
-        'Content-Disposition': contentDisposition(
-          file.name,
-          delivery.disposition
-        ),
+        'Content-Disposition': contentDisposition(name, delivery.disposition),
       }),
       ...guard,
       ...delivery.headers,

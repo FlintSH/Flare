@@ -29,7 +29,7 @@ The screenshots below show real operations with disposable demonstration files. 
 1. Upload a supported archive, or find one already in **Files**.
 2. Open its menu and choose **Browse archive**. The same action is available among the card's preview actions.
 3. Open folders and use the breadcrumbs to return toward **Archive root**. **Search archive** finds files and folders anywhere in the archive by their paths. In the entry list, the up and down arrow keys, **Home**, and **End** move between entries.
-4. Select a file to preview it. Use **Download entry** to save that member to your device.
+4. Select a file to preview it. Use **Download entry** to save that member to your device under its own name, dots included: `notes..txt` stays `notes..txt`. Earlier versions dropped the `..`.
 
 <Screenshot src="/screenshots/archives/browse.webp" alt="Archive browser showing Field kit.zip with four files, four folders, path search, and Extract all" caption="Browse the archive hierarchy before deciding whether to add its contents to your library." />
 

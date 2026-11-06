@@ -355,4 +355,15 @@ describe('downloads', () => {
       `attachment; filename="Q3%20%22final%22%20(2).txt"; filename*=UTF-8''Q3%20%22final%22%20%282%29.txt`
     )
   })
+
+  it('send a stored name without `..`, as they always have', async () => {
+    state.files = [row({ name: 'notes..txt' })]
+    const response = await downloadGET(
+      get('/api/files/file-1/download'),
+      byId('file-1')
+    )
+    expect(response.headers.get('content-disposition')).toBe(
+      `attachment; filename="notestxt"; filename*=UTF-8''notestxt`
+    )
+  })
 })

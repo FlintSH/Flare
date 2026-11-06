@@ -31,6 +31,12 @@ describe('contentDisposition', () => {
       `attachment; filename="download"; filename*=UTF-8''download`
     )
   })
+
+  it('keeps dots, which a name in this header can’t use to leave a directory', () => {
+    expect(contentDisposition('docs/notes..txt', 'attachment')).toBe(
+      `attachment; filename="notes..txt"; filename*=UTF-8''notes..txt`
+    )
+  })
 })
 
 describe('S3 download redirects', () => {
