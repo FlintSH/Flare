@@ -4,7 +4,6 @@ import {
   requireEmailAdmin,
 } from '@/lib/email/admin'
 import { getEmailSettingsView, saveEmailConfig } from '@/lib/email/config'
-import { startMailWorker } from '@/lib/email/worker'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
@@ -32,7 +31,6 @@ export const PUT = api(async (request) => {
     clearPassword: body.clearPassword === true,
     applyToExisting: body.applyToExisting === true,
   })
-  if (view.config.enabled) startMailWorker()
   return {
     data: {
       ...view,

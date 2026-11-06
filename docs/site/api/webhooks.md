@@ -120,7 +120,7 @@ Do not assume global event ordering. Several deliveries can run concurrently, an
 
 ## Retries and delivery states
 
-The application worker checks for deliveries every **five seconds**. Database leases coordinate a global maximum of **four concurrent deliveries** across application replicas. Normal scheduling can be later than a nominal retry time if the worker is busy or the application is offline.
+The application worker in each process checks for deliveries every **five seconds**, starting when the process starts, and never starts a check while its previous one is still running. Database leases coordinate a global maximum of **four concurrent deliveries** across application replicas. Normal scheduling can be later than a nominal retry time if the worker is busy or the application is offline.
 
 | Receiver result                          | What Flare does                                      |
 | ---------------------------------------- | ---------------------------------------------------- |

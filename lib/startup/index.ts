@@ -7,37 +7,48 @@ import { loggers } from '@/lib/logger'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
 import { startOcrTagWorker } from '@/lib/tags/worker'
 
+import { startMemoryMonitor } from './memory-monitor'
 import { sessionSecretWarnings } from './secrets'
 
 const logger = loggers.startup
 
-let startupComplete = false
+function warnAboutSessionSecret() {
+  for (const warning of sessionSecretWarnings(process.env.NEXTAUTH_SECRET))
+    logger.warn(warning)
+}
 
+/**
+ * Starts each task on its own, so one that throws can't keep the others from
+ * starting. Workers are process-wide singletons: a second call starts none twice.
+ */
 export async function runStartupTasks() {
-  if (startupComplete) {
-    return
-  }
-
   const startTime = Date.now()
+  logger.info('Running startup tasks...')
 
-  try {
-    logger.info('Running startup tasks...')
+  const tasks: [name: string, start: () => unknown][] = [
+    ['session secret check', warnAboutSessionSecret],
+    ['security cleanup', startSecurityCleanupWorker],
+    ['audit retention', startAuditRetentionWorker],
+    ['storage deletion', startStorageDeletionWorker],
+    ['file expiry', startFileExpiryWorker],
+    ['email delivery', startMailWorker],
+    ['webhook delivery', startWebhookWorker],
+    ['OCR tag retries', startOcrTagWorker],
+  ]
+  if (process.env.NODE_ENV === 'production')
+    tasks.push(['memory monitor', startMemoryMonitor])
 
-    for (const warning of sessionSecretWarnings(process.env.NEXTAUTH_SECRET))
-      logger.warn(warning)
-
-    startSecurityCleanupWorker()
-    startAuditRetentionWorker()
-    startStorageDeletionWorker()
-    startFileExpiryWorker()
-    startMailWorker()
-    startWebhookWorker()
-    startOcrTagWorker()
-
-    startupComplete = true
-    const duration = Date.now() - startTime
-    logger.info('Startup tasks completed successfully', { duration })
-  } catch (error) {
-    logger.error('Startup tasks failed', error as Error)
+  let failed = false
+  for (const [task, start] of tasks) {
+    try {
+      start()
+    } catch (error) {
+      failed = true
+      logger.error('Startup tasks failed', error, { task })
+    }
   }
+  if (!failed)
+    logger.info('Startup tasks completed successfully', {
+      duration: Date.now() - startTime,
+    })
 }

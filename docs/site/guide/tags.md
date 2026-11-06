@@ -88,7 +88,7 @@ Removing an automatically assigned tag from a file is remembered. Background wor
 
 Changing or turning off a rule does not remove tags already assigned. If you want to reorganize old files, adjust their labels explicitly.
 
-If automatic tagging temporarily fails after OCR, Flare keeps the extracted text and retries the pending tag work in the background, including after a restart. Opening the saved extracted text also retries pending tags without repeating OCR.
+If automatic tagging temporarily fails after OCR, Flare keeps the extracted text and retries the pending tag work in the background about a minute later, including after a restart. Opening the saved extracted text also retries pending tags without repeating OCR.
 
 ## Apply tags with an upload profile
 

@@ -44,28 +44,28 @@ describe('FLARE_AUDIT_RETENTION_DAYS', () => {
 })
 
 describe('audit retention worker', () => {
-  const state = globalThis as { flareAuditRetention?: unknown }
+  let worker: ReturnType<typeof startAuditRetentionWorker>
   afterEach(() => {
-    vi.clearAllTimers()
+    worker?.stop()
+    worker = undefined
     vi.useRealTimers()
-    delete state.flareAuditRetention
   })
 
   it('schedules nothing unless retention is set to a valid number of days', () => {
     vi.useFakeTimers()
     for (const value of [undefined, '0', 'abc', '-1']) {
-      startAuditRetentionWorker(value)
+      expect(startAuditRetentionWorker(value)).toBeUndefined()
       expect(vi.getTimerCount()).toBe(0)
-      expect(state.flareAuditRetention).toBeUndefined()
     }
   })
 
   it('runs shortly after startup and then hourly, once per process', () => {
     vi.useFakeTimers()
-    expect(startAuditRetentionWorker('90')).toEqual({ days: 90 })
+    worker = startAuditRetentionWorker('90')
+    expect(worker).toBeDefined()
     // The first run and the hourly interval.
     expect(vi.getTimerCount()).toBe(2)
-    startAuditRetentionWorker('90')
+    expect(startAuditRetentionWorker('90')).toBe(worker)
     expect(vi.getTimerCount()).toBe(2)
   })
 
@@ -79,7 +79,7 @@ describe('audit retention worker', () => {
   it('prunes a minute after startup and then every hour', async () => {
     vi.useFakeTimers()
     const prune = vi.fn(async () => pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(59_000)
     expect(prune).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1_000)
@@ -95,7 +95,7 @@ describe('audit retention worker', () => {
       .fn()
       .mockResolvedValueOnce(pruned(false))
       .mockResolvedValue(pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(60_000)
     expect(prune).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(60_000)
@@ -115,7 +115,7 @@ describe('audit retention worker', () => {
       )
       .mockRejectedValueOnce(new Error('database unavailable'))
       .mockResolvedValue(pruned())
-    startAuditRetentionWorker('30', { prune })
+    worker = startAuditRetentionWorker('30', { prune })
     await vi.advanceTimersByTimeAsync(60_000)
     // The hourly run arrives while the first is still deleting.
     await vi.advanceTimersByTimeAsync(60 * 60_000)

@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { emailSettingsRoutes, requireEmailAdmin } from '@/lib/email/admin'
 import { retryMail } from '@/lib/email/outbox'
-import { startMailWorker } from '@/lib/email/worker'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -20,6 +19,5 @@ export const POST = api(async (request) => {
       400,
       'This message cannot be retried. Its account link may have expired or been replaced.'
     )
-  startMailWorker()
   return { data: { message: 'Message queued for retry' } }
 })

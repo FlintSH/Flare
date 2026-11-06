@@ -385,8 +385,6 @@ Once the selected repairs are verified, restart the app with `docker compose sta
 
 Each scheduled [file expiration](/guide/uploading#set-an-expiration) is a row in the `Event` table. Every application process checks for due rows every **5 seconds** and claims up to 10 at a time with a conditional database update, so two processes never apply the same expiration. A claim that hasn't finished after **5 minutes**, for example because its process stopped, is claimed again. A failed attempt is retried **1, 5 and 30 minutes** later. If the last retry fails too, the row is marked `FAILED` and the file keeps its state until its owner schedules the expiration again. Completed and failed rows are deleted **30 days** after they finish. Pending rows survive restarts, so restoring a backup restores them too.
 
-The expiry worker starts alongside the email, webhook and OCR-tag workers and can't stop them from starting. In earlier versions, a database error while it started kept email delivery, webhooks and OCR-tag retries from starting in that process, with no retry.
-
 Upgrading needs no migration or new setting. Rows that earlier versions wrote, including the older `file.expired` type, are applied normally. The `EventHandler` table is no longer read or written, so startup no longer records `event_handler.upsert` audit events; leave the table in place. Inspect expiry jobs with read-only SQL:
 
 ```sh
@@ -398,6 +396,25 @@ docker compose exec -T db psql -U flare -d flare -c \
 ```
 
 `error` holds the most recent failure, and logs use the `file-expiry` component. For storage errors, check storage reachability, credentials and delete permissions as for [account storage cleanup](#inspect-pending-cleanup). Treat file IDs as private when sharing diagnostics.
+
+## Background workers
+
+Background work runs inside the application. Each process starts these workers when it starts, so no separate worker service is needed, but a stopped process runs none of them:
+
+| Worker                                                                                                         | Runs                              | Log component      |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------ |
+| [Rate-limit and login-history cleanup](#authentication-rate-limit-cleanup)                                     | Every 60 seconds                  | `security-cleanup` |
+| [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set | 1 minute after start, then hourly | `audit-retention`  |
+| [Account storage cleanup](#account-storage-cleanup)                                                            | Every 5 seconds                   | `storage-cleanup`  |
+| [File expiry](#file-expiry-jobs)                                                                               | Every 5 seconds                   | `file-expiry`      |
+| [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
+| [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
+| [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
+| Memory check, production only                                                                                  | Every 60 seconds                  | `startup`          |
+
+Apart from audit retention, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.
+
+Each worker starts on its own, so one that fails to start can't keep the others from starting. The `startup` component logs `Startup tasks failed` with the task's name and continues. In earlier versions, the first failure skipped every task after it. A database error while file expiry started, for example, kept webhooks and OCR-tag retries from running in that process until it restarted, and email delivery until an administrator saved email settings or retried a message.
 
 ## Monitoring and routine checks
 

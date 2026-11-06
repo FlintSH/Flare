@@ -26,9 +26,6 @@ vi.mock('@/lib/logger', () => ({
 
 const now = new Date('2026-09-18T12:00:00.000Z')
 const transaction = { file: mocks.file, $queryRaw: mocks.queryRaw }
-const globalState = globalThis as typeof globalThis & {
-  flareOcrTagWorker?: { timer: NodeJS.Timeout; busy: boolean }
-}
 type FileState = {
   id: string
   ocrText: string
@@ -36,6 +33,7 @@ type FileState = {
 }
 let files: Map<string, FileState>
 let afterRollback: (() => void) | undefined
+let worker: ReturnType<typeof startOcrTagWorker> | undefined
 
 function addFile(id: string, pendingAt: Date | null = now) {
   const file = { id, ocrText: 'Receipt from Acme', ocrTagsPendingAt: pendingAt }
@@ -94,10 +92,8 @@ beforeEach(() => {
   })
 })
 afterEach(() => {
-  if (globalState.flareOcrTagWorker) {
-    clearInterval(globalState.flareOcrTagWorker.timer)
-    delete globalState.flareOcrTagWorker
-  }
+  worker?.stop()
+  worker = undefined
   vi.useRealTimers()
 })
 
@@ -200,8 +196,8 @@ describe('OCR tag worker polling', () => {
     mocks.applyAutomaticTags.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finish = resolve))
     )
-    startOcrTagWorker()
-    startOcrTagWorker()
+    worker = startOcrTagWorker()
+    expect(startOcrTagWorker()).toBe(worker)
 
     await vi.advanceTimersByTimeAsync(15_000)
     expect(mocks.file.findMany).toHaveBeenCalledTimes(1)
@@ -220,7 +216,7 @@ describe('OCR tag worker polling', () => {
     mocks.file.findMany.mockRejectedValueOnce(
       new Error('Connection unavailable')
     )
-    startOcrTagWorker()
+    worker = startOcrTagWorker()
 
     await vi.advanceTimersByTimeAsync(15_000)
     expect(mocks.applyAutomaticTags).not.toHaveBeenCalled()
