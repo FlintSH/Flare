@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
 
-import { UploadError } from './options'
 import { uploadProfileOptionsSchema } from './schema'
 
 export function profileView(profile: {
@@ -25,7 +25,8 @@ export async function generatorProfile(
   if (!selected) return null
   const profile = await prisma.uploadProfile.findFirst({
     where: { id: selected, userId },
+    select: { id: true, name: true },
   })
-  if (!profile) throw new UploadError('Upload profile not found.', 404)
-  return profile.id
+  if (!profile) throw new HttpError(404, 'Upload profile not found.')
+  return profile
 }

@@ -89,11 +89,11 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                                    |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                                         |
 | `/api/profile/avatar`              | POST          | Upload an account avatar with a durable write intent and live authorization at publication; success remains `{success:true,url}`. |
-| `/api/profile/sharex`              | GET           | Download a ShareX uploader configuration.                                                                                         |
-| `/api/profile/itake`               | GET           | Download an iTake uploader configuration.                                                                                         |
-| `/api/profile/bash`                | GET           | Download the Bash uploader script.                                                                                                |
-| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from submitted tool options.                                                                          |
-| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from submitted tool options.                                                                          |
+| `/api/profile/sharex`              | GET           | Download a ShareX configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).               |
+| `/api/profile/itake`               | GET           | Download an iTake configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).               |
+| `/api/profile/bash`                | GET           | Download the Bash uploader script. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).             |
+| `/api/profile/flameshot`           | POST          | Generate a Flameshot script from JSON `useWayland` and `useCompositor`. `?profileId=` selects a profile; never cached.            |
+| `/api/profile/spectacle`           | POST          | Generate a Spectacle script from JSON tool options (`delay` is optional). `?profileId=` selects a profile; never cached.          |
 | `/api/profile/export/progress`     | GET           | Stream account-export progress using server-sent events.                                                                          |
 | `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                                          |
 

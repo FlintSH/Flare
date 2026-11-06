@@ -1,74 +1,54 @@
 'use client'
 
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 
-import { useToast } from '@/hooks/use-toast'
+import { uploaderClients } from '@/lib/uploads/uploader-clients'
 
-export function BashTool() {
-  const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
+import { ToolRow, type UploaderToolProps } from './tool-parts'
+import { useUploaderDownload } from './use-uploader-download'
 
-  const handleBashDownload = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/profile/bash')
-      if (!response.ok) {
-        throw new Error('Failed to download bash script')
-      }
+export function BashTool({ profileId, compact, disabled }: UploaderToolProps) {
+  const { download, isLoading } = useUploaderDownload('bash', {
+    ready: {
+      title: 'Upload script ready',
+      description:
+        'Run the downloaded script with Bash and a file path. No token editing needed.',
+    },
+    failed: {
+      title: 'Error',
+      description: 'Failed to download bash upload script',
+    },
+  })
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const filename =
-        response.headers
-          .get('content-disposition')
-          ?.split('filename=')[1]
-          .replace(/"/g, '') || 'flare-upload.sh'
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast({
-        title: 'Upload script ready',
-        description:
-          'Run the downloaded script with Bash and a file path. No token editing needed.',
-      })
-    } catch (error) {
-      console.error('Bash script download error:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to download bash upload script',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const button = (
+    <Button
+      variant="outline"
+      size={compact ? 'sm' : 'default'}
+      onClick={() => void download({}, profileId)}
+      disabled={disabled || isLoading}
+    >
+      {compact
+        ? uploaderClients.bash.label
+        : isLoading
+          ? 'Downloading…'
+          : 'Download script'}
+    </Button>
+  )
+  if (compact) return button
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium">Bash script</h3>
-        <p className="text-pretty text-sm text-muted-foreground">
+    <ToolRow
+      title="Bash script"
+      description={
+        <>
           Upload from your terminal. Run{' '}
           <code className="whitespace-nowrap rounded bg-muted px-1 py-0.5 text-xs">
             bash &lt;script.sh&gt; &lt;file&gt;
           </code>{' '}
           with your downloaded script and the file to upload.
-        </p>
-      </div>
-      <Button
-        variant="outline"
-        onClick={handleBashDownload}
-        disabled={isLoading}
-      >
-        {isLoading ? 'Downloading…' : 'Download script'}
-      </Button>
-    </div>
+        </>
+      }
+      action={button}
+    />
   )
 }

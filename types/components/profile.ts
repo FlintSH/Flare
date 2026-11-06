@@ -46,20 +46,6 @@ export interface ProfileSecurityProps {
   onUpdate: () => void
 }
 
-export interface FlameshotFormValues {
-  useWayland: boolean
-  useCompositor: boolean
-}
-
-export interface SpectacleFormValues {
-  scriptType: 'screenshot' | 'recording'
-  useWayland: boolean
-  includePointer: boolean
-  captureMode: 'fullscreen' | 'current' | 'activewindow' | 'region'
-  recordingMode: 'fullscreen' | 'current' | 'region'
-  delay: number
-}
-
 export interface UploadToken {
   uploadToken: string | null
   isLoadingToken: boolean

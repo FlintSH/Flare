@@ -86,7 +86,7 @@ The vanity path is account-wide and is separate from profiles. Changing or clear
 
 ## Connect a saved profile to a tool
 
-On a saved profile, use **Use this profile in your tools** to download a configuration or script for ShareX, iTake, Bash, Flameshot, or Spectacle. The file includes your account upload token and selects that profile automatically.
+On a saved profile, use **Use this profile in your tools** to download a configuration or script for ShareX, Bash, Flameshot, Spectacle, or iTake. The file includes your account upload token and selects that profile automatically. ShareX and Bash download at once. Flameshot, Spectacle, and iTake open the same setup dialog as the general [screenshot tools](./screenshot-tools), so you can choose Wayland support, a screen recording, or any other option for the profile. The buttons appear only when your role has both `files.upload` and `tokens.manage`, like the general tools.
 
 Downloads from the general **Screenshot tools and scripts** section use your account's default behavior instead. This is useful if you want changing your default profile to change how those tools upload.
 

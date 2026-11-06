@@ -1,71 +1,50 @@
 'use client'
 
-import { useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 
-import { useToast } from '@/hooks/use-toast'
+import { uploaderClients } from '@/lib/uploads/uploader-clients'
 
-export function ShareXTool() {
-  const [isLoading, setIsLoading] = useState(false)
-  const { toast } = useToast()
+import { ToolRow, type UploaderToolProps } from './tool-parts'
+import { useUploaderDownload } from './use-uploader-download'
 
-  const handleShareXDownload = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch('/api/profile/sharex')
-      if (!response.ok) {
-        throw new Error('Failed to download ShareX config')
-      }
+export function ShareXTool({
+  profileId,
+  compact,
+  disabled,
+}: UploaderToolProps) {
+  const { download, isLoading } = useUploaderDownload('sharex', {
+    ready: {
+      title: 'ShareX configuration ready',
+      description:
+        'Open the downloaded .sxcu file in ShareX and confirm the import.',
+    },
+    failed: {
+      title: 'Error',
+      description: 'Failed to download ShareX configuration',
+    },
+  })
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const filename =
-        response.headers
-          .get('content-disposition')
-          ?.split('filename=')[1]
-          .replace(/"/g, '') || 'flare-sharex.sxcu'
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      toast({
-        title: 'ShareX configuration ready',
-        description:
-          'Open the downloaded .sxcu file in ShareX and confirm the import.',
-      })
-    } catch (error) {
-      console.error('ShareX download error:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to download ShareX configuration',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const button = (
+    <Button
+      variant="outline"
+      size={compact ? 'sm' : 'default'}
+      onClick={() => void download({}, profileId)}
+      disabled={disabled || isLoading}
+    >
+      {compact
+        ? uploaderClients.sharex.label
+        : isLoading
+          ? 'Downloading…'
+          : 'Download config'}
+    </Button>
+  )
+  if (compact) return button
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium">ShareX</h3>
-        <p className="text-pretty text-sm text-muted-foreground">
-          Screenshots and file sharing on Windows. Open the downloaded .sxcu
-          file in ShareX and confirm the import.
-        </p>
-      </div>
-      <Button
-        variant="outline"
-        onClick={handleShareXDownload}
-        disabled={isLoading}
-      >
-        {isLoading ? 'Downloading…' : 'Download config'}
-      </Button>
-    </div>
+    <ToolRow
+      title="ShareX"
+      description="Screenshots and file sharing on Windows. Open the downloaded .sxcu file in ShareX and confirm the import."
+      action={button}
+    />
   )
 }

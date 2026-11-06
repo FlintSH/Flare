@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 import { MetaLine } from '@/components/profile/meta-line'
-import { ITakeSetupButton } from '@/components/profile/tools/itake-tool'
+import { ProfileToolDownloads } from '@/components/profile/tools/profile-tools'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -221,45 +221,6 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
         title: 'Upload profile saved',
         description: 'It is ready for your next upload.',
       })
-    })
-  }
-
-  async function downloadClient(client: string) {
-    if (!editing) return
-    await perform(async () => {
-      const postBody =
-        client === 'flameshot'
-          ? { useWayland: false, useCompositor: false, profileId: editing.id }
-          : client === 'spectacle'
-            ? {
-                scriptType: 'screenshot',
-                useWayland: false,
-                includePointer: false,
-                captureMode: 'region',
-                recordingMode: 'region',
-                delay: 0,
-                profileId: editing.id,
-              }
-            : null
-      const response = await fetch(
-        `/api/profile/${client}?profileId=${encodeURIComponent(editing.id)}`,
-        postBody
-          ? {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(postBody),
-            }
-          : undefined
-      )
-      if (!response.ok)
-        throw new Error('Could not generate the uploader configuration.')
-      const url = URL.createObjectURL(await response.blob())
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download =
-        client === 'sharex' ? 'flare-sharex.sxcu' : `flare-${client}.sh`
-      anchor.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
     })
   }
 
@@ -713,46 +674,11 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               </Button>
             </div>
             {editing && (
-              <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-                <div>
-                  <h3 className="text-sm font-medium">
-                    Use this profile in your tools
-                  </h3>
-                  <p className="mt-1 text-pretty text-xs text-muted-foreground">
-                    Download an uploader with this profile selected. Generated
-                    configs and scripts contain your upload credential; keep
-                    them private.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {['sharex', 'bash', 'flameshot', 'spectacle'].map(
-                    (client) => (
-                      <Button
-                        key={client}
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void downloadClient(client)}
-                      >
-                        {
-                          {
-                            sharex: 'ShareX',
-                            bash: 'Bash',
-                            flameshot: 'Flameshot',
-                            spectacle: 'Spectacle',
-                          }[client]
-                        }
-                      </Button>
-                    )
-                  )}
-                  <ITakeSetupButton
-                    profileId={editing.id}
-                    profileName={editing.name}
-                    disabled={busy}
-                    compact
-                  />
-                </div>
-              </div>
+              <ProfileToolDownloads
+                profileId={editing.id}
+                profileName={editing.name}
+                disabled={busy}
+              />
             )}
           </CardContent>
         </Card>
