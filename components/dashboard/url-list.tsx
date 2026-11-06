@@ -34,15 +34,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-import { useToast } from '@/hooks/use-toast'
+import { type ShortLink, shortLinkUrl } from '@/lib/links/schema'
 
-interface ShortenedUrl {
-  id: string
-  shortCode: string
-  targetUrl: string
-  clicks: number
-  createdAt: string
-}
+import { useToast } from '@/hooks/use-toast'
 
 interface URLListProps {
   refreshTrigger?: number
@@ -50,13 +44,13 @@ interface URLListProps {
 }
 
 export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
-  const [urls, setUrls] = useState<ShortenedUrl[]>([])
+  const [urls, setUrls] = useState<ShortLink[]>([])
   const requestVersion = useRef(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [origin, setOrigin] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState<ShortenedUrl | null>(null)
+  const [deleting, setDeleting] = useState<ShortLink | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const { toast } = useToast()
 
@@ -91,10 +85,10 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
     return () => controller.abort()
   }, [refreshTrigger, fetchUrls])
 
-  const copyUrl = async (url: ShortenedUrl) => {
+  const copyUrl = async (url: ShortLink) => {
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}/u/${url.shortCode}`
+        shortLinkUrl(url.shortCode, window.location.origin)
       )
       setCopiedId(url.id)
       toast({ title: 'Link copied' })
@@ -131,7 +125,7 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
     }
   }
 
-  const rowActions = (url: ShortenedUrl) => (
+  const rowActions = (url: ShortLink) => (
     <>
       <Button
         variant="ghost"
@@ -241,13 +235,13 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
                       <div className="mt-1 flex items-center gap-1 lg:hidden">
                         <div className="min-w-0 flex-1 space-y-0.5 text-xs">
                           <a
-                            href={`/u/${url.shortCode}`}
+                            href={shortLinkUrl(url.shortCode)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title={`${origin}/u/${url.shortCode}`}
+                            title={shortLinkUrl(url.shortCode, origin)}
                             className="block truncate rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring md:hidden"
                           >
-                            {origin}/u/{url.shortCode}
+                            {shortLinkUrl(url.shortCode, origin)}
                           </a>
                           {/* Breaks only between the two facts, and the
                               separator moves with the date, so a line
@@ -280,13 +274,13 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <a
-                        href={`/u/${url.shortCode}`}
+                        href={shortLinkUrl(url.shortCode)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`${origin}/u/${url.shortCode}`}
+                        title={shortLinkUrl(url.shortCode, origin)}
                         className="block truncate rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        {origin}/u/{url.shortCode}
+                        {shortLinkUrl(url.shortCode, origin)}
                       </a>
                     </TableCell>
                     <TableCell className="hidden text-right tabular-nums md:table-cell">
@@ -321,7 +315,7 @@ export function URLList({ refreshTrigger = 0, onUrlDeleted }: URLListProps) {
             <AlertDialogDescription>
               The short link{' '}
               <span className="break-all font-medium text-foreground">
-                {origin}/u/{deleting?.shortCode}
+                {shortLinkUrl(deleting?.shortCode ?? '', origin)}
               </span>{' '}
               will stop redirecting to its destination. This cannot be undone.
             </AlertDialogDescription>

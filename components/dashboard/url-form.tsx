@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 
-import { CreateUrlSchema } from '@/types/dto/url'
 import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 import { z } from 'zod'
 
@@ -10,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+
+import { shortLinkInputSchema } from '@/lib/links/schema'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -32,7 +33,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
     setError('')
 
     try {
-      const validatedData = CreateUrlSchema.parse({ url: url.trim() })
+      const validatedData = shortLinkInputSchema.parse({ url: url.trim() })
       const response = await fetch('/api/urls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

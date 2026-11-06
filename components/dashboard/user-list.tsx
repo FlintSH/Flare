@@ -105,6 +105,11 @@ import {
 } from '@/components/ui/tooltip'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
+import {
+  type AccountShortLink,
+  type AccountShortLinkPage,
+  shortLinkUrl,
+} from '@/lib/links/schema'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
@@ -141,14 +146,6 @@ interface File {
   urlPath: string
 }
 
-interface ShortenedUrl {
-  id: string
-  shortCode: string
-  targetUrl: string
-  clicks: number
-  createdAt: string
-}
-
 interface PaginationData {
   total: number
   pages: number
@@ -164,11 +161,6 @@ interface FileFilters {
 
 interface FileResponse {
   files: File[]
-  pagination: PaginationData
-}
-
-interface UrlResponse {
-  urls: ShortenedUrl[]
   pagination: PaginationData
 }
 
@@ -469,7 +461,7 @@ export function UserList() {
   const [filesLoading, setFilesLoading] = useState(false)
   const [urlsLoading, setUrlsLoading] = useState(false)
   const [userFiles, setUserFiles] = useState<File[]>([])
-  const [userUrls, setUserUrls] = useState<ShortenedUrl[]>([])
+  const [userUrls, setUserUrls] = useState<AccountShortLink[]>([])
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
     email: '',
@@ -557,7 +549,7 @@ export function UserList() {
 
         const response = await fetch(`/api/users/${userId}/urls?${params}`)
         if (!response.ok) throw new Error('Failed to fetch user URLs')
-        const data: UrlResponse = await response.json()
+        const data: AccountShortLinkPage = await response.json()
         if (requestId !== urlsRequest.current) return
         setUserUrls(data.urls)
         setUrlPagination(data.pagination)
@@ -1821,7 +1813,7 @@ export function UserList() {
                               <TableRow key={url.id}>
                                 <TableCell className="py-3 pl-4">
                                   <a
-                                    href={`/u/${url.shortCode}`}
+                                    href={shortLinkUrl(url.shortCode)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex max-w-full items-center gap-2 rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"

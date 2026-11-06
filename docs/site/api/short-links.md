@@ -45,7 +45,7 @@ The response returns a code rather than a complete short URL. Combine your insta
 https://files.example.com/u/aB3_dE
 ```
 
-Flare generates a unique six-character code. There is no API parameter for a custom code, link password, expiration, or editable destination. Repeating creation can create another short link to the same target; it is not an idempotent lookup.
+Flare generates a unique six-character code. When a drawn code is already taken, including by a request that arrives at the same moment, Flare draws another, up to five times. Earlier versions answered that concurrent case with `500`. There is no API parameter for a custom code, link password, expiration, or editable destination. Repeating creation can create another short link to the same target; it is not an idempotent lookup.
 
 ## List your short links
 
@@ -102,3 +102,40 @@ The count reflects redirect requests, including requests from bots and link prev
 ## Error handling
 
 Invalid destinations return `400` with an `error` message and `success: false`. Missing or insufficient credentials return `401` with `{ "error": "Unauthorized" }`. An authenticated account missing the required current role permission receives `403`. Server failures return `500`. Malformed JSON returns `400` with `{ "success": false, "error": "Invalid JSON." }`.
+
+## Moderation routes
+
+**Admin → Users → View content** uses two routes to inspect and remove another account's links. Both need a browser session: named tokens and the upload credential are refused, whatever their owner's roles. Without a session they return `401` with `{ "error": "Authentication required" }`; without the permission, `403` with `{ "error": "Permission denied" }`.
+
+**`GET /api/users/{id}/urls`** · Permission: **`content.read`**
+
+Lists the links owned by account `{id}`, newest first, one page at a time:
+
+| Parameter | Default | Values                                                                      |
+| --------- | ------- | --------------------------------------------------------------------------- |
+| `page`    | `1`     | Positive integer. A page past the last one returns the last page.           |
+| `limit`   | `10`    | Positive integer, at most `100`.                                            |
+| `search`  | none    | Text matched anywhere in the code or the destination, ignoring letter case. |
+
+A `page` or `limit` that isn't a positive integer uses its default. The body has no `success` field, and its links leave out `userId`:
+
+```json
+{
+  "urls": [
+    {
+      "id": "cm_link",
+      "shortCode": "aB3_dE",
+      "targetUrl": "https://example.com/a/long/path",
+      "clicks": 12,
+      "createdAt": "2026-09-20T12:00:00.000Z"
+    }
+  ],
+  "pagination": { "total": 1, "pages": 1, "page": 1, "limit": 10 }
+}
+```
+
+`pagination.page` is the page actually returned. With no matching links, `pages` is `0` and `page` is `1`. Earlier versions used `page` and `limit` as given: a value that wasn't a number, or a page below 1, returned `500`, a page past the end returned an empty list, and `limit` had no maximum.
+
+**`DELETE /api/users/{id}/urls/{urlId}`** · Permission: **`content.delete`**
+
+Deletes the link only while account `{id}` owns it; see [content moderation deletion](./roles#content-moderation-deletion).

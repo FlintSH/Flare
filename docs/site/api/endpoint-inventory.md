@@ -204,7 +204,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
 | `/api/users/{id}/files`          | GET            | `content.read`; inspect an account's files.                                                                                                               |
 | `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`.                                                                                                        |
-| `/api/users/{id}/urls`           | GET            | `content.read`; inspect an account's short links.                                                                                                         |
+| `/api/users/{id}/urls`           | GET            | `content.read`; page through an account's short links: `page`, `limit` (default 10, at most 100), `search`. [Contract](./short-links#moderation-routes).  |
 | `/api/users/{id}/urls/{urlId}`   | DELETE         | `content.delete`; session-only deletion of a short link owned by that target account. Returns `204`; wrong owner/missing URL returns `404`.               |
 | `/api/users/{id}/login`          | POST           | `users.read`; fetch target account information. Does not itself issue a login session. The dashboard no longer calls it; it remains for existing clients. |
 | `/api/settings`                  | PATCH, POST    | PATCH: corresponding section permission; legacy whole-settings POST: Administrator. [Field mapping](./roles#delegated-settings-writes).                   |

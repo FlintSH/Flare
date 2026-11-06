@@ -26,6 +26,8 @@ https://files.example.com/u/aB3xY9
 
 The dashboard does not offer a custom short code. Your account's vanity URL setting affects uploaded-file URLs, not the generated `/u/…` path.
 
+If two links created at the same moment draw the same code, Flare gives the second one another code instead of failing. Earlier versions showed **Internal server error** in that case; choosing **Shorten** again worked.
+
 <Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created short link with copy and open controls" caption="Copy the new link directly, or open it to check the destination." />
 
 ## Manage existing links
