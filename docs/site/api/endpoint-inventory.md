@@ -105,6 +105,8 @@ These routes explicitly read an interactive session. Neither a named API token n
 
 Every write these routes take from a browser session follows the [browser-session write rule](./authentication#browser-session-writes): Flare's own origin, and JSON or multipart bodies sent as such. Integration commands also bound the body size. Generated uploader configurations contain a credential and should be treated as private downloads.
 
+`POST /api/profile/avatar` reads its image as the logo and favicon uploads do: content that isn't a PNG, JPEG, GIF, or WebP image answers `400` with `File content is not a PNG, JPEG, GIF, or WebP image.` An image in one of those formats sent as another of them, such as a JPEG sent as `image/png`, is accepted. Earlier builds refused that too and answered both with `File content does not match claimed image type`.
+
 ### Archive workspace
 
 The following owner-library archive operations require the owner's browser session and reject an `Authorization` header. `content.read` and administrator privileges do not substitute for source-file ownership on these routes. Share-page reads use the separate file-content routes above; creation and extraction remain owner-only. Their optional `profileRevision` and `profileEffectiveRevision` bind a selected profile and its effective inherited settings to the values returned by the profile list. See [archive API contracts](./archives) for formats, limits, request examples, and response shapes.

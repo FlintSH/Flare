@@ -86,12 +86,14 @@ describe('avatar policy shared by the profile control and the upload route', () 
       })
   })
 
-  it('publishes an accepted image whose content matches its type', async () => {
+  it('publishes an image whose content is an accepted format', async () => {
     for (const [bytes, type] of [
       [png, 'image/png'],
       [jpeg, 'image/jpeg'],
       [gif, 'image/gif'],
       [webp, 'image/webp'],
+      // Avatars are stored and served as JPEG, whatever the browser named.
+      [jpeg, 'image/png'],
     ] as const) {
       const response = await upload({
         headers: { Origin: 'http://localhost' },
@@ -106,7 +108,7 @@ describe('avatar policy shared by the profile control and the upload route', () 
     }
   })
 
-  it('refuses other origins, non-form bodies, and oversized, unaccepted or mislabeled images before storing them', async () => {
+  it('refuses other origins, non-form bodies, and oversized, unaccepted or non-image files before storing them', async () => {
     const endless = new ReadableStream({
       pull(controller) {
         controller.enqueue(new Uint8Array(256 * 1024))
@@ -187,12 +189,12 @@ describe('avatar policy shared by the profile control and the upload route', () 
       [
         upload(form('<html>not an image</html>', 'image/png')),
         400,
-        'File content does not match claimed image type',
+        'File content is not a PNG, JPEG, GIF, or WebP image.',
       ],
       [
-        upload(form(jpeg, 'image/png')),
+        upload(form(Buffer.from('BM fixture bitmap'), 'image/gif')),
         400,
-        'File content does not match claimed image type',
+        'File content is not a PNG, JPEG, GIF, or WebP image.',
       ],
       [upload(form('not an uploaded file')), 400, 'No file provided'],
     ]

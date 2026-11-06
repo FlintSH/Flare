@@ -115,7 +115,7 @@ If no job exists, confirm whether the deletion happened before the durable-clean
 
 ## An avatar upload failed or cleanup remains blocked
 
-A new avatar is published only after the storage write succeeds and the account's current permission and quota pass a second check. A deleted account or revoked `profile.update` permission can reject an upload that was already in progress. The old avatar stays in place if publication fails.
+A new avatar is published only after the storage write succeeds and the account's current permission and quota pass a second check. A deleted account or revoked `profile.update` permission can reject an upload that was already in progress. The old avatar stays in place if publication fails. An image over 2 MB, of a type other than PNG, JPEG, GIF, or WebP, or whose content isn't one of those is refused before anything is written, so it leaves no cleanup row.
 
 Inspect the [cleanup queue](/hosting/maintenance#inspect-pending-cleanup). A `writePending = true` row protects an active or interrupted avatar write from premature deletion. A restart deliberately does not clear that flag. If a writer crashed, follow [interrupted-write recovery](/hosting/maintenance#recover-an-interrupted-avatar-write): stop every possible old writer before releasing the one verified record.
 
