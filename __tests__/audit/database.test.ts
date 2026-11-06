@@ -665,6 +665,8 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     expect(invite).toMatchObject({
       targetId: 'invite-uses',
+      // An invite is known by its note, and this one has none.
+      targetName: null,
       details: {
         changedFields: ['uses'],
         before: { uses: 0 },
@@ -1028,8 +1030,11 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       /old-secret|new-secret|password-secret|token-secret|fixture-secret/
     )
     expect(
-      events.find((event) => event.action === 'setting.update')?.details
-    ).toMatchObject({ settingsKeys: ['settings.email.password'] })
+      events.find((event) => event.action === 'setting.update')
+    ).toMatchObject({
+      targetName: 'flare_config',
+      details: { settingsKeys: ['settings.email.password'] },
+    })
     expect(
       events.find((event) => event.action === 'user.update')?.details
     ).toMatchObject({ changedFields: ['password', 'uploadToken'] })

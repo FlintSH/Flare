@@ -24,7 +24,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
 
-import type { AuditEventView } from '@/lib/audit/types'
+import type { AuditQuery } from '@/lib/audit/query'
+import {
+  AUDIT_OUTCOMES,
+  type AuditEventView,
+  type AuditOutcome,
+  type AuditPage,
+} from '@/lib/audit/types'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
 
@@ -40,14 +46,6 @@ type Filters = {
   targetId: string
   requestId: string
 }
-type Result = {
-  events: AuditEventView[]
-  total: number
-  page: number
-  limit: number
-  pages: number
-  filters: { categories: string[]; actions: string[] }
-}
 const emptyFilters: Filters = {
   q: '',
   category: '',
@@ -59,6 +57,12 @@ const emptyFilters: Filters = {
   actorId: '',
   targetId: '',
   requestId: '',
+}
+
+const OUTCOME_LABELS: Record<AuditOutcome, string> = {
+  success: 'Success',
+  failure: 'Failure',
+  denied: 'Denied',
 }
 
 const ACRONYMS = new Set([
@@ -308,7 +312,7 @@ function AccountAuditLog() {
   const [active, setActive] = useState<Filters>(emptyFilters)
   const [page, setPage] = useState(1)
   const [refresh, setRefresh] = useState(0)
-  const [result, setResult] = useState<Result | null>(null)
+  const [result, setResult] = useState<AuditPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -327,7 +331,7 @@ function AccountAuditLog() {
           'actorId',
           'targetId',
           'requestId',
-        ] as const)
+        ] as const satisfies readonly (keyof AuditQuery & keyof Filters)[])
           if (active[field].trim()) query.set(field, active[field].trim())
         if (active.range !== 'all' && active.range !== 'custom')
           query.set(
@@ -469,9 +473,11 @@ function AccountAuditLog() {
             onChange={(value) => update('outcome', value)}
           >
             <option value="">All outcomes</option>
-            <option value="success">Success</option>
-            <option value="failure">Failure</option>
-            <option value="denied">Denied</option>
+            {AUDIT_OUTCOMES.map((outcome) => (
+              <option key={outcome} value={outcome}>
+                {OUTCOME_LABELS[outcome]}
+              </option>
+            ))}
           </FilterSelect>
           <FilterSelect
             label="Action"

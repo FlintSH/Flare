@@ -206,6 +206,19 @@ describe('safe durable audit events', () => {
     expect(events[0].actorName).toBe('System')
   })
 
+  it('keeps the byte count an archive member read sends', async () => {
+    await recordAudit({
+      action: 'archive.member.read',
+      category: 'archives',
+      details: { name: 'notes/readme.txt', size: 4096, bytes: 1024 },
+    })
+    expect(events[0].details).toEqual({
+      name: 'notes/readme.txt',
+      size: 4096,
+      bytes: 1024,
+    })
+  })
+
   it('bounds strings, arrays and nesting, and removes non-finite numbers', () => {
     expect(
       sanitizeAuditDetails({

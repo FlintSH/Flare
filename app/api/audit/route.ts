@@ -1,4 +1,7 @@
+import type { AuditEvent } from '@prisma/client'
+
 import { auditQuerySchema, auditWhere } from '@/lib/audit/query'
+import type { AuditPage } from '@/lib/audit/types'
 import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
@@ -14,7 +17,7 @@ const api = routes('/api/audit', {
 })
 
 export const GET = api(
-  async (request) => {
+  async (request): Promise<AuditPage<AuditEvent>> => {
     await requireSession('audit.read')
     const parameters = new URL(request.url).searchParams
     const parsed = auditQuerySchema.safeParse(Object.fromEntries(parameters))
