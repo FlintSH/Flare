@@ -25,6 +25,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { allows } from '@/lib/permissions/actions'
+import { TAG_NAME_MAX_LENGTH, TAG_RULE_MAX_LENGTH } from '@/lib/tags/schema'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -188,7 +189,7 @@ export function TagManager({
               <Input
                 id="tag-name"
                 autoFocus
-                maxLength={40}
+                maxLength={TAG_NAME_MAX_LENGTH}
                 placeholder="e.g. Receipts, Work, Inspiration"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -251,7 +252,7 @@ export function TagManager({
                     }
                     value={phrase}
                     onChange={(event) => setPhrase(event.target.value)}
-                    maxLength={200}
+                    maxLength={TAG_RULE_MAX_LENGTH}
                     disabled={busy}
                     required
                   />

@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
+import { nameKey, normalizeName } from '@/lib/library/names'
+import { TAG_NAME_MAX_LENGTH } from '@/lib/tags/schema'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -42,9 +44,9 @@ export function FileTagsDialog({
   const [announcement, setAnnouncement] = useState('')
   const currentFiles = memberships.files
   const ready = !!currentFiles && !loading && !loadError
-  const matching = tags.filter((tag) =>
-    tag.name.toLowerCase().includes(search.toLowerCase())
-  )
+  // Names compare as they are stored, so the list and Create agree.
+  const searchKey = nameKey(normalizeName(search))
+  const matching = tags.filter((tag) => nameKey(tag.name).includes(searchKey))
   const update = async (
     tag: Pick<TagView, 'id' | 'name'>,
     action: 'add' | 'remove'
@@ -85,13 +87,9 @@ export function FileTagsDialog({
     setBusy(true)
     setError('')
     try {
-      const normalized = search
-        .normalize('NFKC')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .toLowerCase()
+      const key = nameKey(normalizeName(search))
       const tag =
-        tags.find((tag) => tag.name.toLowerCase() === normalized) ??
+        tags.find((tag) => nameKey(tag.name) === key) ??
         (await tagRequest<TagView>(
           '/api/tags',
           'POST',
@@ -153,7 +151,7 @@ export function FileTagsDialog({
             placeholder="Find or create a tag…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            maxLength={40}
+            maxLength={TAG_NAME_MAX_LENGTH}
             disabled={busy}
           />
         </form>
@@ -238,9 +236,7 @@ export function FileTagsDialog({
           )}
           {search.trim() &&
             ready &&
-            !tags.some(
-              (tag) => tag.name.toLowerCase() === search.trim().toLowerCase()
-            ) && (
+            !tags.some((tag) => nameKey(tag.name) === searchKey) && (
               <Button
                 variant="ghost"
                 // On the rows' columns: the plus over the checkboxes.

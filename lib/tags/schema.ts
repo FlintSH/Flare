@@ -1,23 +1,23 @@
 import { z } from 'zod'
 
 import { BATCH_LIMIT } from '@/lib/library/contract'
+import { nameSchema } from '@/lib/library/names'
 
-export const tagNameSchema = z
-  .string()
-  .transform((name) => name.normalize('NFKC').trim().replace(/\s+/g, ' '))
-  .pipe(
-    z
-      .string()
-      .min(1, 'Give your tag a name.')
-      .max(40, 'Tag names can be up to 40 characters.')
-      .refine((name) => !/[\p{Cc}\p{Cf}]/u.test(name), 'Use a plain-text name.')
-  )
+export const TAG_NAME_MAX_LENGTH = 40
+export const TAG_RULE_MAX_LENGTH = 200
+
+export const tagNameSchema = nameSchema('tag', TAG_NAME_MAX_LENGTH)
 
 export const tagInputSchema = z
   .object({
     name: tagNameSchema,
     ruleSource: z.enum(['filename', 'ocr']).nullable().default(null),
-    ruleText: z.string().trim().max(200).nullable().default(null),
+    ruleText: z
+      .string()
+      .trim()
+      .max(TAG_RULE_MAX_LENGTH)
+      .nullable()
+      .default(null),
   })
   .strict()
   .superRefine((input, context) => {

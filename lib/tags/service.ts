@@ -12,26 +12,6 @@ export class TagError extends HttpError {
   }
 }
 
-export const tagViewSelect = {
-  id: true,
-  name: true,
-  ruleSource: true,
-  ruleText: true,
-  _count: { select: { files: { where: { excluded: false } } } },
-} satisfies Prisma.VaultTagSelect
-
-export function tagView(
-  tag: Prisma.VaultTagGetPayload<{ select: typeof tagViewSelect }>
-) {
-  return {
-    id: tag.id,
-    name: tag.name,
-    ruleSource: tag.ruleSource as RuleSource | null,
-    ruleText: tag.ruleText,
-    fileCount: tag._count.files,
-  }
-}
-
 export async function validateOwnedTagIds(
   userId: string,
   tagIds: string[],

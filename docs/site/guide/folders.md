@@ -22,7 +22,7 @@ Everyone initially includes folder permissions; an administrator can restrict th
 3. Open the folder to see its direct files and subfolders.
 4. Choose **New folder** inside it to create a subfolder, or **Upload here** to add files.
 
-Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Names must be distinct within the same parent, ignoring letter case, so `Photos` and `photos` can't share a parent. The same name can be useful in separate projects.
+Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Flare trims the ends of a name and saves each run of spaces as one space; unlike a tag name, a folder name can't contain a tab or line break. Names must be distinct within the same parent, ignoring letter case, so `Photos` and `photos` can't share a parent. The same name can be useful in separate projects. Folders that [archive extraction](./archives#extract-into-your-library) creates follow the same rules.
 
 **All files** includes files from every folder. **Unfiled** includes files that do not belong to a folder. Opening a specific folder shows its direct files; open a subfolder to see the files inside that subfolder.
 

@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { sharedFolderUrl } from '@/lib/files/urls'
-import type { FolderView } from '@/lib/folders/schema'
+import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
 
 import { folderRequest, useFolders } from '@/hooks/use-folders'
 import { useToast } from '@/hooks/use-toast'
@@ -172,7 +172,7 @@ export function FolderDialog({
                 autoFocus
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                maxLength={80}
+                maxLength={FOLDER_NAME_MAX_LENGTH}
                 disabled={busy}
                 placeholder="e.g. Marketing assets"
               />

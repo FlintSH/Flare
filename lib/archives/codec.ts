@@ -9,7 +9,7 @@ import { crc32, createGunzip } from 'node:zlib'
 import * as tar from 'tar-stream'
 import { openPromise } from 'yauzl'
 
-import { folderNameSchema } from '@/lib/folders/schema'
+import { FOLDER_NAME_MAX_LENGTH, folderNameSchema } from '@/lib/folders/schema'
 
 import { ArchiveError } from './errors'
 import {
@@ -49,7 +49,7 @@ export function validateArchivePath(raw: string, directory = false): string {
       const parsed = folderNameSchema.safeParse(part)
       if (!parsed.success)
         throw new ArchiveError(
-          'An archive folder name does not fit Flare’s folder rules (80 characters, no controls or slashes).'
+          `An archive folder name does not fit Flare’s folder rules (${FOLDER_NAME_MAX_LENGTH} characters, no controls or slashes).`
         )
       return parsed.data
     }

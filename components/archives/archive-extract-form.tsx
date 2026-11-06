@@ -27,6 +27,7 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { folderPath } from '@/lib/folders/navigation'
+import { FOLDER_NAME_MAX_LENGTH } from '@/lib/folders/schema'
 import { libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes } from '@/lib/utils'
@@ -214,7 +215,7 @@ export function ArchiveExtractForm({
               id="archive-extract-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              maxLength={80}
+              maxLength={FOLDER_NAME_MAX_LENGTH}
               required
               disabled={busy}
             />

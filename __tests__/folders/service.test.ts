@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createFolder,
   deleteFolder,
+  insertFolder,
   moveFilesToFolder,
   updateFolder,
   validateOwnedFolderId,
@@ -73,6 +74,30 @@ describe('owner-isolated folder mutations', () => {
       createFolder('admin', { name: 'Week 2', parentId: 'foreign' })
     ).rejects.toMatchObject({ status: 404 })
     expect(mocks.vaultFolder.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('creates folders with the case-insensitive key and only the fields a caller selects', async () => {
+    const tx = {
+      vaultFolder: { create: vi.fn().mockResolvedValue({ id: 'created' }) },
+    }
+    await expect(
+      insertFolder(
+        tx as never,
+        'owner',
+        { name: 'Week 1', parentId: 'folder' },
+        { id: true }
+      )
+    ).resolves.toEqual({ id: 'created' })
+    expect(tx.vaultFolder.create).toHaveBeenCalledWith({
+      data: {
+        userId: 'owner',
+        name: 'Week 1',
+        normalizedName: 'week 1',
+        parentId: 'folder',
+      },
+      select: { id: true },
+    })
+    expect(mocks.vaultFolder.create).not.toHaveBeenCalled()
   })
 
   it('validates upload destinations using the supplied transaction', async () => {

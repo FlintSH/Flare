@@ -13,7 +13,7 @@ import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import { folderNameSchema } from '@/lib/folders/schema'
-import { validateOwnedFolderId } from '@/lib/folders/service'
+import { insertFolder, validateOwnedFolderId } from '@/lib/folders/service'
 import { loggers } from '@/lib/logger'
 import { actionPermissions, allows } from '@/lib/permissions/actions'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
@@ -671,25 +671,24 @@ export async function extractArchive(
           options
         )
         await validateOwnedFolderId(actor.user.id, input.folderId, tx)
-        const wrapper = await tx.vaultFolder.create({
-          data: {
-            userId: actor.user.id,
-            name: input.name,
-            normalizedName: input.name.toLowerCase(),
-            parentId: input.folderId,
-          },
-        })
+        const wrapper = await insertFolder(
+          tx,
+          actor.user.id,
+          { name: input.name, parentId: input.folderId },
+          { id: true }
+        )
         const folderIds = new Map([['', wrapper.id]])
         for (const [path, directory] of directories) {
           operation.signal.throwIfAborted()
-          const folder = await tx.vaultFolder.create({
-            data: {
-              userId: actor.user.id,
+          const folder = await insertFolder(
+            tx,
+            actor.user.id,
+            {
               name: directory.name,
-              normalizedName: directory.name.toLowerCase(),
               parentId: folderIds.get(directory.parentPath)!,
             },
-          })
+            { id: true }
+          )
           folderIds.set(path, folder.id)
         }
         const files = []

@@ -22,7 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { folderPath } from '@/lib/folders/navigation'
-import type { FolderView } from '@/lib/folders/schema'
+import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -232,7 +232,7 @@ export function MoveFilesDialog({
               placeholder="Folder name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              maxLength={80}
+              maxLength={FOLDER_NAME_MAX_LENGTH}
               disabled={busy}
             />
             <div className="flex justify-end gap-2">

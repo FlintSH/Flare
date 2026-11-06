@@ -154,6 +154,14 @@ describe('archive format detection and paths', () => {
     expect(validateArchivePath('./photos/Trip.jpg')).toBe('photos/Trip.jpg')
     expect(validateArchivePath('./', true)).toBe('')
   })
+  it('names the folder rules when a folder name breaks them', () => {
+    expect(() => validateArchivePath('x'.repeat(81) + '/file')).toThrow(
+      'An archive folder name does not fit Flare’s folder rules (80 characters, no controls or slashes).'
+    )
+    expect(validateArchivePath('x'.repeat(80) + '/file')).toBe(
+      'x'.repeat(80) + '/file'
+    )
+  })
 })
 
 describe('reading and staging archive contents', () => {
