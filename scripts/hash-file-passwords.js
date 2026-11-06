@@ -39,6 +39,7 @@ async function migrateFilePasswords() {
 
     let hashedCount = 0
     let skippedCount = 0
+    let failedCount = 0
 
     for (const file of filesWithPasswords) {
       try {
@@ -63,9 +64,11 @@ async function migrateFilePasswords() {
         const isValid = await compare(file.password, hashedPassword)
         if (!isValid) {
           console.error(`Hash verification failed for file: ${file.name}`)
+          failedCount++
         }
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error.message)
+        failedCount++
       }
     }
 
@@ -75,14 +78,24 @@ async function migrateFilePasswords() {
     if (skippedCount > 0) {
       console.log(`Skipped ${skippedCount} already hashed passwords`)
     }
+    // Flare checks file passwords only against bcrypt hashes, so a file left
+    // unhashed can't be opened with its password until a later start hashes
+    // it. One unreadable row shouldn't keep the instance from starting.
+    if (failedCount > 0) {
+      console.error(
+        `Could not hash ${failedCount} of ${filesWithPasswords.length} file passwords`
+      )
+      return
+    }
 
     console.log('File password migrations completed successfully')
-  } catch (error) {
-    console.error('Failed to migrate file passwords:', error)
-    throw error
   } finally {
     await prisma.$disconnect()
   }
 }
 
-migrateFilePasswords().catch(console.error)
+// The start scripts stop on a non-zero exit instead of starting the server.
+migrateFilePasswords().catch((error) => {
+  console.error('Failed to migrate file passwords:', error)
+  process.exitCode = 1
+})

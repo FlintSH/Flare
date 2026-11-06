@@ -97,7 +97,7 @@ docker compose logs --tail=150 flare
 docker compose ps
 ```
 
-The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. Settings you saved keep their values; settings sections added by a newer release, such as email, single sign-on, invite limits, and appearance, start with their defaults. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
+The official image runs database and configuration migrations on startup. It does not require you to manually run `prisma db push`. If a migration fails, the container stops before starting Flare, and `docker compose logs` shows the migration's error followed by `Failed to run migrations`. Earlier images retried a failed migration 30 times, hid its error and reported `Could not connect to database after 30 attempts`. Keep that log and your backup, and follow [The container never becomes healthy](./troubleshooting#the-container-never-becomes-healthy). Settings you saved keep their values; settings sections added by a newer release, such as email, single sign-on, invite limits, and appearance, start with their defaults. Existing email functionality remains disabled on upgrade unless you enable it. Settings → General shows release information and update availability; it does not install the update for you.
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
