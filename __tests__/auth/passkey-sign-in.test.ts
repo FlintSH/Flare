@@ -59,6 +59,13 @@ describe('browser passkey confirmation', () => {
     )
   })
 
+  it('tells a throttled sign-in how long to wait', async () => {
+    mocks.signIn.mockResolvedValue({ ok: false, error: 'TooManyAttempts' })
+    await expect(signInWithPasskey()).rejects.toThrow(
+      'Too many sign-in attempts. Wait 15 minutes before trying again.'
+    )
+  })
+
   it('does not submit credentials after the device ceremony is canceled', async () => {
     const canceled = new Error('Canceled')
     canceled.name = 'NotAllowedError'

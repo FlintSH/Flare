@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
+import { getOidcErrorMessage } from '@/lib/auth/sign-in'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import { isOidcProviderConfigured } from '@/lib/config/oidc'
 

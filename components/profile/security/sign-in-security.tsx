@@ -32,6 +32,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import {
+  MAX_PASSKEYS,
+  SECURITY_CHALLENGE_MINUTES,
+  TOTP_CODE_PATTERN,
+  TOTP_DIGITS,
+  TOTP_PLACEHOLDER,
+} from '@/lib/auth/security/policy'
 import { accountRequest } from '@/lib/client/account-request'
 
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -499,7 +506,7 @@ function AccountSignInSecurity() {
                 disabled={
                   !supported ||
                   !status.passkeysAvailable ||
-                  status.passkeys.length >= 10
+                  status.passkeys.length >= MAX_PASSKEYS
                 }
                 onClick={() => openAction('add-passkey')}
               >
@@ -512,10 +519,10 @@ function AccountSignInSecurity() {
                   configured HTTPS address, or localhost for development.
                 </p>
               )}
-              {status.passkeys.length >= 10 && (
+              {status.passkeys.length >= MAX_PASSKEYS && (
                 <p className="text-xs text-muted-foreground">
-                  You can keep up to 10 passkeys. Remove one before adding
-                  another.
+                  You can keep up to {MAX_PASSKEYS} passkeys. Remove one before
+                  adding another.
                 </p>
               )}
               {status.passkeyRequired && status.passkeys.length === 1 && (
@@ -717,8 +724,9 @@ function AccountSignInSecurity() {
                         </code>
                       </div>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        Keep this key private. Setup expires after 5 minutes;
-                        cancel and start again if needed.
+                        Keep this key private. Setup expires after{' '}
+                        {SECURITY_CHALLENGE_MINUTES} minutes; cancel and start
+                        again if needed.
                       </p>
                     </div>
                     <div className="space-y-2">
@@ -727,11 +735,11 @@ function AccountSignInSecurity() {
                         data-sensitive="true"
                         id="setup-code"
                         name="setup-code"
-                        placeholder="000000"
+                        placeholder={TOTP_PLACEHOLDER}
                         inputMode="numeric"
                         autoComplete="one-time-code"
-                        pattern="[0-9]{6}"
-                        maxLength={6}
+                        pattern={TOTP_CODE_PATTERN}
+                        maxLength={TOTP_DIGITS}
                         required
                         disabled={busy}
                         autoFocus

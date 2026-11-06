@@ -71,7 +71,7 @@ If you return to the password step, enter your credentials again. An unfinished 
 
 ## Recover when your authenticator is unavailable
 
-At **Verify your identity**, choose **Use a recovery code**. Enter one unused code from your saved set. You still need your password; a recovery code alone does not sign you in.
+At **Verify your identity**, choose **Use a recovery code**. Enter one unused code from your saved set, with or without its hyphens and in any letter case. You still need your password; a recovery code alone does not sign you in.
 
 This section describes **authenticator recovery codes**. They do not work for an account that requires passkeys. For that account, use the separate [passkey recovery flow](#recover-when-required-passkeys-are-unavailable) and its dedicated codes.
 

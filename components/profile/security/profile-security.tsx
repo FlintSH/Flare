@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
 import { updateProfile } from '@/lib/client/account-request'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 
@@ -194,7 +195,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
                   autoComplete="one-time-code"
                   autoCapitalize="none"
                   spellCheck={false}
-                  maxLength={32}
+                  maxLength={RECOVERY_CODE_INPUT_LENGTH}
                   placeholder="Enter an authenticator or recovery code"
                   required
                   disabled={isLoading}

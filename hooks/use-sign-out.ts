@@ -2,6 +2,8 @@
 
 import { signOut } from 'next-auth/react'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+
 import { useToast } from '@/hooks/use-toast'
 
 /**
@@ -17,7 +19,7 @@ export function useSignOut({
       // The local form. With SSO auto-login, the usual sign-in page sends the
       // person straight back to their provider, which signs them in again or,
       // once they deleted their account, can provision a new one.
-      await signOut({ callbackUrl: '/auth/login?local=1' })
+      await signOut({ callbackUrl: LOCAL_SIGN_IN_PATH })
     } catch (error) {
       if (onError) return onError(error)
       console.error('Logout error:', error)

@@ -7,6 +7,7 @@ import { ForgotPasswordForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getEmailCapabilities } from '@/lib/email/config'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +40,7 @@ export default async function ForgotPasswordPage() {
           </AlertDescription>
         </Alert>
         <Button asChild className="mt-6 h-11 w-full">
-          <Link href="/auth/login?local=1">Back to sign in</Link>
+          <Link href={LOCAL_SIGN_IN_PATH}>Back to sign in</Link>
         </Button>
       </AuthShell>
     )

@@ -1,8 +1,7 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
+import { isLinkToken, newLinkToken } from '@/lib/security/link-token'
 import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
-
-import { INVITE_TOKEN_PATTERN } from './policy'
 
 export const INVITE_TOKEN_PURPOSE = 'invites.link.v1'
 
@@ -13,12 +12,12 @@ export function hashInviteToken(token: string) {
 }
 
 export function isInviteToken(value: unknown): value is string {
-  return typeof value === 'string' && INVITE_TOKEN_PATTERN.test(value)
+  return isLinkToken(value)
 }
 
 /** Encryption uses the same key hierarchy as webhook signing secrets. */
 export function createInviteToken() {
-  const token = randomBytes(32).toString('base64url')
+  const token = newLinkToken()
   return {
     token,
     hash: hashInviteToken(token),

@@ -1400,4 +1400,37 @@ suite('account security against disposable PostgreSQL', () => {
     await browserSessions.cleanupSessionHistory()
     expect(await prisma.loginAttempt.count()).toBe(31)
   })
+
+  it('keeps sign-in attempts, and sessions after they expire, for the history window', async () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000)
+    await prisma.loginAttempt.createMany({
+      data: [89, 91].map((days) => ({
+        id: `aged-${days}`,
+        userId: 'security-owner',
+        authMethod: 'credentials',
+        outcome: 'success',
+        createdAt: daysAgo(days),
+      })),
+    })
+    await prisma.browserSession.createMany({
+      data: [89, 91].map((days) => ({
+        id: `expired-${days}`,
+        userId: 'security-owner',
+        sessionVersion: 1,
+        authMethod: 'credentials',
+        expiresAt: daysAgo(days),
+      })),
+    })
+    await browserSessions.cleanupSessionHistory()
+    expect(
+      (await prisma.loginAttempt.findMany({ select: { id: true } })).map(
+        (row) => row.id
+      )
+    ).toEqual(['aged-89'])
+    expect(
+      (await prisma.browserSession.findMany({ select: { id: true } })).map(
+        (row) => row.id
+      )
+    ).toEqual(['expired-89'])
+  })
 })

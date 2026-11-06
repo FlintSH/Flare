@@ -1,7 +1,6 @@
 /** Shared by the invite API, registration, and dashboard. No server imports. */
 import { z } from 'zod'
 
-export const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 export const INVITE_NOTE_MAX = 100
 /** Bounds accidental scripts for accounts without member limits. */
 export const MAX_ACTIVE_INVITES = 1000

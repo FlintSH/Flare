@@ -2,6 +2,7 @@ import { AuthShell } from '@/components/auth/auth-shell'
 import { LoginForm } from '@/components/auth/login-form'
 import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
 
+import { isLocalSignIn } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { isOidcProviderConfigured } from '@/lib/config/oidc'
 
@@ -15,17 +16,18 @@ export default async function LoginPage({
   searchParams,
 }: Readonly<LoginPageProps>) {
   const config = await getConfig()
-  const { local, error } = await searchParams
+  const params = await searchParams
   const registrationsEnabled = config.settings.general.registrations.enabled
   const oidc = config.settings.general.oidc
   const oidcConfigured = isOidcProviderConfigured(oidc)
-  const oidcAutoRedirect = oidcConfigured && oidc.enforceSso && local !== '1'
+  const oidcAutoRedirect =
+    oidcConfigured && oidc.enforceSso && !isLocalSignIn(params)
 
   return (
     <AuthShell
       title={
         oidcAutoRedirect
-          ? error
+          ? params.error
             ? 'Sign-in failed'
             : 'Redirecting to sign-in'
           : 'Welcome back'
@@ -37,7 +39,10 @@ export default async function LoginPage({
       }
     >
       {oidcAutoRedirect ? (
-        <OidcAutoRedirect buttonText={oidc.buttonText} errorCode={error} />
+        <OidcAutoRedirect
+          buttonText={oidc.buttonText}
+          errorCode={params.error}
+        />
       ) : (
         <LoginForm
           registrationsEnabled={registrationsEnabled}

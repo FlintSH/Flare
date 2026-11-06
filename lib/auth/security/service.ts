@@ -9,10 +9,12 @@ import {
   createTotp,
   decryptTotp,
   encryptTotp,
+  isRecoveryCodeInput,
   newRecoveryCodes,
   recoveryHash,
   totpCounter,
 } from './crypto'
+import { SECURITY_CHALLENGE_MINUTES } from './policy'
 import { SecurityError, lockSecurityUser } from './shared'
 
 export type SecurityProof = { password?: string; code?: string }
@@ -35,7 +37,7 @@ export async function consumeSecondFactor(
 ): Promise<'totp' | 'recovery' | undefined> {
   if (!user.totpSecret) return
   const normalized = code?.trim() || ''
-  if (/^[a-f0-9\s-]{20,80}$/i.test(normalized)) {
+  if (isRecoveryCodeInput(normalized)) {
     const removed = await tx.recoveryCode.deleteMany({
       where: { userId: user.id, hash: recoveryHash(user.id, normalized) },
     })
@@ -111,7 +113,7 @@ export async function issueChallenge(
     data: {
       ...data,
       id: randomBytes(32).toString('base64url'),
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      expiresAt: new Date(Date.now() + SECURITY_CHALLENGE_MINUTES * 60_000),
     },
   })
 }

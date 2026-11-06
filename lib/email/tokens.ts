@@ -1,7 +1,8 @@
 import type { Prisma } from '@prisma/client'
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 import { lockUserRow } from '@/lib/database/locks'
+import { isLinkToken, newLinkToken } from '@/lib/security/link-token'
 
 import { EmailHttpError } from './errors'
 import type { EmailTokenPurpose } from './links'
@@ -19,7 +20,7 @@ export async function issueEmailToken(
     expiresAt: Date
   }
 ) {
-  const token = randomBytes(32).toString('base64url')
+  const token = newLinkToken()
   await tx.emailToken.updateMany({
     where: { userId: input.userId, purpose: input.purpose, consumedAt: null },
     data: { consumedAt: new Date() },
@@ -35,7 +36,7 @@ export async function consumeEmailToken(
   token: string,
   purposes: EmailTokenPurpose[]
 ) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token))
+  if (!isLinkToken(token))
     throw new EmailHttpError('This email link is invalid or expired.')
   const record = await tx.emailToken.findUnique({
     where: { tokenHash: hashEmailToken(token) },

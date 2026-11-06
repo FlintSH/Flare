@@ -3,6 +3,7 @@
 import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import { signIn } from 'next-auth/react'
 
+import { SignInError, TOO_MANY_SIGN_IN_ATTEMPTS } from '@/lib/auth/sign-in'
 import { accountRequest } from '@/lib/client/account-request'
 
 /** expectedUserId keeps an in-place confirmation bound to the open account. */
@@ -21,11 +22,8 @@ export async function signInWithPasskey(expectedUserId?: string) {
     callbackUrl: '/dashboard',
   })
   if (!result?.ok || result.error) {
-    if (result?.error === 'TooManyAttempts') {
-      throw new Error(
-        'Too many sign-in attempts. Wait 15 minutes before trying again.'
-      )
-    }
+    if (result?.error === SignInError.TooManyAttempts)
+      throw new Error(TOO_MANY_SIGN_IN_ATTEMPTS)
     throw new Error(
       expectedUserId
         ? 'Unable to confirm this account. Choose a passkey registered to the account you are editing.'

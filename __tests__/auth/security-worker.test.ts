@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { LOGIN_HISTORY_DAYS } from '@/lib/auth/security/policy'
 import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), warn: vi.fn() }))
@@ -42,6 +43,9 @@ describe('authentication retention worker', () => {
     expect(mocks.execute).toHaveBeenCalledTimes(6)
     expect(mocks.execute.mock.calls[1][0].join('')).toContain('LoginAttempt')
     expect(mocks.execute.mock.calls[2][0].join('')).toContain('BrowserSession')
+    // Both keep the login-history window, passed as a parameter.
+    expect(mocks.execute.mock.calls[1].slice(1)).toEqual([LOGIN_HISTORY_DAYS])
+    expect(mocks.execute.mock.calls[2].slice(1)).toEqual([LOGIN_HISTORY_DAYS])
   })
   it('retries a failed cleanup on the next poll without exposing its error', async () => {
     mocks.execute.mockRejectedValueOnce(new Error('private database details'))

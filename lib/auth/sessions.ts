@@ -6,11 +6,11 @@ import { prisma } from '@/lib/database/prisma'
 import { clientIp } from '@/lib/security/client-ip'
 import { findAccountByEmail } from '@/lib/users/email-claim'
 
+import { BROWSER_SESSION_DAYS, LOGIN_HISTORY_DAYS } from './security/policy'
 import { revokeSecuritySessions } from './security/service'
 import { SecurityError, lockSecurityUser } from './security/shared'
 
-export const BROWSER_SESSION_SECONDS = 30 * 24 * 60 * 60
-export const LOGIN_HISTORY_DAYS = 90
+export const BROWSER_SESSION_SECONDS = BROWSER_SESSION_DAYS * 24 * 60 * 60
 export type LoginMetadata = {
   ipAddress: string | null
   userAgent: string | null
@@ -322,17 +322,17 @@ export async function listLoginHistory(
   }
 }
 
-/** Indexed bounded batches retain 90 days, independent of sign-in availability. */
+/** Indexed bounded batches keep the history window, independent of sign-in availability. */
 export async function cleanupSessionHistory() {
   await prisma.$executeRaw`
     WITH expired AS MATERIALIZED (
-      SELECT "id" FROM "LoginAttempt" WHERE "createdAt" < NOW() - INTERVAL '90 days'
+      SELECT "id" FROM "LoginAttempt" WHERE "createdAt" < NOW() - ${LOGIN_HISTORY_DAYS} * INTERVAL '1 day'
       ORDER BY "createdAt" LIMIT 1000 FOR UPDATE SKIP LOCKED
     ) DELETE FROM "LoginAttempt" USING expired WHERE "LoginAttempt"."id" = expired."id"
   `
   await prisma.$executeRaw`
     WITH expired AS MATERIALIZED (
-      SELECT "id" FROM "BrowserSession" WHERE "expiresAt" < NOW() - INTERVAL '90 days'
+      SELECT "id" FROM "BrowserSession" WHERE "expiresAt" < NOW() - ${LOGIN_HISTORY_DAYS} * INTERVAL '1 day'
       ORDER BY "expiresAt" LIMIT 1000 FOR UPDATE SKIP LOCKED
     ) DELETE FROM "BrowserSession" USING expired WHERE "BrowserSession"."id" = expired."id"
   `

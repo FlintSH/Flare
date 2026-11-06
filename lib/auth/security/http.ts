@@ -7,11 +7,12 @@ import { HttpError } from '@/lib/http/errors'
 import { mediaType, readJson } from '@/lib/http/request'
 import type { RouteContract } from '@/lib/http/route'
 
+import { SECURITY_CODE_MAX_LENGTH } from './policy'
 import { SecurityError, securityLimit, validateSecurityOrigin } from './shared'
 
 export const proofSchema = z.object({
   password: z.string().max(256).optional(),
-  code: z.string().max(80).optional(),
+  code: z.string().max(SECURITY_CODE_MAX_LENGTH).optional(),
 })
 export const passkeyName = z.string().trim().min(1).max(64)
 export const challengeResponseSchema = z.object({

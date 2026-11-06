@@ -4,6 +4,8 @@ import { lockUserRow } from '@/lib/database/locks'
 import { HttpError } from '@/lib/http/errors'
 import { consumeLimit } from '@/lib/security/database-limit'
 
+import { SECURITY_LIMIT_MINUTES } from './policy'
+
 export class SecurityError extends HttpError {
   constructor(
     message: string,
@@ -55,11 +57,11 @@ export function validateSecurityOrigin(req: Request) {
     throw new SecurityError('Use a browser session for account security.', 401)
 }
 
-const SECURITY_LIMIT_SECONDS = 15 * 60
+const SECURITY_LIMIT_SECONDS = SECURITY_LIMIT_MINUTES * 60
 
 /**
  * Counts one security attempt under `key`, such as an account or a client
- * address, and refuses it once `limit` attempts fall in one 15-minute window.
+ * address, and refuses it once `limit` attempts fall in one window.
  */
 export async function securityLimit(key: string, limit = 20) {
   const { allowed } = await consumeLimit(
@@ -70,7 +72,7 @@ export async function securityLimit(key: string, limit = 20) {
   )
   if (!allowed)
     throw new SecurityError(
-      `Too many security attempts. Try again in ${SECURITY_LIMIT_SECONDS / 60} minutes.`,
+      `Too many security attempts. Try again in ${SECURITY_LIMIT_MINUTES} minutes.`,
       429,
       // The whole window, as the message says, not the time left in it.
       { headers: { 'Retry-After': String(SECURITY_LIMIT_SECONDS) } }

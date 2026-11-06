@@ -100,6 +100,9 @@ When trust is enabled, Flare accepts a verified claim tied to the current accoun
 | Automatic sign-up is disabled           | Review whether auto-provisioning should be enabled for eligible provider users                                            |
 | Provider has not verified this email    | Complete provider verification or deliberately reconsider the verified-email requirement                                  |
 | Account requires a passkey              | Use local login's passkey or dedicated recovery option; resetting the provider/password does not disable the requirement. |
+| Account uses local two-factor           | Sign in with the account's password and authenticator or recovery code, or a passkey; SSO stays refused for this account. |
 | Generic sign-in failure                 | Check callback URI, issuer discovery, secret, provider logs, public origin, and connectivity                              |
+
+The passkey and two-factor refusals open the local sign-in form (`/auth/login?local=1`) with the message, so auto-login doesn't send the person straight back to the provider.
 
 If auto-login prevents reaching the normal form, open `/auth/login?local=1`, sign in locally, and repair OIDC in Settings. If the local account is also gated by email verification, use the documented [email operator recovery](/admin/email#recover-from-an-email-lockout) to relax that policy while preserving authentication.

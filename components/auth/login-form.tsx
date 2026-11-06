@@ -18,7 +18,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
+import {
+  RECOVERY_CODE_INPUT_LENGTH,
+  SECURITY_CODE_MAX_LENGTH,
+  TOTP_CODE_PATTERN,
+  TOTP_DIGITS,
+  TOTP_PLACEHOLDER,
+} from '@/lib/auth/security/policy'
+import {
+  SignInError,
+  TOO_MANY_SIGN_IN_ATTEMPTS,
+  getOidcErrorMessage,
+} from '@/lib/auth/sign-in'
 import { getSetupResumePathAfterSignIn } from '@/lib/setup/navigation'
 import { cn } from '@/lib/utils'
 
@@ -116,8 +127,8 @@ export function LoginForm({
         })
         if (!result?.ok || result.error) {
           setError(
-            result?.error === 'TooManyAttempts'
-              ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
+            result?.error === SignInError.TooManyAttempts
+              ? TOO_MANY_SIGN_IN_ATTEMPTS
               : 'Unable to sign in. Check your email address and use an unused passkey recovery code from your latest set.'
           )
           return
@@ -149,12 +160,12 @@ export function LoginForm({
         redirect: false,
         callbackUrl: '/dashboard',
       })
-      if (result?.error === 'TwoFactorRequired') {
+      if (result?.error === SignInError.TwoFactorRequired) {
         pendingCredentials.current = credentials
         setTwoFactorRequired(true)
         return
       }
-      if (result?.error === 'PasskeyRequired') {
+      if (result?.error === SignInError.PasskeyRequired) {
         pendingCredentials.current = null
         setTwoFactorRequired(false)
         setError(
@@ -164,8 +175,8 @@ export function LoginForm({
       }
       if (!result || result.error) {
         setError(
-          result?.error === 'TooManyAttempts'
-            ? 'Too many sign-in attempts. Wait 15 minutes before trying again.'
+          result?.error === SignInError.TooManyAttempts
+            ? TOO_MANY_SIGN_IN_ATTEMPTS
             : twoFactorRequired
               ? 'Unable to verify this code. Use a fresh authenticator code or an unused recovery code, or go back and check your password.'
               : 'Invalid email or password'
@@ -216,7 +227,7 @@ export function LoginForm({
                 autoComplete="one-time-code"
                 autoCapitalize="none"
                 spellCheck={false}
-                maxLength={80}
+                maxLength={SECURITY_CODE_MAX_LENGTH}
                 required
                 disabled={busy}
                 data-sensitive="true"
@@ -249,13 +260,17 @@ export function LoginForm({
                 name="code"
                 inputMode={useRecoveryCode ? 'text' : 'numeric'}
                 placeholder={
-                  useRecoveryCode ? 'Enter your recovery code' : '000000'
+                  useRecoveryCode
+                    ? 'Enter your recovery code'
+                    : TOTP_PLACEHOLDER
                 }
                 autoComplete="one-time-code"
                 autoCapitalize="none"
                 spellCheck={false}
-                pattern={useRecoveryCode ? undefined : '[0-9]{6}'}
-                maxLength={useRecoveryCode ? 32 : 6}
+                pattern={useRecoveryCode ? undefined : TOTP_CODE_PATTERN}
+                maxLength={
+                  useRecoveryCode ? RECOVERY_CODE_INPUT_LENGTH : TOTP_DIGITS
+                }
                 required
                 disabled={busy}
                 autoFocus

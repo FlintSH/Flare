@@ -3,10 +3,9 @@ import { NextResponse } from 'next/server'
 import { securityRoutes } from '@/lib/auth/security/http'
 import {
   authenticationOptions,
-  passkeyCookieName,
+  passkeyChallengeCookie,
 } from '@/lib/auth/security/passkeys'
 import {
-  relyingParty,
   securityLimit,
   validateSecurityOrigin,
 } from '@/lib/auth/security/shared'
@@ -23,12 +22,6 @@ export const POST = api(async (request) => {
   )
   const { binding, ...result } = await authenticationOptions()
   const response = NextResponse.json(result)
-  response.cookies.set(passkeyCookieName(), binding, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: relyingParty().origin.startsWith('https:'),
-    path: '/',
-    maxAge: 300,
-  })
+  response.cookies.set(passkeyChallengeCookie(binding))
   return response
 })

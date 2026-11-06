@@ -7,6 +7,13 @@ import {
 } from 'node:crypto'
 import { Secret, TOTP } from 'otpauth'
 
+import { SECURITY_CODE_MAX_LENGTH, TOTP_DIGITS, isTotpCode } from './policy'
+
+const TOTP_PERIOD_SECONDS = 30
+// Recovery codes are random bytes written in hex, in groups for reading.
+const RECOVERY_CODE_BYTES = 10
+const PASSKEY_RECOVERY_CODE_BYTES = 16
+
 export function securityHash(value: string) {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -67,50 +74,72 @@ export function createTotp(
     issuer: 'Flare',
     label,
     algorithm: 'SHA1',
-    digits: 6,
-    period: 30,
+    digits: TOTP_DIGITS,
+    period: TOTP_PERIOD_SECONDS,
     secret,
   })
 }
 
-/** The counter, rather than the six-digit string, is the replay boundary. */
+/** The counter, rather than the code itself, is the replay boundary. */
 export function totpCounter(secret: string, token: string, now = Date.now()) {
-  if (!/^\d{6}$/.test(token)) return null
+  if (!isTotpCode(token)) return null
   const delta = createTotp(secret).validate({
     token,
     timestamp: now,
     window: 1,
   })
-  return delta === null ? null : Math.floor(now / 30000) + delta
+  return delta === null
+    ? null
+    : Math.floor(now / (TOTP_PERIOD_SECONDS * 1000)) + delta
+}
+
+/** A set of ten codes, each `bytes` random bytes in hex groups of `group`. */
+function newCodes(bytes: number, group: number) {
+  return Array.from({ length: 10 }, () =>
+    randomBytes(bytes)
+      .toString('hex')
+      .match(new RegExp(`.{1,${group}}`, 'g'))!
+      .join('-')
+  )
+}
+
+/** A recovery code as it is hashed: without spaces or hyphens, in lower case. */
+export function normalizeRecoveryCode(code: string) {
+  return code.replace(/[\s-]/g, '').toLowerCase()
 }
 
 export function newRecoveryCodes() {
-  return Array.from({ length: 10 }, () =>
-    randomBytes(10)
-      .toString('hex')
-      .match(/.{1,5}/g)!
-      .join('-')
-  )
+  return newCodes(RECOVERY_CODE_BYTES, 5)
+}
+
+/** Whether a second-factor code is written as a recovery code, not an authenticator code. */
+export function isRecoveryCodeInput(code: string) {
+  return new RegExp(
+    `^[a-f0-9\\s-]{${RECOVERY_CODE_BYTES * 2},${SECURITY_CODE_MAX_LENGTH}}$`,
+    'i'
+  ).test(code)
 }
 
 export function recoveryHash(userId: string, code: string) {
   return securityHash(
-    `flare-recovery-v1:${userId}:${code.replace(/[\s-]/g, '').toLowerCase()}`
+    `flare-recovery-v1:${userId}:${normalizeRecoveryCode(code)}`
   )
 }
 
 export function newPasskeyRecoveryCodes() {
-  return Array.from({ length: 10 }, () =>
-    randomBytes(16)
-      .toString('hex')
-      .match(/.{1,8}/g)!
-      .join('-')
+  return newCodes(PASSKEY_RECOVERY_CODE_BYTES, 8)
+}
+
+/** Whether a normalized code has the passkey recovery format. */
+export function isPasskeyRecoveryCode(normalized: string) {
+  return new RegExp(`^[a-f0-9]{${PASSKEY_RECOVERY_CODE_BYTES * 2}}$`).test(
+    normalized
   )
 }
 
 export function passkeyRecoveryHash(userId: string, code: string) {
   return securityHash(
-    `flare-passkey-recovery-v1:${userId}:${code.replace(/[\s-]/g, '').toLowerCase()}`
+    `flare-passkey-recovery-v1:${userId}:${normalizeRecoveryCode(code)}`
   )
 }
 

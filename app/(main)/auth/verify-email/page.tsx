@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { authOptions } from '@/lib/auth'
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 
 export const metadata = {
   title: 'Confirm your email · Flare',
@@ -39,7 +40,7 @@ export default async function VerifyEmailPage({
           </AlertDescription>
         </Alert>
         <Button asChild className="mt-6 h-11 w-full">
-          <Link href="/auth/login?local=1">Sign in</Link>
+          <Link href={LOCAL_SIGN_IN_PATH}>Sign in</Link>
         </Button>
       </AuthShell>
     )

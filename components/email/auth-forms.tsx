@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import {
   ACCOUNT_PASSWORD_MIN_LENGTH,
   PASSWORD_MAX_BYTES,
@@ -123,7 +124,7 @@ export function ForgotPasswordForm() {
       )}
       <Feedback error={error} message={message} />
       <AuthFooter>
-        <Link href="/auth/login?local=1" className={authLinkClassName}>
+        <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
           Back to sign in
         </Link>
       </AuthFooter>
@@ -216,7 +217,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <Feedback error={error} message={message} />
       {complete ? (
         <Button asChild className="h-11 w-full">
-          <Link href="/auth/login?local=1">Sign in with your new password</Link>
+          <Link href={LOCAL_SIGN_IN_PATH}>Sign in with your new password</Link>
         </Button>
       ) : (
         <AuthFooter>
@@ -224,7 +225,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             Request a new reset link
           </Link>
           <span aria-hidden="true"> · </span>
-          <Link href="/auth/login?local=1" className={authLinkClassName}>
+          <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
             Back to sign in
           </Link>
         </AuthFooter>
@@ -292,7 +293,7 @@ export function VerifyEmailForm({ token }: { token: string }) {
             <span aria-hidden="true"> · </span>
           </>
         )}
-        <Link href="/auth/login?local=1" className={authLinkClassName}>
+        <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
           Back to sign in
         </Link>
       </AuthFooter>
@@ -318,7 +319,7 @@ function VerificationStatus() {
           Try again
         </Button>
         <AuthFooter>
-          <Link className={authLinkClassName} href="/auth/login?local=1">
+          <Link className={authLinkClassName} href={LOCAL_SIGN_IN_PATH}>
             Sign in
           </Link>
         </AuthFooter>

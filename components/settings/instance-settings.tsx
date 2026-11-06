@@ -62,6 +62,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import type { FlareConfig } from '@/lib/config'
 import {
   FAVICON_TYPE,
@@ -1114,7 +1115,7 @@ export function InstanceSettings({
                         <Label>OIDC auto-login</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Skip the login form and redirect straight to the
-                          provider. Visit <code>/auth/login?local=1</code> to
+                          provider. Visit <code>{LOCAL_SIGN_IN_PATH}</code> to
                           reach the password login if you get locked out.
                         </p>
                       </div>

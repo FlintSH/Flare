@@ -35,6 +35,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import {
+  BROWSER_SESSION_DAYS,
+  LOGIN_HISTORY_DAYS,
+} from '@/lib/auth/security/policy'
 import { accountRequest } from '@/lib/client/account-request'
 
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -298,9 +302,10 @@ function AccountSessions({
           ))}
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-lg text-xs text-muted-foreground">
-              Sessions expire 30 days after sign-in. Browser and IP details come
-              from the request; they may be shared or inaccurate. Revocation
-              takes effect on the next request and does not revoke API tokens.
+              Sessions expire {BROWSER_SESSION_DAYS} days after sign-in. Browser
+              and IP details come from the request; they may be shared or
+              inaccurate. Revocation takes effect on the next request and does
+              not revoke API tokens.
             </p>
             <Button
               variant="destructive"
@@ -319,8 +324,8 @@ function AccountSessions({
             <div className="space-y-1.5">
               <CardTitle>Login history</CardTitle>
               <CardDescription>
-                Your successful and failed sign-in attempts from the last 90
-                days.
+                Your successful and failed sign-in attempts from the last{' '}
+                {LOGIN_HISTORY_DAYS} days.
               </CardDescription>
             </div>
             <div className="w-full space-y-1 sm:w-44">

@@ -5,6 +5,7 @@ import {
   securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
+import { isTotpCode } from '@/lib/auth/security/policy'
 import { enableTotp } from '@/lib/auth/security/service'
 import { routes } from '@/lib/http/route'
 
@@ -14,7 +15,7 @@ export const POST = api(async (request) => {
   const { session } = await securitySession(request)
   const { code, challengeId } = z
     .object({
-      code: z.string().regex(/^\d{6}$/),
+      code: z.string().refine(isTotpCode),
       challengeId: z.string().min(20).max(100),
     })
     .parse(await securityBody(request))

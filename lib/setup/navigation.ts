@@ -1,3 +1,5 @@
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+
 export const SETUP_PATH = '/setup'
 
 /**
@@ -49,7 +51,7 @@ const RESUME_SETUP = 'setupEmail'
 const RESUME_STEP = 'setupStep'
 
 export function getSetupSignInPath(value: unknown) {
-  return `/auth/login?local=1&${RESUME_SETUP}=1&${RESUME_STEP}=${getSetupStep(value)}`
+  return `${LOCAL_SIGN_IN_PATH}&${RESUME_SETUP}=1&${RESUME_STEP}=${getSetupStep(value)}`
 }
 
 /** Where a sign-in started by `getSetupSignInPath` continues; null for any other sign-in. */

@@ -22,8 +22,16 @@ import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
 import { clientIp, headerRecord } from '@/lib/security/client-ip'
 
-import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
-import { authenticatePasskey, passkeyCookieName } from './security/passkeys'
+import {
+  OidcProfile,
+  type OidcResolveResult,
+  resolveOidcUser,
+} from './oidc-resolve-user'
+import {
+  authenticatePasskey,
+  readPasskeyChallengeCookie,
+} from './security/passkeys'
+import { SECURITY_CODE_MAX_LENGTH } from './security/policy'
 import { authenticatePasskeyRecovery } from './security/required-passkeys'
 import { consumeSecondFactor } from './security/service'
 import {
@@ -39,6 +47,12 @@ import {
   signOutBrowserSession,
   validateBrowserSession,
 } from './sessions'
+import {
+  type OidcError,
+  SIGN_IN_PATH,
+  SignInError,
+  oidcErrorPath,
+} from './sign-in'
 
 const userSelect = {
   id: true,
@@ -62,7 +76,10 @@ const oidcErrorParams = {
   account_exists: 'OidcAccountExists',
   not_provisioned: 'OidcNotProvisioned',
   email_unverified: 'OidcEmailUnverified',
-} as const
+} satisfies Record<
+  Extract<OidcResolveResult, { ok: false }>['reason'],
+  OidcError
+>
 
 declare module 'next-auth' {
   interface Session {
@@ -103,6 +120,11 @@ declare module 'next-auth/jwt' {
   }
 }
 
+/** Whether a sign-in step failed with one of these sign-in errors. */
+function reports(error: unknown, ...codes: SignInError[]) {
+  return error instanceof Error && (codes as string[]).includes(error.message)
+}
+
 function passkeyAttemptId(response?: string) {
   if (!response || response.length > 65536) return undefined
   try {
@@ -130,10 +152,13 @@ async function trackLoginAttempt<T>(
     return result
   } catch (error) {
     // Asking for the second step is not a failed sign-in. Do not amplify rate-limited traffic into unlimited history writes.
-    if (!(
-      error instanceof Error &&
-      ['TwoFactorRequired', 'TooManyAttempts'].includes(error.message)
-    )) {
+    if (
+      !reports(
+        error,
+        SignInError.TwoFactorRequired,
+        SignInError.TooManyAttempts
+      )
+    ) {
       await recordFailedLogin(
         method,
         loginMetadata(new Headers(requestHeaders)),
@@ -161,7 +186,7 @@ export const authOptions: NextAuthOptions = {
         if (
           credentials.email.length > 320 ||
           credentials.password.length > 256 ||
-          (credentials.code?.length || 0) > 80
+          (credentials.code?.length || 0) > SECURITY_CODE_MAX_LENGTH
         )
           return null
         return trackLoginAttempt(
@@ -193,9 +218,10 @@ export const authOptions: NextAuthOptions = {
                   fresh.sessionVersion !== user.sessionVersion
                 )
                   return null
-                if (fresh.passkeyRequired) throw new Error('PasskeyRequired')
+                if (fresh.passkeyRequired)
+                  throw new Error(SignInError.PasskeyRequired)
                 if (fresh.totpSecret && !credentials.code)
-                  throw new Error('TwoFactorRequired')
+                  throw new Error(SignInError.TwoFactorRequired)
                 const secondFactor = await consumeSecondFactor(
                   tx,
                   fresh,
@@ -214,12 +240,15 @@ export const authOptions: NextAuthOptions = {
               })
             } catch (error) {
               if (
-                error instanceof Error &&
-                ['TwoFactorRequired', 'PasskeyRequired'].includes(error.message)
+                reports(
+                  error,
+                  SignInError.TwoFactorRequired,
+                  SignInError.PasskeyRequired
+                )
               )
                 throw error
               if (error instanceof SecurityError && error.status === 429)
-                throw new Error('TooManyAttempts')
+                throw new Error(SignInError.TooManyAttempts)
               return null
             }
           }
@@ -251,15 +280,11 @@ export const authOptions: NextAuthOptions = {
             try {
               const ip = clientIp(headerRecord(req.headers)) ?? 'unknown'
               await securityLimit(`passkey-login:${ip}`, 100)
-              const cookieName = passkeyCookieName()
+              const binding = readPasskeyChallengeCookie(req.headers?.cookie)
               const user = await authenticatePasskey(
                 credentials.challengeId,
                 JSON.parse(credentials.response) as AuthenticationResponseJSON,
-                req.headers?.cookie
-                  ?.split(';')
-                  .map((value: string) => value.trim())
-                  .find((value: string) => value.startsWith(`${cookieName}=`))
-                  ?.slice(cookieName.length + 1) || '',
+                binding,
                 credentials.expectedUserId
               )
               return {
@@ -271,7 +296,7 @@ export const authOptions: NextAuthOptions = {
               }
             } catch (error) {
               if (error instanceof SecurityError && error.status === 429)
-                throw new Error('TooManyAttempts')
+                throw new Error(SignInError.TooManyAttempts)
               return null
             }
           }
@@ -290,7 +315,7 @@ export const authOptions: NextAuthOptions = {
           !credentials?.email ||
           !credentials.code ||
           credentials.email.length > 320 ||
-          credentials.code.length > 80
+          credentials.code.length > SECURITY_CODE_MAX_LENGTH
         )
           return null
         return trackLoginAttempt(
@@ -319,7 +344,7 @@ export const authOptions: NextAuthOptions = {
               }
             } catch (error) {
               if (error instanceof SecurityError && error.status === 429)
-                throw new Error('TooManyAttempts')
+                throw new Error(SignInError.TooManyAttempts)
               return null
             }
           }
@@ -359,7 +384,7 @@ export const authOptions: NextAuthOptions = {
         await recordFailedLogin('oidc', metadata, {
           email: scopedProfile.email || undefined,
         })
-        return `/auth/login?error=${oidcErrorParams[result.reason]}`
+        return oidcErrorPath(oidcErrorParams[result.reason])
       }
 
       const security = await prisma.user.findUnique({
@@ -374,9 +399,12 @@ export const authOptions: NextAuthOptions = {
           metadata = loginMetadata(await headers())
         } catch {}
         await recordFailedLogin('oidc', metadata, { userId: result.user.id })
-        return security.passkeyRequired
-          ? '/auth/login?local=1&error=OidcPasskeyRequired'
-          : '/auth/login?local=1&error=OidcTwoFactorRequired'
+        return oidcErrorPath(
+          security.passkeyRequired
+            ? 'OidcPasskeyRequired'
+            : 'OidcTwoFactorRequired',
+          true
+        )
       }
 
       Object.assign(user, result.user)
@@ -482,7 +510,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: '/auth/login',
+    signIn: SIGN_IN_PATH,
     newUser: '/auth/register',
   },
   session: {

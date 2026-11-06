@@ -8,6 +8,8 @@ import { ResetPasswordForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
+import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+
 export const metadata = {
   title: 'Choose a new password · Flare',
   robots: { index: false, follow: false },
@@ -37,7 +39,7 @@ export default async function ResetPasswordPage({
           <Link href="/auth/forgot-password">Request a new link</Link>
         </Button>
         <AuthFooter>
-          <Link href="/auth/login?local=1" className={authLinkClassName}>
+          <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
             Back to sign in
           </Link>
         </AuthFooter>

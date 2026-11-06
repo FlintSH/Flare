@@ -4,7 +4,12 @@ import type { Session } from 'next-auth'
 import { prisma } from '@/lib/database/prisma'
 import { findAccountByEmail } from '@/lib/users/email-claim'
 
-import { newPasskeyRecoveryCodes, passkeyRecoveryHash } from './crypto'
+import {
+  isPasskeyRecoveryCode,
+  newPasskeyRecoveryCodes,
+  normalizeRecoveryCode,
+  passkeyRecoveryHash,
+} from './crypto'
 import { hasFallbackSignIn } from './fallback'
 import {
   assertSessionVersion,
@@ -100,8 +105,8 @@ export async function rotatePasskeyRecoveryCodes(session: Session) {
 
 /** Emergency credentials are independent of passwords and authenticator codes. */
 export async function authenticatePasskeyRecovery(email: string, code: string) {
-  const normalized = code.replace(/[\s-]/g, '').toLowerCase()
-  if (!/^[a-f0-9]{32}$/.test(normalized)) return null
+  const normalized = normalizeRecoveryCode(code)
+  if (!isPasskeyRecoveryCode(normalized)) return null
   // Legacy case-variant addresses are ambiguous, even when one matches exactly.
   const account = await findAccountByEmail(prisma, email, {
     id: true,
