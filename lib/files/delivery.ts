@@ -26,7 +26,6 @@ import { contentDisposition } from './content-disposition'
 
 const logger = loggers.files
 
-/** How a request names its file. */
 export type FileLocator =
   | { id: string }
   /** A public file directly inside the folder shared with this token. */
@@ -54,7 +53,6 @@ async function findByPath<S extends Prisma.FileSelect>(
   return null
 }
 
-/** The file a locator names, read with `select`. */
 export async function findFile<S extends Prisma.FileSelect>(
   locator: FileLocator,
   select: S
@@ -119,7 +117,6 @@ export type FileGrant<F> = {
   password: string | null
 }
 
-/** Tells a client when a paused password check takes passwords again. */
 function retryAfter(access: FileAccessDenied): Record<string, string> {
   return access.retryAfterSeconds
     ? { 'Retry-After': String(access.retryAfterSeconds) }
@@ -150,7 +147,6 @@ const content: Refusal = {
 
 const refusals = {
   content,
-  /** Thumbnails, which name a missing file in plain text. */
   thumbnail: {
     missing: () => new Response('File not found', { status: 404 }),
     denied: content.denied,
@@ -164,7 +160,6 @@ const refusals = {
         headers: retryAfter(access),
       }),
   },
-  /** JSON routes, in the `{ success: false, error }` envelope. */
   api: {
     missing: () =>
       Response.json(
@@ -271,7 +266,6 @@ export function countView(id: string) {
   return count(id, 'views')
 }
 
-/** How a route sends a file's stored bytes. */
 export type Delivery = {
   /** Show the bytes or save them. Thumbnails send no disposition. */
   disposition?: 'inline' | 'attachment'

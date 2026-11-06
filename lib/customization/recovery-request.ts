@@ -8,7 +8,7 @@ export function recoveryRequestHeaders(
   authenticated: boolean
 ): Headers {
   const headers = new Headers(original)
-  // An incoming header is never evidence of permission. Middleware derives it
+  // An incoming header is never evidence of permission. `proxy.ts` derives it
   // only for the two recovery screens after checking the signed session.
   headers.delete(RECOVERY_HEADER)
   if (authenticated && requested && RECOVERY_PATHS.includes(pathname))

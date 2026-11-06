@@ -6,7 +6,6 @@ const HEAP_WARNING_BYTES = 1024 * 1024 * 1024
 
 const megabytes = (bytes: number) => Math.round(bytes / 1024 / 1024) + 'MB'
 
-/** Checks this process's heap every minute and warns while it is above 1 GiB. */
 export function startMemoryMonitor() {
   return startIntervalWorker({
     key: 'memory-monitor',

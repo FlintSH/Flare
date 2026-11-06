@@ -11,7 +11,6 @@ export const UNFILED = 'unfiled'
 /** The `tag` value for files without an active tag. */
 export const UNTAGGED = 'untagged'
 
-/** A list page's size when the request names none. */
 export const DEFAULT_PAGE_SIZE = 24
 export const MAX_PAGE_SIZE = 100
 /** The most files one selection, `ids` filter or bulk change takes. */
@@ -203,7 +202,6 @@ export function libraryHref(view: Partial<LibraryFilters> = {}): string {
   return query ? `/dashboard?${query}` : '/dashboard'
 }
 
-/** The upload page, set to save into a folder when one is given. */
 export function uploadHref(folder: string | null = null): string {
   return folder
     ? `/dashboard/upload?${new URLSearchParams({ folder })}`

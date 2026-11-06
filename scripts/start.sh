@@ -11,7 +11,6 @@ database_reachable() {
     return 1
 }
 
-# Function to wait for database
 wait_for_db() {
     echo "Waiting for database to be ready..."
     max_retries=30
@@ -36,33 +35,28 @@ wait_for_db() {
 
 echo "Starting initialization..."
 
-# Wait for database
 if ! wait_for_db; then
     echo "Failed to initialize database" >&2
     exit 1
 fi
 
-# Run migrations
 echo "Running database migrations..."
 if ! pnpm prisma migrate deploy; then
     echo "Failed to run migrations" >&2
     exit 1
 fi
 
-# Run config migrations
 echo "Running config migrations..."
 if ! node /app/scripts/migrate-config.js; then
     echo "Failed to run config migrations" >&2
     exit 1
 fi
 
-# Run password migrations
 echo "Running password migrations..."
 if ! node /app/scripts/hash-file-passwords.js; then
     echo "Failed to run password migrations" >&2
     exit 1
 fi
 
-# Start the application
 echo "Starting the application..."
 exec pnpm start

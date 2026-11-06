@@ -19,9 +19,9 @@ function isHttpUrl(value: string) {
 }
 
 /**
- * Storage settings Flare can store files with. S3 needs a bucket, a region and
- * both keys, and a custom endpoint must be an HTTP(S) URL. Setup and every
- * settings save check them, and no provider is built from settings that fail.
+ * Storage settings Flare can store files with. Setup and every settings save
+ * that submits storage check them, and no provider is built from settings
+ * that fail.
  */
 export const storageSettingsSchema = z
   .object({

@@ -155,7 +155,6 @@ async function adminFlow(browser) {
   const page = await admin.newPage()
   page.setDefaultTimeout(45000)
 
-  // Settings → Access: let every account invite people.
   await page.goto(origin + '/dashboard/settings?section=access#invites')
   const card = page.locator('#invites')
   await expect(card).toContainText('Let everyone create invites')
@@ -183,7 +182,6 @@ async function adminFlow(browser) {
     limits: { activeInvites: 5, usesPerInvite: 1, lifetimeDays: 30 },
   })
 
-  // Users → Invites: create a role-granting invite and copy its link.
   await page.goto(origin + '/dashboard/users')
   await page.getByRole('tab', { name: 'Invites' }).click()
   await expect(page).toHaveURL(/tab=invites/)
@@ -251,7 +249,6 @@ async function joinFlow(browser, link) {
   await pause(page, 2500)
   await finish(visitor, page, 'join-with-invite')
 
-  // The single-use link is now spent, and a closed instance says so clearly.
   const late = await context(browser)
   const latePage = await late.newPage()
   await latePage.goto(link)
@@ -393,7 +390,6 @@ async function managementViews(browser) {
   const page = await admin.newPage()
   page.setDefaultTimeout(45000)
 
-  // Revoke one of Jamie's invites from the administrator's list.
   await page.goto(origin + '/dashboard/users?tab=invites')
   const revocable = page
     .getByRole('listitem')
@@ -441,7 +437,6 @@ async function managementViews(browser) {
     200
   )
 
-  // Accounts show who invited them.
   await page.getByRole('tab', { name: 'Accounts' }).click()
   await expect(page).not.toHaveURL(/tab=invites/)
   const sam = page.getByRole('row').filter({ hasText: 'Sam Rivera' })
@@ -449,7 +444,6 @@ async function managementViews(browser) {
   await expect(sam).toContainText('Moderator')
   await shot(page, 'users-invited-by', page.getByRole('table'))
 
-  // The permissions are ordinary role grants.
   await page.goto(origin + '/dashboard/roles')
   await page
     .getByRole('button', { name: /Everyone/ })
@@ -462,7 +456,6 @@ async function managementViews(browser) {
   ).toBeVisible()
   await shot(page, 'roles-invitations')
 
-  // Audit history records creation, redemption, and revocation.
   await page.goto(origin + '/dashboard/audit')
   await page.getByLabel('Category', { exact: true }).selectOption('invites')
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click()

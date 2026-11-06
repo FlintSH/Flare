@@ -57,8 +57,6 @@ export function SaveBar({
           </p>
         )}
       </div>
-      {/* Phones stack the actions full width with the main one on top, like
-          dialog footers; pass them in reading order, main action last. */}
       <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
         {children}
       </div>

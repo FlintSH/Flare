@@ -1,7 +1,6 @@
 // The account-security values the server enforces and the forms state.
 // Browser-safe.
 
-/** Digits in an authenticator (TOTP) code. */
 export const TOTP_DIGITS = 6
 /** An authenticator code, as an HTML `pattern`. */
 export const TOTP_CODE_PATTERN = `[0-9]{${TOTP_DIGITS}}`

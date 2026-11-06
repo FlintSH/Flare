@@ -92,7 +92,6 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
       setDragCounter(0)
       setIsDragging(false)
 
-      // Skip handling if on upload page
       if (window.location.pathname.includes('/upload')) {
         return
       }

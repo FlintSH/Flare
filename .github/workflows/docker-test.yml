@@ -45,10 +45,8 @@ jobs:
 
       - name: Test Docker container
         run: |
-          # Create network
           docker network create flare-network
 
-          # Start PostgreSQL
           docker run -d --name postgres \
             --network flare-network \
             -e POSTGRES_USER=postgres \
@@ -56,7 +54,6 @@ jobs:
             -e POSTGRES_DB=flare_test \
             postgres:16
 
-          # Wait for PostgreSQL to be ready
           timeout=30
           while [ $timeout -gt 0 ]; do
             if docker exec postgres pg_isready -U postgres; then
@@ -70,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Start the application. Its own startup applies the migrations.
+          # The image's own startup applies the migrations.
           docker run --name flare-test -d \
             -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
             -e NEXTAUTH_SECRET=flare-docker-test-disposable-session-secret \
@@ -78,7 +75,7 @@ jobs:
             --network flare-network \
             flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
 
-          # The image's health check ignores failures for 90 seconds, then
+          # The image's health check ignores failures for 150 seconds, then
           # three failures 10 seconds apart make it unhealthy. Docker also
           # reports a container that has stopped as unhealthy.
           deadline=$((SECONDS + 180))

@@ -120,7 +120,6 @@ declare module 'next-auth/jwt' {
   }
 }
 
-/** Whether a sign-in step failed with one of these sign-in errors. */
 function reports(error: unknown, ...codes: SignInError[]) {
   return error instanceof Error && (codes as string[]).includes(error.message)
 }

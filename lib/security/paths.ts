@@ -6,7 +6,6 @@ export function sanitizeDisplayName(name: string): string {
   return basename(cleaned) || 'download'
 }
 
-// rejects traversal, absolute paths, and anything outside uploads/ or public/
 export function validateStoragePath(path: string): string {
   const normalizedPath = normalize(path).replace(/\\/g, '/')
 
@@ -26,7 +25,6 @@ export function validateStoragePath(path: string): string {
   return normalizedPath
 }
 
-// only allows [a-zA-Z0-9_\-\.] — no slashes, no path components
 export function sanitizeFilename(filename: string): string {
   const safe = basename(filename)
   if (!safe || safe !== filename) {
@@ -38,7 +36,6 @@ export function sanitizeFilename(filename: string): string {
   return safe
 }
 
-// for upload IDs and similar — lowercase alphanumeric only
 export function validatePathSegment(segment: string): string {
   if (!segment || !/^[a-z0-9]+$/.test(segment)) {
     throw new Error('Invalid path segment: contains disallowed characters')
@@ -46,7 +43,6 @@ export function validatePathSegment(segment: string): string {
   return segment
 }
 
-// resolves the path and blows up if it escapes rootDir
 export function safeJoin(rootDir: string, ...segments: string[]): string {
   const root = resolve(rootDir)
   const target = resolve(join(root, ...segments))

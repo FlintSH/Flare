@@ -187,8 +187,6 @@ export class S3StorageProvider implements StorageProvider {
     return signal ? addAbortSignal(signal, stream) : stream
   }
 
-  // S3 objects are reachable directly via a presigned/public URL, so callers
-  // can redirect to it instead of streaming bytes through the app.
   async getPublicUrl(path: string): Promise<string | null> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 

@@ -9,7 +9,6 @@ import {
   imageType,
 } from './image'
 
-/** `PNG`, `PNG or JPEG`, `PNG, JPEG, or WebP`. */
 function typeNames(types: readonly ImageType[]) {
   const names = types.map((type) => IMAGE_NAMES[type])
   return names.length > 2

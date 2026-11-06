@@ -312,7 +312,6 @@ export function EmailSettings({
     if (!managed('verification.mode'))
       change('verification.mode', verification ? 'new_users' : 'off')
   }
-  // The preset the current settings match, if any.
   const activePreset =
     config.enabled && config.recovery.enabled
       ? config.verification.mode === 'off'
@@ -880,8 +879,6 @@ export function EmailSettings({
         </div>
       )}
       {setup ? (
-        // The footer every setup step shares: skip at the start, the
-        // primary action at the end.
         <SetupActions>
           {onSkip && (
             <Button

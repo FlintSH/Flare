@@ -35,7 +35,6 @@ export function MetaLine({
             title={item.title}
             className={cn(
               'min-w-0 before:inline-block before:w-[0.8em] before:text-center before:content-["·"]',
-              // A value wider than a whole line ends in an ellipsis.
               !item.wrap && 'max-w-full truncate',
               item.className
             )}

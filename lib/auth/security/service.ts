@@ -162,7 +162,8 @@ export async function consumeChallenge(
   id: string,
   purpose: string
 ) {
-  // DELETE RETURNING provides one-use claims even with concurrent requests.
+  // The delete is the claim: concurrent requests can both read a challenge,
+  // but only one delete removes it.
   const challenges = await tx.authChallenge.findMany({
     where: { id, purpose, expiresAt: { gt: new Date() } },
     take: 1,

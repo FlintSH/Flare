@@ -89,7 +89,6 @@ const streams = (processState[streamsKey] ??= {
   requesters: new Map<string, number>(),
 }) as { total: number; requesters: Map<string, number> }
 
-/** Responses up to this size are read and verified before headers are sent. */
 const BUFFERED_RESPONSE_BYTES = 512 * 1024
 /**
  * Release a streamed response whose body nobody reads. Media players that

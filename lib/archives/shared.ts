@@ -109,7 +109,7 @@ export interface ArchiveListing extends ArchiveManifest {
   extraction: ArchiveExtraction
 }
 
-/** Returned with HTTP 202 while a TAR, TAR.GZ, or GZIP is still being read. */
+/** Returned with HTTP 202 while an archive is queued or still being read. */
 export interface ArchiveListingProgress {
   status: 'indexing'
   format: ArchiveFormat

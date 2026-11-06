@@ -335,7 +335,8 @@ function parseSavedConfig(row: CachedConfigRow): FlareConfig {
 export async function getConfig(): Promise<FlareConfig> {
   const row = await readSavedConfigRow()
   if (row) return parseSavedConfig(row)
-  // Startup saves the defaults; this covers a database it hasn't prepared.
+  // The start script's config migration saves the defaults; this covers a
+  // database it hasn't prepared.
   await prisma.config.createMany({
     data: { key: CONFIG_KEY, value: DEFAULT_CONFIG as InputJsonValue },
     skipDuplicates: true,
@@ -364,7 +365,6 @@ type ConfigUpdate = {
   }
 }
 
-/** What someone saving settings is told when the save fails. */
 export const SETTINGS_NOT_SAVED =
   'Could not update settings. Check the values and try again.'
 
@@ -395,8 +395,10 @@ function mergeSettings<T>(saved: T, update: unknown): T {
 }
 
 /**
- * Merge a partial update into the saved settings inside `tx`, which may hold
- * other locks first. Submitted classic colors merge into the saved palette.
+ * Merge a partial update into the saved settings inside `tx`. This takes the
+ * settings lock, so `tx` may already hold it or the role-change lock, but
+ * none of the locks `lib/database/locks.ts` lists after those. Submitted
+ * classic colors merge into the saved palette.
  */
 export async function applyConfigUpdate(
   tx: Prisma.TransactionClient,
@@ -440,8 +442,6 @@ export async function applyConfigUpdate(
         s3: { ...storage.s3, ...usable.data.s3 },
       }
     }
-    // Tidy custom CSS only when it is submitted; other saves leave the saved
-    // text as it is.
     const { advanced } = checked.data.settings
     if (update.settings?.advanced?.customCSS !== undefined)
       advanced.customCSS = advanced.customCSS.replace(/\n{3,}/g, '\n\n').trim()

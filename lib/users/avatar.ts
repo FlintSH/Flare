@@ -19,10 +19,6 @@ import { assertFits, uploadCapacity } from '@/lib/uploads/capacity'
 
 const logger = loggers.users
 
-// Every avatar upload is stored under its own file name in `uploads/avatars/`
-// and served at `/api/avatars/{file name}`, unless storage gives it a public
-// address of its own.
-
 function avatarPath(filename: string) {
   return `uploads/avatars/${filename}`
 }
@@ -100,7 +96,6 @@ async function authorizeAvatarWrite(
   const user = await tx.user.findUnique({ where: { id: userId } })
   if (!user) throw new PermissionError('Account not found', 404)
   const access = await requireActorPermission(tx, userId, 'profile.update')
-  // An avatar has its own size limit, not the instance's upload limit.
   assertFits(
     uploadCapacity(await readConfig(tx), access, user.storageUsed, {
       fileBytes: AVATAR_MAX_BYTES,

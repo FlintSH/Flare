@@ -19,7 +19,6 @@ import {
 } from './tar-reader'
 import { indexZip } from './zip-reader'
 
-/** Identifies one stored archive and how to read it. */
 export interface ArchiveSourceRef {
   /** Changes whenever the record, its bytes, or its interpretation change. */
   key: string
@@ -37,7 +36,6 @@ export const ARCHIVE_INDEX_CONCURRENCY = 2
 const QUEUED_INDEXES = 32
 /** Unfinished indexes one account or IP address may have started at once. */
 export const ARCHIVE_INDEX_JOBS_PER_REQUESTER = 4
-/** Stop an unfinished index nobody has asked about recently. */
 const ABANDONED_MS = 30_000
 /** Answer requests for an archive that just failed without reading it again. */
 export const ARCHIVE_INDEX_FAILURE_MS = 30_000
@@ -96,7 +94,6 @@ export function clearArchiveIndexCache() {
 
 function rememberFailure(key: string, error: unknown) {
   const now = Date.now()
-  // Oldest first: drop what expired, then anything over the cap.
   for (const [oldKey, old] of state.failed) {
     if (old.until > now && state.failed.size < REMEMBERED_FAILURES) break
     state.failed.delete(oldKey)

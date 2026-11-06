@@ -4,9 +4,8 @@ import { z } from 'zod'
 // the API schemas and the forms, so this module must stay browser-safe.
 
 /**
- * The shortest username. No path has ever accepted an empty name, and setup
- * accepted one character, so every name an account has stays valid when it
- * is saved again.
+ * No path has ever accepted an empty name, and setup accepted one character,
+ * so every name an account has stays valid when it is saved again.
  */
 export const ACCOUNT_NAME_MIN_LENGTH = 1
 export const ACCOUNT_PASSWORD_MIN_LENGTH = 8
@@ -24,7 +23,6 @@ export const accountNameSchema = z
 
 export const accountEmailSchema = z.string().email()
 
-/** A new account password, whether or not account email is enabled. */
 export const accountPasswordSchema = z
   .string()
   .min(ACCOUNT_PASSWORD_MIN_LENGTH)

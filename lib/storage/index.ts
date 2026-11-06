@@ -24,7 +24,7 @@ export class StorageSettingsError extends Error {
   }
 }
 
-/** The provider `storage` describes. Settings it can't use throw; no other backend stands in. */
+/** Settings it can't use throw; no other backend stands in. */
 export function createStorageProvider(storage: SavedStorage): StorageProvider {
   const settings = storageSettingsSchema.safeParse(storage)
   if (!settings.success)
@@ -74,7 +74,6 @@ export function savedStorageProvider(storage: SavedStorage): StorageProvider {
   return slot.provider
 }
 
-/** The provider the saved settings name. */
 export async function getStorageProvider(): Promise<StorageProvider> {
   return savedStorageProvider((await getConfig()).settings.general.storage)
 }

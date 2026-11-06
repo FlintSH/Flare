@@ -47,7 +47,6 @@ export const PALETTE_PRESETS = {
   },
 } as const satisfies Record<string, PalettePreset>
 
-/** The light and dark palettes a preset starts from. */
 export function presetPalettes(preset: PalettePreset): {
   light: Palette
   dark: Palette

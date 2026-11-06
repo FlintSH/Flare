@@ -104,8 +104,6 @@ function exportArchive(
   let source: Readable | null = null
   let settled = false
 
-  // Runs once: after a cancelled download, a storage or archive failure, or
-  // when the archive has been read to the end.
   const settle = (error?: Error) => {
     if (settled) return
     settled = true
@@ -179,7 +177,6 @@ function exportArchive(
         if (source === opened) settle(error)
       })
       archive.append(opened, { name, date: new Date(file.uploadedAt) })
-      // Open the next file only after archiver has read this one.
       await finished(opened)
       source = null
     }

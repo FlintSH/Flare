@@ -31,7 +31,6 @@ function parseRole<Fields>(schema: z.ZodType<Fields>, body: unknown): Fields {
   return parsed.data
 }
 
-/** Only someone who outranks a role and holds everything it grants may change it. */
 function assertMayChange(
   actor: UserAccess,
   role: Pick<RoleSummary, 'position' | 'permissions'>

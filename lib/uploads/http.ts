@@ -4,7 +4,6 @@ import { prismaAnswers } from '@/lib/http/prisma'
 import type { RouteContract } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
-/** Uploads, chunked uploads, and the uploader configurations built from upload options. */
 export const uploadRoutes: RouteContract = {
   invalid: (error) =>
     new HttpError(400, filePasswordIssue(error) ?? 'Invalid upload options.'),

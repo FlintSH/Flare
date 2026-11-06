@@ -9,7 +9,6 @@ export const SignInError = {
   TwoFactorRequired: 'TwoFactorRequired',
   /** The account signs in only with a passkey or a passkey recovery code. */
   PasskeyRequired: 'PasskeyRequired',
-  /** An attempt limit refused the sign-in. */
   TooManyAttempts: 'TooManyAttempts',
 } as const
 
@@ -21,7 +20,6 @@ export const SIGN_IN_PATH = '/auth/login'
 /** The local sign-in form, which stays reachable when sign-in otherwise goes straight to SSO. */
 export const LOCAL_SIGN_IN_PATH = `${SIGN_IN_PATH}?local=1`
 
-/** Whether the login page's search parameters ask for its local form. */
 export function isLocalSignIn(params: { local?: string | string[] }) {
   return params.local === '1'
 }

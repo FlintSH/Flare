@@ -45,7 +45,6 @@ export function uploadCapacity(
   }
 }
 
-/** The 413 for an upload over the size limit or over the quota. */
 export function overCapacity(limit: 'size' | 'quota') {
   return new HttpError(
     413,

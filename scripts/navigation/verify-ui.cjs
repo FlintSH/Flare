@@ -78,8 +78,6 @@ async function arrive(page, route, title) {
   await expect(page.getByRole('menu')).toHaveCount(0)
 }
 
-// Desktop captures frame the bar and any open menu; phone captures keep the
-// whole screen.
 async function screenshot(page, name) {
   if (!screenshotDirectory) return
   await mkdir(screenshotDirectory, { recursive: true })
@@ -234,7 +232,6 @@ async function checkAdministrator(page) {
     'On Roles, the Admin button is marked current, Roles is the page, and a mouse choice leaves no focus ring'
   )
 
-  // Keyboard: open with Enter, move with the arrow keys, close with Escape.
   // The closing menu stays mounted for its exit animation; wait it out.
   await expect(page.getByRole('menu')).toHaveCount(0)
   await expect(trigger).toBeFocused()

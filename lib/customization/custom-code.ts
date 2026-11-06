@@ -82,14 +82,12 @@ function scan(css: string, i: number): { end: number; closed: boolean } {
   return { end: Math.min(i, css.length), closed: closers.length === 0 }
 }
 
-/** The first index from `i` that isn't white space or part of a comment. */
 function significant(css: string, i: number, end: number) {
   while (i < end && (isSpace(css[i]) || isComment(css, i)))
     i = isComment(css, i) ? scan(css, i).end : i + 1
   return i
 }
 
-/** A declaration made `!important`, unless it already is or isn't one. */
 function important(declaration: string) {
   let valueEnd = 0
   let colon = false
@@ -160,7 +158,6 @@ export function customStylesheet(css: string): string {
   return rewrite(css, 0, css.length, false, 0)
 }
 
-/** The elements a page head may hold. */
 const HEAD_TAGS = [
   'base',
   'link',
@@ -319,7 +316,6 @@ export function headElements(html: string): HeadElement[] {
     }
     const tag = /^<([a-z][^\s/>]*)/i.exec(html.slice(open, open + 100))
     if (!tag) {
-      // An end tag, a doctype, or a `<` in text.
       const end = /[/!?]/.test(html[open + 1] ?? '')
         ? html.indexOf('>', open)
         : open

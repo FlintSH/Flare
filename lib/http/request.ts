@@ -4,7 +4,6 @@ import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { HttpError, InvalidInput } from './errors'
 
-/** The media type of a request or response, without parameters, lower-cased. */
 export function mediaType(message: { headers: Headers }) {
   return (
     message.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ??
@@ -16,7 +15,6 @@ function assertMediaType(request: Request, type: string) {
   if (mediaType(request) !== type) throw new HttpError(415, `Use ${type}.`)
 }
 
-/** GET, HEAD and OPTIONS read; every other method may change something. */
 export function isWrite(request: Request) {
   return !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
 }

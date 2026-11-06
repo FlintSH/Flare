@@ -746,7 +746,6 @@ function CreateInviteDialog({
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-              {/* Fields scroll between the title and the actions. */}
               <div ref={scrollFadeRef} className={formDialogBodyClassName}>
                 <div className="space-y-2">
                   <Label htmlFor="invite-note">

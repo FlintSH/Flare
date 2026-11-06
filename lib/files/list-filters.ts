@@ -8,7 +8,6 @@ import {
   VISIBILITY_FILTERS,
 } from '@/lib/library/contract'
 
-/** A list query value the client must fix. */
 export class FileListInputError extends HttpError {
   constructor(message: string) {
     super(400, message)

@@ -61,7 +61,6 @@ import {
 } from './archive-utils'
 
 const ROW_HEIGHT = 44
-// Renew a protected archive's unlock at three quarters of its lifetime.
 const UNLOCK_RENEW_MS = (ARCHIVE_UNLOCK_SECONDS * 1000 * 3) / 4
 const count = (value: number, noun: string) =>
   `${value.toLocaleString()} ${noun}${value === 1 ? '' : 's'}`
@@ -600,8 +599,6 @@ export function ArchiveBrowserContent({
                   }}
                 />
               ) : (
-                // On phones the preview opens under the list once a file is
-                // chosen, so the empty prompt would only push the actions down.
                 <PreviewPlaceholder
                   icon={File}
                   title="Choose a file to preview or download it"

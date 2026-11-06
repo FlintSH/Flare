@@ -115,7 +115,6 @@ export type DashboardPage = (typeof PAGES)[number]['href']
 const allowed = (user: Subject, item: NavigationItem) =>
   item.permissions.every((permission) => hasPermission(user, permission))
 
-/** Whether this person's roles allow the page at `href`. */
 export function canOpen(user: Subject, href: DashboardPage) {
   const page = PAGES.find((item) => item.href === href)
   if (!page) throw new Error(`${href} is not a dashboard page`)

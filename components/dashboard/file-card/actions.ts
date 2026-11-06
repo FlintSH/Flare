@@ -106,7 +106,6 @@ export const FILE_ACTIONS = {
 
 export type FileActionId = keyof typeof FILE_ACTIONS
 
-/** Whether the subject's permissions allow the action. */
 export function fileActionAllowed(
   subject: PermissionSubject | null | undefined,
   id: FileActionId

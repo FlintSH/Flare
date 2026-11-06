@@ -38,7 +38,6 @@ interface FilePageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-/** The `password` the page was opened with; of repeated ones, the first. */
 async function passwordParam(searchParams: FilePageProps['searchParams']) {
   const { password } = await searchParams
   return Array.isArray(password) ? password[0] : password

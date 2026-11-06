@@ -29,7 +29,6 @@ export const ROLE_LIMITS = {
   position: { min: 1, max: 1_000_000 },
 } as const
 
-/** What a new role starts with when a field is left out. */
 export const ROLE_DEFAULTS = {
   description: '',
   color: '#64748b',
@@ -48,7 +47,6 @@ export function highestRolePosition(
   return Math.max(0, ...(subject?.roles ?? []).map((role) => role.position))
 }
 
-/** Below Administrator, only roles strictly under the actor's highest role and without Administrator. */
 export function canManageRole(
   actor: Access | null | undefined,
   role: Pick<RoleSummary, 'position' | 'permissions'>
@@ -60,7 +58,6 @@ export function canManageRole(
   )
 }
 
-/** Below Administrator, only permissions the actor holds, and never Administrator itself. */
 export function canGrantPermissions(
   actor: Access | null | undefined,
   permissions: readonly string[]

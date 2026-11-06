@@ -129,7 +129,6 @@ export async function getUsersAccess(
   )
 }
 
-/** An account must exist and meet the email policy before its roles count. */
 function canAct(
   user: EmailPolicyUser | null | undefined,
   email: EmailConfig

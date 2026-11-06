@@ -6,13 +6,11 @@ import {
   uploaderClients,
 } from '.'
 
-/** What a script needs to upload as the account. */
 interface ScriptTarget {
   uploadUrl: URL
   token: string
 }
 
-/** Lines of a script, leaving out the optional ones that are `false`. */
 const lines = (...parts: (string | false)[]) =>
   parts.filter((part) => part !== false).join('\n')
 
@@ -69,7 +67,6 @@ function upload({
   type?: string
   /** Remove the uploaded file afterwards, whether or not the upload worked. */
   removeFile?: boolean
-  /** Desktop notifications for failures, titled "<notice> Upload Failed". */
   notice?: 'Screenshot' | 'Recording'
 }) {
   const notify = (message: string) =>
@@ -115,7 +112,6 @@ fi`
   )
 }
 
-/** Copies `$URL` with the session's clipboard tool and announces it. */
 function shareLink(useWayland: boolean, notice: 'Screenshot' | 'Recording') {
   return `echo -n "$URL" | ${useWayland ? 'wl-copy' : 'xsel -ib'}
 echo "${notice} uploaded successfully: $URL"
@@ -199,7 +195,6 @@ echo "URL has been copied to clipboard (if a clipboard tool was available)"
 exit 0`
 }
 
-/** Both screenshot scripts capture to a temporary PNG and upload it. */
 const uploadScreenshot = upload({
   file: '$TEMP_FILE',
   type: 'image/png',

@@ -55,7 +55,6 @@ async function api(
   return response.json()
 }
 
-/** Upload a large local file through the real chunked upload API. */
 async function chunkedUpload(ctx, filePath, name, mimeType) {
   const { size } = await stat(filePath)
   const init = await ctx.request.post(origin + '/api/files/chunks', {
@@ -336,7 +335,6 @@ async function browseAndExtract(browser, state, fixture) {
   ).toBeEnabled()
   await accessibleDialog(page)
   await shot(page, 'browse')
-  // Arrow keys, Home, and End move focus through the (virtualized) entry list.
   await page
     .getByRole('button', { name: 'Open folder drafts', exact: true })
     .focus()
@@ -1125,7 +1123,6 @@ async function largeArchiveChecks(browser, state) {
         name: 'Preview projects/campaign-32/content/module-19999.md',
       })
     ).toBeVisible()
-    // End reaches the last of hundreds of virtualized rows and scrolls to it.
     await page.getByLabel('Search archive', { exact: true }).fill('')
     await page
       .getByRole('button', { name: 'Archive root', exact: true })

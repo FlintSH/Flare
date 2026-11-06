@@ -63,7 +63,6 @@ export async function findOwnedProfile(
   return profile
 }
 
-/** Generator selection is always checked against the session owner. */
 export async function generatorProfile(
   userId: string,
   selected?: string | null
@@ -78,10 +77,6 @@ export async function generatorProfile(
   return { id, name }
 }
 
-/**
- * The account's profiles, each with the revision of the settings an upload
- * with it would use, and the account defaults they inherit from.
- */
 export async function listProfiles(user: PermissionSubject & { id: string }) {
   const [profiles, account] = await Promise.all([
     prisma.uploadProfile.findMany({
@@ -140,7 +135,7 @@ function changeProfiles<T>(
   })
 }
 
-/** Saved tags must be the account's own; the caller holds `lockUploadProfiles`. */
+/** The caller holds `lockUploadProfiles`. */
 async function withOwnedTags(
   tx: Prisma.TransactionClient,
   userId: string,

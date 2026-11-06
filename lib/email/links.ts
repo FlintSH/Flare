@@ -3,7 +3,6 @@ import type { EmailConfig } from './schema'
 // Browser-safe: the eligibility rules the forms read are built on this table.
 
 interface EmailLink {
-  /** The page the link opens. */
   page: string
   /** How long the link works, in milliseconds. */
   lifetime: (config: EmailConfig) => number
@@ -56,7 +55,6 @@ export function isEmailLinkPurpose(
   return Object.hasOwn(EMAIL_LINKS, purpose)
 }
 
-/** Whether Flare sends this link now: email is on, and so is its feature. */
 export function emailLinkAvailable(
   config: EmailConfig,
   purpose: EmailTokenPurpose

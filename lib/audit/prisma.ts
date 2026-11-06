@@ -211,9 +211,6 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 )
               ),
             ].filter((field) => !noisyFields.has(field))
-            // Counter-only updates run as one statement, without a snapshot
-            // read or change event. Other changes keep counters in their
-            // snapshots and changedFields.
             if (
               operation.startsWith('update') &&
               changedFields.every((field) =>

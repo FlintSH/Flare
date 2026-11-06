@@ -30,7 +30,6 @@ export default async function LoginPage({
     ),
     pageSetupStatus(),
   ])
-  // A new instance has no account to sign in with yet.
   if (setupComplete === false) redirect(SETUP_PATH)
   const registrationsEnabled = config.settings.general.registrations.enabled
   const oidc = config.settings.general.oidc

@@ -24,7 +24,7 @@ export type FileAuthority =
   /** A moderator acting on one account's files; any other file is missing. */
   | { as: 'moderator'; accountId: string }
 
-/** Visibility and password changes. An empty or null password removes protection. */
+/** An empty or null password removes protection. */
 export const fileSettingsSchema = z.object({
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
   password: newFilePasswordSchema.nullable().optional(),
@@ -87,10 +87,7 @@ async function findManagedFile(
   return file
 }
 
-/**
- * Change a file's visibility or password. Answers the whole stored file with
- * `hasPassword` in place of the password hash.
- */
+/** Answers the whole stored file with `hasPassword` in place of the password hash. */
 export async function updateFileSettings(
   authority: FileAuthority,
   id: string,

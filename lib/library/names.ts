@@ -14,7 +14,6 @@ export function nameKey(name: string) {
   return name.toLowerCase()
 }
 
-/** Whether a name is free of control and format characters. */
 export function isPlainName(name: string) {
   return !/[\p{Cc}\p{Cf}]/u.test(name)
 }

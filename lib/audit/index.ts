@@ -47,7 +47,6 @@ function reportAuditFailure(error: unknown) {
   )
 }
 
-/** The longest text each event column keeps. */
 const textLimits = {
   action: 150,
   category: 80,
@@ -61,7 +60,6 @@ const textLimits = {
   route: 300,
 }
 
-/** `input` with what the current request adds to every event it causes. */
 function inRequest(input: AuditInput): AuditInput {
   const context = auditContext.getStore()
   return {
@@ -83,7 +81,6 @@ function inRequest(input: AuditInput): AuditInput {
   }
 }
 
-/** An event as it is stored: text cut to its column's limit, details sanitized. */
 function auditRow(event: AuditInput): Prisma.AuditEventCreateManyInput {
   return {
     action: auditText(event.action, textLimits.action) ?? 'unknown',

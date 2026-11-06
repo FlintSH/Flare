@@ -20,7 +20,6 @@ export function faviconProblem(file: { size: number; type: string }) {
 const ROUTE = '/api/favicon'
 const VERSION = /^[0-9a-f]{16}$/
 
-/** The address of the favicon whose content has this version. */
 export function faviconAddress(version: string) {
   return `${ROUTE}?v=${version}`
 }

@@ -157,7 +157,6 @@ export function startAuditRetentionWorker(
           deleted: result.deleted,
           cutoff: result.cutoff.toISOString(),
         })
-      // A large backlog continues soon instead of waiting an hour.
       if (!result.complete && !result.contended)
         worker.runAgainIn(BACKLOG_DELAY_MS)
     },

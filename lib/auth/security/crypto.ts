@@ -93,7 +93,6 @@ export function totpCounter(secret: string, token: string, now = Date.now()) {
     : Math.floor(now / (TOTP_PERIOD_SECONDS * 1000)) + delta
 }
 
-/** A set of ten codes, each `bytes` random bytes in hex groups of `group`. */
 function newCodes(bytes: number, group: number) {
   return Array.from({ length: 10 }, () =>
     randomBytes(bytes)

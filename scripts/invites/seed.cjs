@@ -47,7 +47,6 @@ async function seed() {
     where: { key: 'flare_config' },
     data: { value: config.value },
   })
-  // Re-running the demonstration starts every invite fixture from scratch.
   await prisma.invite.deleteMany()
   await prisma.user.deleteMany({
     where: {

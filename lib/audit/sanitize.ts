@@ -3,7 +3,6 @@ import { auditedModels } from './models'
 // Metadata is an allowlist, including at each nested level. New integrations
 // must deliberately choose a safe field; raw payloads and errors never pass.
 const keys = new Set([
-  // Snapshot fields of audited records.
   ...Object.values(auditedModels).flatMap((model) => model?.fields ?? []),
   // Details of database change events.
   'before',

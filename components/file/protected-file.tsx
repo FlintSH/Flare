@@ -19,7 +19,6 @@ interface ProtectedFileProps {
 export function ProtectedFile({ file, verifiedPassword }: ProtectedFileProps) {
   const { status } = useSession()
 
-  // A private file still waits for the browser's session before it shows.
   if (file.visibility === 'PRIVATE' && status === 'loading') {
     return <LoadingState message="Checking access…" />
   }

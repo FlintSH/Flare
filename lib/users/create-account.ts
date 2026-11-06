@@ -34,7 +34,6 @@ interface NewAccount {
  */
 type NewAccountEmail = { verifyWith: EmailConfig } | { enabled: boolean }
 
-/** Whether new accounts get a verification link: their address can be required or used for recovery. */
 export function verifiesNewAccounts(config: EmailConfig) {
   return (
     config.enabled &&

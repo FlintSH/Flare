@@ -20,7 +20,6 @@ const drawUrlId = customAlphabet(URL_ID_ALPHABET, URL_ID_LENGTH)
 /** URL IDs drawn for a new account. Out of 57^5, the first is all but always free. */
 const URL_ID_DRAWS = 10
 
-/** Accounts using any of `ids` as their URL ID or vanity ID. */
 function holders(tx: Tx, ids: string[]) {
   return tx.user.findMany({
     where: { OR: [{ urlId: { in: ids } }, { vanityId: { in: ids } }] },

@@ -174,7 +174,6 @@ export function concatStreams(parts: Array<() => Promise<Readable>>) {
       const opening = open()
       const part = await Promise.race([opening, stopped])
       if (!part || readable.destroyed) {
-        // Close a part that storage delivers after the reader has left.
         opening.then(
           (late) => late.destroy(),
           () => {}

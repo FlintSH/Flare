@@ -73,7 +73,6 @@ const labelClassName =
   'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
 
-// What a failed action says when the server gives no reason.
 const TRY_AGAIN = 'Please try again.'
 const failure = (error: unknown) =>
   error instanceof RefusedRequest ? error.message : TRY_AGAIN

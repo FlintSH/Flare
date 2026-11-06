@@ -549,8 +549,8 @@ export function RoleManager() {
                       />
                     </div>
                   </div>
-                  {/* The shared note surface: a primary tint read as a
-                      grey, disabled block in light themes. */}
+                  {/* The shared note surface rather than a primary tint,
+                      which reads as a grey, disabled block in light themes. */}
                   {draft.permissions.includes('administrator') && (
                     <Alert variant="info" role="status">
                       <Shield aria-hidden="true" />

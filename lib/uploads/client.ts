@@ -1,12 +1,7 @@
-/**
- * The browser's upload client. Whole-file, chunked and paste uploads share one
- * set of options, one reading of responses and one set of error messages.
- */
 import { type UploadResponse, parseUploadResponse } from './response'
 
 export type { UploadResponse }
 
-/** Larger files go up in parts. */
 const WHOLE_FILE_MAX_BYTES = 10 * 1024 * 1024
 /**
  * S3 refuses parts under 5 MiB except the last, and the part route accepts at
@@ -92,7 +87,6 @@ function send(
 
 const succeeded = (reply: Reply) => reply.status >= 200 && reply.status < 300
 
-/** Flare's own message first, then a proxy's 413, then what the step was doing. */
 function failure(reply: Reply, fallback: string) {
   const message = field(reply.body, 'error')
   return new Error(
@@ -227,7 +221,6 @@ async function uploadInParts(
   return parseUploadResponse(reply.body)
 }
 
-/** Uploads one file, in parts when it is large. */
 export function uploadFile(
   file: File,
   options: UploadOptions,
@@ -238,7 +231,7 @@ export function uploadFile(
     : uploadWhole(file, options, onProgress)
 }
 
-/** Creates a paste: always one request, which the server checks for `pastes.create`. */
+/** Always one request, which the server checks for `pastes.create`. */
 export async function uploadPaste(
   file: File,
   options: Pick<UploadOptions, 'profileId' | 'visibility' | 'password'>

@@ -16,7 +16,6 @@ import {
 } from '.'
 import { bashScript, flameshotScript, spectacleScript } from './scripts'
 
-/** The account a client's file uploads to. */
 interface UploaderTarget {
   /** The public `/api/files` URL, selecting the profile when there is one. */
   uploadUrl: URL
@@ -28,7 +27,7 @@ interface UploaderTarget {
 
 /**
  * Installed tools upload to the public server URL, without a query or
- * fragment. A base path is kept. Development falls back to the default port.
+ * fragment. A base path is kept.
  */
 function publicUploadUrl() {
   const url = process.env.NEXTAUTH_URL
@@ -124,10 +123,6 @@ function uploaderDownload(
  */
 const postedProfile = z.object({ profileId: z.string().max(100).optional() })
 
-/**
- * A client's file for the signed-in account: its upload token, and the
- * profile in `?profileId=` instead of account defaults.
- */
 export async function uploaderClientResponse<Id extends UploaderClientId>(
   id: Id,
   request: Request

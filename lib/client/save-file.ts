@@ -14,7 +14,6 @@ function dispositionFilename(header: string | null) {
   return /filename\s*=\s*([^;\s]+)/i.exec(header)?.[1]
 }
 
-/** The name the server gave a download, or `fallbackName` when it gave none. */
 export function responseFilename(response: Response, fallbackName: string) {
   return (
     dispositionFilename(response.headers.get('content-disposition')) ||
@@ -22,7 +21,6 @@ export function responseFilename(response: Response, fallbackName: string) {
   )
 }
 
-/** Saves data the page holds as a download called `filename`. */
 export function saveBlobAsFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -35,10 +33,6 @@ export function saveBlobAsFile(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/**
- * Saves a download response as a file, under the name the server gave it or
- * `fallbackName` when it gave none.
- */
 export async function saveResponseAsFile(
   response: Response,
   fallbackName: string

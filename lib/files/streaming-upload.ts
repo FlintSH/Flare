@@ -131,7 +131,6 @@ export async function parseSingleFileUpload({
           filename: uploadDisplayName(info.filename) ?? 'file',
           mimeType,
         })
-        // Nothing is written for an upload that already hit a limit or failed.
         if (limitHit || settled) return
 
         const { size } = await storageProvider.uploadStream(

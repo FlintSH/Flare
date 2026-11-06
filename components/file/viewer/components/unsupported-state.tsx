@@ -15,7 +15,6 @@ export function UnsupportedState({ mimeType }: UnsupportedStateProps) {
         titleAs="h2"
         description="Download this file to open it with an app on your device."
       >
-        {/* The file type as a quiet code chip, apart from the instruction. */}
         <code className="mt-1 max-w-full break-all rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
           {mimeType}
         </code>

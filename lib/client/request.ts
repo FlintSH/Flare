@@ -7,7 +7,6 @@ const UNEXPLAINED = 'Unable to complete this request. Please try again.'
 export class RefusedRequest extends Error {
   constructor(
     message: string,
-    /** The answer's HTTP status. */
     readonly status: number,
     /** The machine-readable reason some refusals add, such as `invite_used`. */
     readonly code: string | null = null,
@@ -31,7 +30,6 @@ function retryAfter(response: Response) {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
 }
 
-/** The error for an answer with an error status. */
 export async function refusal(response: Response, fallback = UNEXPLAINED) {
   const body: unknown = await response.json().catch(() => null)
   return new RefusedRequest(

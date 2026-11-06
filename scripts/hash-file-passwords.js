@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Migration script to hash existing plaintext file passwords
- * This script should be run once to upgrade existing Flare instances
+ * Hashes file passwords still stored as plaintext. scripts/start.sh runs it on
+ * every start; passwords that are already hashed are skipped.
  */
 
 const { PrismaClient } = require('@prisma/client')
@@ -43,16 +43,13 @@ async function migrateFilePasswords() {
 
     for (const file of filesWithPasswords) {
       try {
-        // Check if password is already hashed
         if (await isPasswordHashed(file.password)) {
           skippedCount++
           continue
         }
 
-        // Hash the plaintext password
         const hashedPassword = await hash(file.password, 10)
 
-        // Update the file with the hashed password
         await prisma.file.update({
           where: { id: file.id },
           data: { password: hashedPassword },
@@ -60,7 +57,6 @@ async function migrateFilePasswords() {
 
         hashedCount++
 
-        // Verify the hash works by comparing
         const isValid = await compare(file.password, hashedPassword)
         if (!isValid) {
           console.error(`Hash verification failed for file: ${file.name}`)

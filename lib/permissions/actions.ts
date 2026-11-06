@@ -36,7 +36,6 @@ export const ACTION_PERMISSIONS = {
   manageExpiration: routeNeeds('POST', '/api/files/{id}/expiry'),
   moveFiles: routeNeeds('POST', '/api/files/folders'),
   tagFiles: routeNeeds('PATCH', '/api/files/tags'),
-  /** Create, rename and remove folders. */
   manageFolders: routeNeeds('POST', '/api/folders'),
   /**
    * Create or disable a folder link. Its route checks `folders.share` on top

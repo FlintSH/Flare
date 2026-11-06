@@ -24,7 +24,6 @@ const draftBody = z.object({
   applyToExisting: z.unknown().optional(),
 })
 
-/** The Email tab's draft settings and its choices about the saved password and existing users. */
 export async function readEmailDraft(request: Request) {
   const body = await readJson(request, draftBody)
   return {

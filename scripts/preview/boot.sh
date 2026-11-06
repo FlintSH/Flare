@@ -54,7 +54,6 @@ export DATABASE_URL="postgresql://flare_preview:${database_password}@127.0.0.1:5
 export NEXTAUTH_SECRET
 NEXTAUTH_SECRET=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("hex"))')
 
-# Validate the public URL and disposable environment before database work.
 node /preview/seed.cjs --check-environment
 initdb -D "$PGDATA" -U flare_preview --pwfile="$password_file" \
   --auth-local=trust --auth-host=scram-sha-256 --encoding=UTF8 --locale=C

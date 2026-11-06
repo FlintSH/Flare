@@ -89,7 +89,6 @@ import { toast } from '@/hooks/use-toast'
 const filterChipClassName =
   'rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs'
 
-/** How an empty folder can be filled, by what the person's roles allow. */
 function emptyFolderHint(user: PermissionSubject | null | undefined) {
   const upload = allows(user, ['uploadFiles', 'fileIntoFolder'])
   const move = allows(user, 'moveFiles')

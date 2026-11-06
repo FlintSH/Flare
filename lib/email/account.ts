@@ -155,12 +155,10 @@ export async function resetPassword(
   })
 }
 
-/** `passwordRecoveryAvailable` under the saved SSO policy. */
 export async function isPasswordRecoveryAvailable(
   config: EmailConfig,
   tx?: Prisma.TransactionClient
 ) {
-  // Without email recovery there is no SSO policy to read.
   if (!emailLinkAvailable(config, 'reset')) return false
   // When changing account state, read SSO policy under the same settings lock.
   const fullConfig = tx ? await readConfig(tx) : await getConfig()
@@ -264,7 +262,6 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
   })
 }
 
-/** The account's address for a message it asks for, while email is on. */
 export function requireEmailAddress(user: User, config: EmailConfig) {
   if (!config.enabled || !user.email)
     throw new EmailHttpError('Email is disabled.')
@@ -276,7 +273,6 @@ export function assertEmailChangesEnabled(config: EmailConfig) {
     throw new EmailHttpError('Email changes are disabled.')
 }
 
-/** Locks the account. One that requires passkeys proves its identity again, under the lock. */
 async function lockConfirmedUser(
   tx: Prisma.TransactionClient,
   { user, session }: EmailAccount,
@@ -290,7 +286,6 @@ async function lockConfirmedUser(
   return fresh
 }
 
-/** Refuses a request whose account changed its sign-in after the request read it. */
 function assertAccountUnchanged(fresh: User, user: User) {
   if (
     fresh.email !== user.email ||
@@ -322,7 +317,6 @@ export async function enrollEmail(
   return 'A verification link was sent to your email address.'
 }
 
-/** Sends an enrolled address another verification link. */
 export async function resendVerification({ user, config }: EmailAccount) {
   await prisma.$transaction(async (tx) => {
     const fresh = await lockEmailUser(tx, user.id)

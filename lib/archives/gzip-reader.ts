@@ -19,7 +19,6 @@ import { concatStreams, sliceStream } from './stream-slice'
 
 const WINDOW = 32 * 1024
 const INPUT_CHUNK = 64 * 1024
-/** Let other requests run after about this much decoded output. */
 const YIELD_BYTES = 1024 * 1024
 
 export interface GzipCheckpoint {
@@ -72,7 +71,6 @@ export class GzipSeekIndex {
   add(checkpoint: GzipCheckpoint) {
     this.checkpoints.push(checkpoint)
     if (this.checkpoints.length <= this.maxCheckpoints) return
-    // Keep memory bounded on huge streams: halve the points, double the gap.
     const kept = this.checkpoints.filter((_, index) => index % 2 === 0)
     this.checkpoints.splice(0, this.checkpoints.length, ...kept)
     this.span *= 2
@@ -245,8 +243,6 @@ export async function openGzipRange(
       until - start
     )
   if (!second || end <= second.output) return fromBlock(end)
-  // The range runs past the first member: finish that member from the block
-  // point, then continue from the second member's header.
   return concatStreams([
     () => fromBlock(second.output),
     async () =>

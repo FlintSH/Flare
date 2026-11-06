@@ -12,7 +12,6 @@ export interface EmailPolicyUser {
 
 type VerificationMode = EmailConfig['verification']['mode']
 
-/** The verification mode in force: `off` while email is disabled. */
 export function effectiveVerificationMode(
   config: Pick<EmailConfig, 'enabled' | 'verification'>
 ): VerificationMode {
@@ -43,7 +42,6 @@ export function hasVerifiedEmail(
   )
 }
 
-/** An exempt account, or one with a verified address, meets every verification mode. */
 export function satisfiesEmailPolicy(
   user: Omit<EmailPolicyUser, 'createdAt'>,
   config: Pick<EmailConfig, 'verification'>

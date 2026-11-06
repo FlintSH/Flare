@@ -1,7 +1,7 @@
 /**
- * The display name Flare stores for an uploaded file. Only the final path
- * component is kept, as busboy already does for multipart uploads, and
- * control characters are removed. Returns null when no usable name remains.
+ * Only the final path component is kept, as busboy already does for multipart
+ * uploads, and control characters are removed. Returns null when no usable
+ * name remains.
  */
 export function uploadDisplayName(filename: string): string | null {
   const separator = Math.max(

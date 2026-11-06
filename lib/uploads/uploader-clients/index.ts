@@ -9,7 +9,6 @@ export const UPLOADER_DOWNLOAD_PERMISSION: Permission = 'tokens.manage'
 export const SHARE_LINK_PATH = 'data.pageUrl'
 
 interface UploaderClient<Shape extends z.ZodRawShape> {
-  /** The tool's name in the dashboard. */
   label: string
   /** POST clients send their options as a JSON body; GET clients have none. */
   method: 'GET' | 'POST'
@@ -37,11 +36,10 @@ const screenshotDependencies = (tool: string, useWayland: boolean) => [
 const captureMode = z.enum(['fullscreen', 'current', 'activewindow', 'region'])
 /**
  * `spectacle -R s` records the screen under the pointer, so recording a whole
- * screen is one choice. Earlier dashboards offered it twice, also as `fullscreen`.
+ * screen is one choice.
  */
 const recordingMode = z.enum(['current', 'region'])
 
-/** A Spectacle mode's label in the form and its command-line flag. */
 interface SpectacleMode {
   label: string
   flag: string
@@ -149,7 +147,6 @@ export const uploaderClients: {
 /** In the order the dashboard lists them. */
 export const UPLOADER_CLIENT_IDS = Object.keys(clients) as UploaderClientId[]
 
-/** The request that downloads a client, selecting `profileId` when given. */
 export function uploaderClientRequest<Id extends UploaderClientId>(
   id: Id,
   options: UploaderOptions<Id>,

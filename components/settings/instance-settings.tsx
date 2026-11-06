@@ -1926,8 +1926,6 @@ export function InstanceSettings({
 
       {hasChanges &&
         createPortal(
-          // The save bar every editor uses, floating while any section has
-          // unsaved instance settings.
           <SaveBar
             role="status"
             tone="unsaved"

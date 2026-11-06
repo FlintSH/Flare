@@ -249,7 +249,7 @@ function VisibilityBadge({
       ? Lock
       : Globe
   // Private files are what a moderator scans for, so they take the amber
-  // status tone (as before this pass); public and password ones stay neutral.
+  // status tone; public and password ones stay neutral.
   const isPrivate = file.visibility === 'PRIVATE'
   return (
     <Badge variant={isPrivate ? 'warning' : 'neutral'} className={className}>

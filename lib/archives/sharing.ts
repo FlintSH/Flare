@@ -108,7 +108,6 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   }
 }
 
-/** JSON, or for entry downloads also a form, each field given once. */
 async function readSharedBody(
   request: Request,
   signal: AbortSignal,
@@ -197,8 +196,8 @@ function denied(access: Awaited<ReturnType<typeof checkFileAccess>>) {
 }
 
 /**
- * Check a shared archive request. A visitor proves a file password either in
- * the body or with an unlock cookie issued after an earlier password check.
+ * A visitor proves a file password either in the body or with an unlock
+ * cookie issued after an earlier password check.
  */
 export async function authorizeSharedArchive(
   id: string,

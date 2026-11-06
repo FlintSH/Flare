@@ -98,8 +98,8 @@ async function deletionProvider(
   job: StorageDeletion
 ): Promise<StorageProvider> {
   if (job.provider === 'unknown') throw new StorageTargetUnknown()
-  // Read credentials fresh. Never use the cached provider or its local fallback:
-  // a configuration change must not delete an identical key in another bucket.
+  // The job's recorded target, never whatever storage is active now: after a
+  // storage change, an identical key in another bucket must not be deleted.
   const target = parseStorageTarget(job.target)
   if (!target || target.provider !== job.provider)
     throw new StorageTargetUnknown()

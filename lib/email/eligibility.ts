@@ -38,7 +38,6 @@ export interface UserEmailStatus {
   exempt: boolean
   required: boolean
   pendingEmail: string | null
-  /** A verification link can be sent again. */
   canResend: boolean
 }
 
@@ -69,7 +68,6 @@ export interface AccountEmailStatus {
   verifyBy: string | null
 }
 
-/** Whether people can change their address on this instance. */
 export function emailChangesEnabled(config: EmailConfig) {
   return emailLinkAvailable(config, 'change')
 }
@@ -82,7 +80,6 @@ export function currentAddressMustVerify(
   return config.changes.requireOldEmail && !hasVerifiedEmail(user, config)
 }
 
-/** Whether an account may ask for a new address now: changes are on, and an address that must approve is verified. */
 export function canRequestEmailChange(
   user: EmailPolicyUser,
   config: EmailConfig
@@ -102,7 +99,6 @@ export function canResendVerification(
   )
 }
 
-/** Whether a person may reset a forgotten password by email: recovery is on, and sign-in isn't SSO only. */
 export function passwordRecoveryAvailable(
   config: EmailConfig,
   sso: SsoSettings

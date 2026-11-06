@@ -79,7 +79,6 @@ export function AuthShell({
           appears pushes the form down instead of moving the whole card. */}
       <div className="relative z-10 flex min-h-[calc(100dvh-57px)] items-start justify-center px-4 py-10 sm:px-6 sm:pb-12 sm:pt-[max(3rem,10vh)]">
         <div className="w-full max-w-[400px] space-y-6">
-          {/* The brand chip from the public header, centred. */}
           <div className="flex justify-center">
             <Link
               href="/"

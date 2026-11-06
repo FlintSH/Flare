@@ -13,7 +13,6 @@ const ZIP64_EOCD = 0x06064b50
 const CENTRAL_HEADER = 0x02014b50
 const LOCAL_HEADER = 0x04034b50
 const MAX_U32 = 0xffffffff
-/** Central directory entries parsed between pauses for other requests. */
 const YIELD_ENTRIES = 2000
 
 /**

@@ -7,8 +7,8 @@ import { RadioGroupItem } from '@/components/ui/radio-group'
 import { cn } from '@/lib/utils'
 
 /**
- * The option card every setup step uses (storage, access and the starting
- * look): an inset with a hairline, the primary border once chosen, and the
+ * The option card every setup step uses (storage, access, the starting look
+ * and email): an inset with a hairline, the primary border once chosen, and the
  * app's radio at the top right. The whole card is the radio's label and
  * shows its focus ring. Use inside a RadioGroup.
  */
@@ -49,7 +49,6 @@ export function SetupOption({
         className
       )}
     >
-      {/* The radio is centred on the visual, or on the title's line. */}
       <span
         className={cn('flex gap-3', visual ? 'items-center' : 'items-start')}
       >
@@ -68,7 +67,6 @@ export function SetupOption({
   )
 }
 
-/** The icon tile for an option card. */
 export function SetupOptionIcon({ children }: { children: ReactNode }) {
   return (
     <span className="flex h-10 w-10 items-center justify-center rounded-lg border bg-background [&_svg]:h-5 [&_svg]:w-5">

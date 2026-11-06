@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 
 import { Terminal } from 'lucide-react'
 
-/** What every uploader tool accepts. */
 export interface UploaderToolProps {
   /** Select this upload profile instead of following account defaults. */
   profileId?: string

@@ -36,7 +36,6 @@ export default async function RegisterPage({
       ),
       pageSetupStatus(),
     ])
-  // Setup creates the first account.
   if (setupComplete === false) redirect(SETUP_PATH)
   const open = config.settings.general.registrations.enabled
   const invite = typeof params.invite === 'string' ? params.invite : undefined

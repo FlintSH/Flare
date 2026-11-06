@@ -12,7 +12,6 @@ import { ImageViewer } from './viewers/image-viewer'
 import { PdfViewer } from './viewers/pdf-viewer'
 import { VideoViewer } from './viewers/video-viewer'
 
-/** The viewer for the file's kind. */
 export function FileViewerContent({
   file,
   password,

@@ -14,7 +14,6 @@ export function timelineWindowStart(row: number, totalRows: number) {
   )
 }
 
-/** Binary search keeps the layout proportional to date groups, not file count. */
 export function bucketAt(buckets: FileTimelineBucket[], index: number) {
   let low = 0
   let high = buckets.length - 1

@@ -85,7 +85,6 @@ export async function sharedFolderBackLink(
     select: { id: true, name: true },
   })
   if (!folder || folder.id !== file.folderId) return null
-  // Return to the listing page the visitor came from.
   const page = viaFileRoute ? 1 : Number(from.searchParams.get('page') ?? 1)
   return {
     href: sharedFolderUrl(token, {

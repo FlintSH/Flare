@@ -1,7 +1,3 @@
-/**
- * Upload queues for the browser, and the progress of whichever file is being
- * sent. Each queue sends one batch at a time, one file after another.
- */
 import {
   type UploadOptions,
   type UploadResponse,
@@ -9,7 +5,6 @@ import {
   uploadFile,
 } from './client'
 
-/** A file waiting in an upload queue, or being sent from it. */
 export type QueuedFile = {
   readonly key: number
   readonly file: File
@@ -95,7 +90,6 @@ export function createUploadQueue(send = uploadFile) {
     })
   }
 
-  /** Sends files in order and stops at the first failure. */
   async function run(
     files: readonly File[],
     options: UploadOptions,
@@ -187,7 +181,7 @@ export function createUploadQueue(send = uploadFile) {
       revoke(state.files)
       update({ files: [] })
     },
-    /** Sends the queued files. Sent files leave the queue; the rest stay. */
+    /** Sent files leave the queue; the rest stay. */
     upload: (options: UploadOptions) =>
       run(
         state.files.map((item) => item.file),

@@ -65,7 +65,7 @@ type UploadInput = {
   passwordHash?: string | null
   isPaste?: boolean
   signal?: AbortSignal
-  /** Chunk assembly already holds an upload lock on this transaction. */
+  /** Publish in the caller's transaction; the caller enqueues processing after it commits. */
   transaction?: Prisma.TransactionClient
 }
 
@@ -104,7 +104,6 @@ export async function prepareUpload(
   return { ...input, passwordHash, [validatedUpload]: true }
 }
 
-/** Prepared bytes are published under the same policy/quota locks as ordinary uploads. */
 export async function publishPreparedUpload(input: PreparedUpload) {
   if (!input[validatedUpload]) throw new UploadError('Upload is not validated.')
   const { user, storage, filePath, displayName, mimeType, size, options } =

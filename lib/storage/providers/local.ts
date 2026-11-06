@@ -197,8 +197,6 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  // The local backend has no direct, client-reachable object URL: callers must
-  // stream the bytes through the app. Returning null signals exactly that.
   async getPublicUrl(_path: string): Promise<string | null> {
     return null
   }

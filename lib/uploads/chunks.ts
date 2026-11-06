@@ -84,7 +84,7 @@ export interface UploadMetadata {
   storageTarget?: StorageTarget
 }
 
-/** A multipart ID belongs to the backend which initialized it, including fallback. */
+/** A multipart ID belongs to the backend that started it, so a storage change ends the upload. */
 export async function getUploadStorage(metadata: UploadMetadata) {
   const target = parseStorageTarget(metadata.storageTarget)
   const storage = await getStorageProvider()

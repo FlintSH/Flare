@@ -31,7 +31,6 @@ type BrowseSource = {
   storageTarget: Prisma.JsonValue
 }
 
-/** How long a progress-mode listing waits before reporting progress. */
 const PROGRESS_WAIT_MS = 750
 
 export async function sourceStorage(file: Pick<BrowseSource, 'storageTarget'>) {
@@ -67,8 +66,8 @@ export async function archiveSourceRef(
 }
 
 /**
- * List an archive. Progress mode returns 202 with the entries found so far
- * while a TAR, TAR.GZ, or GZIP is still being read; otherwise this waits.
+ * Progress mode returns 202 with the entries found so far while the archive,
+ * in any format, is queued or still being read; otherwise this waits.
  */
 export async function archiveListing(
   ref: ArchiveSourceRef,

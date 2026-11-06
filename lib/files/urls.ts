@@ -4,7 +4,6 @@
  * are built by `shortLinkUrl` in `lib/links/schema`.
  */
 
-/** A stored file, as its addresses name it. */
 export interface FileAddress {
   id: string
   /** As stored: `/{urlId}/{name}`. */
@@ -30,7 +29,6 @@ export interface FileUrls {
   direct: string
   thumbnail: string
   download: string
-  /** Text recognized in an image. */
   ocr: string
 }
 
@@ -120,7 +118,6 @@ export function canOptimizeThumbnail(file: {
   )
 }
 
-/** A shared folder's listing, at `page` when that is past the first. */
 export function sharedFolderUrl(
   token: string,
   { origin = '', page = 1 }: { origin?: string; page?: number } = {}

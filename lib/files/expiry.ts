@@ -376,7 +376,6 @@ async function claim(job: Event): Promise<boolean> {
   return count === 1
 }
 
-/** Record a failed attempt and return its audit details. */
 async function recordFailure(job: Event, error: unknown) {
   const retry = job.retryCount < job.maxRetries
   const failure = {
@@ -406,7 +405,6 @@ async function recordFailure(job: Event, error: unknown) {
   return { eventType: job.type, retry }
 }
 
-/** Claim and apply a batch of due jobs, earliest deadline first. */
 export async function processDueExpirations(): Promise<void> {
   const due = await prisma.event.findMany({
     where: dueJobs(Date.now()),

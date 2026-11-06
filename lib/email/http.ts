@@ -3,7 +3,7 @@ import type { RouteContract } from '@/lib/http/route'
 
 import { getEmailConfig } from './config'
 
-/** Account email routes. Provider errors, credentials, database details and token values never reach the response. */
+/** Provider errors, credentials, database details and token values never reach the response. */
 export const emailRoutes: RouteContract = {
   failure: {
     message: 'Unable to complete this email request. Please try again.',

@@ -1,4 +1,3 @@
-# Stage 1: Dependencies  
 # Node.js 25 and later no longer bundle Corepack, which installs pnpm below.
 # Stay on Node.js 24 LTS, the version CI uses, rather than the moving node:lts.
 FROM node:24 AS deps
@@ -18,7 +17,6 @@ COPY prisma ./prisma
 # The postinstall script generates the Prisma client from prisma/.
 RUN pnpm install --frozen-lockfile
 
-# Stage 2: Builder
 FROM node:24 AS builder
 WORKDIR /app
 
@@ -33,14 +31,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY . .
 
-# Set up environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application
 RUN pnpm build
 
-# Stage 3: Runner
 FROM node:24 AS runner
 WORKDIR /app
 
@@ -74,12 +69,10 @@ RUN useradd --system --uid 1001 --gid nodejs nextjs
 # Install curl for healthcheck and OpenSSL for Prisma
 RUN apt-get update && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
 
-# Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && \
     chown nextjs:nodejs /app/uploads && \
     chmod 775 /app/uploads
 
-# Copy necessary files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
@@ -96,11 +89,9 @@ COPY --from=builder /app/scripts/start.sh ./start.sh
 # unprivileged runtime user.
 RUN corepack install && chmod -R a+rX /usr/local/corepack
 
-# Set correct permissions
 RUN chown -R nextjs:nodejs /app
 RUN chmod +x /app/start.sh
 
-# Create the entrypoint script that will run as root
 RUN echo '#!/bin/bash' > /entrypoint.sh && \
     echo 'mkdir -p /app/uploads' >> /entrypoint.sh && \
     echo 'chown -R nextjs:nodejs /app/uploads' >> /entrypoint.sh && \

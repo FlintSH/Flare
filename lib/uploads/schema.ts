@@ -17,8 +17,8 @@ export const PROFILE_NAME_MAX_LENGTH = 80
 export const PROFILE_TAG_LIMIT = 20
 
 /**
- * Saved profile options. Fields this version doesn't know, such as the
- * retired copy format, are left out; a known field with a bad value is not.
+ * Fields this version doesn't know, such as the retired copy format, are left
+ * out; a known field with a bad value is not.
  */
 export const uploadProfileOptionsSchema = z.object({
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
@@ -32,8 +32,8 @@ export const uploadProfileOptionsSchema = z.object({
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
 
 /**
- * The fields a request sends. Any other field is refused, except the retired
- * copy format: older clients and recipes still send it, and requests ignore it.
+ * Any other field is refused, except the retired copy format: older clients
+ * and recipes still send it, and requests ignore it.
  */
 export function requestFields<Shape extends z.ZodRawShape>(shape: Shape) {
   const fields = z.strictObject(shape)
@@ -65,7 +65,6 @@ export const uploadRecipeSchema = z
   .strict()
 export type UploadRecipe = z.infer<typeof uploadRecipeSchema>
 
-/** A profile's portable recipe, as `uploadRecipeSchema` reads it back. */
 export function uploadRecipe({
   name,
   options,
@@ -77,7 +76,6 @@ export function uploadRecipe({
   }
 }
 
-/** What a create request's body is: a recipe when it names a format, otherwise a profile. */
 export function newProfileSchema(body: unknown): z.ZodType<UploadProfileInput> {
   const recipe =
     typeof body === 'object' && body !== null && 'format' in body && body.format
@@ -93,7 +91,6 @@ export type UploadProfileView = {
   updatedAt: string
 }
 
-/** The upload options a request may set: a profile's, and its own. */
 export const uploadRequestOptionFields = {
   ...uploadProfileOptionsSchema.shape,
   profileId: z.string().min(1).max(100).nullable().optional(),
@@ -127,7 +124,6 @@ export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
   tagIds: [],
 }
 
-/** Omission inherits; DISABLED explicitly turns expiration off. Durations use UTC. */
 export function expirationDate(
   expiration: Required<UploadProfileOptions>['expiration'],
   now: Date
@@ -142,7 +138,6 @@ export function expirationDate(
   return date.toISOString()
 }
 
-/** Pure precedence contract shared by transport adapters and contract tests. */
 export function mergeUploadOptions(
   account: UploadProfileOptions,
   profile: UploadProfileOptions,

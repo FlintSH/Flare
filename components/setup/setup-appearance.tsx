@@ -271,7 +271,6 @@ export function SetupAppearance({
                     aria-labelledby={`${id}-presets`}
                     className="grid-cols-2 gap-3"
                   >
-                    {/* The option cards every setup step uses. */}
                     {settings.published.theme.enabled && (
                       <SetupOption
                         id={`${id}-current`}

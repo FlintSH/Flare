@@ -283,7 +283,6 @@ async function screenshot(page, name) {
     .toFile(path.join(screenshots, `${name}.webp`))
 }
 
-// Distinct rendered heights of mounted file cards (or placeholders).
 async function cardHeights(
   page,
   selector = '[data-file-index] > :first-child'

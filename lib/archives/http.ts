@@ -145,7 +145,6 @@ const prismaConflicts = prismaAnswers({
   P2025: changed,
 })
 
-/** Archive routes: private, never cached, and answered in the API envelope. */
 export const archiveRoutes: RouteContract = {
   envelope: 'api',
   respond: apiResponse,

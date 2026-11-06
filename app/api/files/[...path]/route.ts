@@ -32,7 +32,6 @@ async function serveContent(request: Request, { params }: Context) {
       count: download ? 'downloads' : undefined,
     })
   } catch (error) {
-    // Every failure answers like a missing file.
     logger.error('File serve error:', error as Error)
     return new Response(null, { status: 404 })
   }

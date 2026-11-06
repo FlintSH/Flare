@@ -9,10 +9,9 @@ import { changeCredentials } from './credentials'
 import { claimEmail } from './email-claim'
 import { assertPublicIdsFree } from './public-id-claim'
 
-/** What an edit sets. Fields left undefined keep their values. */
+/** Fields left undefined keep their values. */
 export interface AccountEdit {
   name?: string
-  /** A new sign-in address. */
   email?: string
   /** A new password, as `hashAccountPassword` stores it. */
   password?: string
@@ -23,7 +22,6 @@ export interface AccountEdit {
   settings?: Prisma.UserUpdateInput
 }
 
-/** How each editor is told that an edit can't be saved. */
 const refusals = {
   self: {
     changed: 'Account changed during update. Please try again.',

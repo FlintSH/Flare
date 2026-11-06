@@ -29,7 +29,6 @@ import { SpectacleTool } from './spectacle-tool'
 import type { UploaderToolProps } from './tool-parts'
 import { UploadToken } from './upload-token'
 
-/** Each uploader client's tool; the type makes every client have one. */
 const uploaderTools: {
   [Id in UploaderClientId]: ComponentType<UploaderToolProps>
 } = {

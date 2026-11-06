@@ -28,7 +28,6 @@ export function imageType(bytes: Uint8Array): ImageType | null {
   return null
 }
 
-/** What one kind of image upload accepts, and how it words a refusal. */
 export interface ImagePolicy {
   types: readonly ImageType[]
   maxBytes: number

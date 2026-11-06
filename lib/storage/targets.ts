@@ -48,9 +48,9 @@ export function parseStorageTarget(value: unknown): StorageTarget | null {
 }
 
 /**
- * Whether two targets name the same storage. Spaces around a value don't
- * count: providers trim their settings, while records written before that,
- * and settings saved before saves trimmed them, can keep spaces.
+ * Spaces around a value don't count: providers trim their settings, while
+ * records written before that, and settings saved before saves trimmed them,
+ * can keep spaces.
  */
 export function sameStorageTarget(
   left: StorageTarget,

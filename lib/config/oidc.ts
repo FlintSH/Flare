@@ -36,7 +36,6 @@ export function oidcSubjectPrefix(oidc: OidcSettings): string | null {
     : null
 }
 
-/** Whether people may sign in with a local password, rather than only through SSO. */
 export function localSignInAllowed(
   oidc: Pick<OidcSettings, 'enabled' | 'enforceSso'>
 ) {

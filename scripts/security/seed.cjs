@@ -36,7 +36,6 @@ async function seed() {
     where: { key: 'flare_config' },
     data: { value: config.value },
   })
-  // Re-running the demonstration starts these two fixtures from scratch.
   await prisma.user.deleteMany({
     where: { id: { in: ['security-demo-alex', 'security-demo-jamie'] } },
   })

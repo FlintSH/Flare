@@ -10,7 +10,6 @@ export const AVATAR_TYPES = [
   'image/webp',
 ] as const
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024
-/** The avatar input's `accept` attribute. */
 export const AVATAR_ACCEPT = AVATAR_TYPES.join(',')
 
 export const AVATAR_POLICY: ImagePolicy = {

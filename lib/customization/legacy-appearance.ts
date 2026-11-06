@@ -88,7 +88,6 @@ export function legacyTheme(value: unknown): LegacyTheme {
     : 'dark'
 }
 
-/** Strict validation for submitted classic appearance changes. */
 export const legacyAppearanceUpdateSchema = z.object({
   theme: z
     .enum(LEGACY_THEMES, {

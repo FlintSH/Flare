@@ -49,10 +49,7 @@ const urlIdCharacters = z
   .regex(/^[A-Za-z0-9]*$/, urlIdMessage)
   .length(URL_ID_LENGTH, urlIdMessage)
 
-/**
- * Letters and digits, and not one of Flare's own routes. File URLs use an ID
- * as written, so letter case counts.
- */
+/** File URLs use an ID as written, so letter case counts. */
 export const urlIdSchema = urlIdCharacters.refine(
   (id) => !isReservedPublicId(id),
   RESERVED_MESSAGE
@@ -70,10 +67,7 @@ export function isUrlIdDraft(value: string) {
   )
 }
 
-/**
- * Letters, digits and inner hyphens, and not one of Flare's own routes. Like
- * a URL ID, it is used as written, so letter case counts.
- */
+/** Like a URL ID, it is used as written, so letter case counts. */
 export const vanityIdSchema = z
   .string()
   .min(
