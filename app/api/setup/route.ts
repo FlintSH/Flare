@@ -9,6 +9,7 @@ import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
 import { setupSchema } from '@/lib/setup/schema'
+import { isSetupComplete } from '@/lib/setup/status'
 import { invalidateStorageProvider } from '@/lib/storage'
 import { createAccount } from '@/lib/users/create-account'
 
@@ -55,8 +56,8 @@ export const POST = api(async (request) => {
   const user = await prisma.$transaction(async (tx) => {
     // Account creation needs the role lock, which takes the settings lock first.
     await lockRoleChanges(tx)
-    const userCount = await tx.user.count()
-    if (userCount > 0) throw new HttpError(400, 'Setup already completed')
+    if (await isSetupComplete(tx))
+      throw new HttpError(400, 'Setup already completed')
     const admin = await createAccount(tx, {
       name: validatedData.admin.name,
       email: validatedData.admin.email,

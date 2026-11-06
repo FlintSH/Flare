@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { getOidcErrorMessage } from '@/lib/auth/oidc-error-messages'
-import { getSetupResumePath } from '@/lib/setup/navigation'
+import { getSetupResumePathAfterSignIn } from '@/lib/setup/navigation'
 import { cn } from '@/lib/utils'
 
 const disabledLink = 'disabled:cursor-not-allowed disabled:opacity-50'
@@ -74,11 +74,7 @@ export function LoginForm({
   function finishSignIn() {
     pendingCredentials.current = null
     // Only allow these fixed callbacks on the current origin.
-    router.push(
-      searchParams.get('setupEmail') === '1'
-        ? getSetupResumePath(searchParams.get('setupStep'))
-        : '/dashboard'
-    )
+    router.push(getSetupResumePathAfterSignIn(searchParams) ?? '/dashboard')
     router.refresh()
   }
 

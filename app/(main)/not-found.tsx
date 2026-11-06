@@ -11,15 +11,11 @@ import { getConfig } from '@/lib/config'
 // Visitors land here from expired, private or mistyped share links, so the
 // page follows the share pages' footer setting.
 async function shareFooterVisible() {
-  try {
-    const config = await getConfig()
-    return (
-      config.settings.customization.published.sharing.showFooter ??
-      config.settings.general.credits.showFooter
-    )
-  } catch {
-    return false
-  }
+  const config = await getConfig()
+  return (
+    config.settings.customization.published.sharing.showFooter ??
+    config.settings.general.credits.showFooter
+  )
 }
 
 export default async function NotFound() {

@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
 
+import { getSetupResumePath } from '@/lib/setup/navigation'
+
 export default function SetupEmailPage() {
-  redirect('/setup?step=email')
+  redirect(getSetupResumePath('email'))
 }

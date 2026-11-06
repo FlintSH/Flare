@@ -110,6 +110,7 @@ vi.mock('@/lib/database/prisma', async () => {
       return row ? { ...row } : null
     }),
     count: vi.fn(async () => db.rows.length),
+    findFirst: vi.fn(async () => (db.rows[0] ? { id: db.rows[0].id } : null)),
     create: vi.fn(async ({ data }: { data: CreateUserData }) => {
       db.create(data)
       const row: StoredUser = {

@@ -10,6 +10,7 @@ import {
 import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
 import { PUBLIC_PATHS, isFileUrlPath } from './lib/middleware/constants'
+import { isSetupPath } from './lib/setup/navigation'
 
 export async function proxy(request: NextRequest) {
   const requestedRecovery =
@@ -53,7 +54,7 @@ export async function proxy(request: NextRequest) {
       : botResponse
   }
 
-  if (request.nextUrl.pathname.startsWith('/setup')) {
+  if (isSetupPath(request.nextUrl.pathname)) {
     return next()
   }
 

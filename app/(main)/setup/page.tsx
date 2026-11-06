@@ -5,12 +5,12 @@ import { getServerSession } from 'next-auth'
 import { SetupWizard } from '@/components/setup/setup-wizard'
 
 import { getAuthOptions } from '@/lib/auth'
-import { checkSetupCompletion } from '@/lib/database/setup'
 import { getDocumentationUrl } from '@/lib/documentation'
 import { getEmailConfig } from '@/lib/email/config'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { getBuildInfo } from '@/lib/releases'
 import { getSetupSignInPath, getSetupStep } from '@/lib/setup/navigation'
+import { isSetupComplete } from '@/lib/setup/status'
 
 export default async function SetupPage({
   searchParams,
@@ -18,7 +18,7 @@ export default async function SetupPage({
   searchParams: Promise<{ step?: string }>
 }) {
   const documentationUrl = getDocumentationUrl(getBuildInfo(), 'setup')
-  if (!(await checkSetupCompletion()))
+  if (!(await isSetupComplete()))
     return <SetupWizard documentationUrl={documentationUrl} />
   const { step } = await searchParams
   const session = await getServerSession(await getAuthOptions())
@@ -28,8 +28,7 @@ export default async function SetupPage({
   return (
     <SetupWizard
       documentationUrl={documentationUrl}
-      configured
-      initialStep={getSetupStep(step)}
+      resumeStep={getSetupStep(step)}
       initialEmailEnabled={email.enabled}
       initialEmailRecoveryEnabled={email.enabled && email.recovery.enabled}
     />

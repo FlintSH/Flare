@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { sendAccountToken } from '@/lib/email/account'
 import type { EmailConfig } from '@/lib/email/schema'
 import { ensureBuiltInRoles } from '@/lib/permissions/server'
+import { isSetupComplete } from '@/lib/setup/status'
 
 import { newUploadToken } from './credentials'
 import { claimEmail } from './email-claim'
@@ -90,7 +91,7 @@ export async function createAccount(
   if (!free) return null
 
   const roleIds = [...new Set(account.roleIds ?? [])]
-  if ((await tx.user.count()) === 0) {
+  if (!(await isSetupComplete(tx))) {
     const { administrator } = await ensureBuiltInRoles(tx)
     if (!roleIds.includes(administrator.id)) roleIds.push(administrator.id)
   }

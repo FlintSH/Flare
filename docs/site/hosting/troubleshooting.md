@@ -27,6 +27,21 @@ Check that `NEXTAUTH_URL` exactly matches the public scheme, hostname, and port 
 
 All replicas must use the same authentication secret. A secret regenerated on every deploy invalidates sessions and may also make authenticator, SMTP, and webhook secrets unreadable. Authenticator encryption always depends on `NEXTAUTH_SECRET`, even when email/webhooks use a dedicated key. If only appearance is broken, use [appearance recovery](/admin/appearance#recover-an-unusable-appearance).
 
+## Pages show Something went wrong
+
+While Flare can't read its database, for example because PostgreSQL is stopped, unreachable, or rejecting the configured account, the home page and `/setup` show **Something went wrong**. Other pages no longer send visitors to setup, and `GET /api/setup/check` answers `503`. Earlier versions treated an unreadable database as a new instance and showed the first-run setup form instead.
+
+Check the database the same way as for a container that never becomes healthy:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 db
+docker compose exec -T db pg_isready -U flare -d flare
+docker compose logs --tail=150 flare
+```
+
+Flare logs the database error under `GET /api/setup/check failed` when a browser checks setup, and reads settings as their defaults with `Could not access database for config, using default`. Once the database answers again, choose **Try again** or reload the page; nothing in Flare needs repairing. In earlier versions, **Try again** showed the error again until the page was reloaded. If the setup form appears while the database is reachable, Flare is connected to a database with no accounts: read [Files disappear after redeploying](#files-disappear-after-redeploying) before you complete setup again.
+
 ## Startup logs warn about NEXTAUTH_SECRET
 
 Flare warns at startup when `NEXTAUTH_SECRET` is `your-secret-key-here`, the example value in earlier versions of the repository's `docker-compose.yml` and `.env.example`, or shorter than 32 characters. Anyone can sign session tokens with the published example. A short value also blocks authenticator setup, and invite links, webhooks, and saved SMTP passwords unless `FLARE_EMAIL_ENCRYPTION_KEY` is set.

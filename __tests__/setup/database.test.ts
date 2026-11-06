@@ -79,6 +79,19 @@ suite('setup contracts against disposable PostgreSQL', () => {
     })
   }
 
+  it('counts setup as complete from the first account, inside a transaction too', async () => {
+    const { isSetupComplete } = await import('@/lib/setup/status')
+    const check = await import('@/app/api/setup/check/route')
+    const reported = async () =>
+      (await check.GET(new Request('http://localhost/api/setup/check'))).json()
+    expect(await isSetupComplete()).toBe(false)
+    expect(await reported()).toEqual({ completed: false })
+    expect((await setup.POST(request())).status).toBe(200)
+    expect(await isSetupComplete()).toBe(true)
+    expect(await prisma.$transaction((tx) => isSetupComplete(tx))).toBe(true)
+    expect(await reported()).toEqual({ completed: true })
+  })
+
   it('creates one initial admin with stock appearance and no exposed credentials', async () => {
     const response = await setup.POST(request())
     expect(response.status).toBe(200)

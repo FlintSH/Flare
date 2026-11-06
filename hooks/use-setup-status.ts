@@ -31,12 +31,14 @@ export function useSetupStatus(enabled = true) {
   })
 }
 
-export function useSetupStatusMutations() {
+/**
+ * Records that this browser just completed setup, so pages stop being sent
+ * to setup without waiting for the stored status to expire.
+ */
+export function useMarkSetupComplete() {
   const queryClient = useQueryClient()
-
-  const updateSetupStatus = (completed: boolean) => {
-    queryClient.setQueryData(SETUP_STATUS_QUERY_KEY, { completed })
-  }
-
-  return { updateSetupStatus }
+  return () =>
+    queryClient.setQueryData<SetupStatus>(SETUP_STATUS_QUERY_KEY, {
+      completed: true,
+    })
 }
