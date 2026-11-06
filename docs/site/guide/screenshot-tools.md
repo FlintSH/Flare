@@ -104,6 +104,8 @@ The account upload token is created for you and included in generated downloads.
 
 Replacing it disconnects every tool using that account token. Download and import fresh configurations afterward. Existing named API tokens are unaffected.
 
+If Flare can't load or replace the token, the error shows the server's reason when it gives one. For example, **Too many requests** means requests from your address replaced the token, or created or revoked invites, more than 60 times within a minute; wait a minute and try again. Otherwise the error reads **Failed to fetch upload token** or **Failed to refresh upload token**, which earlier versions showed for every failure.
+
 Use [named API tokens](../api/authentication) when a custom connection needs its own permissions, expiration, profile binding, or revocation. Downloading a standard screenshot-tool configuration does not create a separate named token for that tool.
 
 ## Troubleshooting

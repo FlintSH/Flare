@@ -3,10 +3,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 
-import {
-  type SecurityStatus,
-  securityRequest,
-} from '@/components/auth/security-api'
+import type { SecurityStatus } from '@/components/auth/security-api'
+
+import { accountRequest } from '@/lib/client/account-request'
 
 export function useSecurityStatus() {
   const { data: session, status } = useSession()
@@ -15,12 +14,7 @@ export function useSecurityStatus() {
   return useQuery({
     queryKey: ['account-security', userId, sessionId],
     queryFn: ({ signal }) =>
-      securityRequest<SecurityStatus>(
-        '/api/auth/security',
-        undefined,
-        'GET',
-        signal
-      ),
+      accountRequest<SecurityStatus>('/api/auth/security', { signal }),
     enabled: status === 'authenticated' && !!userId,
     staleTime: 0,
     gcTime: 0,

@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { accountRequest } from '@/lib/client/account-request'
 import {
   type UploadProfileOptions,
   type UploadProfileView,
@@ -183,16 +184,12 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     setTagSearch('')
   }
 
-  async function request(url: string, method: string, body?: unknown) {
-    const result = await fetch(url, {
+  function request<T>(url: string, method: string, body?: unknown) {
+    return accountRequest<T>(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body,
+      fallback: 'Could not save your changes.',
     })
-    const json = await result.json()
-    if (!result.ok)
-      throw new Error(json.error || 'Could not save your changes.')
-    return json.data
   }
   async function perform(action: () => Promise<void>) {
     setBusy(true)
@@ -211,7 +208,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
 
   async function save() {
     await perform(async () => {
-      const profile = await request(
+      const profile = await request<UploadProfileView>(
         editing ? `/api/upload-profiles/${editing.id}` : '/api/upload-profiles',
         editing ? 'PUT' : 'POST',
         { name, options, ...(editing ? { revision: editing.updatedAt } : {}) }
@@ -285,7 +282,13 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
             const recipe = uploadRecipeSchema.parse(
               JSON.parse(await file.text())
             )
-            choose(await request('/api/upload-profiles', 'POST', recipe))
+            choose(
+              await request<UploadProfileView>(
+                '/api/upload-profiles',
+                'POST',
+                recipe
+              )
+            )
             toast({
               title: 'Recipe imported',
               description: 'Review it before making it your default.',

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 
+import { RefusedRequest, refusal } from '@/lib/client/account-request'
 import {
   type UploaderClientId,
   type UploaderOptions,
@@ -16,21 +17,6 @@ import { saveResponseAsFile } from './save-response-as-file'
 interface Notice {
   title: string
   description: string
-}
-
-/** A refusal whose message the server wrote for the person. */
-class RefusedDownload extends Error {}
-
-async function refusal(response: Response) {
-  const body: unknown = await response.json().catch(() => null)
-  const message =
-    typeof body === 'object' &&
-    body !== null &&
-    'error' in body &&
-    typeof body.error === 'string'
-      ? body.error
-      : ''
-  return new RefusedDownload(message)
 }
 
 /**
@@ -53,7 +39,8 @@ export function useUploaderDownload<Id extends UploaderClientId>(
       const response = await fetch(
         ...uploaderClientRequest(id, options, profileId)
       )
-      if (!response.ok) throw await refusal(response)
+      if (!response.ok)
+        throw await refusal(response, notices.failed.description)
       await saveResponseAsFile(response, `flare-${client.fileName(options)}`)
       toast(notices.ready)
       return true
@@ -62,8 +49,9 @@ export function useUploaderDownload<Id extends UploaderClientId>(
       toast({
         title: notices.failed.title,
         description:
-          (error instanceof RefusedDownload && error.message) ||
-          notices.failed.description,
+          error instanceof RefusedRequest
+            ? error.message
+            : notices.failed.description,
         variant: 'destructive',
       })
       return false

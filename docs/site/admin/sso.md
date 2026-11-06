@@ -43,7 +43,9 @@ Flare uses provider discovery, ID tokens, PKCE, and state checks. The callback o
 
 These settings are stored in the database. There are no `FLARE_OIDC_*` server environment overrides in the current implementation.
 
-With auto-login on, **Sign out** in the account menu, the phone navigation sheet, and Profile opens `/auth/login?local=1`, so Flare doesn't send the person straight back to the provider. Signing out of Flare doesn't end the provider's own session; choosing the sign-in button can still continue without a password prompt. Earlier builds sent the Profile button to the auto-login page, which could sign someone with an active provider session straight back in.
+With auto-login on, every sign-out opens `/auth/login?local=1`, so Flare doesn't send the person straight back to the provider. That includes **Sign out** in the account menu, the phone navigation sheet, Profile, and the email verification page, and the sign-out after someone deletes their own account. Signing out of Flare doesn't end the provider's own session; choosing the sign-in button can still continue without a password prompt. Earlier builds sent the Profile button, the verification page's **Sign out**, and account deletion to the auto-login page. An active provider session could then sign the person straight back in or, after deletion, create a new, empty account when **Auto-provision users** is on.
+
+A session that ends without a sign-out, for example one an administrator revokes, sends that browser to the usual login page on its next visit, where auto-login can sign it in again while the provider session lasts.
 
 ## Account creation and identity
 

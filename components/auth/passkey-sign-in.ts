@@ -3,14 +3,14 @@
 import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import { signIn } from 'next-auth/react'
 
-import { securityRequest } from './security-api'
+import { accountRequest } from '@/lib/client/account-request'
 
 /** expectedUserId keeps an in-place confirmation bound to the open account. */
 export async function signInWithPasskey(expectedUserId?: string) {
-  const { options, challengeId } = await securityRequest<{
+  const { options, challengeId } = await accountRequest<{
     options: PublicKeyCredentialRequestOptionsJSON
     challengeId: string
-  }>('/api/auth/passkeys/options', {})
+  }>('/api/auth/passkeys/options', { body: {} })
   const { startAuthentication } = await import('@simplewebauthn/browser')
   const response = await startAuthentication({ optionsJSON: options })
   const result = await signIn('passkey', {

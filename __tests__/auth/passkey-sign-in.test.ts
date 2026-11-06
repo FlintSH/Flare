@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
 }))
 
-vi.mock('@/components/auth/security-api', () => ({
-  securityRequest: mocks.request,
+vi.mock('@/lib/client/account-request', () => ({
+  accountRequest: mocks.request,
 }))
 vi.mock('@simplewebauthn/browser', () => ({
   startAuthentication: mocks.authenticate,
@@ -43,6 +43,13 @@ describe('browser passkey confirmation', () => {
   it('keeps account discovery available for normal passkey sign-in', async () => {
     await signInWithPasskey()
     expect(mocks.signIn.mock.calls[0][1]).not.toHaveProperty('expectedUserId')
+  })
+
+  it('posts an empty JSON body for the challenge', async () => {
+    await signInWithPasskey()
+    expect(mocks.request).toHaveBeenCalledWith('/api/auth/passkeys/options', {
+      body: {},
+    })
   })
 
   it('does not treat a rejected account confirmation as a success', async () => {

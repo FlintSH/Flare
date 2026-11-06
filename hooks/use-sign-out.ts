@@ -4,15 +4,22 @@ import { signOut } from 'next-auth/react'
 
 import { useToast } from '@/hooks/use-toast'
 
-/** Signs out to the sign-in form, with a toast if that fails. */
-export function useSignOut() {
+/**
+ * Signs out to the sign-in form. A failure shows a toast, unless `onError`
+ * reports it the caller's own way.
+ */
+export function useSignOut({
+  onError,
+}: { onError?: (error: unknown) => void } = {}) {
   const { toast } = useToast()
   return async () => {
     try {
-      // The local form, so instances with SSO auto-login don't sign the
-      // person straight back in through their provider.
+      // The local form. With SSO auto-login, the usual sign-in page sends the
+      // person straight back to their provider, which signs them in again or,
+      // once they deleted their account, can provision a new one.
       await signOut({ callbackUrl: '/auth/login?local=1' })
     } catch (error) {
+      if (onError) return onError(error)
       console.error('Logout error:', error)
       toast({
         title: 'Error',

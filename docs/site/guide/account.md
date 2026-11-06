@@ -32,7 +32,7 @@ Open **Profile → Account** and scroll to **Active sessions** and **Login histo
 3. To end every browser sign-in, choose **Revoke all sessions**, review the confirmation, and choose **Revoke all and sign out**. This includes the current session; sign in again with an allowed method to continue.
 4. Use **Refresh** to reload the list after activity in another browser. If a revocation fails, read the error and retry after resolving it; an error does not confirm the session ended.
 
-To end only this browser's session, select your avatar and choose **Sign out**. The same action is under **Account** in the navigation sheet on a phone and at the top of **Profile**. Each returns you to the sign-in page; other browsers stay signed in.
+To end only this browser's session, select your avatar and choose **Sign out**. The same action is under **Account** in the navigation sheet on a phone and at the top of **Profile**. Other browsers stay signed in. Every sign-out, including **Revoke and sign out** and **Revoke all and sign out**, opens the local sign-in form (`/auth/login?local=1`), even if your instance normally redirects sign-in to SSO, so your provider doesn't sign you straight back in.
 
 <Screenshot src="/screenshots/audit/revoke-session.webp" alt="Revoke this session confirmation explains that the other browser loses access on its next request" caption="Ending another session preserves the browser you are using." />
 
@@ -184,8 +184,10 @@ Deleting your own account requires `profile.update` and removes its content even
 
 Under **Profile → Your data**, choose **Delete account** and review the confirmation. Confirming removes your account, file records, short links, integrations, and invite links from Flare, then signs you out. Accounts that joined with your invites keep their accounts. The same database transaction saves per-file deletion audit evidence and cleanup work for your stored files and uploaded avatar. If that audit insert fails, the account deletion and cleanup work roll back together; ask the operator to resolve the database problem before retrying. A background worker removes those bytes after the account deletion succeeds and retries storage failures automatically. There is no account-restore button.
 
+After deleting the account, Flare opens the local sign-in form (`/auth/login?local=1`), even if your instance normally redirects sign-in to SSO. On such an instance, earlier versions opened the usual sign-in page, where a still-active provider session could sign you straight into a new, empty account.
+
 Export and inspect anything you want to keep first. If this is an administrator account, make sure another administrator can manage the instance before removing it.
 
 Storage cleanup can remain pending while the storage service is unavailable, its configuration has changed, or an operator must verify an older file's original storage location. An already-issued S3 link can still read an object until the worker removes it or the link expires. Account deletion removes its personal session/history records but does not erase retained instance audit events, operator backups, external caches, or avatars hosted by another service. Ask the operator to check [pending account cleanup](/hosting/maintenance#account-storage-cleanup) and their retention procedures if complete data removal matters for your use case.
 
-For a normal end to a session, use **Log out** instead of deleting the account.
+For a normal end to a session, use **Sign out** instead of deleting the account.

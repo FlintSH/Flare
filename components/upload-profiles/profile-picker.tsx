@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { RefusedRequest, accountRequest } from '@/lib/client/account-request'
 import {
   UPLOAD_DEFAULTS,
   type UploadProfileOptions,
@@ -38,17 +39,20 @@ export function useUploadProfiles(refreshKey = 0) {
     setData(null)
     setError('')
     const load = () =>
-      fetch('/api/upload-profiles', { cache: 'no-store' })
-        .then(async (res) => {
-          if (!res.ok) throw new Error('Could not load upload profiles.')
-          const result = await res.json()
+      accountRequest<ProfilesData>('/api/upload-profiles')
+        .then((profiles) => {
           if (alive) {
-            setData(result.data)
+            setData(profiles)
             setError('')
           }
         })
         .catch((failure) => {
-          if (alive) setError(failure.message)
+          if (alive)
+            setError(
+              failure instanceof RefusedRequest
+                ? 'Could not load upload profiles.'
+                : failure.message
+            )
         })
     void load()
     window.addEventListener('flare:upload-profiles-changed', load)

@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
-import { signOut } from 'next-auth/react'
-
 import { hasRecentSecurityProof } from '@/components/auth/security-api'
 import { PasskeyConfirmation } from '@/components/profile/security/passkey-confirmation'
 import { Button } from '@/components/ui/button'
@@ -13,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'
+import { useSignOut } from '@/hooks/use-sign-out'
 
 import { AccountEmailStatus, emailPost, emailRequest } from './api'
 
@@ -51,6 +50,7 @@ export function AccountEmail({
   restricted?: boolean
 }) {
   const router = useRouter()
+  const signOut = useSignOut()
   const { data: security, refetch: refreshSecurity } = useSecurityStatus()
   const [busy, setBusy] = useState(false)
   const [password, setPassword] = useState('')
@@ -321,11 +321,7 @@ export function AccountEmail({
           >
             I have verified my email
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void signOut({ callbackUrl: '/auth/login' })}
-          >
+          <Button type="button" variant="ghost" onClick={signOut}>
             Sign out
           </Button>
         </div>

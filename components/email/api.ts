@@ -1,23 +1,16 @@
+import { accountRequest, readAnswer } from '@/lib/client/account-request'
+
 export async function emailRequest<T>(
   url: string,
   init?: RequestInit
 ): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...init })
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(
-      body.error || 'Unable to complete this request. Please try again.'
-    )
-  }
-  return (body.data ?? body) as T
+  return readAnswer<T>(await fetch(url, { cache: 'no-store', ...init }), {
+    signal: init?.signal ?? undefined,
+  })
 }
 
 export function emailPost<T>(url: string, data: unknown): Promise<T> {
-  return emailRequest<T>(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
+  return accountRequest<T>(url, { method: 'POST', body: data })
 }
 
 export interface EmailCapabilities {
