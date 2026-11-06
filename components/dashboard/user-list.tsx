@@ -83,6 +83,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -100,6 +101,7 @@ import {
 } from '@/components/ui/tooltip'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import type { AccountFile, FileSettings } from '@/lib/files/manage'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { fileUrls } from '@/lib/files/urls'
 import {
@@ -107,7 +109,7 @@ import {
   type AccountShortLinkPage,
   shortLinkUrl,
 } from '@/lib/links/schema'
-import { type RoleSummary, resolvePermissions } from '@/lib/permissions/catalog'
+import { resolvePermissions } from '@/lib/permissions/catalog'
 import {
   canGrantRole,
   isEveryoneRole,
@@ -127,41 +129,12 @@ import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
-import { UserFormData, useUserManagement } from '@/hooks/use-user-management'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  image: string | null
-  roles: RoleSummary[]
-  urlId: string
-  vanityId: string | null
-  storageUsed: number
-  invitedBy?: { id: string; name: string | null } | null
-  _count: {
-    files: number
-    shortenedUrls: number
-  }
-}
-
-interface File {
-  id: string
-  name: string
-  mimeType: string
-  size: number
-  visibility: 'PUBLIC' | 'PRIVATE'
-  password?: string | null
-  uploadedAt: string
-  urlPath: string
-}
-
-interface PaginationData {
-  total: number
-  pages: number
-  page: number
-  limit: number
-}
+import {
+  type PaginationData,
+  type User,
+  UserFormData,
+  useUserManagement,
+} from '@/hooks/use-user-management'
 
 interface FileFilters {
   search: string
@@ -170,7 +143,7 @@ interface FileFilters {
 }
 
 interface FileResponse {
-  files: File[]
+  files: AccountFile[]
   pagination: PaginationData
 }
 
@@ -266,13 +239,10 @@ function VisibilityBadge({
   file,
   className,
 }: {
-  file: Pick<File, 'visibility' | 'password'>
+  file: Pick<AccountFile, 'visibility'>
   className?: string
 }) {
-  // The user files API leaves out passwords and reports password-protected
-  // files as PROTECTED instead.
-  const isProtected =
-    Boolean(file.password) || (file.visibility as string) === 'PROTECTED'
+  const isProtected = file.visibility === 'PROTECTED'
   const Icon = isProtected
     ? KeyRound
     : file.visibility === 'PRIVATE'
@@ -280,7 +250,7 @@ function VisibilityBadge({
       : Globe
   // Private files are what a moderator scans for, so they take the amber
   // status tone (as before this pass); public and password ones stay neutral.
-  const isPrivate = !isProtected && file.visibility === 'PRIVATE'
+  const isPrivate = file.visibility === 'PRIVATE'
   return (
     <Badge variant={isPrivate ? 'warning' : 'neutral'} className={className}>
       <Icon aria-hidden="true" />
@@ -289,36 +259,111 @@ function VisibilityBadge({
   )
 }
 
-interface FileSettingsDialogProps {
-  file: File | null
-  isOpen: boolean
-  onClose: () => void
-  onSave: (visibility: 'PUBLIC' | 'PRIVATE', password?: string) => Promise<void>
+/** `KEEP` sends no visibility. */
+type VisibilityChoice = NonNullable<FileSettings['visibility']> | 'KEEP'
+
+interface FileSettingsForm {
+  visibility: VisibilityChoice
+  /** A new password; empty keeps the current one. */
+  password: string
+  removePassword: boolean
 }
 
-function FileSettingsDialog({
+/**
+ * Where the dialog starts. The list doesn't say which visibility a
+ * password-protected file has, so its dialog starts from keeping it.
+ */
+export function fileSettingsForm(
+  file: Pick<AccountFile, 'visibility'>
+): FileSettingsForm {
+  return {
+    visibility: file.visibility === 'PROTECTED' ? 'KEEP' : file.visibility,
+    password: '',
+    removePassword: false,
+  }
+}
+
+/** What saving the dialog sends: only what it changes. */
+export function fileSettingsChanges(
+  file: Pick<AccountFile, 'visibility'>,
+  form: FileSettingsForm
+): FileSettings {
+  return {
+    ...(form.visibility !== 'KEEP' && form.visibility !== file.visibility
+      ? { visibility: form.visibility }
+      : {}),
+    ...(form.removePassword
+      ? { password: null }
+      : form.password
+        ? { password: form.password }
+        : {}),
+  }
+}
+
+interface FileSettingsDialogProps {
+  file: AccountFile | null
+  isOpen: boolean
+  onClose: () => void
+  onSave: (changes: FileSettings) => Promise<void>
+}
+
+export function FileSettingsDialog({
   file,
   isOpen,
   onClose,
   onSave,
 }: FileSettingsDialogProps) {
-  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PRIVATE')
-  const [password, setPassword] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>File settings</DialogTitle>
+          <DialogDescription className="break-words">
+            Update visibility and password protection for{' '}
+            <span className="font-medium text-foreground">{file?.name}</span>.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while the dialog is open, so each opening starts
+            from the file. */}
+        {file && (
+          <FileSettingsFields
+            key={file.id}
+            file={file}
+            onClose={onClose}
+            onSave={onSave}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-  useEffect(() => {
-    if (file) {
-      setVisibility(file.visibility)
-      setPassword('')
-    }
-  }, [file])
+function FileSettingsFields({
+  file,
+  onClose,
+  onSave,
+}: Omit<FileSettingsDialogProps, 'file' | 'isOpen'> & { file: AccountFile }) {
+  const [form, setForm] = useState(() => fileSettingsForm(file))
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { visibility, password, removePassword } = form
+  const isProtected = file.visibility === 'PROTECTED'
+  const changes = fileSettingsChanges(file, form)
+  const canSave =
+    Object.keys(changes).length > 0 && !(password && filePasswordHint(password))
+  const edit = (change: Partial<FileSettingsForm>) =>
+    setForm({ ...form, ...change })
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (password && filePasswordHint(password)) return
+    if (!canSave) return
     setIsSubmitting(true)
     try {
-      await onSave(visibility, password || undefined)
+      await onSave(changes)
       onClose()
     } catch (error) {
       console.error('Error saving file settings:', error)
@@ -328,84 +373,87 @@ function FileSettingsDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>File settings</DialogTitle>
-          <DialogDescription className="break-words">
-            Update visibility and password protection for{' '}
-            <span className="font-medium text-foreground">{file?.name}</span>.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="visibility">Visibility</Label>
-              <Select
-                value={visibility}
-                onValueChange={(value: 'PUBLIC' | 'PRIVATE') =>
-                  setVisibility(value)
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="grid gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="visibility">Visibility</Label>
+          <Select
+            value={visibility}
+            onValueChange={(value: VisibilityChoice) =>
+              edit({ visibility: value })
+            }
+          >
+            <SelectTrigger id="visibility">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {isProtected && (
+                <SelectItem value="KEEP">Keep current visibility</SelectItem>
+              )}
+              <SelectItem value="PUBLIC">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Public
+                </div>
+              </SelectItem>
+              <SelectItem value="PRIVATE">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-4 w-4" />
+                  Private
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password-protection">
+            {isProtected ? 'New password' : 'Password protection'}
+          </Label>
+          <Input
+            id="password-protection"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            disabled={removePassword}
+            onChange={(e) => edit({ password: e.target.value })}
+            placeholder={
+              removePassword
+                ? 'The password is removed when you save'
+                : isProtected
+                  ? 'Leave empty to keep the current password'
+                  : 'Leave empty for no password'
+            }
+            {...filePasswordFieldProps('password-protection-hint', password)}
+          />
+          <FilePasswordHint id="password-protection-hint" password={password} />
+          {isProtected && (
+            <div className="flex items-center justify-between gap-4 pt-1">
+              <Label htmlFor="remove-password">Remove password</Label>
+              <Switch
+                id="remove-password"
+                checked={removePassword}
+                onCheckedChange={(checked) =>
+                  edit({ removePassword: checked, password: '' })
                 }
-              >
-                <SelectTrigger id="visibility">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PUBLIC">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-4 w-4" />
-                      Public
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="PRIVATE">
-                    <div className="flex items-center gap-2">
-                      <EyeOff className="h-4 w-4" />
-                      Private
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password-protection">Password protection</Label>
-              <Input
-                id="password-protection"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Leave empty for no password"
-                {...filePasswordFieldProps(
-                  'password-protection-hint',
-                  password
-                )}
-              />
-              <FilePasswordHint
-                id="password-protection-hint"
-                password={password}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSubmitting || Boolean(password && filePasswordHint(password))
-              }
-            >
-              {isSubmitting ? 'Saving…' : 'Save changes'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          )}
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting || !canSave}>
+          {isSubmitting ? 'Saving…' : 'Save changes'}
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 
@@ -449,7 +497,7 @@ export function UserList() {
   const urlsRequest = useRef(0)
   const [filesLoading, setFilesLoading] = useState(false)
   const [urlsLoading, setUrlsLoading] = useState(false)
-  const [userFiles, setUserFiles] = useState<File[]>([])
+  const [userFiles, setUserFiles] = useState<AccountFile[]>([])
   const [userUrls, setUserUrls] = useState<AccountShortLink[]>([])
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
@@ -472,7 +520,7 @@ export function UserList() {
     null
   )
   const { toast } = useToast()
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFile, setSelectedFile] = useState<AccountFile | null>(null)
   const [isFileSettingsOpen, setIsFileSettingsOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isFileDeleteDialogOpen, setIsFileDeleteDialogOpen] = useState(false)
@@ -659,7 +707,7 @@ export function UserList() {
   }
 
   // A hairline keeps light screenshots from dissolving into the row.
-  const getFilePreview = (file: File) => {
+  const getFilePreview = (file: AccountFile) => {
     if (file.mimeType.startsWith('image/')) {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
@@ -746,10 +794,7 @@ export function UserList() {
     }
   }
 
-  const handleFileSettings = async (
-    visibility: 'PUBLIC' | 'PRIVATE',
-    password?: string
-  ) => {
+  const handleFileSettings = async (changes: FileSettings) => {
     if (!viewingUser || !selectedFile) return
 
     try {
@@ -757,7 +802,7 @@ export function UserList() {
         `/api/users/${viewingUser.id}/files/${selectedFile.id}`,
         {
           method: 'PATCH',
-          body: { visibility, password },
+          body: changes,
           fallback: 'Failed to update file settings',
         }
       )
@@ -1531,7 +1576,7 @@ export function UserList() {
                       </TableHeader>
                       <TableBody>
                         {!filesLoading &&
-                          userFiles.map((file: File) => {
+                          userFiles.map((file) => {
                             const uploaded = new Date(
                               file.uploadedAt
                             ).toLocaleDateString()
@@ -1915,10 +1960,8 @@ export function UserList() {
       <FileSettingsDialog
         file={selectedFile}
         isOpen={isFileSettingsOpen}
-        onClose={() => {
-          setSelectedFile(null)
-          setIsFileSettingsOpen(false)
-        }}
+        // The file stays selected, so the dialog doesn't change as it closes.
+        onClose={() => setIsFileSettingsOpen(false)}
         onSave={handleFileSettings}
       />
 

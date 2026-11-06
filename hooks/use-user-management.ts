@@ -29,11 +29,6 @@ export interface PaginationData {
   limit: number
 }
 
-export interface UsersResponse {
-  users: User[]
-  pagination: PaginationData
-}
-
 export interface UserFormData {
   name?: string
   email?: string

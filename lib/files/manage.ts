@@ -165,6 +165,18 @@ function visibilityFilter(value: string): FileVisibility | undefined {
 }
 
 /**
+ * A file in `listAccountFiles` as `GET /api/users/{id}/files` sends it. The
+ * stored visibility of a password-protected file isn't sent.
+ */
+export type AccountFile = Omit<
+  Prisma.FileGetPayload<{ select: typeof accountFileSelect }>,
+  'password' | 'visibility' | 'uploadedAt'
+> & {
+  visibility: FileVisibility | 'PROTECTED'
+  uploadedAt: string
+}
+
+/**
  * One page of an account's files for moderators, newest first: 10 unless
  * asked, at most 100. A password-protected file reports the visibility
  * `PROTECTED`, which the Users screen reads; no hash is sent.

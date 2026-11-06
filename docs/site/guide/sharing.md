@@ -41,7 +41,7 @@ Public files can be opened by anyone who obtains their URL, including someone a 
 
 ## Protect a link with a password
 
-Add a password in the upload form, or use **Files → file menu → Add password**. For an already protected file, **Manage password** lets you replace or remove it. Recipients open the link, enter the password in **File password**, and choose **Access file** to unlock the viewer. A wrong password keeps the file locked and shows a message under the field.
+Add a password in the upload form, or use **Files → file menu → Add password**. For an already protected file, **Manage password** lets you replace or remove it. Recipients open the link, enter the password in **File password**, and choose **Access file** to unlock the viewer. A wrong password keeps the file locked and shows a message under the field. An account with `content.update`, such as an administrator, can also change a file's visibility and add, replace, or remove its password from **Users → View content** ([moderating files](/admin/users#moderate-files-and-shortened-links)).
 
 <Screenshot src="/screenshots/workspace/share-protected.png" alt="Password-protected share page asking a visitor to unlock the file" caption="A protected public file asks visitors for its password before showing the content." />
 
