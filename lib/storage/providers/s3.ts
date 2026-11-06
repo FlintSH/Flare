@@ -30,13 +30,8 @@ export class S3StorageProvider implements StorageProvider {
   private bucket: string
   private endpoint?: string
 
+  /** Build it through `createStorageProvider`, which checks the settings first. */
   constructor(config: S3Config) {
-    if (!config.bucket) throw new Error('S3 bucket name is required')
-    if (!config.region) throw new Error('S3 region is required')
-    if (!config.accessKeyId) throw new Error('S3 access key ID is required')
-    if (!config.secretAccessKey)
-      throw new Error('S3 secret access key is required')
-
     this.target = Object.freeze(s3StorageTarget(config))
     this.bucket = config.bucket
     this.endpoint = config.endpoint

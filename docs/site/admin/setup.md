@@ -30,6 +30,8 @@ Choose **Local storage** if you mounted persistent storage at `/app/uploads`. Ch
 
 Setup validates required fields and URL syntax. It does **not** connect to the bucket or verify object permissions. Upload, preview, download, avatar, and delete tests after setup confirm the actual integration. See [storage behavior](/hosting/storage) before choosing a backend, especially if the bucket disables ACLs.
 
+**Settings → Storage** applies the same checks when you change storage later and saves nothing that fails them. There, a key field left blank keeps the key you saved here.
+
 ## 3. Choose who can join
 
 Allow registration for an open community instance, or close registration and create accounts through Users. If closed, set a message explaining how people can request access. People can still join a closed instance with an [invite link](/admin/users#invite-links); only administrators can create one until you allow others to.

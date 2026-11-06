@@ -1,20 +1,13 @@
+import { getConfig } from '@/lib/config'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { getStorageProvider } from '@/lib/storage'
-
-const logger = loggers.storage
 
 const api = routes('/api/storage/type', {
   failure: { message: 'Internal server error' },
-  logger,
+  logger: loggers.storage,
 })
 
-export const GET = api(async () => {
-  try {
-    const storageProvider = await getStorageProvider()
-    return { type: storageProvider.kind }
-  } catch (error) {
-    logger.error('Failed to get storage type:', error as Error)
-    return { type: 'local' }
-  }
-})
+// The backend the settings name, which is the only one Flare stores files in.
+export const GET = api(async () => ({
+  type: (await getConfig()).settings.general.storage.provider,
+}))

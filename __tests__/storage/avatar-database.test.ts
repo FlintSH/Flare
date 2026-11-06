@@ -86,7 +86,6 @@ suite.sequential(
 
     beforeEach(async () => {
       s3.reset()
-      storage.invalidateStorageProvider()
       await prisma.storageDeletion.deleteMany()
       await prisma.user.deleteMany()
       await prisma.role.deleteMany()
@@ -122,7 +121,6 @@ suite.sequential(
 
     afterEach(async () => {
       vi.restoreAllMocks()
-      storage.invalidateStorageProvider()
       for (const path of paths) await rm(path, { force: true })
       paths.clear()
     })
@@ -163,7 +161,6 @@ suite.sequential(
         where: { key: 'flare_config' },
         data: { value: config },
       })
-      storage.invalidateStorageProvider()
     }
 
     async function existingAvatar() {

@@ -100,6 +100,7 @@ If the direct request also fails, check that the session is still valid and has 
 | Browser cannot reach a preview/download URL           | The configured S3 endpoint is only reachable from the container or private network                                |
 | Ordinary uploads work but avatars fail                | Provider rejects the avatar `public-read` ACL; [see compatibility details](/hosting/storage#avatar-compatibility) |
 | Files fail immediately after changing provider/bucket | The bytes were not migrated; changing settings does not move objects                                              |
+| Every upload and download fails after an upgrade      | Saved S3 settings are incomplete; [complete them](/hosting/storage#s3-compatible-storage) in Settings             |
 | Expired signed link                                   | Open the original Flare share link again to obtain an authorized fresh URL                                        |
 
 Use the endpoint your provider documents for its S3 API, not its web console or a bucket browsing URL. Test path-style access if required by that provider. Do not change a bucket to public as a blanket fix for access errors.

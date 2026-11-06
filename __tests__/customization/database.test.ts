@@ -1155,7 +1155,6 @@ suite('customization contracts against disposable PostgreSQL', () => {
       await prepared('Delete me', { expiration: 'DAY', expiryAction: 'DELETE' })
     )
     const deleteEvent = await makeDue(deleteFile)
-    ;(await import('@/lib/storage')).invalidateStorageProvider()
     await expiry.processDueExpirations()
     await expiry.applyFileExpiration(
       await prisma.event.findUniqueOrThrow({ where: { id: deleteEvent } })

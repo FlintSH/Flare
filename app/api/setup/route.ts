@@ -8,7 +8,6 @@ import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
 import { setupSchema } from '@/lib/setup/schema'
 import { isSetupComplete } from '@/lib/setup/status'
-import { invalidateStorageProvider } from '@/lib/storage'
 import { createAccount } from '@/lib/users/create-account'
 import { hashAccountPassword } from '@/lib/users/credentials'
 
@@ -67,10 +66,6 @@ export const POST = api(async (request) => {
     await replaceConfig(tx, initialConfig)
     return admin
   })
-
-  // A public storage-type request can initialize local storage before setup.
-  // The next upload must use the provider that was just saved.
-  invalidateStorageProvider()
 
   return {
     success: true,

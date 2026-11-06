@@ -227,12 +227,14 @@ These operations require a browser session and the permission listed below. Admi
 
 Administration writes follow the [browser-session write rule](./authentication#browser-session-writes). Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
 
+A `/api/settings` save that includes storage settings with S3 selected answers `400` with the missing or invalid value, such as `Bucket name is required`, when the [saved result](/hosting/storage#s3-compatible-storage) would lack a bucket, region, either key, or a valid HTTP(S) endpoint; a blank key keeps the saved one. Earlier builds saved such settings.
+
 ## Public and bootstrap routes
 
 | Path                            | Methods   | Authentication and purpose                                                                                                                                                                      |
 | ------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/health`                   | GET       | Public process liveness: `{ "success": true, "data": { "status": "ok" } }`. Does not probe PostgreSQL or storage.                                                                               |
-| `/api/storage/type`             | GET       | Public storage kind (`local` or `s3`); falls back to `local` on an initialization error. Not a storage health check.                                                                            |
+| `/api/storage/type`             | GET       | Public storage kind the saved settings name (`local` or `s3`). Earlier builds answered `local` when S3 couldn't start. Not a storage health check.                                              |
 | `/api/setup/check`              | GET       | Public setup-completion state: `{ "completed": boolean }`, `true` once any account exists. Answers `503` when the database can't be read instead of reporting `false`.                          |
 | `/api/setup`                    | POST      | First-run bootstrap only while no users exist; creates Everyone, the full-access Admin role, the first account assignment, and settings atomically and rate-limits attempts.                    |
 | `/api/auth/registration-status` | GET       | Public registration availability and message.                                                                                                                                                   |

@@ -41,11 +41,9 @@ suite('setup contracts against disposable PostgreSQL', () => {
   beforeEach(async () => {
     await prisma.user.deleteMany()
     await prisma.config.deleteMany()
-    storage.invalidateStorageProvider()
   })
 
   afterAll(async () => {
-    storage?.invalidateStorageProvider()
     await prisma?.$disconnect()
     vi.unstubAllEnvs()
   })
@@ -184,7 +182,7 @@ suite('setup contracts against disposable PostgreSQL', () => {
     expect(await prisma.config.count()).toBe(0)
   })
 
-  it('replaces pre-setup cached local storage with the saved S3 provider', async () => {
+  it('replaces pre-setup local storage with the saved S3 provider, then follows later changes', async () => {
     const previous = await storage.getStorageProvider()
     expect(previous.kind).toBe('local')
     const input = payload()
@@ -200,9 +198,43 @@ suite('setup contracts against disposable PostgreSQL', () => {
     const current = await storage.getStorageProvider()
     expect(current.kind).toBe('s3')
     expect(current).not.toBe(previous)
+    // One provider while the settings stay the same.
+    expect(await storage.getStorageProvider()).toBe(current)
     expect(
       (await config.getConfig()).settings.general.storage.s3.forcePathStyle
     ).toBe(false)
+
+    // A change written elsewhere, such as by another replica, applies on the next call.
+    const saved = structuredClone(await config.getConfig())
+    saved.settings.general.storage.provider = 'local'
+    await prisma.config.update({
+      where: { key: 'flare_config' },
+      data: { value: JSON.parse(JSON.stringify(saved)) },
+    })
+    expect((await storage.getStorageProvider()).kind).toBe('local')
+  })
+
+  it('fails storage, logged once, instead of falling back to local disk when saved S3 settings are incomplete', async () => {
+    const { loggers } = await import('@/lib/logger')
+    const logged = vi
+      .spyOn(loggers.storage, 'error')
+      .mockImplementation(() => {})
+    const saved = structuredClone(config.DEFAULT_CONFIG)
+    saved.settings.general.storage.provider = 's3'
+    saved.settings.general.storage.s3.bucket = 'test-bucket'
+    saved.settings.general.storage.s3.region = 'us-east-1'
+    await prisma.config.create({
+      data: {
+        key: 'flare_config',
+        value: JSON.parse(JSON.stringify(saved)),
+      },
+    })
+    for (let attempt = 0; attempt < 2; attempt++)
+      await expect(storage.getStorageProvider()).rejects.toThrow(
+        "The saved storage settings can't be used: Access key ID is required"
+      )
+    expect(logged).toHaveBeenCalledTimes(1)
+    logged.mockRestore()
   })
 
   it('rolls back the administrator when saving initial configuration fails', async () => {

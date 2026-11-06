@@ -16,6 +16,7 @@ import { prisma } from '@/lib/database/prisma'
 import { emailConfigSchema } from '@/lib/email/schema'
 import { HttpError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
+import { storageSettingsSchema } from '@/lib/storage/settings'
 
 const logger = loggers.config
 
@@ -425,6 +426,20 @@ export async function applyConfigUpdate(
     const checked = configSchema.safeParse(merged)
     if (!checked.success)
       throw new ConfigValidationError(undefined, checked.error)
+    // Check storage as it will be saved: an update sends only what changed,
+    // and a blank key keeps the saved one. Saves that leave storage alone
+    // don't check it.
+    if (update.settings?.general?.storage) {
+      const { storage } = checked.data.settings.general
+      const usable = storageSettingsSchema.safeParse(storage)
+      if (!usable.success)
+        throw new ConfigValidationError(usable.error.issues[0].message)
+      checked.data.settings.general.storage = {
+        ...storage,
+        provider: usable.data.provider,
+        s3: { ...storage.s3, ...usable.data.s3 },
+      }
+    }
     return checked.data
   })
   logger.info('Configuration updated successfully')

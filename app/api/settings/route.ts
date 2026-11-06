@@ -29,7 +29,6 @@ import {
   requireActorPermission,
 } from '@/lib/permissions/server'
 import { settingsPatchAllowed } from '@/lib/permissions/settings'
-import { invalidateStorageProvider } from '@/lib/storage'
 
 /** A change to some sections, or one section by name. */
 const settingsPatch = z.object({
@@ -99,7 +98,6 @@ export const PATCH = api(
       await applyConfigUpdate(tx, { settings })
       await assertAccessibleAdministrator(tx)
     })
-    if (settings.general?.storage) invalidateStorageProvider()
     return apiResponse({ message: 'Settings updated successfully' })
   },
   { failure: { message: SETTINGS_NOT_SAVED } }
@@ -126,10 +124,6 @@ export const POST = api(async (request) => {
     await applyConfigUpdate(tx, config as Partial<FlareConfig>)
     await assertAccessibleAdministrator(tx)
   })
-
-  if ((config.settings as Partial<FlareConfig['settings']>).general?.storage) {
-    invalidateStorageProvider()
-  }
 
   const responseData: SettingsUpdateResponse = {
     message: 'Settings updated successfully',

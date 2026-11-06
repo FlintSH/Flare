@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  setupAdminSchema,
-  setupSchema,
-  setupStorageSchema,
-} from '@/lib/setup/schema'
+import { setupAdminSchema, setupSchema } from '@/lib/setup/schema'
+import { storageSettingsSchema } from '@/lib/storage/settings'
 
 const admin = {
   name: 'admin',
@@ -72,9 +69,13 @@ describe('shared setup validation', () => {
     (field) => {
       const input = { ...s3, [field]: ' ' }
       expect(
-        setupStorageSchema.safeParse({ provider: 'local', s3: input }).success
+        storageSettingsSchema.safeParse({ provider: 'local', s3: input })
+          .success
       ).toBe(true)
-      const result = setupStorageSchema.safeParse({ provider: 's3', s3: input })
+      const result = storageSettingsSchema.safeParse({
+        provider: 's3',
+        s3: input,
+      })
       expect(result.success).toBe(false)
       if (!result.success)
         expect(result.error.issues[0].path).toEqual(['s3', field])
@@ -83,7 +84,7 @@ describe('shared setup validation', () => {
 
   it('accepts local storage without any S3 credentials', () => {
     expect(
-      setupStorageSchema.parse({
+      storageSettingsSchema.parse({
         provider: 'local',
         s3: {
           bucket: '',
@@ -100,13 +101,13 @@ describe('shared setup validation', () => {
       provider: 's3',
       s3: { ...s3, endpoint: 'unfinished endpoint' },
     }
-    const s3Result = setupStorageSchema.safeParse(storage)
+    const s3Result = storageSettingsSchema.safeParse(storage)
     expect(s3Result.success).toBe(false)
     if (!s3Result.success)
       expect(s3Result.error.issues[0].path).toEqual(['s3', 'endpoint'])
 
     storage.provider = 'local'
-    expect(setupStorageSchema.safeParse(storage).success).toBe(true)
+    expect(storageSettingsSchema.safeParse(storage).success).toBe(true)
     expect(
       setupSchema.safeParse({
         admin,
@@ -120,7 +121,7 @@ describe('shared setup validation', () => {
     'accepts optional HTTP(S) endpoint %s',
     (endpoint) => {
       expect(
-        setupStorageSchema.safeParse({
+        storageSettingsSchema.safeParse({
           provider: 's3',
           s3: { ...s3, endpoint },
         }).success
@@ -131,7 +132,7 @@ describe('shared setup validation', () => {
   it.each(['minio:9000', 'ftp://s3.example.test', 'not a url'])(
     'rejects unsupported endpoint %s before setup is committed',
     (endpoint) => {
-      const result = setupStorageSchema.safeParse({
+      const result = storageSettingsSchema.safeParse({
         provider: 's3',
         s3: { ...s3, endpoint },
       })

@@ -62,8 +62,8 @@ import {
   type SetupData,
   setupAdminSchema,
   setupSchema,
-  setupStorageSchema,
 } from '@/lib/setup/schema'
+import { storageSettingsSchema } from '@/lib/storage/settings'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 import { cn } from '@/lib/utils'
 
@@ -233,7 +233,7 @@ export function SetupWizard({
       return
     }
     if (step === 'storage') {
-      const result = setupStorageSchema.safeParse(data.storage)
+      const result = storageSettingsSchema.safeParse(data.storage)
       if (!result.success) {
         const issue = result.error.issues[0]
         showValidation(issue.message, `storage.${issue.path.join('.')}`)
