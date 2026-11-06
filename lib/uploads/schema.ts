@@ -22,6 +22,10 @@ export function discardLegacyCopyFormat(value: unknown) {
   return options
 }
 
+export const PROFILE_NAME_MAX_LENGTH = 80
+/** The most tags a profile, or one upload, can select. */
+export const PROFILE_TAG_LIMIT = 20
+
 export const uploadProfileOptionsSchema = z.preprocess(
   discardLegacyCopyFormat,
   z
@@ -31,7 +35,10 @@ export const uploadProfileOptionsSchema = z.preprocess(
       expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
       randomizeFileUrls: z.boolean().optional(),
       shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
-      tagIds: z.array(z.string().min(1).max(100)).max(20).optional(),
+      tagIds: z
+        .array(z.string().min(1).max(100))
+        .max(PROFILE_TAG_LIMIT)
+        .optional(),
     })
     .strict()
 )
@@ -39,10 +46,14 @@ export const uploadProfileOptionsSchema = z.preprocess(
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
 export const uploadProfileInputSchema = z
   .object({
-    name: z.string().trim().min(1).max(80),
+    name: z.string().trim().min(1).max(PROFILE_NAME_MAX_LENGTH),
     options: uploadProfileOptionsSchema,
   })
   .strict()
+export type UploadProfileInput = z.infer<typeof uploadProfileInputSchema>
+
+/** The largest recipe file the importer reads, and the largest create request. */
+export const RECIPE_MAX_BYTES = 64 * 1024
 
 export const uploadRecipeSchema = z
   .object({
@@ -51,6 +62,27 @@ export const uploadRecipeSchema = z
     profile: uploadProfileInputSchema,
   })
   .strict()
+export type UploadRecipe = z.infer<typeof uploadRecipeSchema>
+
+/** A profile's portable recipe, as `uploadRecipeSchema` reads it back. */
+export function uploadRecipe({
+  name,
+  options,
+}: UploadProfileInput): UploadRecipe {
+  return {
+    format: 'flare-upload-profile',
+    version: 1,
+    profile: { name, options },
+  }
+}
+
+/** A new profile from a create request: a recipe when it names a format. */
+export function newProfileInput(body: unknown): UploadProfileInput {
+  const recipe =
+    typeof body === 'object' && body !== null && 'format' in body && body.format
+  if (recipe) return uploadRecipeSchema.parse(body).profile
+  return uploadProfileInputSchema.parse(body)
+}
 
 export type UploadProfileView = {
   id: string

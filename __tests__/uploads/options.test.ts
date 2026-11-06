@@ -10,6 +10,7 @@ import {
   requestUploadOptions,
   resolveUploadOptions,
 } from '@/lib/uploads/options'
+import { ProfileNotFoundError } from '@/lib/uploads/profiles'
 import {
   expirationDate,
   mergeUploadOptions,
@@ -270,9 +271,13 @@ describe('portable profile and upload policy contracts', () => {
 
   it('does not fall back when an explicitly selected profile is missing or belongs to another account', async () => {
     database.uploadProfile.findFirst.mockResolvedValue(null)
-    await expect(
-      resolveUploadOptions(user, { profileId: 'another-owner' })
-    ).rejects.toMatchObject({ status: 404 })
+    const missing = resolveUploadOptions(user, { profileId: 'another-owner' })
+    // Archive requests recognise this error by its type.
+    await expect(missing).rejects.toBeInstanceOf(ProfileNotFoundError)
+    await expect(missing).rejects.toMatchObject({
+      status: 404,
+      message: 'Upload profile not found.',
+    })
   })
 
   it('prevents bound credentials selecting a different profile, relaxing privacy, or bypassing expiration', async () => {

@@ -228,6 +228,7 @@ suite('vault tags against disposable PostgreSQL', () => {
       tagId: saved.id,
       action: 'add',
     })
+    const loaded = new Date('2026-09-18T00:00:00.000Z')
     const profile = await prisma.uploadProfile.create({
       data: {
         name: 'Screenshot',
@@ -237,6 +238,15 @@ suite('vault tags against disposable PostgreSQL', () => {
           visibility: 'PRIVATE',
           shareStyle: 'minimal',
         },
+        updatedAt: loaded,
+      },
+    })
+    const untouched = await prisma.uploadProfile.create({
+      data: {
+        name: 'Other only',
+        userId: 'tag-owner',
+        options: { tagIds: [retained.id] },
+        updatedAt: loaded,
       },
     })
     expect(
@@ -248,17 +258,21 @@ suite('vault tags against disposable PostgreSQL', () => {
     ).toBe(200)
     expect(await prisma.file.count()).toBe(1)
     expect(await prisma.vaultFileTag.count()).toBe(0)
-    expect(
-      (
-        await prisma.uploadProfile.findUniqueOrThrow({
-          where: { id: profile.id },
-        })
-      ).options
-    ).toEqual({
+    const changed = await prisma.uploadProfile.findUniqueOrThrow({
+      where: { id: profile.id },
+    })
+    expect(changed.options).toEqual({
       tagIds: [retained.id],
       visibility: 'PRIVATE',
       shareStyle: 'minimal',
     })
+    // A new revision makes an editor still open on the old one reload first.
+    expect(changed.updatedAt.getTime()).toBeGreaterThan(loaded.getTime())
+    expect(
+      await prisma.uploadProfile.findUniqueOrThrow({
+        where: { id: untouched.id },
+      })
+    ).toEqual(untouched)
   })
 
   it('rejects foreign profile tags before applying any association', async () => {

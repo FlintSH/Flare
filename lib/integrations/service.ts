@@ -10,6 +10,7 @@ import {
   hasPermission,
 } from '@/lib/permissions/catalog'
 import { encryptSecret } from '@/lib/security/secret-box'
+import { findOwnedProfile } from '@/lib/uploads/profiles'
 
 import { API_SCOPES } from './bearer-routes'
 import { resolveWebhookTarget } from './security'
@@ -216,16 +217,14 @@ async function createToken(
     throw new IntegrationError(
       `Revoke an unused token before creating another (limit ${MAX_ACTIVE_TOKENS}).`
     )
-  if (
-    input.profileId &&
-    (!input.scopes.includes('files:upload') ||
-      !(await tx.uploadProfile.findFirst({
-        where: { id: input.profileId, userId },
-      })))
-  )
-    throw new IntegrationError(
-      'Choose one of your upload profiles and enable the upload scope.'
-    )
+  if (input.profileId) {
+    const unusable = () =>
+      new IntegrationError(
+        'Choose one of your upload profiles and enable the upload scope.'
+      )
+    if (!input.scopes.includes('files:upload')) throw unusable()
+    await findOwnedProfile(tx, userId, input.profileId, unusable)
+  }
   const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
   if (expiresAt && expiresAt <= new Date())
     throw new IntegrationError('Token expiration must be in the future.')

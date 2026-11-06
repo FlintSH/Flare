@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     file: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     vaultFolder: { findFirst: vi.fn() },
+    apiToken: { findUnique: vi.fn() },
+    uploadProfile: { findFirst: vi.fn() },
   },
 }))
 vi.mock('@/lib/database/prisma', () => ({
@@ -262,5 +264,29 @@ describe('tags at the shared upload commit boundary', () => {
         data: expect.objectContaining({ visibility: 'PRIVATE' }),
       })
     )
+  })
+})
+
+describe('token-bound profiles at the upload commit', () => {
+  it('refuses a token whose profile was removed, with its own answer and before writing', async () => {
+    const token = { id: 'token', scopes: ['files:upload'], profileId: 'bound' }
+    mocks.tx.apiToken.findUnique.mockResolvedValue({
+      ...token,
+      userId: 'alice',
+      revokedAt: null,
+      expiresAt: null,
+    })
+    mocks.tx.uploadProfile.findFirst.mockResolvedValue(null)
+    const upload = { ...input(), user: { ...user, apiToken: token } }
+    upload.options.profileId = 'bound'
+    await expect(finalizeUpload(upload)).rejects.toMatchObject({
+      name: 'UploadError',
+      status: 403,
+      message: 'The token upload profile was removed.',
+    })
+    expect(mocks.tx.uploadProfile.findFirst).toHaveBeenCalledWith({
+      where: { id: 'bound', userId: 'alice' },
+    })
+    expect(mocks.tx.file.create).not.toHaveBeenCalled()
   })
 })

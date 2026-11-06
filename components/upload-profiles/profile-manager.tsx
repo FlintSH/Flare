@@ -34,6 +34,9 @@ import {
 
 import { accountRequest } from '@/lib/client/account-request'
 import {
+  PROFILE_NAME_MAX_LENGTH,
+  PROFILE_TAG_LIMIT,
+  RECIPE_MAX_BYTES,
   type UploadProfileOptions,
   type UploadProfileView,
   uploadRecipeSchema,
@@ -277,8 +280,10 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
           event.target.value = ''
           if (!file) return
           void perform(async () => {
-            if (file.size > 64 * 1024)
-              throw new Error('Recipes must be smaller than 64 KB.')
+            if (file.size > RECIPE_MAX_BYTES)
+              throw new Error(
+                `Recipes must be smaller than ${RECIPE_MAX_BYTES / 1024} KB.`
+              )
             const recipe = uploadRecipeSchema.parse(
               JSON.parse(await file.text())
             )
@@ -437,7 +442,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="My screenshots"
-                maxLength={80}
+                maxLength={PROFILE_NAME_MAX_LENGTH}
               />
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
@@ -566,7 +571,8 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                                   checked={selected}
                                   disabled={
                                     !selected &&
-                                    (options.tagIds?.length ?? 0) >= 20
+                                    (options.tagIds?.length ?? 0) >=
+                                      PROFILE_TAG_LIMIT
                                   }
                                   onChange={() =>
                                     setOptions((current) => ({

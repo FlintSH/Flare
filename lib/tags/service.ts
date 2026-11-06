@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { type RuleSource, matchesTagRule } from '@/lib/tags/schema'
+import { PROFILE_TAG_LIMIT } from '@/lib/uploads/schema'
 
 export class TagError extends HttpError {
   constructor(message: string, status = 400) {
@@ -37,7 +38,8 @@ export async function validateOwnedTagIds(
   transaction?: Prisma.TransactionClient
 ): Promise<string[]> {
   const ids = [...new Set(tagIds)]
-  if (ids.length > 20) throw new TagError('Choose up to 20 tags.')
+  if (ids.length > PROFILE_TAG_LIMIT)
+    throw new TagError(`Choose up to ${PROFILE_TAG_LIMIT} tags.`)
   if (!ids.length) return ids
   const count = await (transaction ?? prisma).vaultTag.count({
     where: { userId, id: { in: ids } },

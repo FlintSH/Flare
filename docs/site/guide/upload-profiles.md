@@ -98,7 +98,7 @@ Edits apply to future uploads. They do not change the visibility, expiration, na
 
 Archive creation and extraction also check the profile and effective settings shown in the dialog, including any inherited account or instance defaults. A relevant default or sharing permission changing can require another review even when the saved profile itself was not edited. If those settings change before submission or during processing, the operation fails without publishing outputs. Review the refreshed summary and submit again. The fixed **Private (no profile)** archive option does not inherit these defaults.
 
-If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes.
+If another session changes a profile while you are editing, Flare checks the saved revision rather than silently overwriting the newer version. Reload the latest profile and reapply your intended changes. Deleting a tag counts as such a change for every profile that selects it: Flare takes the tag out of those profiles and keeps their other settings.
 
 Before deleting a profile, update clients that select it explicitly and any bound tokens. A missing profile is an error rather than an automatic switch to weaker settings.
 
@@ -123,6 +123,6 @@ Before deleting a profile, update clients that select it explicitly and any boun
 }
 ```
 
-The browser importer accepts recipes up to 64 KiB. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
+Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger file, and `POST /api/upload-profiles` answers `413` to a larger request, whether it carries a recipe or a new profile. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.

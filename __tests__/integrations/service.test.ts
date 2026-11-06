@@ -137,6 +137,31 @@ describe('integration commands', () => {
     expect(db.tx.webhook.delete).not.toHaveBeenCalled()
   })
 
+  it('binds a token only to one of the account’s profiles, with the upload scope', async () => {
+    db.tx.apiToken.count.mockResolvedValue(0)
+    db.tx.uploadProfile.findFirst.mockResolvedValue(null)
+    for (const scopes of [['files:read'], ['files:upload']]) {
+      const error = await refusal(
+        runIntegrationCommand(owner, {
+          ...commands['create-token'],
+          scopes,
+          profileId: 'foreign',
+        })
+      )
+      expect(error).toBeInstanceOf(IntegrationError)
+      expect([error.status, error.message, error.headers]).toEqual([
+        400,
+        'Choose one of your upload profiles and enable the upload scope.',
+        { 'cache-control': 'no-store' },
+      ])
+    }
+    expect(db.tx.uploadProfile.findFirst).toHaveBeenCalledTimes(1)
+    expect(db.tx.uploadProfile.findFirst).toHaveBeenCalledWith({
+      where: { id: 'foreign', userId: 'owner' },
+    })
+    expect(db.tx.apiToken.create).not.toHaveBeenCalled()
+  })
+
   it('stores a new signing secret encrypted and returns it once', async () => {
     db.tx.webhook.count.mockResolvedValue(9)
     db.tx.webhook.create.mockResolvedValue({ id: 'hook' })

@@ -8,6 +8,11 @@ type RowTx = Pick<Prisma.TransactionClient, '$queryRaw'>
 // older versions during a rolling deploy, so a key never changes or repeats.
 // Take locks in the order they appear in this file.
 
+/** One chunked upload session. */
+export async function lockUploadSession(tx: Tx, uploadId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`flare-upload:${uploadId}`}, 0))`
+}
+
 /** Instance settings writers, and anything that must see settings unchanged. */
 export async function lockSettings(tx: Tx) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`
@@ -19,14 +24,24 @@ export async function lockRoleChanges(tx: Tx) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347202)`
 }
 
-/** One mailbox address while an account claims it. */
-export async function lockEmailAddress(tx: Tx, email: string) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${email.trim()}), 71041))`
-}
-
 /** One account's row: its quota, files, folders, tags, profiles and credentials. */
 export async function lockUserRow(tx: RowTx, userId: string) {
   await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`
+}
+
+/**
+ * One account's upload profiles: every profile write, and tag deletion before
+ * it deletes the tag and takes it out of the profiles, so no profile keeps a
+ * deleted tag. It is the account's row lock, which uploads hold while they
+ * check their profile and tags.
+ */
+export async function lockUploadProfiles(tx: RowTx, userId: string) {
+  await lockUserRow(tx, userId)
+}
+
+/** One mailbox address while an account claims it. */
+export async function lockEmailAddress(tx: Tx, email: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${email.trim()}), 71041))`
 }
 
 /** One account's API token and webhook management changes. */
@@ -39,19 +54,14 @@ export async function lockWebhookQueue(tx: Tx, userId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347213, hashtext(${userId}))`
 }
 
-/** One chunked upload session. */
-export async function lockUploadSession(tx: Tx, uploadId: string) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`flare-upload:${uploadId}`}, 0))`
+/** Claims on the mail outbox. */
+export async function lockMailClaims(tx: Tx) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
 }
 
 /** The daily mail budget, while a message is counted against it. */
 export async function lockMailBudget(tx: Tx) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347201)`
-}
-
-/** Claims on the mail outbox. */
-export async function lockMailClaims(tx: Tx) {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347203)`
 }
 
 /** Claims on queued storage deletions. */

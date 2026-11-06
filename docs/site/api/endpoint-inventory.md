@@ -82,9 +82,9 @@ These routes explicitly read an interactive session. Neither a named API token n
 | Path                               | Methods       | Purpose                                                                                                                           |
 | ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `/api/integrations`                | GET, POST     | List/manage named tokens, webhooks, and deliveries. POST uses action commands and validates same-origin JSON requests.            |
-| `/api/upload-profiles`             | GET, POST     | List profiles with their `updatedAt` and effective-settings `effectiveRevision`; create/import a profile.                         |
+| `/api/upload-profiles`             | GET, POST     | List profiles with `updatedAt` and effective-settings `effectiveRevision`; create or import one (JSON up to 64 KiB, else `413`).  |
 | `/api/upload-profiles/{id}`        | PUT, DELETE   | Update an owned profile using its revision or delete it.                                                                          |
-| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe.                                                                                                 |
+| `/api/upload-profiles/{id}/export` | GET           | Export a portable profile recipe: the `flare-upload-profile` version 1 JSON that POST imports.                                    |
 | `/api/upload-profiles/default`     | PUT           | Select or clear the account's default profile.                                                                                    |
 | `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                                    |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                                         |

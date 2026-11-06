@@ -10,6 +10,7 @@ import {
   accountUploadOptions,
   effectiveUploadRevision,
 } from './effective-settings'
+import { findOwnedProfile, missingUploadProfile } from './profiles'
 import {
   type ResolvedUploadOptions,
   type UploadRequestOptions,
@@ -120,12 +121,8 @@ export async function resolveUploadOptions(
       ? request.profileId
       : account.defaultUploadProfileId)
   const profile = profileId
-    ? await prisma.uploadProfile.findFirst({
-        where: { id: profileId, userId: user.id },
-      })
+    ? await findOwnedProfile(prisma, user.id, profileId, missingUploadProfile)
     : null
-  if (profileId && !profile)
-    throw new UploadError('Upload profile not found.', 404)
   const profileOptions = profile
     ? uploadProfileOptionsSchema.parse(profile.options)
     : {}

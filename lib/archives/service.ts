@@ -36,6 +36,7 @@ import {
   publishPreparedUpload,
 } from '@/lib/uploads/finalize'
 import { UploadError, resolveUploadOptions } from '@/lib/uploads/options'
+import { ProfileNotFoundError, findOwnedProfile } from '@/lib/uploads/profiles'
 import {
   type ResolvedUploadOptions,
   mergeUploadOptions,
@@ -261,15 +262,19 @@ async function lockPublication(
   if (!user || user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
   if (options.profileId) {
-    const profile = await tx.uploadProfile.findFirst({
-      where: { id: options.profileId, userId: actor.user.id },
-      select: { updatedAt: true, options: true },
-    })
-    if (!profile || profile.updatedAt.toISOString() !== options.profileRevision)
-      throw new ArchiveError(
+    const changed = () =>
+      new ArchiveError(
         'The selected upload profile changed or was removed. Refresh and try again.',
         409
       )
+    const profile = await findOwnedProfile(
+      tx,
+      actor.user.id,
+      options.profileId,
+      changed
+    )
+    if (profile.updatedAt.toISOString() !== options.profileRevision)
+      throw changed()
     const config = await readConfig(tx)
     const revision = effectiveUploadRevision(
       actor.user.id,
@@ -434,9 +439,7 @@ async function archiveOptions(
   } catch (error) {
     if (
       (input.profileRevision || input.profileEffectiveRevision) &&
-      error instanceof UploadError &&
-      error.status === 404 &&
-      error.message === 'Upload profile not found.'
+      error instanceof ProfileNotFoundError
     )
       throw new ArchiveError(
         'The selected upload profile changed or was removed. Refresh and try again.',

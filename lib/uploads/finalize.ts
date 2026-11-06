@@ -28,6 +28,7 @@ import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
 
 import { UploadError } from './options'
+import { findOwnedProfile } from './profiles'
 import type { ResolvedUploadOptions } from './schema'
 
 export async function prepareUploadDestination(
@@ -162,13 +163,13 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           'This token is restricted to its upload profile.',
           403
         )
-      if (
-        token.profileId &&
-        !(await tx.uploadProfile.findFirst({
-          where: { id: token.profileId, userId: user.id },
-        }))
-      )
-        throw new UploadError('The token upload profile was removed.', 403)
+      if (token.profileId)
+        await findOwnedProfile(
+          tx,
+          user.id,
+          token.profileId,
+          () => new UploadError('The token upload profile was removed.', 403)
+        )
     }
     if (size > maxUploadBytes(config))
       throw new UploadError(
