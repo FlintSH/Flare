@@ -49,13 +49,6 @@ if ! pnpm prisma migrate deploy; then
     exit 1
 fi
 
-# Generate Prisma Client if needed
-echo "Ensuring Prisma Client is generated..."
-if ! pnpm prisma generate; then
-    echo "Failed to generate Prisma Client" >&2
-    exit 1
-fi
-
 # Run config migrations
 echo "Running config migrations..."
 if ! node /app/scripts/migrate-config.js; then

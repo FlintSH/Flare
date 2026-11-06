@@ -15,9 +15,8 @@ RUN corepack enable pnpm
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY prisma ./prisma
 
+# The postinstall script generates the Prisma client from prisma/.
 RUN pnpm install --frozen-lockfile
-
-RUN pnpm prisma generate
 
 # Stage 2: Builder
 FROM node:24 AS builder
@@ -61,10 +60,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # cache is placed somewhere world-readable and warmed at build time. Otherwise
 # pnpm would land in root's cache and the container would need network access on
 # every boot. node_modules is baked into the image, so pnpm's staleness check is
-# disabled to keep `pnpm start` from attempting an install at runtime.
+# disabled to keep start.sh's pnpm commands from attempting an install at
+# runtime. pnpm 11 no longer reads this setting from npm_config_ variables.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV COREPACK_HOME=/usr/local/corepack
-ENV npm_config_verify_deps_before_run=false
+ENV pnpm_config_verify_deps_before_run=false
 ENV HUSKY=0
 RUN corepack enable pnpm
 
