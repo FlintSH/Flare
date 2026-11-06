@@ -1,57 +1,33 @@
-import { NextResponse } from 'next/server'
-
-import { join } from 'path'
-
-import { getConfig, updateConfig } from '@/lib/config'
+import { FAVICON_MAX_BYTES } from '@/lib/customization/favicon'
+import { saveFavicon } from '@/lib/customization/favicon/server'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
+import {
+  FORM_FRAMING_BYTES,
+  assertMediaType,
+  assertSameOrigin,
+  readForm,
+} from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
-import { getStorageProvider } from '@/lib/storage'
-
-const logger = loggers.files
 
 const api = routes('/api/settings/favicon', {
   failure: { message: 'Internal server error' },
-  logger,
+  logger: loggers.files,
 })
 
 export const POST = api(async (request) => {
   await requireSession('appearance.manage')
+  assertSameOrigin(request)
+  assertMediaType(request, 'multipart/form-data')
 
-  const formData = await request.formData()
-  const file = formData.get('file') as File
-  if (!file) {
+  const form = await readForm(request, {
+    limit: FAVICON_MAX_BYTES + FORM_FRAMING_BYTES,
+  })
+  const file = form.get('file')
+  if (!(file instanceof File)) {
     throw new HttpError(400, 'No file provided')
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-
-  // browsers can handle resizing (i think)
-  const processedBuffer = buffer
-
-  const storageProvider = await getStorageProvider()
-  const faviconPath = join('uploads', 'favicon.png')
-  let publicPath = '/api/favicon'
-
-  const config = await getConfig()
-  if (config.settings.appearance.favicon) {
-    try {
-      const oldPath = join('uploads', 'favicon.png')
-      await storageProvider.deleteFile(oldPath)
-    } catch (error) {
-      logger.error('Failed to delete old favicon:', error as Error)
-    }
-  }
-
-  await storageProvider.uploadFile(processedBuffer, faviconPath, 'image/png')
-
-  const publicUrl = await storageProvider.getPublicUrl(faviconPath)
-  if (publicUrl) {
-    publicPath = publicUrl
-  }
-
-  await updateConfig({ settings: { appearance: { favicon: publicPath } } })
-
-  return new NextResponse('Favicon updated successfully', { status: 200 })
+  return { url: await saveFavicon(file) }
 })

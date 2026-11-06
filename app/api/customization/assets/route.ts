@@ -2,7 +2,7 @@ import { fileTypeFromBuffer } from 'file-type'
 
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertMediaType, assertSameOrigin } from '@/lib/http/request'
+import { assertMediaType, assertSameOrigin, readForm } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
 const api = routes('/api/customization/assets', {
@@ -13,9 +13,10 @@ export const POST = api(async (request) => {
   await requireSession('appearance.manage')
   assertSameOrigin(request)
   assertMediaType(request, 'multipart/form-data')
-  if (Number(request.headers.get('content-length') || 0) > 300_000)
-    throw new HttpError(413, 'Logos must be smaller than 256 KB.')
-  const data = await request.formData()
+  const data = await readForm(request, {
+    limit: 300_000,
+    tooLarge: 'Logos must be smaller than 256 KB.',
+  })
   const file = data.get('file')
   if (!(file instanceof File) || file.size > 256 * 1024)
     throw new HttpError(

@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 
@@ -13,6 +15,7 @@ import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 
 import { getConfig } from '@/lib/config'
+import { faviconUrl } from '@/lib/customization/favicon'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 
@@ -38,12 +41,24 @@ const inter = localFont({
   variable: '--font-inter',
 })
 
-export const metadata: Metadata = {
-  title: null,
-  description: null,
-  icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-  },
+const requestConfig = cache(getConfig)
+
+export async function generateMetadata(): Promise<Metadata> {
+  const favicon = faviconUrl(
+    (await requestConfig()).settings.appearance.favicon
+  )
+  return {
+    title: null,
+    description: null,
+    icons: {
+      icon: [
+        ...(favicon
+          ? [{ url: favicon, type: 'image/png', sizes: '32x32' }]
+          : []),
+        { url: '/icon.svg', type: 'image/svg+xml' },
+      ],
+    },
+  }
 }
 
 export const dynamic = 'force-dynamic'
@@ -73,7 +88,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const config = await getConfig()
+  const config = await requestConfig()
   const recovery = await isAppearanceRecovery()
   const appearance = recovery
     ? {
@@ -88,15 +103,6 @@ export default async function RootLayout({
     Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
   const hasCustomFont =
     !recovery && config.settings.advanced.customCSS.includes('font-family')
-
-  if (config.settings.appearance.favicon) {
-    metadata.icons = {
-      icon: [
-        { url: '/api/favicon', type: 'image/png', sizes: '32x32' },
-        { url: '/icon.svg', type: 'image/svg+xml' },
-      ],
-    }
-  }
 
   return (
     <html lang="en" suppressHydrationWarning>

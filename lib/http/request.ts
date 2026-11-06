@@ -74,3 +74,28 @@ export async function readJson(
     throw new HttpError(400, 'Invalid JSON.')
   }
 }
+
+/** Room for the boundaries and part headers around one file in a multipart body. */
+export const FORM_FRAMING_BYTES = 64 * 1024
+
+/**
+ * The form in the body, refusing to buffer more than `limit` bytes; a larger
+ * body answers 413 with `tooLarge`. Like `request.formData()`, it rejects with
+ * a TypeError when the body isn't the form its content type names.
+ */
+export async function readForm(
+  request: Request,
+  {
+    limit,
+    tooLarge = 'Request body is too large.',
+  }: { limit: number; tooLarge?: string }
+): Promise<FormData> {
+  const body = await readBody(request, limit).catch((error: unknown) => {
+    throw error instanceof HttpError && error.status === 413
+      ? new HttpError(413, tooLarge)
+      : error
+  })
+  return new Response(new Uint8Array(body), {
+    headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
+  }).formData()
+}

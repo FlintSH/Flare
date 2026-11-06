@@ -63,6 +63,11 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import type { FlareConfig } from '@/lib/config'
+import {
+  FAVICON_TYPE,
+  faviconProblem,
+  faviconUrl,
+} from '@/lib/customization/favicon'
 import type { CustomizationState } from '@/lib/customization/schema'
 import { getDocumentationUrl } from '@/lib/documentation'
 import {
@@ -182,6 +187,7 @@ export function InstanceSettings({
 
   const saveChanges = async () => {
     const snapshot = structuredClone(workingConfig)
+    let saved = savedConfig
     try {
       setIsSaving(true)
       if (pendingFaviconFile) {
@@ -191,22 +197,26 @@ export function InstanceSettings({
           method: 'POST',
           body: formData,
         })
-        if (!upload.ok) throw new Error('Failed to upload favicon')
-        snapshot.settings.appearance.favicon = '/api/favicon'
-        setWorkingConfig((previous) => ({
-          ...previous,
+        const answer = await upload.json().catch(() => null)
+        if (!upload.ok)
+          throw new Error(answer?.error || 'Failed to upload favicon')
+        // The upload saved the icon's new address; record it, never send it.
+        const favicon: string = answer.url
+        const withFavicon = (config: FlareConfig): FlareConfig => ({
+          ...config,
           settings: {
-            ...previous.settings,
-            appearance: {
-              ...previous.settings.appearance,
-              favicon: '/api/favicon',
-            },
+            ...config.settings,
+            appearance: { ...config.settings.appearance, favicon },
           },
-        }))
+        })
+        snapshot.settings.appearance.favicon = favicon
+        saved = withFavicon(saved)
+        setSavedConfig(withFavicon)
+        setWorkingConfig(withFavicon)
         setPendingFaviconFile(null)
         setFaviconPreviewUrl(null)
       }
-      const settings = changedFields(savedConfig.settings, snapshot.settings)
+      const settings = changedFields(saved.settings, snapshot.settings)
       if (settings !== undefined) {
         const response = await fetch('/api/settings', {
           method: 'PATCH',
@@ -378,6 +388,7 @@ export function InstanceSettings({
   const hasFaviconChanged = useCallback(() => {
     return pendingFaviconFile !== null
   }, [pendingFaviconFile])
+  const savedFavicon = faviconUrl(workingConfig.settings.appearance.favicon)
 
   const getFieldClasses = (
     section: keyof FlareConfig['settings'],
@@ -1650,15 +1661,14 @@ export function InstanceSettings({
                   <div>
                     <div className="flex items-center justify-center w-full">
                       <label className="relative flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 transition-colors hover:border-primary hover:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background">
-                        {(workingConfig?.settings.appearance.favicon ||
-                          faviconPreviewUrl) && (
+                        {(savedFavicon || faviconPreviewUrl) && (
                           <div className="absolute top-4 left-4">
                             <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
                               <img
                                 src={
                                   isSafeUrl(faviconPreviewUrl)
                                     ? DOMPurify.sanitize(faviconPreviewUrl)
-                                    : '/api/favicon'
+                                    : (savedFavicon ?? undefined)
                                 }
                                 alt="Favicon"
                                 className="w-6 h-6"
@@ -1685,25 +1695,16 @@ export function InstanceSettings({
                           disabled={isSaving}
                           className="sr-only"
                           aria-label="Upload favicon"
-                          accept="image/png"
+                          accept={FAVICON_TYPE}
                           onChange={async (e) => {
                             const file = e.target.files?.[0]
                             if (!file) return
 
-                            if (file.size > 1024 * 1024) {
+                            const problem = faviconProblem(file)
+                            if (problem) {
                               toast({
-                                title: 'File too large',
-                                description:
-                                  'Please upload a file smaller than 1 MB.',
-                                variant: 'destructive',
-                              })
-                              return
-                            }
-
-                            if (file.type !== 'image/png') {
-                              toast({
-                                title: 'Invalid file type',
-                                description: 'Please upload a PNG image file.',
+                                title: problem.title,
+                                description: problem.message,
                                 variant: 'destructive',
                               })
                               return

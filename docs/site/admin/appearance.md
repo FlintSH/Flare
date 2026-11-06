@@ -114,7 +114,13 @@ These colors are written into every page, including the sign-in page, so Flare a
 - Colors chosen with the picker in earlier builds were saved as hex, which the theme could not use, so the affected elements lost their color; a primary button could turn transparent. They now display as the colors that were picked. Review **Classic color controls** if your palette changes unexpectedly.
 - If you delegated `appearance.manage` to people you don't fully trust, filter [Audit log](/admin/audit) to the `settings` category and review events whose `settingsKeys` include `settings.appearance`, then check the classic colors.
 
-The favicon control accepts a **PNG up to 1 MB** in the dashboard. Save your changes to apply the pending favicon. It is stored through the active storage provider, so it belongs in file backups as well as the database configuration.
+Under **Favicon**, choose **Upload favicon** and select a **PNG up to 1 MB**, then choose **Save settings** to apply it. The server applies the same limits and also checks the file's content, so an image that isn't really a PNG, such as a JPEG renamed to `.png`, is refused: **Settings could not be saved** appears with _File content is not a PNG image._ and the current favicon stays. After a successful save, **Current favicon** shows the new icon.
+
+Flare accepts the upload only from its own pages, as a `multipart/form-data` request with the image in its `file` field: a request from another origin answers `403` and any other content type `415`. Earlier versions checked neither and usually answered a body that wasn't a multipart form with `500`.
+
+Each upload gets its own address, `/api/favicon?v=` followed by a hash of the image. Browsers may cache that address for a year because its content never changes, and they load a replaced favicon from its new address on the next page view. Earlier versions served every favicon from `/api/favicon` with the same one-year caching, so a replaced favicon could stay stale for up to a year in returning visitors' browsers and in the **Current favicon** preview. A favicon uploaded with an earlier version keeps working but isn't cached long-term until you upload it again. Without an uploaded favicon, pages link only Flare's own icon and `/api/favicon` answers `404`.
+
+The favicon is stored through the active storage provider as `uploads/favicon.png`, so it belongs in file backups as well as the database configuration.
 
 ## Custom CSS and head HTML
 
