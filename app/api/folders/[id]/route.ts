@@ -3,7 +3,7 @@ import { folderUpdateSchema } from '@/lib/folders/schema'
 import { deleteFolder, updateFolder } from '@/lib/folders/service'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -14,7 +14,6 @@ const api = routes('/api/folders/[id]', folderRoutes)
 
 export const PATCH = api(async (request, { params }: Context) => {
   const user = await requireAccount(request)
-  assertJsonMutation(request)
   const { id } = await params
   const input = folderUpdateSchema.parse(await readJson(request))
   if (input.sharing !== undefined && !hasPermission(user, 'folders.share'))
@@ -24,7 +23,6 @@ export const PATCH = api(async (request, { params }: Context) => {
 
 export const DELETE = api(async (request, { params }: Context) => {
   const user = await requireAccount(request)
-  assertJsonMutation(request, { body: false })
   const { id } = await params
   await deleteFolder(user.id, id)
   return apiResponse({ deleted: true })

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getConfig } from '@/lib/config'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { everyoneCanInvite, setEveryoneCanInvite } from '@/lib/invites/service'
 
@@ -14,8 +14,8 @@ const api = routes('/api/settings/invites', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async () => {
-  await requireSession('settings.read')
+export const GET = api(async (request) => {
+  await requireSession(request, 'settings.read')
   const config = await getConfig()
   return {
     everyoneCanInvite: await everyoneCanInvite(),
@@ -25,8 +25,7 @@ export const GET = api(async () => {
 
 export const PUT = api(
   async (request) => {
-    const { user } = await requireSession('settings.security')
-    assertJsonMutation(request)
+    const { user } = await requireSession(request, 'settings.security')
     const parsed = policySchema.safeParse(
       await readJson(request, { limit: 32 * 1024 })
     )

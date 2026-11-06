@@ -4,7 +4,6 @@ import { Prisma } from '@prisma/client'
 
 import { lockUserRow } from '@/lib/database/locks'
 import { requireSession } from '@/lib/http/access'
-import { assertSameOrigin } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { mutateAccount } from '@/lib/permissions/account-mutations'
@@ -19,8 +18,7 @@ const api = routes('/api/users/[id]/avatar', {
 })
 
 export const DELETE = api(async (request, { params }: Context) => {
-  assertSameOrigin(request)
-  const { user: actor } = await requireSession('users.update')
+  const { user: actor } = await requireSession(request, 'users.update')
   const { id } = await params
 
   await mutateAccount(actor.id, id, 'users.update', async (tx) => {

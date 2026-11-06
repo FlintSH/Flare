@@ -12,12 +12,18 @@ import {
   checkFileAccess,
   retryAfterMinutes,
 } from '@/lib/files/access'
+import { refuseApiCredentials } from '@/lib/http/access'
+import {
+  assertSameOrigin,
+  mediaType,
+  readBody,
+  readJson,
+} from '@/lib/http/request'
 import { getUserAccess } from '@/lib/permissions/server'
 import { rateLimit, requestLimit } from '@/lib/security/rate-limit'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { ArchiveError } from './errors'
-import { archiveBody } from './http'
+import { ARCHIVE_BODY_LIMIT } from './http'
 import { ARCHIVE_BROWSE_LIMITS } from './shared'
 import {
   createArchiveUnlock,
@@ -91,7 +97,7 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   if (request.signal.aborted) abort()
   try {
     controller.signal.throwIfAborted()
-    return await archiveBody(request, controller.signal, allowForm)
+    return await readSharedBody(request, controller.signal, allowForm)
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason
     throw error
@@ -102,16 +108,39 @@ export async function sharedArchiveBody(request: Request, allowForm = false) {
   }
 }
 
+/** JSON, or for entry downloads also a form, each field given once. */
+async function readSharedBody(
+  request: Request,
+  signal: AbortSignal,
+  allowForm: boolean
+) {
+  const type = mediaType(request)
+  if (allowForm && type === 'application/x-www-form-urlencoded') {
+    const fields = new URLSearchParams(
+      (await readBody(request, ARCHIVE_BODY_LIMIT, signal)).toString('utf8')
+    )
+    if ([...fields.keys()].some((key) => fields.getAll(key).length !== 1))
+      throw new ArchiveError('Use each archive field only once.', 400)
+    return Object.fromEntries(fields)
+  }
+  if (type !== 'application/json')
+    throw new ArchiveError(
+      allowForm ? 'Use JSON or a URL-encoded form.' : 'Use application/json.',
+      415
+    )
+  return readJson(request, { limit: ARCHIVE_BODY_LIMIT, signal })
+}
+
+/**
+ * Share pages call these routes from Flare itself, and only from there:
+ * reads too, so other sites can't embed shared entries.
+ */
 export async function sharedArchiveGuard(
   request: Request,
   kind: 'listing' | 'entry'
 ) {
-  if (request.headers.has('authorization'))
-    throw new ArchiveError(
-      'API credentials cannot authorize shared archives.',
-      401
-    )
-  if (!isSameOriginRequest(request)) throw new ArchiveError('Forbidden', 403)
+  refuseApiCredentials(request)
+  assertSameOrigin(request)
   return rateLimit(request, limiters[kind])
 }
 

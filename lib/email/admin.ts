@@ -1,17 +1,8 @@
 import { ZodError } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
-import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertSameOrigin } from '@/lib/http/request'
 import type { RouteContract } from '@/lib/http/route'
-
-/** Email settings need settings.email; their writes must come from this app. */
-export async function requireEmailAdmin(request: Request) {
-  const access = await requireSession('settings.email')
-  if (!['GET', 'HEAD'].includes(request.method)) assertSameOrigin(request)
-  return access
-}
 
 export const emailSettingsRoutes: RouteContract = {
   invalid: (error) =>

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 const api = routes('/api/profile/login-history', securityRoutes)
 
 export const GET = api(async (request) => {
-  const { session } = await securitySession(request, false)
+  const { session } = await securitySession(request)
   const params = new URL(request.url).searchParams
   return listLoginHistory(
     session.user.id,

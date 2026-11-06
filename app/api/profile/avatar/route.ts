@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import {
-  FORM_FRAMING_BYTES,
-  assertMediaType,
-  assertSameOrigin,
-  readForm,
-} from '@/lib/http/request'
+import { FORM_FRAMING_BYTES, readForm } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { validateFileType } from '@/lib/security/file-validation'
@@ -20,9 +15,7 @@ const api = routes('/api/profile/avatar', {
 })
 
 export const POST = api(async (request) => {
-  const { session } = await requireSession('profile.update')
-  assertSameOrigin(request)
-  assertMediaType(request, 'multipart/form-data')
+  const { session } = await requireSession(request, 'profile.update')
 
   const formData = await readForm(request, {
     limit: AVATAR_MAX_BYTES + FORM_FRAMING_BYTES,

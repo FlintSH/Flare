@@ -1,6 +1,5 @@
 import { PublicSettings, SettingsUpdateResponse } from '@/types/dto/settings'
 
-import { getAccessSession } from '@/lib/auth'
 import {
   ConfigValidationError,
   FlareConfig,
@@ -16,7 +15,7 @@ import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requireAccount, requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
@@ -55,8 +54,7 @@ export const GET = api(async (request) => {
   if (
     !user ||
     !hasPermission(user, 'settings.read') ||
-    user.apiToken ||
-    !(await getAccessSession())
+    user.credential !== 'session'
   )
     return apiResponse<PublicSettings>(publicSettings(config))
   return apiResponse<FlareConfig>(redactSettings(config))
@@ -64,8 +62,7 @@ export const GET = api(async (request) => {
 
 export const PATCH = api(
   async (request) => {
-    const { user } = await requireSession()
-    assertJsonMutation(request)
+    const { user } = await requireSession(request)
     const body = (await readJson(request)) as {
       settings?: Partial<FlareConfig['settings']>
       section?: string
@@ -108,8 +105,7 @@ export const PATCH = api(
 )
 
 export const POST = api(async (request) => {
-  const { user } = await requireSession('administrator')
-  assertJsonMutation(request)
+  const { user } = await requireSession(request, 'administrator')
   const config = (await readJson(request)) as FlareConfig
   // The Email tab owns this section. A stale whole-settings form must not
   // overwrite its policy or submit masked SMTP credentials as a password.

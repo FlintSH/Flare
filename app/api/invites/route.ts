@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { inviteCreateSchema } from '@/lib/invites/policy'
 import {
@@ -21,7 +21,10 @@ const api = routes('/api/invites', {
 })
 
 export const GET = api(async (request) => {
-  const { user } = await requireSession(['invites.create', 'invites.manage'])
+  const { user } = await requireSession(request, [
+    'invites.create',
+    'invites.manage',
+  ])
   const parsed = inviteListQuerySchema.safeParse(
     Object.fromEntries(new URL(request.url).searchParams)
   )
@@ -35,8 +38,7 @@ export const POST = api(
   async (request) => {
     const limited = await rateLimit(request, generalLimiter)
     if (limited) return limited
-    const { user } = await requireSession('invites.create')
-    assertJsonMutation(request)
+    const { user } = await requireSession(request, 'invites.create')
     const parsed = inviteCreateSchema.safeParse(
       await readJson(request, { limit: 32 * 1024 })
     )

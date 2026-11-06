@@ -113,7 +113,11 @@ suite('file expiry against disposable PostgreSQL', () => {
     const { getUserAccess } = await import('@/lib/permissions/server')
     const user = await prisma.user.findUniqueOrThrow({ where: { id: owner } })
     const uploaded = await uploads.finalizeUpload({
-      user: { ...user, ...(await getUserAccess(owner)) },
+      user: {
+        ...user,
+        ...(await getUserAccess(owner)),
+        credential: 'session',
+      },
       storage,
       filePath,
       urlPath: `/${owner}/${randomUUID()}.txt`,

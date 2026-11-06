@@ -9,10 +9,7 @@ import {
   totpCounter,
   webauthnUserId,
 } from '@/lib/auth/security/crypto'
-import {
-  relyingParty,
-  validateSecurityOrigin,
-} from '@/lib/auth/security/shared'
+import { relyingParty } from '@/lib/auth/security/shared'
 
 afterEach(() => vi.unstubAllEnvs())
 describe('account security cryptography and origin', () => {
@@ -78,41 +75,24 @@ describe('account security cryptography and origin', () => {
     )
     expect(webauthnUserId('one')).toHaveLength(32)
   })
-  it('pins relying party and request origins to canonical configuration', () => {
+  it('pins the relying party to the public origin', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://flare.example/base')
     expect(relyingParty()).toEqual({
       rpID: 'flare.example',
       origin: 'https://flare.example',
       rpName: 'Flare',
     })
-    expect(() =>
-      validateSecurityOrigin(
-        new Request('https://untrusted.example/api', {
-          headers: { origin: 'https://untrusted.example' },
-        })
-      )
-    ).toThrow('origin')
-    expect(() =>
-      validateSecurityOrigin(new Request('https://flare.example/api'))
-    ).toThrow('origin')
-    expect(() =>
-      validateSecurityOrigin(
-        new Request('https://flare.example/api', {
-          headers: {
-            origin: 'https://flare.example',
-            authorization: 'Bearer token',
-          },
-        })
-      )
-    ).toThrow('browser session')
-    expect(() =>
-      validateSecurityOrigin(
-        new Request('http://internal:3000/api', {
-          headers: { origin: 'https://flare.example' },
-        })
-      )
-    ).not.toThrow()
+    vi.stubEnv('NEXTAUTH_URL', 'http://localhost:3000')
+    expect(relyingParty().origin).toBe('http://localhost:3000')
     vi.stubEnv('NEXTAUTH_URL', 'http://flare.example')
     expect(() => relyingParty()).toThrow('HTTPS')
+    for (const unusable of [
+      '',
+      'not a URL',
+      'https://user:pass@flare.example',
+    ]) {
+      vi.stubEnv('NEXTAUTH_URL', unusable)
+      expect(() => relyingParty()).toThrow('Configure NEXTAUTH_URL')
+    }
   })
 })

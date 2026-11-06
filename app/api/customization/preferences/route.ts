@@ -10,15 +10,15 @@ import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
 const api = routes('/api/customization/preferences', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async () => {
-  const { session } = await requireSession()
+export const GET = api(async (request) => {
+  const { session } = await requireSession(request)
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { preferences: true },
@@ -31,8 +31,7 @@ export const GET = api(async () => {
 
 export const PATCH = api(
   async (request) => {
-    const { session } = await requireSession('appearance.personal')
-    assertJsonMutation(request)
+    const { session } = await requireSession(request, 'appearance.personal')
     const parsed = personalAppearanceSchema.safeParse(
       await readJson(request, { limit: 1024 })
     )

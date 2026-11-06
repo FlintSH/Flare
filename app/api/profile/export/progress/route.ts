@@ -12,7 +12,7 @@ const api = routes('/api/profile/export/progress', {
 })
 
 export const GET = api(async (request) => {
-  const { user } = await requireSession('profile.export')
+  const { user } = await requireSession(request, 'profile.export')
   const exportId = requestedExportId(request)
   if (!exportId) throw new HttpError(400, 'Missing export id.')
 

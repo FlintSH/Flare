@@ -1,5 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { tagRoutes } from '@/lib/tags/http'
@@ -28,7 +28,6 @@ export const GET = api(async (request) => {
 
 export const PATCH = api(async (request) => {
   const user = await requireAccount(request)
-  assertJsonMutation(request)
   const input = fileTagsInputSchema.parse(await readJson(request))
   const count = await changeFileTags(user.id, input)
   return apiResponse({ count })

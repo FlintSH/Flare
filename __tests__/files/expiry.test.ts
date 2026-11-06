@@ -306,6 +306,7 @@ describe('upload-time expiration', () => {
     roles: [],
     permissions: [...DEFAULT_PERMISSIONS],
     randomizeFileUrls: false,
+    credential: 'session',
   }
   const upload = (expiryAction: 'DELETE' | 'SET_PRIVATE') => ({
     user,

@@ -11,7 +11,7 @@ const api = routes('/api/users/[id]/files', {
 })
 
 export const GET = api(async (request, { params }: Context) => {
-  await requireSession('content.read')
+  await requireSession(request, 'content.read')
   const query = new URL(request.url).searchParams
   const { id } = await params
   return listAccountFiles(id, {

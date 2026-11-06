@@ -6,7 +6,7 @@ import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { canResendVerification, userEmailStatus } from '@/lib/email/eligibility'
 import { EmailHttpError } from '@/lib/email/errors'
-import { emailRoutes, validateEmailOrigin } from '@/lib/email/http'
+import { emailRoutes } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { requireSession } from '@/lib/http/access'
 import { readJson } from '@/lib/http/request'
@@ -22,7 +22,7 @@ type Context = { params: Promise<{ id: string }> }
 const api = routes('/api/users/[id]/email', emailRoutes)
 
 export const GET = api(async (request, { params }: Context) => {
-  await requireSession('users.email')
+  await requireSession(request, 'users.email')
   const { id } = await params
   const [user, config] = await Promise.all([
     prisma.user.findUnique({ where: { id } }),
@@ -33,13 +33,12 @@ export const GET = api(async (request, { params }: Context) => {
 })
 
 export const POST = api(async (request, { params }: Context) => {
-  const { user: actor } = await requireSession('users.email')
+  const { user: actor } = await requireSession(request, 'users.email')
   const { id } = await params
   const { action } = z
     .object({ action: z.enum(['exempt', 'require', 'resend']) })
     .parse(await readJson(request))
   let config = await getEmailConfig()
-  validateEmailOrigin(request, config.publicUrl)
   if (!config.enabled) throw new EmailHttpError('Email is disabled.')
   await limitEmailRequest(request, config)
   await prisma.$transaction(async (tx) => {

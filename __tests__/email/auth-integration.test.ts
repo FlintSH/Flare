@@ -247,7 +247,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         `Bearer ${account.uploadToken}`
       )
       expect((await enroll(bearerRequest)).status).toBe(401)
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       expect((await resend(request({}))).status).toBe(400)
       // Expire this account's cooldown between intentional negative attempts.
       const cooldownKey = createHash('sha256')
@@ -479,7 +481,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
       const changer = await user()
       await user({ email: `abc-${id}@example.com` })
-      state.session = { user: { id: changer.id } }
+      state.session = {
+        user: { id: changer.id, sessionVersion: changer.sessionVersion },
+      }
       const change = await changeEmail(
         request({ email: `a_c-${id}@example.com`, password: 'old-password' })
       )
@@ -514,7 +518,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('does not fabricate old-address approval when the policy makes it optional', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       const response = await changeEmail(
         request({ email, password: 'old-password' })
@@ -538,7 +544,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('requires real old-address approval when an administrator tightens policy during a pending change', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
@@ -594,7 +602,9 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     it('waits for a concurrent settings transaction before deciding whether old-address approval is required', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
       const email = `${randomUUID()}@new.example`
       expect(
         (await changeEmail(request({ email, password: 'old-password' }))).status
@@ -778,7 +788,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       })
       await persistConfig(config)
       state.session = {
-        user: { id: account.id, permissions: ['administrator'] },
+        user: {
+          id: account.id,
+          permissions: ['administrator'],
+          sessionVersion: account.sessionVersion,
+        },
       }
       const response = await adminEmail(request({ action: 'require' }), {
         params: Promise.resolve({ id: account.id }),
@@ -797,7 +811,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         emailVerificationSource: 'pending_local',
       })
       state.session = {
-        user: { id: account.id, permissions: ['administrator'] },
+        user: {
+          id: account.id,
+          permissions: ['administrator'],
+          sessionVersion: account.sessionVersion,
+        },
       }
       const status = await emailStatus(
         new Request('https://flare.example/api/auth/email/status')
@@ -868,28 +886,32 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).not.toBe(account.uploadToken)
     })
 
-    it('accepts the configured external origin behind a proxy and rejects an unrelated origin', async () => {
+    it('accepts the public origin behind a proxy and no other, not even the email link address', async () => {
       const account = await user()
-      state.session = { user: { id: account.id } }
-      const good = new Request('http://internal:3000/api/auth/email/enroll', {
-        method: 'POST',
-        headers: {
-          origin: 'https://flare.example',
-          'Content-Type': 'application/json',
-          'x-real-ip': uniqueAddress(),
-        },
-        body: JSON.stringify({ password: 'old-password' }),
-      })
-      expect((await enroll(good)).status).toBe(200)
-      const bad = new Request('http://internal:3000/api/auth/email/enroll', {
-        method: 'POST',
-        headers: {
-          origin: 'https://unrelated.example',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password: 'old-password' }),
-      })
-      expect((await enroll(bad)).status).toBe(403)
+      state.session = {
+        user: { id: account.id, sessionVersion: account.sessionVersion },
+      }
+      const enrollFrom = (origin: string) =>
+        enroll(
+          new Request('http://internal:3000/api/auth/email/enroll', {
+            method: 'POST',
+            headers: {
+              origin,
+              'Content-Type': 'application/json',
+              'x-real-ip': uniqueAddress(),
+            },
+            body: JSON.stringify({ password: 'old-password' }),
+          })
+        )
+      // The email settings' public URL only builds the links in messages.
+      expect((await enrollFrom('https://flare.example')).status).toBe(403)
+      vi.stubEnv('NEXTAUTH_URL', 'https://flare.example')
+      try {
+        expect((await enrollFrom('https://unrelated.example')).status).toBe(403)
+        expect((await enrollFrom('https://flare.example')).status).toBe(200)
+      } finally {
+        vi.unstubAllEnvs()
+      }
     })
   }
 )

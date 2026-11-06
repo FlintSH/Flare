@@ -1,14 +1,12 @@
-import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/database/prisma'
+import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { mediaType, readJson } from '@/lib/http/request'
+import { isWrite } from '@/lib/http/request'
 import type { RouteContract } from '@/lib/http/route'
 
 import { SECURITY_CODE_MAX_LENGTH } from './policy'
-import { SecurityError, securityLimit, validateSecurityOrigin } from './shared'
+import { securityLimit } from './shared'
 
 export const proofSchema = z.object({
   password: z.string().max(256).optional(),
@@ -38,29 +36,20 @@ export const securityRoutes: RouteContract = {
   },
 }
 
-export async function securitySession(req: Request, mutation = true) {
-  if (mutation) validateSecurityOrigin(req)
-  if (req.headers.has('authorization'))
-    throw new SecurityError('Use a browser session for account security.', 401)
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) throw new SecurityError('Sign in to continue.', 401)
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } })
-  if (!user || user.sessionVersion !== session.user.sessionVersion)
-    throw new SecurityError('Sign in again to continue.', 401)
-  if (mutation) await securityLimit(`management:${user.id}`)
-  return { session, user }
+/**
+ * The browser session's account as it is now, before email verification too,
+ * so a restricted account can still secure itself. Every write counts toward
+ * the account's management limit.
+ */
+export async function securitySession(request: Request) {
+  const { session, account } = await requireSession(request, undefined, {
+    pendingEmail: true,
+    refuseApiCredentials: true,
+    fresh: true,
+  })
+  if (isWrite(request)) await securityLimit(`management:${account.id}`)
+  return { session, user: account }
 }
 
 /** Security writes are small JSON documents. */
-export async function securityBody(req: Request) {
-  if (mediaType(req) !== 'application/json')
-    throw new SecurityError('Use application/json for security requests.', 415)
-  if (!req.body) throw new SecurityError('Invalid security request.')
-  try {
-    return await readJson(req, { limit: 65536 })
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 413)
-      throw new SecurityError('Security request is too large.', 413)
-    throw new SecurityError('Invalid security request.')
-  }
-}
+export const SECURITY_BODY_LIMIT = 64 * 1024

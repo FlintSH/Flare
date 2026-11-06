@@ -27,7 +27,8 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/http/access', () => ({
+vi.mock('@/lib/http/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/http/access')>()),
   requireSession: mocks.requirePermission,
 }))
 vi.mock('@/lib/permissions/server', () => ({

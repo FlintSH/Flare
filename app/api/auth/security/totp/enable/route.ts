@@ -1,12 +1,13 @@
 import { z } from 'zod'
 
 import {
-  securityBody,
+  SECURITY_BODY_LIMIT,
   securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { isTotpCode } from '@/lib/auth/security/policy'
 import { enableTotp } from '@/lib/auth/security/service'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
 const api = routes('/api/auth/security/totp/enable', securityRoutes)
@@ -18,6 +19,6 @@ export const POST = api(async (request) => {
       code: z.string().refine(isTotpCode),
       challengeId: z.string().min(20).max(100),
     })
-    .parse(await securityBody(request))
+    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
   return enableTotp(session, code, challengeId)
 })

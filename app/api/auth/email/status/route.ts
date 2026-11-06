@@ -5,8 +5,8 @@ import { routes } from '@/lib/http/route'
 
 const api = routes('/api/auth/email/status', emailRoutes)
 
-export const GET = api(async () => {
-  const { user, config } = await emailSession()
+export const GET = api(async (request) => {
+  const { user, config } = await emailSession(request)
   return accountEmailStatus(
     user,
     config,

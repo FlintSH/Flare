@@ -20,15 +20,15 @@ const api = routes('/api/files/[id]', {
 })
 
 export const PATCH = api(async (request, { params }: Context) => {
+  const { user } = await requireSession(request, 'files.share')
   const { id } = await params
   const settings = fileSettingsSchema.parse(await readJson(request))
-  const { user } = await requireSession('files.share')
   return updateFileSettings({ as: 'owner', userId: user.id }, id, settings)
 })
 
 export const DELETE = api(
-  async (_request, { params }: Context) => {
-    const { user } = await requireSession('files.delete')
+  async (request, { params }: Context) => {
+    const { user } = await requireSession(request, 'files.delete')
     const { id } = await params
     await deleteFile({ as: 'owner', userId: user.id }, id)
     return { success: true }

@@ -1,5 +1,7 @@
 import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto'
 
+import { publicOrigin } from '@/lib/security/public-origin'
+
 /**
  * After a visitor submits a file password, previews load through ordinary GET
  * requests (images, video seeking) without putting the password in a URL. A
@@ -95,7 +97,5 @@ export function verifyArchiveUnlock(
 
 /** Match next-auth: secure cookies when the public URL uses HTTPS. */
 export function secureCookies(request: Request) {
-  const configured = process.env.NEXTAUTH_URL
-  if (configured) return configured.startsWith('https://')
-  return new URL(request.url).protocol === 'https:'
+  return (publicOrigin() ?? new URL(request.url)).protocol === 'https:'
 }

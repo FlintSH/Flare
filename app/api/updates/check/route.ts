@@ -13,7 +13,7 @@ const api = routes('/api/updates/check', {
   logger: loggers.api,
 })
 
-export const GET = api(async () => {
-  await requireSession('settings.read')
+export const GET = api(async (request) => {
+  await requireSession(request, 'settings.read')
   return checkForUpdates(getBuildInfo())
 })

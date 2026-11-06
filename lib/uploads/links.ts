@@ -1,4 +1,5 @@
 import { fileUrls } from '@/lib/files/urls'
+import { publicOrigin } from '@/lib/security/public-origin'
 
 export function uploadLinks(
   file: {
@@ -11,7 +12,7 @@ export function uploadLinks(
   user: { urlId: string; vanityId: string | null }
 ) {
   const urls = fileUrls(file, {
-    origin: (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(
+    origin: (publicOrigin()?.href ?? 'http://localhost:3000').replace(
       /\/+$/,
       ''
     ),

@@ -1,11 +1,12 @@
 import {
+  ARCHIVE_BODY_LIMIT,
   archiveActor,
-  archiveBody,
   archiveRoutes,
   createArchiveSchema,
 } from '@/lib/archives/http'
 import { withArchiveOperation } from '@/lib/archives/operation'
 import { createAccountArchive } from '@/lib/archives/service'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { actionPermissions } from '@/lib/permissions/actions'
 
@@ -22,7 +23,10 @@ export const POST = api(
       request.signal,
       async (operation) => {
         const input = createArchiveSchema.parse(
-          await archiveBody(request, operation.signal)
+          await readJson(request, {
+            limit: ARCHIVE_BODY_LIMIT,
+            signal: operation.signal,
+          })
         )
         return createAccountArchive(actor, input, operation)
       }

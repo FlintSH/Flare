@@ -12,7 +12,7 @@ const api = routes('/api/users/[id]/login', {
 })
 
 export const POST = api(async (request, { params }: Context) => {
-  await requireSession('users.read')
+  await requireSession(request, 'users.read')
 
   const { id } = await params
   const user = await prisma.user.findUnique({

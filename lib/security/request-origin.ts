@@ -1,25 +1,16 @@
-/** Check browser writes against explicit app origins, never proxy headers. */
+import { publicOrigin } from './public-origin'
+
+/**
+ * Whether a browser sent this request from Flare's own pages: its own origin,
+ * or the public origin when a reverse proxy hands Next internal HTTP. Never
+ * proxy headers. Clients that send no Origin, such as scripts, pass.
+ */
 export function isSameOriginRequest(request: Request): boolean {
   if (request.headers.get('sec-fetch-site') === 'cross-site') return false
   const origin = request.headers.get('origin')
-  if (!origin) return true
-
-  const allowed = new Set([new URL(request.url).origin])
-  // A reverse proxy can expose HTTPS while Next receives internal HTTP. This
-  // operator-controlled URL is also the public origin used for authentication.
-  if (process.env.NEXTAUTH_URL) {
-    try {
-      const publicUrl = new URL(process.env.NEXTAUTH_URL)
-      if (
-        ['http:', 'https:'].includes(publicUrl.protocol) &&
-        !publicUrl.username &&
-        !publicUrl.password
-      ) {
-        allowed.add(publicUrl.origin)
-      }
-    } catch {
-      // A malformed setting must not disable the request-origin boundary.
-    }
-  }
-  return allowed.has(origin)
+  return (
+    !origin ||
+    origin === new URL(request.url).origin ||
+    origin === publicOrigin()?.origin
+  )
 }

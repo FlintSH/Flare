@@ -16,7 +16,7 @@ Open **Settings → Email** with `settings.email` (and `settings.read` to naviga
 2. Select **TLS** for implicit TLS, usually port 465, or **STARTTLS** for a connection that must upgrade to TLS, usually port 587. Flare defaults to TLS on 465.
 3. Enable authentication and enter the provider's username and password. An explicitly trusted local relay can use no authentication and/or no encryption when appropriate to that relay.
 4. Set a sender address the provider authorizes, a display name, and optional Reply-To.
-5. Set the public Flare URL, or let it use `NEXTAUTH_URL`. It must use HTTPS outside localhost testing.
+5. Set the public Flare URL, or let it use `NEXTAUTH_URL`. It must use HTTPS outside localhost testing. Keep it on the same origin as `NEXTAUTH_URL`: it only builds the links in messages, and someone who signs in at another origin can't change their account email there. Earlier builds accepted email changes from the public URL's origin too.
 6. Choose **Test connection**, then **Send test email** to an address you control. Open the inbox to confirm receipt.
 7. Turn on **Enable email** and choose **Save email settings** when you are satisfied with the result.
 

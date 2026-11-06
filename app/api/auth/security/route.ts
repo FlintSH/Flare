@@ -7,7 +7,7 @@ import { routes } from '@/lib/http/route'
 const api = routes('/api/auth/security', securityRoutes)
 
 export const GET = api(async (request) => {
-  const { session, user } = await securitySession(request, false)
+  const { session, user } = await securitySession(request)
   const [passkeys, recoveryCodesRemaining, passkeyRecoveryCodesRemaining] =
     await Promise.all([
       prisma.passkey.findMany({

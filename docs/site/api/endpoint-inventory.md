@@ -31,7 +31,7 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
-See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
+See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. When the dashboard calls the write routes above with a browser session, they follow the [browser-session write rule](./authentication#browser-session-writes); token requests don't. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
 
 ## File content and access checks
 
@@ -97,7 +97,7 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/profile/export/progress`     | GET           | Stream server-sent progress of the caller's export started with this `id`; ends when it finishes or fails, or the client leaves.  |
 | `/api/files/{id}`                  | PATCH, DELETE | Change an owned file's visibility/password or delete it.                                                                          |
 
-Profile and appearance mutations have explicit origin/content-type guards. Integration commands likewise enforce same-origin JSON and a bounded body size. Generated uploader configurations contain a credential and should be treated as private downloads.
+Every write these routes take from a browser session follows the [browser-session write rule](./authentication#browser-session-writes): Flare's own origin, and JSON or multipart bodies sent as such. Integration commands also bound the body size. Generated uploader configurations contain a credential and should be treated as private downloads.
 
 ### Archive workspace
 
@@ -126,13 +126,13 @@ Email enrollment and change operations use an account session that remains avail
 | `/api/auth/email/verify`        | POST    | A valid one-time email action token.                                                    |
 | `/api/auth/email/capabilities`  | GET     | Public view of enabled email capabilities.                                              |
 
-Email session mutations validate the request origin when provided. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
+Email session mutations follow the [browser-session write rule](./authentication#browser-session-writes); earlier builds also accepted the origin of the email public URL. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
 
 `GET /api/auth/email/status` gives the account's eligibility already worked out, by the rules the email routes apply. `canRequestChange` says whether the account may ask for a new address now, which also needs a verified current address when the old address must approve changes. `verifyBy` is the date the account must verify by to keep access during an all-user grace period, or `null` when no deadline applies to it. Both fields are new; the older ones keep their values. `canChangeEmail` only says whether the instance allows address changes, `graceEndsAt` is the instance's grace end whether or not it applies to the account, `verificationMode` is the saved mode even while email is disabled (`/api/auth/email/capabilities` gives the mode in force), and `hasPassword` and `requiresPassword` always carry the same value.
 
 ### Authenticator, recovery-code, and passkey flows
 
-Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutation origins must match `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
+Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutations follow the [browser-session write rule](./authentication#browser-session-writes); only passkeys need `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
 
 | Path                                         | Methods       | Authentication and purpose                                                                                               |
 | -------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -178,7 +178,7 @@ These routes use `requireAccount`, whose compatibility path accepts a browser se
 | `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                                                                                                                                                                         |
 | `/api/files/tags`           | GET, PATCH        | GET reads current tag assignments for 1–100 owned file IDs with `files.read`; PATCH changes assignments with `files.update` and `tags.manage`. See the [selection contract](./files#read-current-tags-for-a-selection).       |
 
-Folder/tag mutations also require their origin and content-type guards. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
+Writes from a browser session follow the [browser-session write rule](./authentication#browser-session-writes); legacy-token requests are not origin- or type-checked. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 
 ## Invite routes
 
@@ -219,7 +219,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/customization/assets`      | POST           | `appearance.manage`; turn a PNG, JPEG, or WebP logo of at most 256 KB into a data URL. A body over 300,000 bytes answers `413` before it is read.         |
 | `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 
-Email administration validates origins for mutations; appearance administration uses same-origin/content-type guards. Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
+Administration writes follow the [browser-session write rule](./authentication#browser-session-writes). Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
 
 ## Public and bootstrap routes
 

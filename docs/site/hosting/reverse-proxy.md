@@ -115,6 +115,14 @@ Earlier versions read the first `X-Forwarded-For` entry before `X-Real-IP` for u
 
 [Active sessions and login history](/guide/account#login-history-and-active-sessions) record client-address and browser information when it is available. The address follows the [rules above](#client-addresses-and-rate-limits); an IP value is not independent proof of identity. Keep the application port private and have the trusted edge replace incoming forwarding headers, as in the examples above. A user-agent string is supplied by the client and can be imitated. Do not infer an exact device or physical location from these fields.
 
+## Browser origin checks
+
+When a browser's session cookie authenticates a change, such as saving settings, uploading or deleting, Flare accepts it only from its own pages. The request's `Origin` must be the origin of `NEXTAUTH_URL`, or the address the app itself serves, which is what you use when you open `http://localhost:3000` directly. Behind a proxy that ends TLS, only the first can match, so set `NEXTAUTH_URL` to the exact scheme, hostname and port people use; otherwise every change answers `403` with `Cross-origin requests are not allowed.` Flare never reads the origin from `Host` or `X-Forwarded-Host`. API tokens aren't checked. The [browser-session write rule](/api/authentication#browser-session-writes) has the details.
+
+Flare reads `NEXTAUTH_URL` in one place. It must be an `http` or `https` URL without a username or password. Origin checks, passkeys, the default email link address, archive unlock cookies and upload links ignore any other value, and generated screenshot-tool configurations refuse it with `Invalid server URL configuration`.
+
+Earlier builds read it seven ways. Account security accepted only the exact `NEXTAUTH_URL` origin and answered `503` while it was unset; account email also accepted the origin of the email public URL, and failed with an unrelated error when `NEXTAUTH_URL` wasn't a URL. Both now follow the rule above, and only passkeys need `NEXTAUTH_URL`. A value without `http://` or `https://` used to end up in upload links as written.
+
 ## Passkeys and hostname changes
 
 Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.

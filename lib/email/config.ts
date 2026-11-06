@@ -10,6 +10,7 @@ import {
 import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
+import { publicOrigin } from '@/lib/security/public-origin'
 import {
   assertEmailEncryptionKey,
   decryptSecret,
@@ -99,8 +100,9 @@ export function resolveEmailConfig(
     managedFields.push(path)
   }
   // Configuring a server never enables sending or account enforcement.
-  if (!config.publicUrl && env.NEXTAUTH_URL)
-    config.publicUrl = env.NEXTAUTH_URL.replace(/\/+$/, '')
+  const serverUrl = publicOrigin(env)
+  if (!config.publicUrl && serverUrl)
+    config.publicUrl = serverUrl.href.replace(/\/+$/, '')
   // An administrator can explicitly test delivery without changing automatic sending.
   if (options.testDelivery) config.enabled = true
   if (

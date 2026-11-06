@@ -18,7 +18,7 @@ const api = routes('/api/audit', {
 
 export const GET = api(
   async (request): Promise<AuditPage<AuditEvent>> => {
-    await requireSession('audit.read')
+    await requireSession(request, 'audit.read')
     const parameters = new URL(request.url).searchParams
     const parsed = auditQuerySchema.safeParse(Object.fromEntries(parameters))
     if (

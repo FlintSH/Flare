@@ -101,7 +101,7 @@ The count reflects redirect requests, including requests from bots and link prev
 
 ## Error handling
 
-Invalid destinations return `400` with an `error` message and `success: false`. Missing or insufficient credentials return `401` with `{ "error": "Unauthorized" }`. An authenticated account missing the required current role permission receives `403`. Server failures return `500`. Malformed JSON returns `400` with `{ "success": false, "error": "Invalid JSON." }`.
+Invalid destinations return `400` with an `error` message and `success: false`. Missing or insufficient credentials return `401` with `{ "error": "Unauthorized" }`. An authenticated account missing the required current role permission receives `403`. Server failures return `500`. Malformed JSON returns `400` with `{ "success": false, "error": "Invalid JSON." }`. A request a browser session makes must also follow the [browser-session write rule](./authentication#browser-session-writes): from another origin it returns `403`, and with a body not sent as `application/json` it returns `415`. Token requests aren't checked this way.
 
 ## Moderation routes
 

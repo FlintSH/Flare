@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { requireSession } from '@/lib/http/access'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import {
   listIntegrations,
@@ -15,15 +15,17 @@ const api = routes('/api/integrations', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async () => {
-  const { user } = await requireSession(['tokens.manage', 'webhooks.manage'])
+export const GET = api(async (request) => {
+  const { user } = await requireSession(request, [
+    'tokens.manage',
+    'webhooks.manage',
+  ])
   return NextResponse.json(await listIntegrations(user), { headers: noStore })
 })
 
 export const POST = api(
   async (request) => {
-    const { user } = await requireSession()
-    assertJsonMutation(request)
+    const { user } = await requireSession(request)
     const body = await readJson(request, { limit: 16_384 })
     return NextResponse.json(await runIntegrationCommand(user, body), {
       headers: noStore,

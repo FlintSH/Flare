@@ -11,7 +11,7 @@ The [OpenAPI document](/openapi.json) continues to describe named-token operatio
 
 ## Personal sessions and login history
 
-These routes operate only on the signed-in account, independently of `profile.update` and `users.sessions`. Responses are private and must not be shared-cached. Mutation requests must have an `Origin` matching `NEXTAUTH_URL`; an `Authorization` header is rejected even when a session cookie is present. The existing restricted session used for email verification can still use these self-service security routes.
+These routes operate only on the signed-in account, independently of `profile.update` and `users.sessions`. Responses are private and must not be shared-cached. Mutation requests must come from Flare's own pages, under the [browser-session write rule](./authentication#browser-session-writes); an `Authorization` header is rejected even when a session cookie is present. The existing restricted session used for email verification can still use these self-service security routes.
 
 | Method and path                     | Result                                                                                                                                          |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |

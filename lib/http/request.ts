@@ -10,20 +10,34 @@ export function mediaType(request: Request) {
   )
 }
 
-/** Browser-session writes must come from this app's own pages. */
+function assertMediaType(request: Request, type: string) {
+  if (mediaType(request) !== type) throw new HttpError(415, `Use ${type}.`)
+}
+
+/** GET, HEAD and OPTIONS read; every other method may change something. */
+export function isWrite(request: Request) {
+  return !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+}
+
+/** The request comes from Flare's own pages, whatever its method. */
 export function assertSameOrigin(request: Request) {
   if (!isSameOriginRequest(request))
     throw new HttpError(403, 'Cross-origin requests are not allowed.')
 }
 
-export function assertMediaType(request: Request, type: string) {
-  if (mediaType(request) !== type) throw new HttpError(415, `Use ${type}.`)
-}
+const browserWrites = new WeakSet<Request>()
 
-/** A same-origin write whose body, if it has one, is JSON. */
-export function assertJsonMutation(request: Request, { body = true } = {}) {
+/**
+ * A browser attaches the session cookie to requests other sites send, so a
+ * write the cookie authenticates must come from Flare's own pages. Its body
+ * readers then take only their own type, JSON or a multipart form, so the
+ * plain-text and URL-encoded posts another site can send without a CORS
+ * preflight are refused too.
+ */
+export function assertBrowserWrite(request: Request) {
+  if (!isWrite(request)) return
   assertSameOrigin(request)
-  if (body) assertMediaType(request, 'application/json')
+  browserWrites.add(request)
 }
 
 /** The body as bytes, refusing to buffer more than `limit` bytes. */
@@ -65,9 +79,13 @@ export const JSON_BODY_LIMIT = 1024 * 1024
 
 export async function readJson(
   request: Request,
-  { limit = JSON_BODY_LIMIT }: { limit?: number } = {}
+  {
+    limit = JSON_BODY_LIMIT,
+    signal,
+  }: { limit?: number; signal?: AbortSignal } = {}
 ): Promise<unknown> {
-  const text = (await readBody(request, limit)).toString('utf8')
+  if (browserWrites.has(request)) assertMediaType(request, 'application/json')
+  const text = (await readBody(request, limit, signal)).toString('utf8')
   try {
     return JSON.parse(text)
   } catch {
@@ -90,6 +108,8 @@ export async function readForm(
     tooLarge = 'Request body is too large.',
   }: { limit: number; tooLarge?: string }
 ): Promise<FormData> {
+  if (browserWrites.has(request))
+    assertMediaType(request, 'multipart/form-data')
   const body = await readBody(request, limit).catch((error: unknown) => {
     throw error instanceof HttpError && error.status === 413
       ? new HttpError(413, tooLarge)

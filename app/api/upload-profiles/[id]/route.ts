@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { requireSession } from '@/lib/http/access'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { uploadProfileRoutes } from '@/lib/uploads/http'
 import { deleteProfile, updateProfile } from '@/lib/uploads/profiles'
@@ -15,8 +15,7 @@ const updateSchema = uploadProfileInputSchema
 const api = routes('/api/upload-profiles/[id]', uploadProfileRoutes)
 
 export const PUT = api(async (request, { params }: Context) => {
-  const { user } = await requireSession('uploadProfiles.manage')
-  assertJsonMutation(request)
+  const { user } = await requireSession(request, 'uploadProfiles.manage')
   const { id } = await params
   const { revision, ...input } = updateSchema.parse(await readJson(request))
   return Response.json({
@@ -25,8 +24,7 @@ export const PUT = api(async (request, { params }: Context) => {
 })
 
 export const DELETE = api(async (request, { params }: Context) => {
-  const { user } = await requireSession('uploadProfiles.manage')
-  assertJsonMutation(request, { body: false })
+  const { user } = await requireSession(request, 'uploadProfiles.manage')
   const { id } = await params
   await deleteProfile(user.id, id)
   return Response.json({ data: { deleted: true } })

@@ -137,7 +137,11 @@ suite('customization contracts against disposable PostgreSQL', () => {
       where: { id: 'owner-one' },
     })
     const { getUserAccess } = await import('@/lib/permissions/server')
-    return { ...user, ...(await getUserAccess(user.id)) }
+    return {
+      ...user,
+      ...(await getUserAccess(user.id)),
+      credential: 'session' as const,
+    }
   }
 
   async function prepared(text = 'A private test document', overrides = {}) {

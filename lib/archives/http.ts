@@ -1,19 +1,16 @@
 import { z } from 'zod'
 
 import { setAuditActor, setAuditOutcome } from '@/lib/audit'
-import { getAccessSession } from '@/lib/auth'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
-import { prisma } from '@/lib/database/prisma'
 import { folderIdSchema, folderNameSchema } from '@/lib/folders/schema'
+import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { prismaAnswers } from '@/lib/http/prisma'
-import { mediaType, readBody } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import type { RouteContract } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
-import { isSameOriginRequest } from '@/lib/security/request-origin'
 import { StorageTargetChangedError } from '@/lib/storage/target-provider'
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
@@ -102,21 +99,17 @@ export function parseListingQuery(input: {
   }
 }
 
+/** The signed-in account as it is now, holding every one of `permissions`. */
 export async function archiveActor(
   request: Request,
   permissions: Permission[]
 ): Promise<ArchiveActor> {
-  if (request.headers.has('authorization'))
-    throw new ArchiveError('Use a browser session for archives.', 401)
-  if (request.method !== 'GET' && !isSameOriginRequest(request))
-    throw new ArchiveError('Forbidden', 403)
-  const session = await getAccessSession()
-  if (!session?.user?.id) throw new ArchiveError('Sign in to continue.', 401)
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } })
-  if (!user || user.sessionVersion !== session.user.sessionVersion)
-    throw new ArchiveError('Sign in again to continue.', 401)
-  setAuditActor({ id: user.id, name: user.name })
-  const access = await getUserAccess(user.id)
+  const { account } = await requireSession(request, undefined, {
+    refuseApiCredentials: true,
+    fresh: true,
+  })
+  setAuditActor({ id: account.id, name: account.name })
+  const access = await getUserAccess(account.id)
   if (permissions.some((permission) => !hasPermission(access, permission)))
     throw new ArchiveError(
       'You do not have permission for this archive operation.',
@@ -124,50 +117,20 @@ export async function archiveActor(
     )
   return {
     user: {
-      id: user.id,
-      urlId: user.urlId,
-      vanityId: user.vanityId,
-      storageUsed: user.storageUsed,
-      randomizeFileUrls: user.randomizeFileUrls,
+      id: account.id,
+      urlId: account.urlId,
+      vanityId: account.vanityId,
+      storageUsed: account.storageUsed,
+      randomizeFileUrls: account.randomizeFileUrls,
       ...access,
+      credential: 'session',
     },
-    sessionVersion: user.sessionVersion,
+    sessionVersion: account.sessionVersion,
   }
 }
 
-export async function archiveBody(
-  request: Request,
-  signal?: AbortSignal,
-  allowForm = false
-) {
-  const form =
-    allowForm && mediaType(request) === 'application/x-www-form-urlencoded'
-  if (mediaType(request) !== 'application/json' && !form)
-    throw new ArchiveError(
-      allowForm ? 'Use JSON or a URL-encoded form.' : 'Use application/json.',
-      415
-    )
-  if (!request.body) throw new ArchiveError('Invalid archive request.', 400)
-  let text: string
-  try {
-    text = (await readBody(request, 16384, signal)).toString('utf8')
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 413)
-      throw new ArchiveError('Archive request is too large.', 413)
-    throw error
-  }
-  if (!form) {
-    try {
-      return JSON.parse(text)
-    } catch {
-      throw new ArchiveError('Invalid JSON.', 400)
-    }
-  }
-  const fields = new URLSearchParams(text)
-  if ([...fields.keys()].some((key) => fields.getAll(key).length !== 1))
-    throw new ArchiveError('Use each archive field only once.', 400)
-  return Object.fromEntries(fields)
-}
+/** Archive request bodies, streamed ones included, are small JSON documents. */
+export const ARCHIVE_BODY_LIMIT = 16 * 1024
 
 const changed = new HttpError(
   409,

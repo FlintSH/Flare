@@ -1,11 +1,12 @@
 import {
+  SECURITY_BODY_LIMIT,
   passkeyName,
   proofSchema,
-  securityBody,
   securityRoutes,
   securitySession,
 } from '@/lib/auth/security/http'
 import { changePasskey } from '@/lib/auth/security/passkeys'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
 type Context = { params: Promise<{ id: string }> }
@@ -17,7 +18,7 @@ export const DELETE = api(async (request, { params }: Context) => {
   return changePasskey(
     session,
     (await params).id,
-    proofSchema.parse(await securityBody(request))
+    proofSchema.parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
   )
 })
 
@@ -25,6 +26,6 @@ export const PATCH = api(async (request, { params }: Context) => {
   const { session } = await securitySession(request)
   const data = proofSchema
     .extend({ name: passkeyName })
-    .parse(await securityBody(request))
+    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
   return changePasskey(session, (await params).id, data, data.name)
 })

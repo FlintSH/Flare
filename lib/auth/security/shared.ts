@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { lockUserRow } from '@/lib/database/locks'
 import { HttpError } from '@/lib/http/errors'
 import { consumeLimit } from '@/lib/security/database-limit'
+import { publicOrigin } from '@/lib/security/public-origin'
 
 import { SECURITY_LIMIT_MINUTES } from './policy'
 
@@ -18,43 +19,18 @@ export class SecurityError extends HttpError {
 }
 
 export function relyingParty() {
-  let url: URL
-  try {
-    url = new URL(process.env.NEXTAUTH_URL || '')
-  } catch {
+  const url = publicOrigin()
+  if (!url)
     throw new SecurityError(
       'Configure NEXTAUTH_URL with the public HTTPS origin before using passkeys.',
       503
     )
-  }
-  if (
-    url.username ||
-    url.password ||
-    (url.protocol !== 'https:' &&
-      !(url.protocol === 'http:' && url.hostname === 'localhost'))
-  ) {
+  if (url.protocol !== 'https:' && url.hostname !== 'localhost')
     throw new SecurityError(
       'Passkeys require HTTPS, or HTTP on localhost.',
       503
     )
-  }
   return { rpID: url.hostname, origin: url.origin, rpName: 'Flare' }
-}
-
-export function validateSecurityOrigin(req: Request) {
-  let origin: string
-  try {
-    origin = new URL(process.env.NEXTAUTH_URL || '').origin
-  } catch {
-    throw new SecurityError(
-      'Configure NEXTAUTH_URL before changing account security.',
-      503
-    )
-  }
-  if (req.headers.get('origin') !== origin)
-    throw new SecurityError('Invalid request origin.', 403)
-  if (req.headers.has('authorization'))
-    throw new SecurityError('Use a browser session for account security.', 401)
 }
 
 const SECURITY_LIMIT_SECONDS = SECURITY_LIMIT_MINUTES * 60

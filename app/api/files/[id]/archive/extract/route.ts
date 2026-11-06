@@ -1,12 +1,13 @@
 import {
+  ARCHIVE_BODY_LIMIT,
   archiveActor,
-  archiveBody,
   archiveRoutes,
   extractArchiveSchema,
 } from '@/lib/archives/http'
 import { withArchiveOperation } from '@/lib/archives/operation'
 import { extractArchive } from '@/lib/archives/service'
 import { setAuditTarget } from '@/lib/audit'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { actionPermissions } from '@/lib/permissions/actions'
 
@@ -27,7 +28,10 @@ export const POST = api(
       request.signal,
       async (operation) => {
         const input = extractArchiveSchema.parse(
-          await archiveBody(request, operation.signal)
+          await readJson(request, {
+            limit: ARCHIVE_BODY_LIMIT,
+            signal: operation.signal,
+          })
         )
         return extractArchive(actor, id, input, operation)
       }

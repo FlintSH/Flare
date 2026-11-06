@@ -23,10 +23,18 @@ const mocks = vi.hoisted(() => ({
     deleteMany: vi.fn(),
   },
 }))
-vi.mock('@/lib/http/access', () => ({
-  requireAccount: mocks.requireAccount,
-  requireSession: mocks.requireSession,
-}))
+vi.mock('@/lib/http/access', async () => {
+  // The session check also refuses writes from other origins.
+  const { assertBrowserWrite } = await import('@/lib/http/request')
+  return {
+    requireAccount: mocks.requireAccount,
+    requireSession: async (request: Request, ...rest: unknown[]) => {
+      const access = await mocks.requireSession(request, ...rest)
+      assertBrowserWrite(request)
+      return access
+    },
+  }
+})
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { shortenedUrl: mocks.shortenedUrl },
 }))
@@ -158,7 +166,10 @@ describe('moderation short-link API', () => {
       urls: [{ ...listed, createdAt: sent.createdAt }],
       pagination: { total: 1, pages: 1, page: 1, limit: 10 },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith('content.read')
+    expect(mocks.requireSession).toHaveBeenCalledWith(
+      expect.any(Request),
+      'content.read'
+    )
   })
 
   it.each([
@@ -213,7 +224,10 @@ describe('moderation short-link API', () => {
     expect(links.deleteMany).toHaveBeenCalledWith({
       where: { id: 'cm_link', userId: 'member' },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith('content.delete')
+    expect(mocks.requireSession).toHaveBeenCalledWith(
+      expect.any(Request),
+      'content.delete'
+    )
 
     links.deleteMany.mockResolvedValue({ count: 0 })
     const missing = await remove()

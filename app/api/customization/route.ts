@@ -5,7 +5,7 @@ import { appearanceCommandSchema } from '@/lib/customization/schema'
 import { saveAppearance } from '@/lib/customization/store'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { hasPermission } from '@/lib/permissions/catalog'
 
@@ -20,8 +20,8 @@ const api = routes('/api/customization', {
   failure: { message: 'Internal server error' },
 })
 
-export const GET = api(async () => {
-  const { user } = await requireSession()
+export const GET = api(async (request) => {
+  const { user } = await requireSession(request)
   const { customization } = (await getConfig()).settings
   return NextResponse.json(
     {
@@ -35,8 +35,7 @@ export const GET = api(async () => {
 
 export const POST = api(
   async (request) => {
-    await requireSession('appearance.manage')
-    assertJsonMutation(request)
+    await requireSession(request, 'appearance.manage')
     const command = appearanceCommandSchema.parse(
       await readJson(request, { limit: 1_000_000 })
     )

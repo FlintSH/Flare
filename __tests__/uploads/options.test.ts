@@ -46,6 +46,7 @@ const user: AuthenticatedUser = {
   roles: [],
   permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: false,
+  credential: 'session',
 }
 const now = new Date('2026-09-13T12:00:00.000Z')
 

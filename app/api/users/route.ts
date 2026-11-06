@@ -7,10 +7,10 @@ import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { emailRoutes } from '@/lib/email/http'
 import { MailLimitError } from '@/lib/email/outbox'
-import { requireSession } from '@/lib/http/access'
+import { assertPermission, requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
@@ -48,7 +48,7 @@ const api = routes('/api/users', {
 })
 
 export const GET = api(async (request) => {
-  await requireSession('users.read')
+  await requireSession(request, 'users.read')
 
   const { searchParams } = new URL(request.url)
   const search = (searchParams.get('search') || '').trim().slice(0, 200)
@@ -126,8 +126,7 @@ export const GET = api(async (request) => {
 })
 
 export const POST = api(async (request) => {
-  assertJsonMutation(request)
-  const { user: actor } = await requireSession('users.create')
+  const { user: actor } = await requireSession(request, 'users.create')
 
   const json = await readJson(request)
   if (!json || typeof json !== 'object' || Array.isArray(json))
@@ -188,7 +187,7 @@ export const POST = api(async (request) => {
 })
 
 export const PUT = api(async (request) => {
-  assertJsonMutation(request)
+  const { user: actor } = await requireSession(request)
   const json = await readJson(request)
   if (!json || typeof json !== 'object' || Array.isArray(json))
     throw new HttpError(400, 'Provide a JSON object')
@@ -197,7 +196,7 @@ export const PUT = api(async (request) => {
   )
     ? 'users.update'
     : 'users.roles'
-  const { user: actor } = await requireSession(requiredPermission)
+  assertPermission(actor, requiredPermission)
 
   const result = UserSchema.partial().safeParse(json)
   if (!result.success) {

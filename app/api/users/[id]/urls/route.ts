@@ -11,7 +11,7 @@ const api = routes('/api/users/[id]/urls', {
 })
 
 export const GET = api(async (request, { params }: Context) => {
-  await requireSession('content.read')
+  await requireSession(request, 'content.read')
   const { id } = await params
   const query = new URL(request.url).searchParams
   return listAccountShortLinks(id, {

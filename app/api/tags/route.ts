@@ -1,5 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
-import { assertJsonMutation, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { tagRoutes } from '@/lib/tags/http'
@@ -17,7 +17,6 @@ export const GET = api(async (request) => {
 
 export const POST = api(async (request) => {
   const user = await requireAccount(request)
-  assertJsonMutation(request)
   const input = tagInputSchema.parse(await readJson(request))
   return apiResponse(await createTag(user.id, input))
 })

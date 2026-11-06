@@ -6,7 +6,7 @@ import {
 import { filePasswordIssue } from '@/lib/files/password-policy'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { assertSameOrigin, readJson } from '@/lib/http/request'
+import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
@@ -23,16 +23,14 @@ const api = routes('/api/users/[id]/files/[fileId]', {
 })
 
 export const DELETE = api(async (request, { params }: Context) => {
-  assertSameOrigin(request)
-  await requireSession('content.delete')
+  await requireSession(request, 'content.delete')
   const { id, fileId } = await params
   await deleteFile({ as: 'moderator', accountId: id }, fileId)
   return new Response(null, { status: 204 })
 })
 
 export const PATCH = api(async (request, { params }: Context) => {
-  assertSameOrigin(request)
-  await requireSession('content.update')
+  await requireSession(request, 'content.update')
   const { id, fileId } = await params
   const settings = settingsSchema.parse(await readJson(request))
   return updateFileSettings(

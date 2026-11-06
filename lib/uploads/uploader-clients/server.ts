@@ -4,6 +4,7 @@ import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
+import { publicOrigin } from '@/lib/security/public-origin'
 import { generatorProfile } from '@/lib/uploads/profiles'
 
 import {
@@ -26,29 +27,17 @@ interface UploaderTarget {
 }
 
 /**
- * Installed tools upload to the public server URL: an http(s) URL without
- * credentials, query or fragment. A base path is kept.
+ * Installed tools upload to the public server URL, without a query or
+ * fragment. A base path is kept. Development falls back to the default port.
  */
 function publicUploadUrl() {
-  const base =
-    process.env.NEXTAUTH_URL ||
-    (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
-  if (!base) throw new HttpError(500, 'Server configuration error')
-  const invalid = new HttpError(500, 'Invalid server URL configuration')
-  let url: URL
-  try {
-    url = new URL(base)
-  } catch {
-    throw invalid
-  }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw invalid
+  const url = process.env.NEXTAUTH_URL
+    ? publicOrigin()
+    : process.env.NODE_ENV === 'development'
+      ? new URL('http://localhost:3000')
+      : null
+  if (!url || url.search || url.hash)
+    throw new HttpError(500, 'Invalid server URL configuration')
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/api/files`
   return url
 }
@@ -143,7 +132,7 @@ export async function uploaderClientResponse<Id extends UploaderClientId>(
   id: Id,
   request: Request
 ): Promise<Response> {
-  const { user } = await requireSession(UPLOADER_DOWNLOAD_PERMISSION)
+  const { user } = await requireSession(request, UPLOADER_DOWNLOAD_PERMISSION)
   const client = uploaderClients[id]
   const body = client.method === 'POST' ? await readJson(request) : {}
   const { profileId } = postedProfile.parse(body)

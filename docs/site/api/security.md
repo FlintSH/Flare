@@ -13,7 +13,9 @@ Security features are available independently of `profile.update`. They do not g
 
 ## Origin and credential boundaries
 
-Mutations require the exact canonical `Origin` from `NEXTAUTH_URL` and reject an `Authorization` header, even if a session cookie is also present. Passkey requests also use the relying-party hostname and expected origin from that configured URL, rather than choosing them from an incoming Host header. Use HTTPS; `http://localhost` is accepted for local development.
+Mutations must come from Flare's own pages, as every [browser-session write](./authentication#browser-session-writes) must: their `Origin` is the origin of `NEXTAUTH_URL` or the address the app itself serves. These routes also reject an `Authorization` header, even if a session cookie is also present. Passkey requests use the relying-party hostname and expected origin from `NEXTAUTH_URL`, rather than choosing them from an incoming Host header. Use HTTPS; `http://localhost` is accepted for local development.
+
+Earlier builds accepted only the exact `NEXTAUTH_URL` origin here, refused a mutation without an `Origin` header, and answered every mutation with `503` while `NEXTAUTH_URL` was unset or unusable. Now only the passkey routes need `NEXTAUTH_URL`.
 
 A local account with `passkeyRequired: false` confirms management actions with its current password and, when enrolled, an unused authenticator or authenticator recovery code. A session authenticated with a passkey or password plus authenticator recovery code within the last **five minutes** satisfies fresh identity proof without consuming another code. An account without a local password can use a fresh OIDC or passkey sign-in. TOTP enrollment itself additionally requires an existing local password.
 
@@ -106,7 +108,7 @@ This provider looks up the current account email **case-insensitively** and requ
 
 ### Errors and throttling
 
-Errors contain `{ "error": "…" }` with `Cache-Control: no-store`. Invalid proof, used/expired challenges, invalid enrollment codes, and passkey limits return `400`; missing/revoked sessions or an `Authorization` header return `401`; an incorrect or missing mutation origin returns `403`; an unknown owned passkey returns `404`; oversized requests return `413`; unsupported body content types return `415`; throttled requests return `429`; unavailable canonical-origin configuration returns `503`. A throttled response includes `Retry-After: 900`.
+Errors contain `{ "error": "…" }` with `Cache-Control: no-store`. Invalid proof, used/expired challenges, invalid enrollment codes, and passkey limits return `400`; missing/revoked sessions or an `Authorization` header return `401`; a mutation from another origin returns `403`; an unknown owned passkey returns `404`; oversized requests return `413`; unsupported body content types return `415`; throttled requests return `429`; passkey routes return `503` while `NEXTAUTH_URL` isn't an HTTPS URL, or HTTP on localhost. A throttled response includes `Retry-After: 900`.
 
 Management is limited to **20 attempts per account per 15 minutes**. Password sign-in is limited to **30 attempts per account** and **100 per IP** per 15 minutes. Dedicated passkey-recovery sign-in has its own **30-per-account** and **100-per-IP** limits per 15 minutes. Public passkey options and passkey sign-in callbacks each have a limit of **100 per IP per 15 minutes**. The limits are shared through PostgreSQL across application replicas. Each limit's 15-minute window opens with the first attempt it counts, and refused attempts don't extend it, so `Retry-After: 900` covers a whole window. Requests that carry no usable client address share one count in each per-IP limit. Keep the [proxy's client-IP headers trustworthy](/hosting/reverse-proxy#client-addresses-and-rate-limits).
 

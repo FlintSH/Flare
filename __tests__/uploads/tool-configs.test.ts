@@ -303,20 +303,25 @@ describe.each(clients)('$name setup download', ({ id }) => {
     const response = await download(id)
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({
-      error: 'Server configuration error',
+      error: 'Invalid server URL configuration',
     })
   })
 
-  it.each([
-    'not-a-url',
-    'ftp://flare.test',
-    'file:///tmp/flare',
-    'https://username:password@flare.test',
-    'https://flare.test?unexpected=query',
-    'https://flare.test#fragment',
-  ])(
-    'rejects an invalid upload server URL %s without returning credentials',
-    async (baseUrl) => {
+  it.each(
+    ['development', 'production'].flatMap((environment) =>
+      [
+        'not-a-url',
+        'ftp://flare.test',
+        'file:///tmp/flare',
+        'https://username:password@flare.test',
+        'https://flare.test?unexpected=query',
+        'https://flare.test#fragment',
+      ].map((baseUrl) => [environment, baseUrl])
+    )
+  )(
+    'rejects an invalid upload server URL in %s (%s) without returning credentials',
+    async (environment, baseUrl) => {
+      vi.stubEnv('NODE_ENV', environment)
       vi.stubEnv('NEXTAUTH_URL', baseUrl)
       const response = await download(id)
       expect(response.status).toBe(500)

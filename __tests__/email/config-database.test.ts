@@ -20,7 +20,8 @@ vi.mock('next-auth', async (original) => ({
     },
   }),
 }))
-vi.mock('@/lib/http/access', () => ({
+vi.mock('@/lib/http/access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/http/access')>()),
   requireAccount: async () => ({ id: authentication.id }),
 }))
 

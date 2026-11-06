@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import { requireSession } from '@/lib/http/access'
-import { assertSameOrigin } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
@@ -14,8 +13,7 @@ const api = routes('/api/users/[id]', {
 })
 
 export const DELETE = api(async (request, { params }: Context) => {
-  assertSameOrigin(request)
-  const { user } = await requireSession('users.delete')
+  const { user } = await requireSession(request, 'users.delete')
   const { id } = await params
   await deleteAccountWithStorageCleanup(user.id, id, 'users.delete')
   return new NextResponse(null, { status: 204 })

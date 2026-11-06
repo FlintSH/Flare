@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { emailSettingsRoutes, requireEmailAdmin } from '@/lib/email/admin'
+import { emailSettingsRoutes } from '@/lib/email/admin'
 import {
   getSavedEmailConfig,
   prepareEmailConfig,
@@ -12,6 +12,7 @@ import {
   sendTestEmail,
   verifySmtp,
 } from '@/lib/email/transport'
+import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -27,7 +28,7 @@ const testSchema = z.object({
 const api = routes('/api/settings/email/test', emailSettingsRoutes)
 
 export const POST = api(async (request) => {
-  await requireEmailAdmin(request)
+  await requireSession(request, 'settings.email')
   const body = testSchema.parse(await readJson(request))
   const saved = body.config
     ? (await prepareEmailConfig(body.config, body.clearPassword)).candidate

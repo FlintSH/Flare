@@ -33,6 +33,17 @@ For that listing request, the token needs `files:read`. Authentication schemes a
 
 A named `flr_` bearer token uses its own authority even if browser cookies accompany the request. A signed-in administrator's cookie does not add permissions to a named token on these routes. Use a server-side process or command-line client for custom automation; the docs builder does not act as an authenticated proxy to your instance.
 
+## Browser-session writes
+
+Flare's own pages call these routes with the browser's session cookie. A browser also attaches that cookie to requests other pages send, so a request the cookie authenticates that changes something, with any method except `GET`, `HEAD` and `OPTIONS`, must come from Flare's pages:
+
+- Its `Origin` header must be the origin of `NEXTAUTH_URL`, or the address the app itself serves, such as `http://localhost:3000` in development. A request without an `Origin` header, such as one a script sends, passes. A browser request marked `Sec-Fetch-Site: cross-site` doesn't. Otherwise the answer is `403` with `Cross-origin requests are not allowed.`
+- A JSON body must be sent as `Content-Type: application/json`, and an image upload as `multipart/form-data`. Another type answers `415`, such as `Use application/json.`
+
+Named tokens and the legacy upload token are never checked this way, because a browser doesn't attach them on its own. Send their JSON as `application/json` all the same, as the examples here do.
+
+Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/chunks`, `POST /api/files/chunks/{uploadId}/complete`, `POST /api/files/{id}/expiry`, `POST /api/urls` and `POST /api/profile/upload-token`, and read their JSON whatever type it was sent as. A page on another subdomain of the same site could therefore upload files, create short links, schedule expirations or replace the upload token in a signed-in visitor's account. They also checked the origin and type of legacy-token requests to the folder and tag routes, which now accept those like other token requests.
+
 ## Scope reference
 
 | Scope          | Allowed methods and paths                                                                                                                                            |

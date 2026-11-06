@@ -61,6 +61,7 @@ const user: AuthenticatedUser = {
   roles: [],
   permissions: [...DEFAULT_PERMISSIONS],
   randomizeFileUrls: true,
+  credential: 'session',
 }
 const file = {
   id: 'file-one',

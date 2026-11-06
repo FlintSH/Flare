@@ -10,14 +10,13 @@ import { GET as listModerated } from '@/app/api/users/[id]/files/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type AuditInput, configureAuditWriter } from '@/lib/audit'
-import { AccessError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
 
 const mocks = vi.hoisted(() => {
   const tx = { file: { delete: vi.fn() }, user: { update: vi.fn() } }
   return {
     tx,
-    requireSession: vi.fn(),
+    session: vi.fn(),
     file: {
       findUnique: vi.fn(),
       update: vi.fn(),
@@ -26,7 +25,7 @@ const mocks = vi.hoisted(() => {
     },
   }
 })
-vi.mock('@/lib/http/access', () => ({ requireSession: mocks.requireSession }))
+vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     file: mocks.file,
@@ -76,6 +75,9 @@ const request = (
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 const own = { params: Promise.resolve({ id: 'file-one' }) }
+/** Signs in `id` holding exactly these permissions. */
+const signIn = (id: string, ...permissions: string[]) =>
+  mocks.session.mockResolvedValue({ user: { id, permissions } })
 const moderated = {
   params: Promise.resolve({ id: 'owner', fileId: 'file-one' }),
 }
@@ -86,7 +88,7 @@ beforeEach(() => {
   configureAuditWriter(async (event) => {
     events.push(event as Partial<AuditInput>)
   })
-  mocks.requireSession.mockResolvedValue({ user: { id: 'owner' } })
+  signIn('owner', 'files.share', 'files.delete')
   files.findUnique.mockResolvedValue(found)
   files.update.mockResolvedValue(stored)
 })
@@ -96,20 +98,26 @@ describe("the owner's file routes", () => {
     updateOwn(request('/api/files/file-one', 'PATCH', body), own)
 
   it('answers the stored file without its hash', async () => {
+    signIn('owner', 'files.share')
     const response = await patch({ visibility: 'PRIVATE', ignored: true })
     expect(response.status).toBe(200)
     expect(await response.text()).toBe(answered)
-    expect(mocks.requireSession).toHaveBeenCalledWith('files.share')
   })
 
-  it('checks the body before the session', async () => {
-    mocks.requireSession.mockRejectedValue(
-      new AccessError(401, 'Authentication required')
-    )
-    const response = await patch({ visibility: 'HIDDEN' })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'Invalid request body' })
-    expect(mocks.requireSession).not.toHaveBeenCalled()
+  it('checks the session and its permission before the body', async () => {
+    mocks.session.mockResolvedValue(null)
+    const signedOut = await patch({ visibility: 'HIDDEN' })
+    expect(signedOut.status).toBe(401)
+    expect(await signedOut.json()).toEqual({ error: 'Authentication required' })
+    signIn('owner', 'files.delete')
+    const refused = await patch({ visibility: 'HIDDEN' })
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toEqual({ error: 'Permission denied' })
+    signIn('owner', 'files.share')
+    const invalid = await patch({ visibility: 'HIDDEN' })
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toEqual({ error: 'Invalid request body' })
+    expect(files.findUnique).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -140,7 +148,6 @@ describe("the owner's file routes", () => {
     )
     expect(deleted.status).toBe(200)
     expect(await deleted.json()).toEqual({ success: true })
-    expect(mocks.requireSession).toHaveBeenCalledWith('files.delete')
 
     vi.spyOn(loggers.files, 'error').mockImplementation(() => {})
     mocks.tx.file.delete.mockRejectedValue(new Error('database unavailable'))
@@ -171,7 +178,7 @@ describe('the moderation file routes', () => {
     )
 
   beforeEach(() => {
-    mocks.requireSession.mockResolvedValue({ user: { id: 'moderator' } })
+    signIn('moderator', 'content.update', 'content.delete')
   })
 
   it('answers a missing or foreign file with 404 instead of failing', async () => {
@@ -197,6 +204,7 @@ describe('the moderation file routes', () => {
   })
 
   it("changes the account's file and answers it without its hash", async () => {
+    signIn('moderator', 'content.update')
     const response = await patch({ visibility: 'PRIVATE' })
     expect(response.status).toBe(200)
     expect(await response.text()).toBe(answered)
@@ -204,7 +212,6 @@ describe('the moderation file routes', () => {
       where: { id: 'file-one', userId: 'owner' },
       data: { visibility: 'PRIVATE' },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith('content.update')
   })
 
   it('refuses unknown fields and foreign origins', async () => {
@@ -224,13 +231,13 @@ describe('the moderation file routes', () => {
   })
 
   it('deletes with an empty 204', async () => {
+    signIn('moderator', 'content.delete')
     const response = await remove()
     expect(response.status).toBe(204)
     expect(await response.text()).toBe('')
     expect(mocks.tx.file.delete).toHaveBeenCalledWith({
       where: { id: 'file-one', userId: 'owner' },
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith('content.delete')
   })
 
   it('keeps its unexpected-failure body', async () => {
@@ -250,7 +257,7 @@ describe('the moderation file list', () => {
     )
 
   beforeEach(() => {
-    mocks.requireSession.mockResolvedValue({ user: { id: 'moderator' } })
+    signIn('moderator', 'content.read')
   })
 
   it('keeps the list shape, the PROTECTED value and the default page size', async () => {
@@ -281,7 +288,6 @@ describe('the moderation file list', () => {
         mimeType: { startsWith: 'text/' },
       }),
     })
-    expect(mocks.requireSession).toHaveBeenCalledWith('content.read')
   })
 
   it.each([
