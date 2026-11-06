@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 
@@ -204,7 +205,7 @@ export function RegisterForm({
       </div>
       <AuthFooter>
         Already have an account?{' '}
-        <Link href="/auth/login" className={authLinkClassName}>
+        <Link href={SIGN_IN_PATH} className={authLinkClassName}>
           Sign in
         </Link>
       </AuthFooter>

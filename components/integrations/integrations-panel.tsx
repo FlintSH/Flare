@@ -44,6 +44,7 @@ import {
   API_SCOPE_CATALOG,
   scopeUsable,
 } from '@/lib/integrations/bearer-routes'
+import { allows } from '@/lib/permissions/actions'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -139,7 +140,7 @@ export function IntegrationsPanel({
   active?: boolean
   onSetupTool?: () => void
 }) {
-  const { can } = usePermissions()
+  const { can, user } = usePermissions()
   // Delivery statuses change on their own, so a visible panel polls.
   const snapshot = useAccountQuery<Snapshot>(
     'integrations',
@@ -265,26 +266,24 @@ export function IntegrationsPanel({
           </p>
         </div>
       )}
-      <PermissionGate permission="files.upload">
-        <PermissionGate permission="tokens.manage">
-          <Tip
-            title="Setting up a screenshot tool?"
-            action={
-              <Link
-                href="/dashboard/profile?section=uploads#upload-tools"
-                onNavigate={onSetupTool}
-                className={tipLinkClassName}
-              >
-                Set up a tool
-                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            }
-          >
-            ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
-            downloads with your upload token included. No API key setup needed.
-          </Tip>
-        </PermissionGate>
-      </PermissionGate>
+      {allows(user, 'uploaderTools') && (
+        <Tip
+          title="Setting up a screenshot tool?"
+          action={
+            <Link
+              href="/dashboard/profile?section=uploads#upload-tools"
+              onNavigate={onSetupTool}
+              className={tipLinkClassName}
+            >
+              Set up a tool
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          }
+        >
+          ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
+          downloads with your upload token included. No API key setup needed.
+        </Tip>
+      )}
       {error && (
         <Alert variant="destructive">
           <AlertCircle aria-hidden="true" />

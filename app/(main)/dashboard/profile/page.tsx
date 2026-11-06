@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 
 import { ProfileClient } from '@/components/profile'
 
-import { getPageSession } from '@/lib/auth/page-session'
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
@@ -13,6 +13,8 @@ import {
 } from '@/lib/preferences/navigation'
 import { storageQuotaBytes } from '@/lib/uploads/capacity'
 import { bytesToMB, formatFileSize } from '@/lib/utils'
+
+import { requireDashboardPage } from '../page-access'
 
 export default async function ProfilePage({
   searchParams,
@@ -26,11 +28,7 @@ export default async function ProfilePage({
     'account',
     PROFILE_SECTION_ALIASES
   )
-  const session = await getPageSession()
-
-  if (!session?.user) {
-    redirect('/auth/login')
-  }
+  const session = await requireDashboardPage('/dashboard/profile')
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -53,7 +51,7 @@ export default async function ProfilePage({
   })
 
   if (!user) {
-    redirect('/auth/login')
+    redirect(SIGN_IN_PATH)
   }
 
   const quota = storageQuotaBytes(await getConfig(), session.user)

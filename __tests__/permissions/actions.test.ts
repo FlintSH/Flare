@@ -13,6 +13,7 @@ import {
   actionPermissions,
   allows,
 } from '@/lib/permissions/actions'
+import { UPLOADER_DOWNLOAD_PERMISSION } from '@/lib/uploads/uploader-clients'
 
 const role = (...permissions: string[]) => ({ permissions })
 
@@ -28,6 +29,8 @@ describe('action permissions', () => {
     ['manageFolders', 'PATCH', '/api/folders/a'],
     ['manageFolders', 'DELETE', '/api/folders/a'],
     ['applyTagRule', 'POST', '/api/tags/a/apply'],
+    ['viewLinks', 'GET', '/api/urls'],
+    ['exportAccount', 'GET', '/api/profile/export'],
   ] as const)('%s needs what %s %s needs', (action, method, path) => {
     expect(ACTION_PERMISSIONS[action]).toEqual(requestPermissions(method, path))
   })
@@ -41,6 +44,23 @@ describe('action permissions', () => {
     expect(
       allows(role('folders.share', 'folders.manage'), 'shareFolders')
     ).toBe(true)
+  })
+
+  it('adds what a paste and a screenshot tool need on top of uploading', () => {
+    const upload = requestPermissions('POST', '/api/files')!
+    expect(actionPermissions('createPaste')).toEqual([
+      ...upload,
+      'pastes.create',
+    ])
+    expect(actionPermissions('uploaderTools')).toEqual([
+      ...upload,
+      UPLOADER_DOWNLOAD_PERMISSION,
+    ])
+    expect(allows(role('pastes.create'), 'createPaste')).toBe(false)
+    expect(allows(role('tokens.manage'), 'uploaderTools')).toBe(false)
+    expect(allows(role('files.upload', 'tokens.manage'), 'uploaderTools')).toBe(
+      true
+    )
   })
 
   it('makes scheduling an expiration need what it does when it runs', () => {

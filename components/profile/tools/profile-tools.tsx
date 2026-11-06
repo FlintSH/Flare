@@ -13,9 +13,9 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 
+import { allows } from '@/lib/permissions/actions'
 import {
   UPLOADER_CLIENT_IDS,
-  UPLOADER_TOOL_PERMISSIONS,
   type UploaderClientId,
 } from '@/lib/uploads/uploader-clients'
 
@@ -117,9 +117,8 @@ export function ProfileToolDownloads({
   profileName: string
   disabled?: boolean
 }) {
-  const { can } = usePermissions()
-  if (!UPLOADER_TOOL_PERMISSIONS.every((permission) => can(permission)))
-    return null
+  const { user } = usePermissions()
+  if (!allows(user, 'uploaderTools')) return null
 
   return (
     <div className="space-y-3 rounded-xl border bg-muted/30 p-4">

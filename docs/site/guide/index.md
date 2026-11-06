@@ -62,6 +62,8 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 
 The **Admin** menu lists only the pages your roles allow. If they allow just one, that page sits in the bar by itself instead of in a menu, for example **Audit log** for an account whose only administration permission is `audit.read`. Without any of these permissions there is no **Admin** menu. While you are on one of its pages, the **Admin** button is highlighted and the menu marks the current page. On **Profile**, a ring around your avatar shows where you are.
 
+The instance name and logo at the start of the bar open **Files**, or **Profile** if your roles don't include `files.read`. A bookmark or link to a page your roles don't allow opens **Profile** instead.
+
 <Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Your avatar opens the account menu. Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
 
 When the window is too narrow for the bar, choose the menu button next to your avatar. It lists your places, then the administration pages under an **Admin** heading, then **Profile** and **Sign out** under **Account**. Your avatar still opens the account menu too. With four places or fewer, the full bar shows from 768 pixels wide; with more, including the **Admin** menu, it shows from 900 pixels.

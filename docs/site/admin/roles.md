@@ -99,6 +99,23 @@ The file library shows each action only to roles with the permissions below; whe
 
 **Select** appears when a role allows **Create archive**, **Move**, or **Edit tags**. Earlier versions showed **Upload here** to roles with `files.upload` but not `folders.manage`, and **Share folder** to roles with `folders.share` but not `folders.manage`; the upload, or creating or disabling the link, then failed. Both now appear only when the action can succeed.
 
+Dashboard pages and Profile cards follow the same rule:
+
+| Page or card                                                                                                          | Needs                                                                        |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Files**                                                                                                             | `files.read`                                                                 |
+| **Upload**                                                                                                            | `files.upload`                                                               |
+| **Paste**                                                                                                             | `files.upload` and `pastes.create`                                           |
+| **Links**                                                                                                             | `links.read`                                                                 |
+| **Admin → Users**                                                                                                     | `users.read`; its **Invites** tab needs `invites.create` or `invites.manage` |
+| **Admin → Roles**                                                                                                     | `roles.manage`                                                               |
+| **Admin → Audit log**                                                                                                 | `audit.read`                                                                 |
+| **Admin → Settings**                                                                                                  | `settings.read`                                                              |
+| **Profile → Uploads → Screenshot tools and scripts**, and a saved upload profile's **Use this profile in your tools** | `files.upload` and `tokens.manage`                                           |
+| **Profile → Your data → Take your files with you**                                                                    | `profile.export`, `files.read`, and `links.read`                             |
+
+Opening the address of a page without its permissions leads to **Profile**, which every account has, and a signed-out visitor to the sign-in page. Earlier versions sent people without `users.read` from **Users** to **Files** instead.
+
 Permissions do not transfer file ownership, create per-folder membership lists, encrypt content from operators, or create separate storage pools. A role does not have its own numeric quota. Public URLs retain their sharing behavior: removing dashboard access does not revoke a previously shared public file, folder link, or short URL.
 
 ## Delegate without handing over the instance

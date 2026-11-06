@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/card'
 import { ProfileManager } from '@/components/upload-profiles/profile-manager'
 
+import { allows } from '@/lib/permissions/actions'
 import {
   PROFILE_SECTIONS,
   PROFILE_SECTION_ALIASES,
@@ -94,7 +95,7 @@ export function ProfileClient({
   initialSection,
   initialPreference,
 }: ProfileClientProps) {
-  const { can } = usePermissions()
+  const { can, user: sessionUser } = usePermissions()
   const router = useRouter()
   const [activeSection, setSection] = usePreferenceSection(
     PROFILE_SECTIONS,
@@ -179,27 +180,25 @@ export function ProfileClient({
 
       <PreferencesPanel active={displayedSection === 'uploads'}>
         <div className="space-y-8">
-          <PermissionGate permission="files.upload">
-            <PermissionGate permission="tokens.manage">
-              <Card id="upload-tools" className="scroll-mt-6">
-                <CardHeader>
-                  <CardTitle>Screenshot tools and scripts</CardTitle>
-                  <CardDescription className="text-pretty">
-                    Choose your tool and download a ready-to-use configuration.
-                    It includes your upload token, so there is no API key to
-                    create or paste.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ProfileTools
-                    onOpenIntegrations={() =>
-                      setSection('integrations', { updateHistory: false })
-                    }
-                  />
-                </CardContent>
-              </Card>
-            </PermissionGate>
-          </PermissionGate>
+          {allows(sessionUser, 'uploaderTools') && (
+            <Card id="upload-tools" className="scroll-mt-6">
+              <CardHeader>
+                <CardTitle>Screenshot tools and scripts</CardTitle>
+                <CardDescription className="text-pretty">
+                  Choose your tool and download a ready-to-use configuration. It
+                  includes your upload token, so there is no API key to create
+                  or paste.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProfileTools
+                  onOpenIntegrations={() =>
+                    setSection('integrations', { updateHistory: false })
+                  }
+                />
+              </CardContent>
+            </Card>
+          )}
           <PermissionGate permission="uploadProfiles.manage">
             <ProfileManager embedded />
           </PermissionGate>
@@ -256,24 +255,20 @@ export function ProfileClient({
               />
             </CardContent>
           </Card>
-          <PermissionGate permission="profile.export">
-            <PermissionGate permission="files.read">
-              <PermissionGate permission="links.read">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Take your files with you</CardTitle>
-                    <CardDescription>
-                      Download a copy of your uploaded files and account
-                      information.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ProfileExport />
-                  </CardContent>
-                </Card>
-              </PermissionGate>
-            </PermissionGate>
-          </PermissionGate>
+          {allows(sessionUser, 'exportAccount') && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Take your files with you</CardTitle>
+                <CardDescription>
+                  Download a copy of your uploaded files and account
+                  information.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProfileExport />
+              </CardContent>
+            </Card>
+          )}
           <PermissionGate permission="profile.update">
             <Card className="border-danger/30">
               <CardHeader>

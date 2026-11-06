@@ -5,12 +5,6 @@ import type { Permission } from '@/lib/permissions/catalog'
 /** Every download carries the account upload token. */
 export const UPLOADER_DOWNLOAD_PERMISSION: Permission = 'tokens.manage'
 
-/** Offered to people who can both download the tools and upload with them. */
-export const UPLOADER_TOOL_PERMISSIONS: readonly Permission[] = [
-  'files.upload',
-  UPLOADER_DOWNLOAD_PERMISSION,
-]
-
 /** The share-page link in an upload response: `apiResponse(uploadLinks(…))`. */
 export const SHARE_LINK_PATH = 'data.pageUrl'
 

@@ -1,23 +1,10 @@
-import { redirect } from 'next/navigation'
-
 import { PasteForm } from '@/components/dashboard/paste-form'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 
-import { getPageSession } from '@/lib/auth/page-session'
-import { hasPermission } from '@/lib/permissions/catalog'
+import { requireDashboardPage } from '../page-access'
 
 export default async function PastePage() {
-  const session = await getPageSession()
-
-  if (!session?.user) {
-    redirect('/auth/login')
-  }
-
-  if (
-    !hasPermission(session.user, 'pastes.create') ||
-    !hasPermission(session.user, 'files.upload')
-  )
-    redirect('/dashboard/profile')
+  await requireDashboardPage('/dashboard/paste')
 
   return (
     <div className="container space-y-7">

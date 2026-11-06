@@ -1,11 +1,13 @@
 /**
- * What each action on files, folders and archives needs, read by the API and
- * the dashboard so both apply one rule. An action that calls an account route
- * needs what the bearer route table grants that route. No server imports.
+ * What each action on files, folders, archives and the account needs, read by
+ * the API and the dashboard so both apply one rule. An action that calls an
+ * account route needs what the bearer route table grants that route. No server
+ * imports.
  */
 import { ExpiryAction } from '@/types/events'
 
 import { requestPermissions } from '@/lib/integrations/bearer-routes'
+import { UPLOADER_DOWNLOAD_PERMISSION } from '@/lib/uploads/uploader-clients'
 
 import {
   type Permission,
@@ -48,6 +50,13 @@ export const ACTION_PERMISSIONS = {
   createArchive: [...viewFiles, ...uploadFiles],
   /** Extraction always saves into a new folder. */
   extractArchive: [...viewFiles, ...uploadFiles, ...fileIntoFolder],
+  /** A paste is an upload that its route also checks `pastes.create` for. */
+  createPaste: [...uploadFiles, 'pastes.create'],
+  viewLinks: routeNeeds('GET', '/api/urls'),
+  /** Download the account's files and links in one archive. */
+  exportAccount: routeNeeds('GET', '/api/profile/export'),
+  /** Download a screenshot tool, which carries the upload token, and upload with it. */
+  uploaderTools: [...uploadFiles, UPLOADER_DOWNLOAD_PERMISSION],
 } as const satisfies Record<string, readonly Permission[]>
 
 export type Action = keyof typeof ACTION_PERMISSIONS

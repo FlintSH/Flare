@@ -24,7 +24,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
-import { hasPermission } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
 
 import { useSignOut } from '@/hooks/use-sign-out'
@@ -33,6 +32,7 @@ import {
   type AdminNavigationItem,
   type NavigationItem,
   PROFILE_ITEM,
+  dashboardHome,
   dashboardNavigation,
   isCurrentPage,
 } from './navigation'
@@ -237,11 +237,7 @@ export function DashboardNav() {
       className="flex min-w-0 flex-1 items-center gap-4"
     >
       <Link
-        href={
-          hasPermission(session?.user, 'files.read')
-            ? '/dashboard'
-            : PROFILE_ITEM.href
-        }
+        href={dashboardHome(session?.user)}
         aria-label="Go to your dashboard"
         className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background xl:max-w-[220px]"
       >

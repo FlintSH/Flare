@@ -1,19 +1,10 @@
-import { redirect } from 'next/navigation'
-
 import { URLsClient } from '@/components/dashboard/urls-client'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 
-import { getPageSession } from '@/lib/auth/page-session'
-import { hasPermission } from '@/lib/permissions/catalog'
+import { requireDashboardPage } from '../page-access'
 
 export default async function URLsPage() {
-  const session = await getPageSession()
-
-  if (!session?.user) {
-    redirect('/auth/login')
-  }
-
-  if (!hasPermission(session.user, 'links.read')) redirect('/dashboard/profile')
+  await requireDashboardPage('/dashboard/urls')
 
   return (
     <div className="container space-y-7">

@@ -5,6 +5,7 @@ import { AuthShell } from '@/components/auth/auth-shell'
 import { RegisterForm } from '@/components/auth/register-form'
 import { Button } from '@/components/ui/button'
 
+import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { getEmailCapabilities } from '@/lib/email/config'
 import { isEnforcedVerificationMode } from '@/lib/email/policy'
@@ -92,7 +93,7 @@ export default async function RegisterPage({
       description={`${message} Ask the person who invited you for a new link.`}
     >
       <Button asChild className="h-11 w-full">
-        <Link href="/auth/login">Go to sign in</Link>
+        <Link href={SIGN_IN_PATH}>Go to sign in</Link>
       </Button>
     </AuthShell>
   )
