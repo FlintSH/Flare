@@ -19,6 +19,7 @@ import {
 } from '@/lib/security/secret-box'
 
 import { emailCapabilities } from './eligibility'
+import { emailOverrides } from './environment'
 import { EmailHttpError } from './errors'
 import { effectiveVerificationMode, isEnforcedVerificationMode } from './policy'
 import {
@@ -32,24 +33,6 @@ const SMTP_PURPOSE = 'smtp'
 
 type Environment = Record<string, string | undefined>
 type ObjectValue = Record<string, unknown>
-
-// Every operator-facing setting can be overridden. Dates are controlled by the
-// policy transition, not by a browser-supplied config snapshot.
-export function emailEnvironmentName(path: string): string {
-  return `FLARE_EMAIL_${path
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/\./g, '_')
-    .toUpperCase()}`
-}
-
-function leafEntries(value: ObjectValue, prefix = ''): [string, unknown][] {
-  return Object.entries(value).flatMap(([key, entry]) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    return entry !== null && typeof entry === 'object'
-      ? leafEntries(entry as ObjectValue, path)
-      : [[path, entry] as [string, unknown]]
-  })
-}
 
 function assignPath(object: ObjectValue, path: string, value: unknown) {
   const keys = path.split('.')
@@ -65,16 +48,7 @@ export function resolveEmailConfig(
 ): { config: EmailConfig; managedFields: string[] } {
   const config = emailConfigSchema.parse(saved ?? {})
   const managedFields: string[] = []
-  for (const [path, fallback] of leafEntries(config)) {
-    if (
-      [
-        'verification.requiredSince',
-        'verification.graceEndsAt',
-        'verification.appliedMode',
-      ].includes(path)
-    )
-      continue
-    const name = emailEnvironmentName(path)
+  for (const { path, name, value: fallback } of emailOverrides(config)) {
     let value = env[name]
     if (env[`${name}_FILE`]) {
       if (value !== undefined)
@@ -229,9 +203,8 @@ export async function prepareEmailConfig(
     decryptPassword: false,
   }).managedFields
   // Ignore stale UI values for operator-managed fields; retain their saved fallback.
-  const previousLeaves = new Map(leafEntries(previous))
-  for (const path of managed)
-    assignPath(candidate, path, previousLeaves.get(path))
+  for (const { path, value } of emailOverrides(previous))
+    if (managed.includes(path)) assignPath(candidate, path, value)
   if (!managed.includes('smtp.password')) {
     if (clearPassword) candidate.smtp.password = ''
     else if (!candidate.smtp.password)

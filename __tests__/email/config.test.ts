@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import {
-  emailEnvironmentName,
+  prepareEmailConfig,
   resolveEmailConfig,
   transitionEmailPolicy,
 } from '@/lib/email/config'
+import { emailEnvironmentName } from '@/lib/email/environment'
 import {
   DEFAULT_EMAIL_CONFIG,
   emailConfigSchema,
@@ -141,6 +142,24 @@ describe('email upgrade and configuration boundaries', () => {
     expect(config.verification.requiredSince).toBeNull()
     expect(config.verification.appliedMode).toBe('off')
     expect(managedFields).toEqual([])
+  })
+
+  it('saves the stored fallback, not the submitted value, for an environment-managed setting', async () => {
+    vi.stubEnv('FLARE_EMAIL_SMTP_PORT', '587')
+    const saved = emailConfigSchema.parse({ smtp: { port: 2525 } })
+    const client = {
+      config: {
+        findUnique: async () => ({ value: { settings: { email: saved } } }),
+      },
+    }
+    const { candidate, effective } = await prepareEmailConfig(
+      { smtp: { host: 'smtp.example.test', port: 25 } },
+      false,
+      client as never
+    )
+    expect(candidate.smtp.port).toBe(2525)
+    expect(candidate.smtp.host).toBe('smtp.example.test')
+    expect(effective.smtp.port).toBe(587)
   })
 
   it('gives existing users grace on new-users to all-users transitions and refreshes reactivation boundaries', () => {

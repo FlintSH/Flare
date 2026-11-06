@@ -605,7 +605,7 @@ The former `.github/workflows/meticulous.yaml` workflow has been removed. Once t
 
 ## Automatic coverage checks
 
-`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
+`npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide. It collects those variables from `process.env.NAME` and `FLARE_*` names in the `.ts`, `.tsx`, `.js`, `.mjs`, and `.sh` files under `lib/`, `app/`, and `scripts/`, in `instrumentation.ts`, and in `next.config.ts`. It lists the email overrides with `lib/email/environment.ts`, the module the app uses to read them, so a new email setting needs its `FLARE_EMAIL_*` row in the configuration guide. The check loads that module, `lib/integrations/bearer-routes.ts`, and `lib/permissions/catalog.ts` without a bundler, so those three must import nothing but types.
 
 Changes to role and user-management components or `lib/permissions/` require administration guidance; changes to the bearer route table in `lib/integrations/bearer-routes.ts`, which maps API routes to permissions and token scopes, also require the API reference. The gate tests these paths with an isolated Git fixture.
 

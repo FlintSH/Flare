@@ -127,7 +127,7 @@ FLARE_EMAIL_VERIFICATION_MODE=new_users
 
 Mount the referenced file so the app user can read it, and add these variables to the Flare service's environment; putting new keys in Compose's `.env` alone does not automatically pass them into the container. Redeploy after changes.
 
-Every operator-facing email setting has an override and optional `_FILE` form. Overrides take precedence, are marked in the UI, and never overwrite the saved fallback. See the [complete variable/default reference](/hosting/configuration#email-environment-variables).
+Every operator-facing email setting has an override and optional `_FILE` form, named `FLARE_EMAIL_` plus the setting's key in upper snake case: **Accounts created by administrators** (`verification.adminCreated`) is `FLARE_EMAIL_VERIFICATION_ADMIN_CREATED`. Overrides take precedence and never overwrite the saved fallback. Settings → Email shows **Managed by environment** under each overridden control and keeps it read-only. See the [complete variable/default reference](/hosting/configuration#email-environment-variables).
 
 ## Recover from an email lockout
 
