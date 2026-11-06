@@ -113,6 +113,8 @@ Omitting an option inherits the selected profile or account/default value. Suppl
 
 Multipart fields are strings: use `true`/`false` for booleans, and an empty string or `null` string for nullable `password`, `expiresAt`, `profileId`, and `folderId`. In JSON bodies use actual booleans, arrays, and `null`.
 
+Flare records `expiresAt` as a UTC instant: `2026-11-06T12:00+0200` is saved as `2026-11-06T10:00:00.000Z` and expires at that moment. Earlier versions saved the value exactly as sent, and an upload whose `expiresAt` used any other form, including `Z` without milliseconds, never expired: the file kept its visibility and storage, and the library stopped showing its expiration. Uploads from the web app always sent the `.000Z` form and were not affected. Files still waiting for their time now expire on schedule. For a file whose time already passed, set the expiration again from **Files → file menu → Manage expiration**, or with `POST /api/files/{id}/expiry` using a browser session or the legacy upload token ([endpoint inventory](./endpoint-inventory#dashboard-routes-using-the-shared-account-helper)).
+
 Earlier versions accepted file passwords of any length up to 72 bytes. Clients that send a password shorter than 8 characters now receive `400` with `{"error":"File passwords must be at least 8 characters."}` and no file is created, so update scripts and screenshot-tool configurations that set one. `PATCH /api/files/{id}` applies the same rule when protecting an existing file. Passwords already stored on files keep working.
 
 ```sh

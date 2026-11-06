@@ -3,9 +3,11 @@ import { ExpiryAction } from '@/types/events'
 import { prisma } from '@/lib/database/prisma'
 import {
   cancelFileExpiration,
-  getFileExpirationInfo,
+  expiryPermission,
+  getFilesExpirationInfo,
+  isExpiryAction,
   scheduleFileExpiration,
-} from '@/lib/events/handlers/file-expiry'
+} from '@/lib/files/expiry'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
@@ -29,14 +31,14 @@ export const GET = api(async (request, { params }: Context) => {
 
   const file = await prisma.file.findUnique({
     where: { id },
-    select: { userId: true, name: true },
+    select: { userId: true },
   })
 
   if (!file || file.userId !== user.id) {
     throw new HttpError(404, 'File not found')
   }
 
-  const expiresAt = await getFileExpirationInfo(id)
+  const expiresAt = (await getFilesExpirationInfo([id])).get(id) ?? null
 
   return apiResponse({ expiresAt })
 })
@@ -48,7 +50,7 @@ export const POST = api(
     const { id } = await params
     const { expiresAt, action = ExpiryAction.DELETE } = (await readJson(
       request
-    )) as { expiresAt?: string; action?: ExpiryAction }
+    )) as { expiresAt?: string; action?: unknown }
 
     if (!expiresAt) {
       throw new HttpError(400, 'Expiration date is required')
@@ -64,25 +66,23 @@ export const POST = api(
 
     const file = await prisma.file.findUnique({
       where: { id },
-      select: { userId: true, name: true },
+      select: { userId: true },
     })
 
     if (!file || file.userId !== user.id) {
       throw new HttpError(404, 'File not found')
     }
 
-    if (![ExpiryAction.DELETE, ExpiryAction.SET_PRIVATE].includes(action))
+    if (!isExpiryAction(action))
       throw new HttpError(400, 'Invalid expiration action')
 
-    const actionPermission =
-      action === ExpiryAction.DELETE ? 'files.delete' : 'files.share'
-    if (!hasPermission(user, actionPermission))
+    if (!hasPermission(user, expiryPermission(action)))
       throw new HttpError(
         403,
         'You do not have permission for this expiration action.'
       )
 
-    await scheduleFileExpiration(id, user.id, file.name, expirationDate, action)
+    await scheduleFileExpiration(id, user.id, expirationDate, action)
 
     return apiResponse({
       message: 'File expiration scheduled successfully',
@@ -107,7 +107,7 @@ export const DELETE = api(
       throw new HttpError(404, 'File not found')
     }
 
-    const cancelled = await cancelFileExpiration(id)
+    const cancelled = await cancelFileExpiration(id, user.id)
 
     return apiResponse({
       message: cancelled ? 'File expiration cancelled' : 'No expiration found',

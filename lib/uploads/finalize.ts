@@ -3,12 +3,18 @@ import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { basename, extname } from 'node:path'
 
-import { recordAudit, setAuditTarget } from '@/lib/audit'
+import { setAuditTarget } from '@/lib/audit'
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { readConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import {
+  expiryPermission,
+  fileExpiry,
+  queueFileExpiration,
+  storedExpiry,
+} from '@/lib/files/expiry'
 import { urlSafeFilename } from '@/lib/files/filename'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
@@ -104,6 +110,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     input
   const storageTarget = captureStorageTarget(storage)
   const passwordHash = input.passwordHash
+  const expiry = fileExpiry(options.expiresAt, options.expiryAction)
   const persist = async (tx: Prisma.TransactionClient) => {
     // Same order as settings/account policy updates: policy lock, then user lock.
     await lockRoleChanges(tx)
@@ -124,13 +131,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       )
     if (options.tagIds?.length && !hasPermission(access, 'tags.manage'))
       throw new UploadError('Your role cannot apply tags.', 403)
-    if (
-      options.expiresAt &&
-      !hasPermission(
-        access,
-        options.expiryAction === 'DELETE' ? 'files.delete' : 'files.share'
-      )
-    )
+    if (expiry && !hasPermission(access, expiryPermission(expiry.action)))
       throw new UploadError(
         'Your role does not allow the selected expiration action. Disable expiration or ask for the required permission.',
         403
@@ -180,7 +181,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     const quota = storageQuotaBytes(config, access)
     if (quota !== null && fresh.storageUsed + sizeMB > quota / 1024 ** 2)
       throw new UploadError('The file would exceed your storage quota.', 413)
-    if (options.expiresAt && new Date(options.expiresAt) <= new Date())
+    if (expiry && expiry.expiresAt <= new Date())
       throw new UploadError(
         'The selected expiration passed before upload finished.'
       )
@@ -213,7 +214,10 @@ export async function publishPreparedUpload(input: PreparedUpload) {
         password: passwordHash,
         userId: user.id,
         folderId,
-        uploadOptions: persistedOptions as Prisma.InputJsonValue,
+        uploadOptions: {
+          ...persistedOptions,
+          ...storedExpiry(expiry),
+        } as Prisma.InputJsonValue,
       },
     })
     await applyProfileTags(tx, file, options.tagIds ?? [])
@@ -222,33 +226,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },
     })
-    if (options.expiresAt) {
-      await tx.event.create({
-        data: {
-          type: 'file.schedule-expiration',
-          status: 'SCHEDULED',
-          scheduledAt: new Date(options.expiresAt),
-          payload: {
-            fileId: file.id,
-            userId: user.id,
-            fileName: file.name,
-            expiresAt: options.expiresAt,
-            action: options.expiryAction,
-          },
-        },
-      })
-      await recordAudit({
-        action: 'file.expiration.scheduled',
-        category: 'files',
-        targetType: 'file',
-        targetId: file.id,
-        targetName: file.name,
-        details: {
-          expiresAt: options.expiresAt,
-          expiryAction: options.expiryAction,
-        },
-      })
-    }
+    if (expiry) await queueFileExpiration(tx, file, expiry)
     await enqueueFileReady(tx, file)
     return { file, created: true }
   }

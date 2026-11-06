@@ -381,6 +381,24 @@ SQL
 
 Once the selected repairs are verified, restart the app with `docker compose start flare` and inspect the queue. The worker now retries deletion normally. Do not remove the row to dismiss the warning: it is the durable record needed to clean up those bytes.
 
+## File expiry jobs
+
+Each scheduled [file expiration](/guide/uploading#set-an-expiration) is a row in the `Event` table. Every application process checks for due rows every **5 seconds** and claims up to 10 at a time with a conditional database update, so two processes never apply the same expiration. A claim that hasn't finished after **5 minutes**, for example because its process stopped, is claimed again. A failed attempt is retried **1, 5 and 30 minutes** later. If the last retry fails too, the row is marked `FAILED` and the file keeps its state until its owner schedules the expiration again. Completed and failed rows are deleted **30 days** after they finish. Pending rows survive restarts, so restoring a backup restores them too.
+
+The expiry worker starts alongside the email, webhook and OCR-tag workers and can't stop them from starting. In earlier versions, a database error while it started kept email delivery, webhooks and OCR-tag retries from starting in that process, with no retry.
+
+Upgrading needs no migration or new setting. Rows that earlier versions wrote, including the older `file.expired` type, are applied normally. The `EventHandler` table is no longer read or written, so startup no longer records `event_handler.upsert` audit events; leave the table in place. Inspect expiry jobs with read-only SQL:
+
+```sh
+docker compose exec -T db psql -U flare -d flare -c \
+  "SELECT status, count(*) FROM \"Event\" WHERE type IN ('file.schedule-expiration', 'file.expired') GROUP BY status ORDER BY status;"
+
+docker compose exec -T db psql -U flare -d flare -c \
+  "SELECT id, payload->>'fileId' AS \"fileId\", payload->>'action' AS action, \"scheduledAt\", status, \"retryCount\", \"failedAt\", error FROM \"Event\" WHERE type IN ('file.schedule-expiration', 'file.expired') AND (status = 'FAILED' OR \"retryCount\" > 0) ORDER BY \"failedAt\" DESC LIMIT 50;"
+```
+
+`error` holds the most recent failure, and logs use the `file-expiry` component. For storage errors, check storage reachability, credentials and delete permissions as for [account storage cleanup](#inspect-pending-cleanup). Treat file IDs as private when sharing diagnostics.
+
 ## Monitoring and routine checks
 
 | Signal                                | Why it matters                                                                            |
@@ -390,6 +408,7 @@ Once the selected repairs are verified, restart the app with `docker compose sta
 | Memory and CPU                        | Large uploads and OCR increase resource use                                               |
 | Database reachability and connections | Authentication, settings, file records, and durable jobs rely on PostgreSQL               |
 | Pending account-cleanup jobs          | Storage failures can outlive the deleted account; inspect retries and the recorded target |
+| Failed file-expiry jobs               | A failed expiration leaves the file public or stored until its owner schedules it again   |
 | Failed email/webhook deliveries       | A running web service can still fail external delivery                                    |
 | A periodic upload/download check      | Tests the database-and-storage path together                                              |
 | Backup age and restore result         | Confirms recovery is practical                                                            |

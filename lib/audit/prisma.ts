@@ -116,11 +116,6 @@ const models: Record<
     target: 'passkey',
     fields: ['id', 'name', 'userId'],
   },
-  EventHandler: {
-    category: 'system',
-    target: 'event_handler',
-    fields: ['id', 'enabled'],
-  },
 }
 const writes = new Set([
   'create',

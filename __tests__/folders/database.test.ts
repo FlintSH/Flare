@@ -17,7 +17,7 @@ vi.mock('@/lib/http/access', () => ({
     permissions: ['administrator'],
   }),
 }))
-vi.mock('@/lib/events/handlers/file-expiry', () => ({
+vi.mock('@/lib/files/expiry', () => ({
   getFilesExpirationInfo: async () => new Map(),
 }))
 

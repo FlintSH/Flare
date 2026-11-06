@@ -55,7 +55,7 @@ Use the one-hour, one-day, one-week, or one-month shortcuts, or choose a custom 
 
 <Screenshot src="/screenshots/workspace/upload-expiration-custom.png" alt="Custom file expiration date and time controls" caption="Choose an expiration date together with the action Flare should take." />
 
-Expiration is processed by the server's scheduled worker. Allow for its processing interval; it is not a promise that access changes at an exact second. You can change or remove an existing file's schedule with **Files → file menu → Manage expiration**.
+The server checks for due expirations every 5 seconds, so access changes a few seconds after the time you chose, not at that exact second. If an expiration can't be applied, for example while storage is unreachable, Flare tries again 1, 5 and 30 minutes later. If the last attempt also fails, the file stays as it is and **Files** stops showing its expiration; set it again from **Files → file menu → Manage expiration**, where you can also change or remove an existing schedule.
 
 ## Quick drag-and-drop
 

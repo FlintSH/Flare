@@ -1096,9 +1096,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
   })
 
   it('applies expiry actions once and honors a cancellation racing a queued worker', async () => {
-    const expiry = await import('@/lib/events/handlers/file-expiry')
-    const { events } = await import('@/lib/events')
-    await expiry.registerFileExpiryHandlers()
+    const expiry = await import('@/lib/files/expiry')
     const makeDue = async (
       file: Awaited<ReturnType<typeof uploads.finalizeUpload>>
     ) => {
@@ -1128,10 +1126,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       })
     )
     const privateEvent = await makeDue(privateFile)
-    expect(
-      (await events.processEvent((await events.getEvent(privateEvent))!))
-        .success
-    ).toBe(true)
+    await expiry.processDueExpirations()
     expect(
       (await prisma.file.findUniqueOrThrow({ where: { id: privateFile.id } }))
         .visibility
@@ -1140,11 +1135,14 @@ suite('customization contracts against disposable PostgreSQL', () => {
       where: { id: privateFile.id },
       data: { visibility: 'PUBLIC' },
     })
-    // A delayed duplicate must not undo the owner's later explicit change.
-    expect(
-      (await events.processEvent((await events.getEvent(privateEvent))!))
-        .success
-    ).toBe(true)
+    // A delayed duplicate must not undo the owner's later explicit change,
+    // even from an older version that reset the finished job to PROCESSING.
+    await expiry.applyFileExpiration(
+      await prisma.event.update({
+        where: { id: privateEvent },
+        data: { status: 'PROCESSING' },
+      })
+    )
     expect(
       (await prisma.file.findUniqueOrThrow({ where: { id: privateFile.id } }))
         .visibility
@@ -1154,12 +1152,10 @@ suite('customization contracts against disposable PostgreSQL', () => {
     )
     const deleteEvent = await makeDue(deleteFile)
     ;(await import('@/lib/storage')).invalidateStorageProvider()
-    expect(
-      (await events.processEvent((await events.getEvent(deleteEvent))!)).success
-    ).toBe(true)
-    expect(
-      (await events.processEvent((await events.getEvent(deleteEvent))!)).success
-    ).toBe(true)
+    await expiry.processDueExpirations()
+    await expiry.applyFileExpiration(
+      await prisma.event.findUniqueOrThrow({ where: { id: deleteEvent } })
+    )
     expect(
       await prisma.file.findUnique({ where: { id: deleteFile.id } })
     ).toBeNull()
@@ -1170,17 +1166,20 @@ suite('customization contracts against disposable PostgreSQL', () => {
     const pending = await prisma.event.findFirstOrThrow({
       where: { payload: { path: ['fileId'], equals: retained.id } },
     })
-    await prisma.event.update({
+    const stale = await prisma.event.update({
       where: { id: pending.id },
       data: { status: 'PROCESSING' },
     })
-    const stale = (await events.getEvent(pending.id))!
-    expect(await expiry.cancelFileExpiration(retained.id)).toBe(true)
-    expect((await events.processEvent(stale)).success).toBe(true)
+    expect(await expiry.cancelFileExpiration(retained.id, 'owner-one')).toBe(
+      true
+    )
+    await expiry.applyFileExpiration(stale)
     expect(
       await prisma.file.findUnique({ where: { id: retained.id } })
     ).not.toBeNull()
-    expect(await expiry.getFileExpirationInfo(retained.id)).toBeNull()
+    expect(
+      (await expiry.getFilesExpirationInfo([retained.id])).has(retained.id)
+    ).toBe(false)
   })
 
   it('publishes same-name and non-ASCII uploads under clean, distinct URL names', async () => {

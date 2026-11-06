@@ -10,7 +10,7 @@ vi.mock('@/lib/http/access', () => ({ requireAccount: mocks.requireAccount }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: { file: mocks.file } }))
 vi.mock('@/lib/logger', () => ({ loggers: { files: { error: vi.fn() } } }))
 vi.mock('@/lib/config', () => ({ getConfig: vi.fn() }))
-vi.mock('@/lib/events/handlers/file-expiry', () => ({
+vi.mock('@/lib/files/expiry', () => ({
   getFilesExpirationInfo: async () => new Map(),
 }))
 vi.mock('@/lib/files/streaming-upload', () => ({

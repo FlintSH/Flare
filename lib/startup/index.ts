@@ -1,7 +1,7 @@
 import { startAuditRetentionWorker } from '@/lib/audit/retention'
 import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 import { startMailWorker } from '@/lib/email/worker'
-import { initializeEventSystem } from '@/lib/events/init'
+import { startFileExpiryWorker } from '@/lib/files/expiry-worker'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
@@ -29,7 +29,7 @@ export async function runStartupTasks() {
     startSecurityCleanupWorker()
     startAuditRetentionWorker()
     startStorageDeletionWorker()
-    await initializeEventSystem()
+    startFileExpiryWorker()
     startMailWorker()
     startWebhookWorker()
     startOcrTagWorker()

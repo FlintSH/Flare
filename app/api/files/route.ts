@@ -3,7 +3,7 @@ import { FileMetadata } from '@/types/dto/file'
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
-import { getFilesExpirationInfo } from '@/lib/events/handlers/file-expiry'
+import { getFilesExpirationInfo } from '@/lib/files/expiry'
 import {
   anchoredGalleryPage,
   fileListSelect,

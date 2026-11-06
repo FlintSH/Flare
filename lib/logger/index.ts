@@ -177,7 +177,6 @@ export const loggers = {
   api: createLogger('api'),
   db: createLogger('db'),
   storage: createLogger('storage'),
-  events: createLogger('events'),
   ocr: createLogger('ocr'),
   files: createLogger('files'),
   users: createLogger('users'),
