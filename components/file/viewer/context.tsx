@@ -9,9 +9,7 @@ import {
   useState,
 } from 'react'
 
-import DOMPurify from 'dompurify'
-
-import { sanitizeUrl } from '@/lib/utils/url'
+import { fileUrls } from '@/lib/files/urls'
 
 import type {
   FileViewerContext as FileViewerContextType,
@@ -37,19 +35,10 @@ export function FileViewerProvider({
     error: undefined,
   })
 
-  const urls = useMemo(() => {
-    const passwordParam = verifiedPassword
-      ? `?password=${encodeURIComponent(verifiedPassword)}`
-      : ''
-    return {
-      fileUrl: DOMPurify.sanitize(
-        `/api/files${sanitizeUrl(file.urlPath)}${passwordParam}`
-      ),
-      rawUrl: DOMPurify.sanitize(
-        `${sanitizeUrl(file.urlPath)}/raw${passwordParam}`
-      ),
-    }
-  }, [file.urlPath, verifiedPassword])
+  const { content: fileUrl, direct: directLookupUrl } = fileUrls(file, {
+    password: verifiedPassword,
+  })
+  const urls = useMemo(() => ({ fileUrl }), [fileUrl])
 
   const fetchContent = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: undefined }))
@@ -80,17 +69,12 @@ export function FileViewerProvider({
     setState((prev) => ({ ...prev, isLoading: true, error: undefined }))
 
     try {
-      const passwordParam = verifiedPassword
-        ? `?password=${encodeURIComponent(verifiedPassword)}`
-        : ''
-      const response = await fetch(
-        `${sanitizeUrl(file.urlPath)}/direct${passwordParam}`
-      )
+      const response = await fetch(directLookupUrl)
       if (!response.ok) {
         throw new Error(`Failed to fetch direct URL: ${response.status}`)
       }
       const data = await response.json()
-      const directUrl = DOMPurify.sanitize(data.url)
+      const directUrl: string = data.url
 
       setState((prev) => ({
         ...prev,
@@ -105,7 +89,7 @@ export function FileViewerProvider({
         isLoading: false,
       }))
     }
-  }, [file.urlPath, verifiedPassword, urls])
+  }, [directLookupUrl, urls])
 
   useEffect(() => {
     setState((prev) => ({ ...prev, urls, isLoading: false }))

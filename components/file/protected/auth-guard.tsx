@@ -11,12 +11,13 @@ import { PasswordPrompt } from '@/components/auth/password-prompt'
 import { LoadingState } from '@/components/file/viewer/components/loading-state'
 import { Button } from '@/components/ui/button'
 
-import { sanitizeUrl } from '@/lib/utils/url'
+import { fileUrls } from '@/lib/files/urls'
 
 interface AuthGuardProps {
   children: React.ReactNode | ((verifiedPassword?: string) => React.ReactNode)
   initialVerifiedPassword?: string
   file: {
+    id: string
     userId: string
     password: string | null
     visibility: 'PUBLIC' | 'PRIVATE'
@@ -79,9 +80,7 @@ export function AuthGuard({
 
   if (file.password && !isOwner && !isVerified) {
     const verifyPassword = async (password: string) => {
-      const response = await fetch(
-        `/api/files${sanitizeUrl(file.urlPath)}?password=${encodeURIComponent(password)}`
-      )
+      const response = await fetch(fileUrls(file, { password }).content)
       if (response.ok) {
         setVerifiedPassword(password)
       }

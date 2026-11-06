@@ -99,12 +99,13 @@ export default async function SharedFolderPage({
                       : file.mimeType?.startsWith('audio/')
                         ? Music
                         : File
-                  const image =
-                    !file.hasPassword && file.mimeType?.startsWith('image/')
+                  const image = file.mimeType?.startsWith('image/')
+                    ? file.rawUrl
+                    : null
                   return (
                     <li key={file.id} className="min-w-0">
                       <Link
-                        href={file.urlPath}
+                        href={file.href}
                         prefetch={false}
                         className="group flex h-full flex-col overflow-hidden rounded-xl border bg-muted/30 transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       >
@@ -121,7 +122,7 @@ export default async function SharedFolderPage({
                           {image ? (
                             // Raw routes apply file access checks again if visibility changes.
                             <img
-                              src={`${file.urlPath}/raw`}
+                              src={image}
                               alt=""
                               loading="lazy"
                               className="h-full w-full object-cover"

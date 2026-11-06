@@ -61,6 +61,32 @@ describe('direct video playback URL', () => {
     )
   })
 
+  it('encodes a name from an earlier build so the playback URL reaches it', async () => {
+    // Earlier builds could keep `#`, `%` or spaces in a URL name; returned
+    // as typed, the URL ended at the `#`.
+    mocks.findUnique.mockResolvedValue({
+      urlPath: '/owner/clip #2 50%.webm',
+      path: 'clip.webm',
+      mimeType: 'video/webm',
+    })
+    const response = await GET(
+      new Request(
+        'https://flare.example/owner/clip%20%232%2050%25.webm/direct'
+      ),
+      {
+        params: Promise.resolve({
+          userUrlId: 'owner',
+          filename: 'clip #2 50%.webm',
+        }),
+      }
+    )
+    const { url } = await response.json()
+    expect(url).toBe('/owner/clip%20%232%2050%25.webm/raw')
+    expect(
+      decodeURIComponent(new URL(url, 'https://flare.example').pathname)
+    ).toBe('/owner/clip #2 50%.webm/raw')
+  })
+
   it('does not disclose a playback URL when file access is denied', async () => {
     mocks.access.mockResolvedValue({ allowed: false, status: 403 })
     const response = await GET(

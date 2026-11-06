@@ -24,6 +24,7 @@ import { resolveShareStyle } from '@/lib/customization/schema'
 import { shareMetadataText } from '@/lib/customization/sharing'
 import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
 import { languageFromFilename } from '@/lib/files/text-language'
+import { fileUrls } from '@/lib/files/urls'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -109,13 +110,13 @@ export async function generateMetadata({
   const host = headersList.get('host') || 'localhost:3000'
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
   const baseUrl = `${protocol}://${host}`
-  const rawUrl = `${baseUrl}${file.urlPath}/raw`
+  const rawUrl = fileUrls(file, { origin: baseUrl }).raw
 
   let videoUrl = rawUrl
   if (isVideo) {
     const storageProvider = await getStorageProvider()
     const publicUrl = await storageProvider.getPublicUrl(file.path)
-    videoUrl = publicUrl ?? `${baseUrl}${file.urlPath}/raw`
+    videoUrl = publicUrl ?? rawUrl
   }
 
   const metadata: Metadata = {
@@ -209,7 +210,7 @@ export default async function FilePage({
         footer={showFooter ? <Footer /> : undefined}
       >
         <FilePasswordForm
-          action={file.urlPath}
+          action={fileUrls(file).page}
           problem={filePasswordProblem(access)}
         />
       </PublicState>

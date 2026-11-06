@@ -9,8 +9,6 @@ import {
 import { FileViewer } from '@/components/file/viewer'
 import type { FileViewerFile } from '@/components/file/viewer/types'
 
-import { sanitizeUrl } from '@/lib/utils/url'
-
 interface ProtectedFileProps {
   file: FileViewerFile
   verifiedPassword?: string
@@ -40,12 +38,10 @@ export function ProtectedFile({
 
             <div className="flex items-center justify-center px-6 pb-4">
               <FileActions
-                urlPath={sanitizeUrl(file.urlPath)}
-                name={file.name}
+                file={file}
                 verifiedPassword={currentVerifiedPassword}
                 showOcr={file.mimeType.startsWith('image/')}
                 isTextBased={isTextBased}
-                fileId={file.id}
               />
             </div>
           </div>

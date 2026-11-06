@@ -12,6 +12,12 @@ import { Footer } from '@/components/layout/footer'
 
 import { getConfig } from '@/lib/config'
 import { checkPageAccess, findFile } from '@/lib/files/delivery'
+import {
+  fileUrls,
+  sharedFolderFileUrl,
+  sharedFolderUrl,
+  withPassword,
+} from '@/lib/files/urls'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,14 +65,7 @@ export default async function SharedFolderFilePage({
   if (access.allowed) {
     // Only reveal the canonical filename after access succeeds. The existing
     // viewer independently applies file access checks again at the destination.
-    const urlPath = file.urlPath
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/')
-    const query = providedPassword
-      ? `?${new URLSearchParams({ password: providedPassword })}`
-      : ''
-    redirect(`${urlPath}${query}`)
+    redirect(withPassword(fileUrls(file).page, providedPassword))
   }
   if (access.reason === 'private') notFound()
 
@@ -74,7 +73,6 @@ export default async function SharedFolderFilePage({
   const showFooter =
     config.settings.customization.published.sharing.showFooter ??
     config.settings.general.credits.showFooter
-  const opaquePath = `/s/folders/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}`
 
   return (
     <PublicState
@@ -83,13 +81,13 @@ export default async function SharedFolderFilePage({
       footer={showFooter ? <Footer /> : undefined}
       backLink={
         file.folder && {
-          href: `/s/folders/${encodeURIComponent(token)}`,
+          href: sharedFolderUrl(token),
           label: file.folder.name,
         }
       }
     >
       <FilePasswordForm
-        action={opaquePath}
+        action={sharedFolderFileUrl(token, fileId)}
         problem={filePasswordProblem(access)}
       />
     </PublicState>

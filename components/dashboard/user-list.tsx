@@ -106,6 +106,7 @@ import {
 } from '@/components/ui/tooltip'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
+import { fileUrls } from '@/lib/files/urls'
 import {
   type AccountShortLink,
   type AccountShortLinkPage,
@@ -119,7 +120,6 @@ import {
 } from '@/lib/permissions/policy'
 import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
-import { sanitizeUrl } from '@/lib/utils/url'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -698,7 +698,7 @@ export function UserList() {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
           <Image
-            src={`/api/files/${file.id}/thumbnail`}
+            src={fileUrls(file).thumbnail}
             alt={file.name}
             fill
             className="object-cover"
@@ -1585,7 +1585,7 @@ export function UserList() {
                                 <TableCell>{getFilePreview(file)}</TableCell>
                                 <TableCell className="py-3">
                                   <a
-                                    href={sanitizeUrl(file.urlPath)}
+                                    href={fileUrls(file).page}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title={file.name}

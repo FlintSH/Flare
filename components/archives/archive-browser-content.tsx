@@ -37,6 +37,7 @@ import {
   type ArchiveManifest,
   detectArchiveFormat,
 } from '@/lib/archives/shared'
+import { fileIdUrls } from '@/lib/files/urls'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { ArchiveEntryPreview } from './archive-entry-preview'
@@ -336,10 +337,7 @@ export function ArchiveBrowserContent({
         <div className="flex flex-wrap gap-2">
           {source.kind === 'owner' && (
             <Button variant="outline" size="sm" asChild>
-              <a
-                href={`/api/files/${encodeURIComponent(file.id)}/download`}
-                download={file.name}
-              >
+              <a href={fileIdUrls(file.id).download} download={file.name}>
                 <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
                 Download archive
               </a>

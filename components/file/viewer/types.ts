@@ -15,7 +15,6 @@ export interface FileViewerFile {
 
 export interface FileViewerUrls {
   fileUrl: string
-  rawUrl: string
   directUrl?: string
 }
 

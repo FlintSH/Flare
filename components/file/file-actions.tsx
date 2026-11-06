@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 
-import DOMPurify from 'dompurify'
 import {
   Check,
   Copy,
@@ -13,6 +12,7 @@ import {
   ScanText,
 } from 'lucide-react'
 
+import type { FileViewerFile } from '@/components/file/viewer/types'
 import {
   OcrDialog,
   type OcrDialogState,
@@ -21,29 +21,25 @@ import {
 } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 
+import { type FileUrls, fileUrls } from '@/lib/files/urls'
 import { cn } from '@/lib/utils'
 
-import { useFileActions } from '@/hooks/use-file-actions'
 import { useToast } from '@/hooks/use-toast'
 
 interface FileActionsProps {
-  urlPath: string
-  name: string
+  file: Pick<FileViewerFile, 'id' | 'name' | 'urlPath'>
   verifiedPassword?: string
   showOcr?: boolean
   isTextBased?: boolean
   content?: string
-  fileId?: string
 }
 
 export function FileActions({
-  urlPath,
-  name,
+  file,
   verifiedPassword,
   showOcr = false,
   isTextBased = false,
   content,
-  fileId,
 }: FileActionsProps) {
   const { toast } = useToast()
   const [isOcrDialogOpen, setIsOcrDialogOpen] = useState(false)
@@ -53,31 +49,20 @@ export function FileActions({
   const [canRetryOcr, setCanRetryOcr] = useState(false)
   const [isLoadingOcr, setIsLoadingOcr] = useState(false)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
-  const [urls, setUrls] = useState<{ fileUrl: string; rawUrl: string }>()
+  const [urls, setUrls] = useState<FileUrls>()
 
   const [copied, setCopied] = useState(false)
   const [isCopyingText, setIsCopyingText] = useState(false)
 
-  const { download, openRaw } = useFileActions({
-    urlPath,
-    name,
-    fileId,
-    verifiedPassword,
-  })
-
-  const sanitizeUrl = (url: string): string => {
-    return DOMPurify.sanitize(url)
-  }
-
+  // Set once hydrated, so the actions stay disabled until they can run.
   useEffect(() => {
-    const passwordParam = verifiedPassword
-      ? `?password=${encodeURIComponent(verifiedPassword)}`
-      : ''
-    const sanitizedUrlPath = DOMPurify.sanitize(urlPath)
-    const fileUrl = `/api/files${sanitizedUrlPath}${passwordParam}`
-    const rawUrl = `${sanitizedUrlPath}/raw${passwordParam}`
-    setUrls({ fileUrl, rawUrl })
-  }, [urlPath, verifiedPassword])
+    setUrls(
+      fileUrls(
+        { id: file.id, urlPath: file.urlPath },
+        { password: verifiedPassword }
+      )
+    )
+  }, [file.id, file.urlPath, verifiedPassword])
 
   useEffect(() => {
     if (!copied) return
@@ -85,9 +70,25 @@ export function FileActions({
     return () => window.clearTimeout(timeout)
   }, [copied])
 
+  const download = () => {
+    if (!urls) return
+    const link = document.createElement('a')
+    link.href = urls.download
+    link.download = file.name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const openRaw = () => {
+    if (urls) window.open(urls.raw, '_blank')
+  }
+
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}${urlPath}`)
+      await navigator.clipboard.writeText(
+        fileUrls(file, { origin: window.location.origin }).page
+      )
       setCopied(true)
     } catch {
       toast({
@@ -104,7 +105,7 @@ export function FileActions({
     try {
       let text = content
       if (text === undefined) {
-        const response = await fetch(sanitizeUrl(urls.fileUrl))
+        const response = await fetch(urls.content)
         if (!response.ok) throw new Error('Could not load file content')
         text = await response.text()
       }
@@ -133,27 +134,13 @@ export function FileActions({
   }
 
   const handleOcr = async () => {
-    if (!fileId) {
-      toast({
-        title: 'Error',
-        description: 'File ID is required for OCR',
-        variant: 'destructive',
-      })
-      return
-    }
-
+    if (!urls) return
     try {
       setIsLoadingOcr(true)
       setOcrError(null)
       setOcrNotice(null)
       setIsOcrDialogOpen(true)
-      const sanitizedFileId = DOMPurify.sanitize(fileId)
-      const passwordParam = verifiedPassword
-        ? `?password=${encodeURIComponent(verifiedPassword)}`
-        : ''
-      const ocrUrl = `/api/files/${sanitizedFileId}/ocr${passwordParam}`
-
-      applyOcrState(ocrDialogState(await requestOcr(sanitizeUrl(ocrUrl))))
+      applyOcrState(ocrDialogState(await requestOcr(urls.ocr)))
     } catch {
       applyOcrState(ocrDialogState(null))
     } finally {

@@ -46,6 +46,8 @@ import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
+import { fileUrls } from '@/lib/files/urls'
+
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 import { useFileTimeline } from '@/hooks/use-file-timeline'
@@ -738,13 +740,16 @@ function FileLibrary({ scope }: { scope: string }) {
       )}
       {gallery && (
         <ImageLightbox
-          images={gallery.files.map((file) => ({
-            id: file.id,
-            name: file.name,
-            src: `/api/files/${file.id}/thumbnail`,
-            downloadUrl: `/api/files/${file.id}/download`,
-            subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
-          }))}
+          images={gallery.files.map((file) => {
+            const urls = fileUrls(file)
+            return {
+              id: file.id,
+              name: file.name,
+              src: urls.thumbnail,
+              downloadUrl: urls.download,
+              subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
+            }
+          })}
           index={gallery.index}
           onIndexChange={setIndex}
           onClose={close}

@@ -457,12 +457,14 @@ describe('upload link outputs', () => {
 
   it('encodes the share URL without adding display-name markup', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://files.example/')
+    // New URL names can't hold these characters; the library spells older
+    // ones the same way.
     const output = uploadLinks(
-      { ...file, urlPath: '/alice/a file.txt)(injected)', name: '<img src=x>' },
+      { ...file, urlPath: '/alice/a file #1 (draft).txt', name: '<img src=x>' },
       user
     )
     expect(output.url).toBe(
-      'https://files.example/alice/a%20file.txt%29%28injected%29'
+      'https://files.example/alice/a%20file%20%231%20(draft).txt'
     )
     expect(output.copyText).toBe(output.url)
     expect(output.pageUrl).toBe(output.url)

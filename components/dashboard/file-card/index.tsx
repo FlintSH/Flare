@@ -60,9 +60,9 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
+import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
-import { sanitizeUrl } from '@/lib/utils/url'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -148,7 +148,7 @@ export function FileCard({
     if (signal.aborted) return
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}${sanitizeUrl(file.urlPath)}`
+        fileUrls(file, { origin: window.location.origin }).page
       )
       if (signal.aborted) return
       toast({
@@ -281,7 +281,7 @@ export function FileCard({
       setIsOcrDialogOpen(true)
     }
     try {
-      const outcome = await requestOcr(`/api/files/${file.id}/ocr`, signal)
+      const outcome = await requestOcr(fileUrls(file).ocr, signal)
       if (signal.aborted) return
       show(ocrDialogState(outcome))
     } catch {
@@ -344,7 +344,7 @@ export function FileCard({
   const isImage = file.mimeType.startsWith('image/')
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
-  const safeUrl = sanitizeUrl(file.urlPath)
+  const urls = fileUrls(file)
   const tags = initialFile.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
 
@@ -364,7 +364,7 @@ export function FileCard({
       <div className="relative">
         <Link
           prefetch={false}
-          href={safeUrl}
+          href={urls.page}
           aria-label={`Open ${file.name}`}
           aria-haspopup={
             onBrowseArchive || (isImage && onPreview) ? 'dialog' : undefined
@@ -386,18 +386,14 @@ export function FileCard({
         >
           {isImage && !previewFailed ? (
             <Image
-              src={`/api/files/${file.id}/thumbnail`}
+              src={urls.thumbnail}
               alt={file.name}
               fill
               className="object-cover"
               sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
               loading="lazy"
               onError={() => setPreviewFailed(true)}
-              unoptimized={
-                file.visibility === 'PRIVATE' ||
-                file.hasPassword ||
-                file.mimeType === 'image/gif'
-              }
+              unoptimized={!canOptimizeThumbnail(file)}
             />
           ) : (
             // The icon steps aside for the hover and focus controls, so it
@@ -436,7 +432,7 @@ export function FileCard({
               className="bg-background"
               asChild
             >
-              <Link prefetch={false} href={safeUrl}>
+              <Link prefetch={false} href={urls.page}>
                 View
               </Link>
             </Button>
@@ -461,7 +457,7 @@ export function FileCard({
               asChild
             >
               <a
-                href={`/api/files/${file.id}/download`}
+                href={urls.download}
                 download={file.name}
                 aria-label={`Download ${file.name}`}
                 title="Download"
@@ -569,7 +565,7 @@ export function FileCard({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem asChild>
-                <Link prefetch={false} href={safeUrl}>
+                <Link prefetch={false} href={urls.page}>
                   <ArrowUpRight />
                   Open file
                 </Link>
@@ -581,7 +577,7 @@ export function FileCard({
                 </DropdownMenuItem>
               </PermissionGate>
               <DropdownMenuItem asChild>
-                <a href={`/api/files/${file.id}/download`} download={file.name}>
+                <a href={urls.download} download={file.name}>
                   <Download />
                   Download file
                 </a>
@@ -692,7 +688,7 @@ export function FileCard({
         <div className="flex items-center justify-between gap-2">
           <Link
             prefetch={false}
-            href={safeUrl}
+            href={urls.page}
             title={file.name}
             className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >

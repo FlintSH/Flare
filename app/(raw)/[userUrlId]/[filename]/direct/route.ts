@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { authorizeFile } from '@/lib/files/delivery'
+import { fileUrls } from '@/lib/files/urls'
 import { routes } from '@/lib/http/route'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -32,8 +33,7 @@ export const GET = api(
       return NextResponse.json({ url: directUrl })
     }
 
-    const rawUrl = `${file.urlPath}/raw${password ? `?${new URLSearchParams({ password })}` : ''}`
-    return NextResponse.json({ url: rawUrl })
+    return NextResponse.json({ url: fileUrls(file, { password }).raw })
   },
   { audit: { action: 'file.read', category: 'files' } }
 )

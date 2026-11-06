@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { sharedFolderUrl } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 
 import { folderRequest, useFolders } from '@/hooks/use-folders'
@@ -62,7 +63,7 @@ export function FolderDialog({
   }, [current?.shareToken, loading, loadError])
   const shareUrl =
     token && typeof window !== 'undefined'
-      ? `${window.location.origin}/s/folders/${token}`
+      ? sharedFolderUrl(token, { origin: window.location.origin })
       : ''
   const run = async (operation: () => Promise<void>) => {
     if (busy || unavailable) return

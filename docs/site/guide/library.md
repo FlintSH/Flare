@@ -108,7 +108,7 @@ If an image disappears from the filtered results while you browse, Flare may ask
 Open the card's menu for the full action list. On a desktop, preview actions also appear on hover or keyboard focus; the menu keeps the same actions available on touch screens.
 
 - **Open file:** open its share/viewer page.
-- **Copy link:** copy its share-page URL.
+- **Copy link:** copy its share-page URL. The link starts with the address you opened Flare at and uses your account's URL ID, not your [vanity URL](./upload-profiles#account-upload-defaults). Links shown after an upload start with the instance's public URL instead, and use your vanity URL when you have one.
 - **Download file:** save a copy to your device.
 - **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives).
 - **Edit tags:** add or remove private organizational labels.
