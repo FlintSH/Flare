@@ -177,7 +177,8 @@ export function PasteForm() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label htmlFor="content">Content</Label>
           <span className="text-xs tabular-nums text-muted-foreground">
-            {content.length.toLocaleString()} characters
+            {/* One locale, so the server's markup matches the browser's. */}
+            {content.length.toLocaleString('en-US')} characters
           </span>
         </div>
         <Textarea

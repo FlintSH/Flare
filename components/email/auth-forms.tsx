@@ -47,13 +47,19 @@ function Feedback({ error, message }: { error: string; message: string }) {
   )
 }
 
-export function ForgotPasswordForm() {
-  const [recoveryEnabled, setRecoveryEnabled] = useState<boolean | null>(null)
+/** `recoveryEnabled` is the page's answer; without one, the browser asks. */
+export function ForgotPasswordForm({
+  recoveryEnabled: known = null,
+}: {
+  recoveryEnabled?: boolean | null
+}) {
+  const [recoveryEnabled, setRecoveryEnabled] = useState(known)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
+    if (known !== null) return
     fetchEmailCapabilities()
       .then((capabilities) => setRecoveryEnabled(capabilities.recoveryEnabled))
       .catch(() =>
@@ -61,7 +67,7 @@ export function ForgotPasswordForm() {
           'Unable to check whether recovery is available. Please try again later.'
         )
       )
-  }, [])
+  }, [known])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setBusy(true)

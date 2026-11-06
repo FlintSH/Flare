@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
@@ -12,3 +14,11 @@ export async function isSetupComplete(
 ): Promise<boolean> {
   return (await db.user.findFirst({ select: { id: true } })) !== null
 }
+
+/**
+ * `isSetupComplete` for the page being rendered, read once per request.
+ * Undefined while the database can't be read: unknown, not "not set up".
+ */
+export const pageSetupStatus = cache((): Promise<boolean | undefined> =>
+  isSetupComplete().catch(() => undefined)
+)

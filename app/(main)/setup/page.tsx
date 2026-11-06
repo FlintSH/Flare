@@ -1,10 +1,8 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth'
-
 import { SetupWizard } from '@/components/setup/setup-wizard'
 
-import { getAuthOptions } from '@/lib/auth'
+import { getRequestSession } from '@/lib/auth/page-session'
 import { getDocumentationUrl } from '@/lib/documentation'
 import { getEmailConfig } from '@/lib/email/config'
 import { hasPermission } from '@/lib/permissions/catalog'
@@ -21,7 +19,7 @@ export default async function SetupPage({
   if (!(await isSetupComplete()))
     return <SetupWizard documentationUrl={documentationUrl} />
   const { step } = await searchParams
-  const session = await getServerSession(await getAuthOptions())
+  const session = await getRequestSession()
   if (!session?.user?.id) redirect(getSetupSignInPath(step))
   if (!hasPermission(session.user, 'administrator')) redirect('/dashboard')
   const email = await getEmailConfig()

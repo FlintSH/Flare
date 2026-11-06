@@ -14,10 +14,12 @@ import { ThemeInitializer } from '@/components/theme/theme-initializer'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 
+import { getRequestSession } from '@/lib/auth/page-session'
 import { getConfigOrDefaults } from '@/lib/config'
 import { faviconUrl } from '@/lib/customization/favicon'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
+import { pageSetupStatus } from '@/lib/setup/status'
 
 import './globals.css'
 
@@ -88,8 +90,15 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const config = await requestConfig()
-  const recovery = await isAppearanceRecovery()
+  const [config, recovery, setupComplete, session] = await Promise.all([
+    requestConfig(),
+    isAppearanceRecovery(),
+    // Unknown while the database can't be read: the browser then asks again,
+    // and the page shows its own error.
+    pageSetupStatus(),
+    // Left out when it can't be read, so the browser asks for it instead.
+    getRequestSession().catch(() => undefined),
+  ])
   const appearance = recovery
     ? {
         ...DEFAULT_APPEARANCE,
@@ -138,7 +147,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
-            <AuthProvider>
+            <AuthProvider session={session}>
               <AppearanceProvider
                 appearance={appearance}
                 legacyTheme={config.settings.appearance.theme}
@@ -148,9 +157,8 @@ export default async function RootLayout({
                     flags={collectBooleanFlags(config.settings.general)}
                   />
                 )}
-                <SetupChecker>
-                  <div className="flex-1">{children}</div>
-                </SetupChecker>
+                <SetupChecker completed={setupComplete} />
+                <div className="flex-1">{children}</div>
               </AppearanceProvider>
             </AuthProvider>
           </QueryProvider>

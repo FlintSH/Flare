@@ -27,7 +27,8 @@ async function recoveryAvailable() {
 }
 
 export default async function ForgotPasswordPage() {
-  if ((await recoveryAvailable()) === false)
+  const recoveryEnabled = await recoveryAvailable()
+  if (recoveryEnabled === false)
     return (
       <AuthShell
         title="Forgot your password?"
@@ -50,7 +51,7 @@ export default async function ForgotPasswordPage() {
       title="Forgot your password?"
       description="Enter your account email and we will send a reset link if recovery is available for it."
     >
-      <ForgotPasswordForm />
+      <ForgotPasswordForm recoveryEnabled={recoveryEnabled} />
     </AuthShell>
   )
 }

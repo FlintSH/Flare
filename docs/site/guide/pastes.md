@@ -15,7 +15,7 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 
 1. Open **Paste** in the navigation.
 2. Select an upload profile, or keep the current default.
-3. Enter your text or code in **Content**. The character count helps you see how much you have entered.
+3. Enter your text or code in **Content**. The character count helps you see how much you have entered; it groups thousands with commas, such as `12,345`, in every browser language.
 4. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
 5. Keep visibility from the profile or explicitly choose **Public** or **Private**.
 6. Add a password if you want recipients of a public paste to unlock it.

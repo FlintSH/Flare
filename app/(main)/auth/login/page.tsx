@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation'
+
 import { AuthShell } from '@/components/auth/auth-shell'
 import { LoginForm } from '@/components/auth/login-form'
 import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
@@ -5,6 +7,9 @@ import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
 import { isLocalSignIn } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { isOidcProviderConfigured } from '@/lib/config/oidc'
+import { getEmailCapabilities } from '@/lib/email/config'
+import { SETUP_PATH } from '@/lib/setup/navigation'
+import { pageSetupStatus } from '@/lib/setup/status'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +20,18 @@ interface LoginPageProps {
 export default async function LoginPage({
   searchParams,
 }: Readonly<LoginPageProps>) {
-  const config = await getConfig()
-  const params = await searchParams
+  const [config, params, recoveryEnabled, setupComplete] = await Promise.all([
+    getConfig(),
+    searchParams,
+    // Unreadable email settings offer no recovery link rather than no sign-in.
+    getEmailCapabilities().then(
+      (email) => email.recoveryEnabled,
+      () => false
+    ),
+    pageSetupStatus(),
+  ])
+  // A new instance has no account to sign in with yet.
+  if (setupComplete === false) redirect(SETUP_PATH)
   const registrationsEnabled = config.settings.general.registrations.enabled
   const oidc = config.settings.general.oidc
   const oidcConfigured = isOidcProviderConfigured(oidc)
@@ -51,6 +66,7 @@ export default async function LoginPage({
           }
           oidcEnabled={oidcConfigured}
           oidcButtonText={oidc.buttonText}
+          recoveryEnabled={recoveryEnabled}
         />
       )}
     </AuthShell>

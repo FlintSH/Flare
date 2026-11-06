@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -9,7 +9,6 @@ import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
-import { fetchEmailCapabilities } from '@/components/email/api'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -18,32 +17,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
-import { isEnforcedVerificationMode } from '@/lib/email/policy'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 
 export function RegisterForm({
   invite,
   inviteRoles = [],
   notice,
+  verificationRequired,
 }: {
   invite?: string
   inviteRoles?: { id: string; name: string; color: string }[]
   notice?: string
+  /** New accounts must confirm their address before using Flare. */
+  verificationRequired: boolean
 }) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [verificationRequired, setVerificationRequired] = useState(false)
-
-  useEffect(() => {
-    fetchEmailCapabilities()
-      .then((email) =>
-        setVerificationRequired(
-          isEnforcedVerificationMode(email.verificationMode)
-        )
-      )
-      .catch(() => {})
-  }, [])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

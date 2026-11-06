@@ -1,14 +1,13 @@
 import Link from 'next/link'
 
 import { LogIn } from 'lucide-react'
-import { getServerSession } from 'next-auth/next'
 
 import { AuthShell } from '@/components/auth/auth-shell'
 import { VerifyEmailForm } from '@/components/email/auth-forms'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
-import { authOptions } from '@/lib/auth'
+import { getRequestSession } from '@/lib/auth/page-session'
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 
 export const metadata = {
@@ -26,7 +25,7 @@ export default async function VerifyEmailPage({
   const emailToken = typeof token === 'string' ? token : ''
   // A link from an email works signed out. Without one, the page shows the
   // account's status, which needs a session, so ask the visitor to sign in.
-  if (!emailToken && !(await getServerSession(authOptions))?.user)
+  if (!emailToken && !(await getRequestSession())?.user)
     return (
       <AuthShell
         title="Confirm your email"

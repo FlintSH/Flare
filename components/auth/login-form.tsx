@@ -11,7 +11,6 @@ import { signIn } from 'next-auth/react'
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
 import { passkeyError } from '@/components/auth/security-api'
-import { fetchEmailCapabilities } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -40,6 +39,8 @@ interface LoginFormProps {
   disabledMessage: string
   oidcEnabled?: boolean
   oidcButtonText?: string
+  /** Link to password recovery by email. */
+  recoveryEnabled: boolean
 }
 
 export function LoginForm({
@@ -47,6 +48,7 @@ export function LoginForm({
   disabledMessage,
   oidcEnabled = false,
   oidcButtonText = 'Sign in with SSO',
+  recoveryEnabled,
 }: Readonly<LoginFormProps>) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -54,7 +56,6 @@ export function LoginForm({
     'password' | 'passkey' | 'oidc' | null
   >(null)
   const [error, setError] = useState<string | null>(null)
-  const [recoveryEnabled, setRecoveryEnabled] = useState(false)
   const [passkeysSupported, setPasskeysSupported] = useState(false)
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [useRecoveryCode, setUseRecoveryCode] = useState(false)
@@ -67,9 +68,6 @@ export function LoginForm({
 
   useEffect(() => {
     setPasskeysSupported(window.isSecureContext && !!window.PublicKeyCredential)
-    fetchEmailCapabilities()
-      .then((email) => setRecoveryEnabled(email.recoveryEnabled))
-      .catch(() => {})
     return () => {
       pendingCredentials.current = null
     }

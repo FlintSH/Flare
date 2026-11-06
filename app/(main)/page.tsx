@@ -1,8 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { getServerSession } from 'next-auth/next'
-
-import { authOptions } from '@/lib/auth'
+import { getRequestSession } from '@/lib/auth/page-session'
 import { SETUP_PATH } from '@/lib/setup/navigation'
 import { isSetupComplete } from '@/lib/setup/status'
 
@@ -13,7 +11,7 @@ export default async function HomePage() {
     redirect(SETUP_PATH)
   }
 
-  const session = await getServerSession(authOptions)
+  const session = await getRequestSession()
 
   if (!session?.user) {
     redirect('/auth/login')

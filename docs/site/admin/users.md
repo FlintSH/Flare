@@ -29,6 +29,8 @@ Administrator grants all these permissions. Delegated managers can manage only a
 
 With `settings.security`, go to **Settings → Access → Registration**. Disable registration to prevent public password-account sign-ups, then add a useful message such as “This is a private team instance. Ask a member for an invite link.” Existing users retain their accounts, administrators can still create users, and people with an active [invite link](#invite-links) can still create an account.
 
+While email is enabled with **Required for new users** or **Required for all users** [verification](/admin/email#choose-an-access-policy), the registration form tells people they'll confirm their email address before using the account. The sign-in form links **Forgot your password?** only while [password recovery](/admin/email#password-recovery) is available. Both forms show these with the page; earlier versions added them a moment after the page loaded.
+
 OIDC auto-provisioning is a separate setting. Closing password registration does not by itself define which identities your identity provider may provision. Review both controls when operating a private instance.
 
 ## Invite links

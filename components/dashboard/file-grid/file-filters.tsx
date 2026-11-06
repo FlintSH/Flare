@@ -46,6 +46,8 @@ import {
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
+import { useHydrated } from '@/hooks/use-hydrated'
+
 interface FileFiltersProps {
   tagFilter?: ReactNode
   sortBy: SortOption
@@ -87,6 +89,8 @@ export const FileFilters = memo(function FileFilters({
   visibility,
   onVisibilityChange,
 }: FileFiltersProps) {
+  // The chosen days are named in the reader's time zone, which the server lacks.
+  const hydrated = useHydrated()
   const fileTypesByCategory = [...new Set([...fileTypes, ...selectedTypes])]
     .sort()
     .reduce(
@@ -256,7 +260,7 @@ export const FileFilters = memo(function FileFilters({
           >
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
             <span className="hidden truncate sm:inline">
-              {date?.from
+              {date?.from && hydrated
                 ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
                 : 'Upload date'}
             </span>
