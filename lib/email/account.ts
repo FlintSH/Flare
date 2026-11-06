@@ -1,8 +1,7 @@
 import { Prisma, type User } from '@prisma/client'
-import { compare } from 'bcryptjs'
 import type { Session } from 'next-auth'
 
-import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
+import { assertFreshIdentity } from '@/lib/auth/security/service'
 import { getConfig, readConfig } from '@/lib/config'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
@@ -45,32 +44,6 @@ export async function lockEmailUser(tx: Prisma.TransactionClient, id: string) {
   const user = await tx.user.findUnique({ where: { id } })
   if (!user) throw new EmailHttpError('Account not found.')
   return user
-}
-
-export async function assertRecentIdentity(
-  user: User,
-  password: string | undefined,
-  session: Session
-) {
-  if (user.passkeyRequired) {
-    assertRecentPasskeyProof(user, session)
-    return
-  }
-  if (user.password) {
-    if (!password || !(await compare(password, user.password)))
-      throw new EmailHttpError('Confirm your current password to continue.')
-    return
-  }
-  if (
-    !user.oidcSubject ||
-    session.user.authMethod !== 'oidc' ||
-    !session.user.authTime ||
-    Date.now() - session.user.authTime > 5 * 60 * 1000
-  ) {
-    throw new EmailHttpError(
-      'Sign in again with SSO, then try again within five minutes.'
-    )
-  }
 }
 
 export async function sendAccountToken(
@@ -305,7 +278,9 @@ async function lockConfirmedUser(
 ) {
   const fresh = await lockEmailUser(tx, user.id)
   if (fresh.passkeyRequired)
-    await assertRecentIdentity(fresh, password, session)
+    await assertFreshIdentity(fresh, { password }, session, {
+      secondFactor: false,
+    })
   return fresh
 }
 
@@ -325,7 +300,9 @@ export async function enrollEmail(
   password: string | undefined
 ) {
   const { user, session, config } = account
-  await assertRecentIdentity(user, password, session)
+  await assertFreshIdentity(user, { password }, session, {
+    secondFactor: false,
+  })
   await prisma.$transaction(async (tx) => {
     const fresh = await lockConfirmedUser(tx, account, password)
     if (hasVerifiedEmail(fresh, config)) return
@@ -364,7 +341,9 @@ export async function requestEmailChange(
   password: string | undefined
 ) {
   const { user, session } = account
-  await assertRecentIdentity(user, password, session)
+  await assertFreshIdentity(user, { password }, session, {
+    secondFactor: false,
+  })
   const requiresOldEmail = await prisma.$transaction(async (tx) => {
     const config = await getEmailConfigForUpdate(tx)
     assertEmailChangesEnabled(config)

@@ -2,7 +2,7 @@ import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
 import { compare } from 'bcryptjs'
 
 import { securitySession } from '@/lib/auth/security/http'
-import { assertSecurityProof } from '@/lib/auth/security/service'
+import { assertFreshIdentity } from '@/lib/auth/security/service'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { requireAccount } from '@/lib/http/access'
@@ -103,11 +103,11 @@ export const PUT = api(async (request) => {
         emailEnabled,
         prove: security
           ? (fresh) =>
-              assertSecurityProof(
-                tx,
+              assertFreshIdentity(
                 fresh,
                 { password: body.currentPassword, code: body.securityCode },
-                security.session
+                security.session,
+                { secondFactor: true, tx }
               )
           : undefined,
       },

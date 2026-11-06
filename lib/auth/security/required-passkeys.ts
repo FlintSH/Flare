@@ -1,4 +1,4 @@
-import type { Prisma, User } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import type { Session } from 'next-auth'
 
 import { prisma } from '@/lib/database/prisma'
@@ -11,31 +11,8 @@ import {
   passkeyRecoveryHash,
 } from './crypto'
 import { hasFallbackSignIn } from './fallback'
-import {
-  assertSessionVersion,
-  recentAuthentication,
-  revokeSecuritySessions,
-} from './service'
+import { assertRecentPasskeyProof, revokeSecuritySessions } from './service'
 import { SecurityError, lockSecurityUser } from './shared'
-
-/** Policy-changing actions never fall back to password, TOTP, or ordinary SSO. */
-export function assertRecentPasskeyProof(
-  user: User,
-  session: Session,
-  allowRecovery = true
-) {
-  assertSessionVersion(user, session)
-  if (
-    recentAuthentication(session, 'passkey') ||
-    (allowRecovery && recentAuthentication(session, 'passkey-recovery'))
-  )
-    return
-  throw new SecurityError(
-    allowRecovery
-      ? 'Sign in again with a passkey or a passkey recovery code, then retry within five minutes.'
-      : 'Sign in again with a passkey, then retry within five minutes.'
-  )
-}
 
 async function replacePasskeyRecoveryCodes(
   tx: Prisma.TransactionClient,

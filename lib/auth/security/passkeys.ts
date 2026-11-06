@@ -17,7 +17,7 @@ import { hasFallbackSignIn } from './fallback'
 import { MAX_PASSKEYS, SECURITY_CHALLENGE_MINUTES } from './policy'
 import {
   type SecurityProof,
-  assertSecurityProof,
+  assertFreshIdentity,
   assertSessionVersion,
   consumeChallenge,
   issueChallenge,
@@ -71,7 +71,10 @@ export async function registrationOptions(
   const rp = relyingParty()
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     const passkeys = await tx.passkey.findMany({ where: { userId: user.id } })
     if (passkeys.length >= MAX_PASSKEYS)
       throw new SecurityError(
@@ -243,7 +246,10 @@ export async function changePasskey(
 ) {
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, session.user.id)
-    await assertSecurityProof(tx, user, proof, session)
+    await assertFreshIdentity(user, proof, session, {
+      secondFactor: true,
+      tx,
+    })
     const key = await tx.passkey.findFirst({ where: { id, userId: user.id } })
     if (!key) throw new SecurityError('Passkey not found.', 404)
     if (name !== undefined) {

@@ -23,6 +23,13 @@ export const MAX_PASSKEYS = 10
 /** How long a security challenge lasts: a passkey sign-in or registration, or authenticator setup. */
 export const SECURITY_CHALLENGE_MINUTES = 5
 
+/**
+ * How long a sign-in proves who is changing the account: a passkey, recovery
+ * code or SSO sign-in counts this long. Messages state it as `RECENT_PROOF_WINDOW`.
+ */
+export const RECENT_PROOF_MINUTES = 5
+export const RECENT_PROOF_WINDOW = 'five minutes'
+
 /** The window of each security attempt limit; a refused attempt waits this long. */
 export const SECURITY_LIMIT_MINUTES = 15
 

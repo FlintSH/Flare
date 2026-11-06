@@ -110,7 +110,7 @@ There is currently no user-facing flow to link an existing local account to an S
 
 When email features are enabled, **Profile → Account** shows your address and verification status. Choose **Verify my email** if offered, complete any current-password confirmation, and open the message sent to your inbox.
 
-For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry.
+For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry within five minutes. If Flare keeps asking right after you sign in, ask your administrator to check the server clocks: a sign-in timed ahead of the clock of the server checking it doesn't count.
 
 If you require passkeys, starting email enrollment requires a recent passkey or dedicated passkey-recovery sign-in instead, including for SSO-only accounts. This confirmation does not waive mailbox verification.
 
