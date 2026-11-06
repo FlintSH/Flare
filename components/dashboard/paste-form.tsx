@@ -10,7 +10,6 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
-import { PermissionGate } from '@/components/roles/permission-gate'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +25,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
+import { allows } from '@/lib/permissions/actions'
+import { uploadPaste } from '@/lib/uploads/client'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -33,7 +34,7 @@ import { useToast } from '@/hooks/use-toast'
 export function PasteForm() {
   const [content, setContent] = useState('')
   const [filename, setFilename] = useState('')
-  const { can } = usePermissions()
+  const canShare = allows(usePermissions().user, 'shareFiles')
   const [visibility, setVisibility] = useState('inherit')
   const [profileId, setProfileId] = useState<string | null | undefined>(
     undefined
@@ -64,40 +65,20 @@ export function PasteForm() {
       const file = new File([content], filename.trim() || 'paste.txt', {
         type: 'text/plain',
       })
-      const formData = new FormData()
-      formData.append('file', file)
-      if (!can('files.share')) formData.append('visibility', 'PRIVATE')
-      else if (visibility !== 'inherit')
-        formData.append('visibility', visibility)
-      if (password) formData.append('password', password)
-
-      const response = await fetch('/api/files', {
-        method: 'POST',
-        headers: {
-          'X-Flare-Paste': 'true',
-          ...(profileId !== undefined
-            ? { 'X-Upload-Profile': profileId ?? 'none' }
-            : {}),
-        },
-        body: formData,
+      const paste = await uploadPaste(file, {
+        profileId,
+        visibility: !canShare
+          ? 'PRIVATE'
+          : visibility === 'PUBLIC' || visibility === 'PRIVATE'
+            ? visibility
+            : undefined,
+        password,
       })
-      const responseData = await response.json().catch(() => null)
-      if (!response.ok) {
-        throw new Error(
-          responseData?.error ||
-            responseData?.message ||
-            'Could not create your paste. Please try again.'
-        )
-      }
-
-      const data = responseData?.data
-      const pagePath = data?.pageUrl || data?.url
+      const url = paste.pageUrl || paste.url
       setCreated({
         name: file.name,
-        pagePath: pagePath
-          ? new URL(pagePath, window.location.origin).pathname
-          : '/dashboard',
-        url: data?.pageUrl || data?.url || '',
+        pagePath: new URL(url, window.location.origin).pathname,
+        url,
       })
       toast({
         title: 'Paste created',
@@ -234,7 +215,7 @@ export function PasteForm() {
             Add an extension such as .js, .py, or .md for syntax highlighting.
           </p>
         </div>
-        <PermissionGate permission="files.share">
+        {canShare && (
           <div className="space-y-2">
             <Label htmlFor="paste-visibility">Visibility</Label>
             <Select
@@ -254,9 +235,9 @@ export function PasteForm() {
               </SelectContent>
             </Select>
           </div>
-        </PermissionGate>
+        )}
       </div>
-      <PermissionGate permission="files.share">
+      {canShare && (
         <div className="space-y-2">
           <Label htmlFor="paste-password">
             Password protection{' '}
@@ -276,7 +257,7 @@ export function PasteForm() {
           />
           <FilePasswordHint id="paste-password-hint" password={password} />
         </div>
-      </PermissionGate>
+      )}
       {error && (
         <Alert id="paste-error" variant="destructive">
           <AlertCircle aria-hidden="true" />

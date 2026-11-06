@@ -2,43 +2,53 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
-import { useRouter } from 'next/navigation'
-
 import { UploadIcon } from 'lucide-react'
 
+import { folderDestination, libraryHref } from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
+import type { PermissionSubject } from '@/lib/permissions/catalog'
+import { partitionBySize } from '@/lib/uploads/client'
 import { cn } from '@/lib/utils'
 
-import { useFileUpload } from '@/hooks/use-file-upload'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
+import {
+  notifyUploadInProgress,
+  useUploadQueue,
+} from '@/hooks/use-upload-queue'
 
 interface GlobalDropZoneProps {
   maxSize: number
 }
 
+/**
+ * The folder open in Files, which a drop uploads into when the role may save
+ * new files into folders. The server refuses folder destinations otherwise.
+ */
+export function dropFolder(
+  location: { pathname: string; search: string },
+  user: PermissionSubject | null | undefined
+) {
+  if (!allows(user, 'fileIntoFolder') || location.pathname !== libraryHref())
+    return null
+  return folderDestination(new URLSearchParams(location.search).get('folder'))
+}
+
 export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
-  const router = useRouter()
   const { toast } = useToast()
+  const { user } = usePermissions()
   const [isDragging, setIsDragging] = useState(false)
   const [_dragCounter, setDragCounter] = useState(0)
-  const [shouldUpload, setShouldUpload] = useState(false)
   const [droppingInFolder, setDroppingInFolder] = useState(false)
-  const { onDrop, uploadFiles, files, isUploading, setFolderId } =
-    useFileUpload({
-      maxSize,
-      onUploadComplete: () => {
-        router.refresh()
-        window.dispatchEvent(new Event('flare:files-changed'))
-        setShouldUpload(false)
-      },
-      onUploadError: () => setShouldUpload(false),
-    })
+  // Each drop is its own batch: nothing waits in a queue for the next drop.
+  const { uploading, uploadFiles } = useUploadQueue()
 
   const handleDragEnter = useCallback(
     (e: DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
 
-      if (window.location.pathname.includes('/upload') || isUploading) {
+      if (window.location.pathname.includes('/upload') || uploading) {
         return
       }
 
@@ -47,20 +57,13 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           (item) => item.kind === 'file'
         )
         if (hasFiles) {
-          const folder = new URLSearchParams(window.location.search).get(
-            'folder'
-          )
-          setDroppingInFolder(
-            window.location.pathname === '/dashboard' &&
-              !!folder &&
-              folder !== 'unfiled'
-          )
+          setDroppingInFolder(!!dropFolder(window.location, user))
           setDragCounter((prev) => prev + 1)
           setIsDragging(true)
         }
       }
     },
-    [isUploading]
+    [uploading, user]
   )
 
   const handleDragLeave = useCallback((e: DragEvent) => {
@@ -96,51 +99,28 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
 
       const droppedFiles = Array.from(e.dataTransfer?.files || [])
       if (droppedFiles.length === 0) return
-      if (isUploading) {
-        toast({
-          title: 'An upload is already in progress',
-          description: 'Wait for it to finish, then drop these files again.',
-        })
+      if (uploading) {
+        notifyUploadInProgress()
         return
       }
 
-      const validFiles: File[] = []
-      const oversizedFiles: File[] = []
+      const { fitting, tooLarge } = partitionBySize(droppedFiles, maxSize)
 
-      droppedFiles.forEach((file) => {
-        if (file.size > maxSize) {
-          oversizedFiles.push(file)
-        } else {
-          validFiles.push(file)
-        }
-      })
-
-      if (oversizedFiles.length > 0) {
+      if (tooLarge.length > 0) {
         toast({
           title: 'Files too large',
-          description: `${oversizedFiles.length} file(s) exceed the maximum size limit`,
+          description: `${tooLarge.length} file(s) exceed the maximum size limit`,
           variant: 'destructive',
         })
       }
 
-      if (validFiles.length > 0) {
-        const folder =
-          window.location.pathname === '/dashboard'
-            ? new URLSearchParams(window.location.search).get('folder')
-            : null
-        setFolderId(folder === 'unfiled' ? null : folder)
-        onDrop(validFiles)
-        setShouldUpload(true)
-      }
+      if (fitting.length > 0)
+        await uploadFiles(fitting, {
+          folderId: dropFolder(window.location, user),
+        })
     },
-    [isUploading, maxSize, onDrop, setFolderId, toast]
+    [uploading, maxSize, uploadFiles, toast, user]
   )
-
-  useEffect(() => {
-    if (shouldUpload && files.length > 0 && !isUploading) {
-      uploadFiles()
-    }
-  }, [shouldUpload, files.length, isUploading, uploadFiles])
 
   useEffect(() => {
     document.addEventListener('dragenter', handleDragEnter)

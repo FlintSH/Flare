@@ -26,7 +26,6 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
-import { PermissionGate } from '@/components/roles/permission-gate'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -44,12 +43,14 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { folderPath } from '@/lib/folders/navigation'
+import { UNFILED, folderDestination, libraryHref } from '@/lib/library/contract'
+import { allows } from '@/lib/permissions/actions'
+import type { UploadResponse } from '@/lib/uploads/client'
 import { cn, formatBytes } from '@/lib/utils'
 
-import { UploadResponse, useFileUpload } from '@/hooks/use-file-upload'
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
-import { useToast } from '@/hooks/use-toast'
+import { copyUploadLinks, useUploadQueue } from '@/hooks/use-upload-queue'
 
 // The form's text actions share one look, matching the upload profile
 // picker's "Manage profiles" link.
@@ -74,74 +75,69 @@ export function UploadForm({
   const [completed, setCompleted] = useState<UploadResponse[]>([])
   const [uploadError, setUploadError] = useState('')
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
-  const { toast } = useToast()
-  const { can } = usePermissions()
+  const { user: sessionUser } = usePermissions()
+  const canShare = allows(sessionUser, 'shareFiles')
+  // Until the session loads, keep a requested folder. The server refuses
+  // folder destinations to roles without folder management.
+  const canChooseFolder = !sessionUser || allows(sessionUser, 'fileIntoFolder')
   const searchParams = useSearchParams()
-  const requestedFolder = searchParams.get('folder')
-  const initialFolder = requestedFolder === 'unfiled' ? null : requestedFolder
+  const initialFolder = canChooseFolder
+    ? folderDestination(searchParams.get('folder'))
+    : null
   const { folders, loading: foldersLoading, error: foldersError } = useFolders()
   const {
     files,
-    isUploading,
-    onDrop,
-    removeFile,
-    clearFiles,
-    uploadFiles,
-    visibility,
-    setVisibility,
-    password,
-    setPassword,
-    expiresAt,
-    setExpiresAt,
-    expiryAction,
-    setExpiryAction,
-    profileId,
-    setProfileId,
-    folderId,
-    setFolderId,
-  } = useFileUpload({
-    maxSize,
-    folderId: initialFolder,
-    onUploadComplete: (responses) => {
-      setCompleted((previous) => [...responses, ...previous])
-      setUploadError('')
-      window.dispatchEvent(new Event('flare:files-changed'))
-    },
-    onUploadError: setUploadError,
-  })
+    uploading: isUploading,
+    add,
+    remove,
+    clear,
+    upload,
+  } = useUploadQueue()
+  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>()
+  const [password, setPassword] = useState('')
+  const [expiresAt, setExpiresAt] = useState<Date | null>()
+  const [expiryAction, setExpiryAction] = useState<'DELETE' | 'SET_PRIVATE'>()
+  const [profileId, setProfileId] = useState<string | null>()
+  const [folderId, setFolderId] = useState(initialFolder)
   useEffect(() => {
     setFolderId(initialFolder)
-  }, [initialFolder, setFolderId])
-  const showFolders = folders.length > 0 || !!folderId
+  }, [initialFolder])
+  const showFolders = canChooseFolder && (folders.length > 0 || !!folderId)
   const selectedFolder = folders.find((folder) => folder.id === folderId)
   const unavailableFolder = !!folderId && !selectedFolder && !foldersLoading
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (acceptedFiles, rejections) => {
-      onDrop(acceptedFiles)
+    onDrop: (acceptedFiles) => {
+      const tooLarge = add(acceptedFiles, maxSize)
       setUploadError(
-        rejections.length
-          ? `${rejections.length} ${rejections.length === 1 ? 'file could' : 'files could'} not be added. Each file must be ${formattedMaxSize} or smaller.`
+        tooLarge.length
+          ? `${tooLarge.length} ${tooLarge.length === 1 ? 'file could' : 'files could'} not be added. Each file must be ${formattedMaxSize} or smaller.`
           : ''
       )
     },
-    maxSize,
     disabled: isUploading,
   })
-  const totalSize = files.reduce((total, file) => total + file.size, 0)
+  const totalSize = files.reduce((total, { file }) => total + file.size, 0)
+
+  const uploadQueued = async () => {
+    const batch = await upload({
+      profileId,
+      folderId,
+      visibility,
+      password,
+      expiresAt,
+      expiryAction,
+    })
+    if (!batch) return
+    if (batch.uploaded.length) {
+      setCompleted((previous) => [...batch.uploaded, ...previous])
+      setUploadError('')
+    }
+    if (batch.failure) setUploadError(batch.failure.message)
+  }
 
   const copyLinks = async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopiedLink(value)
-      toast({ title: 'Copied to clipboard' })
-    } catch {
-      toast({
-        title: 'Could not copy link',
-        description: 'Open the file to copy its address.',
-        variant: 'destructive',
-      })
-    }
+    if (await copyUploadLinks(value)) setCopiedLink(value)
   }
 
   return (
@@ -194,22 +190,19 @@ export function UploadForm({
             <button
               type="button"
               className={textActionClassName}
-              onClick={clearFiles}
+              onClick={clear}
               disabled={isUploading}
             >
               Clear all
             </button>
           </div>
           <ul className="divide-y rounded-xl border">
-            {files.map((file, index) => (
-              <li
-                key={`${file.name}-${file.lastModified}-${index}`}
-                className="flex items-center gap-3 p-3"
-              >
+            {files.map(({ key, file, preview, uploaded, progress }) => (
+              <li key={key} className="flex items-center gap-3 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-                  {file.preview ? (
+                  {preview ? (
                     <Image
-                      src={file.preview}
+                      src={preview}
                       alt=""
                       width={40}
                       height={40}
@@ -228,12 +221,12 @@ export function UploadForm({
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {isUploading
-                      ? `${formatBytes(file.uploaded)} / ${formatBytes(file.size)}`
+                      ? `${formatBytes(uploaded)} / ${formatBytes(file.size)}`
                       : formatBytes(file.size)}
                   </p>
                   {isUploading && (
                     <Progress
-                      value={Math.min(file.progress, 100)}
+                      value={progress}
                       aria-label={`Upload progress for ${file.name}`}
                       className="mt-2 h-1.5"
                     />
@@ -241,7 +234,7 @@ export function UploadForm({
                 </div>
                 {isUploading ? (
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {Math.min(file.progress, 100)}%
+                    {progress}%
                   </span>
                 ) : (
                   <Button
@@ -249,7 +242,7 @@ export function UploadForm({
                     variant="ghost"
                     size="icon"
                     aria-label={`Remove ${file.name}`}
-                    onClick={() => removeFile(index)}
+                    onClick={() => remove(key)}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -270,15 +263,15 @@ export function UploadForm({
           onChange={setProfileId}
           disabled={isUploading}
         />
-        {(showFolders || can('files.share')) && (
+        {(showFolders || canShare) && (
           <div className="grid gap-4 md:grid-cols-2 md:[&>:only-child]:col-span-2">
             {showFolders && (
               <div className="min-w-0 space-y-2">
                 <Label htmlFor="upload-folder">Save to</Label>
                 <Select
-                  value={folderId ?? 'unfiled'}
+                  value={folderId ?? UNFILED}
                   onValueChange={(value) =>
-                    setFolderId(value === 'unfiled' ? null : value)
+                    setFolderId(folderDestination(value))
                   }
                   disabled={isUploading || foldersLoading}
                 >
@@ -292,7 +285,7 @@ export function UploadForm({
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unfiled">Unfiled</SelectItem>
+                    <SelectItem value={UNFILED}>Unfiled</SelectItem>
                     {folderId && !selectedFolder && (
                       <SelectItem value={folderId} disabled>
                         {foldersLoading
@@ -326,7 +319,7 @@ export function UploadForm({
                 ) : null}
               </div>
             )}
-            <PermissionGate permission="files.share">
+            {canShare && (
               <div className="min-w-0 space-y-2">
                 <Label htmlFor="upload-visibility">Visibility</Label>
                 <Select
@@ -348,10 +341,10 @@ export function UploadForm({
                   </SelectContent>
                 </Select>
               </div>
-            </PermissionGate>
+            )}
           </div>
         )}
-        <PermissionGate permission="files.share">
+        {canShare && (
           <div className="min-w-0 space-y-2">
             <Label htmlFor="upload-password">
               Password protection{' '}
@@ -371,7 +364,7 @@ export function UploadForm({
             />
             <FilePasswordHint id="upload-password-hint" password={password} />
           </div>
-        </PermissionGate>
+        )}
         <div className="space-y-2">
           <Label htmlFor="upload-expiration">
             File expiration{' '}
@@ -439,7 +432,7 @@ export function UploadForm({
           className="w-full"
           onClick={() => {
             setUploadError('')
-            void uploadFiles()
+            void uploadQueued()
           }}
           disabled={
             files.length === 0 ||
@@ -470,9 +463,7 @@ export function UploadForm({
             </h2>
             {selectedFolder && (
               <Button asChild variant="ghost" size="sm">
-                <Link
-                  href={`/dashboard?folder=${encodeURIComponent(selectedFolder.id)}`}
-                >
+                <Link href={libraryHref({ folder: selectedFolder.id })}>
                   <Folder className="h-4 w-4" aria-hidden="true" />
                   Open folder
                 </Link>

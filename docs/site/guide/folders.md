@@ -47,8 +47,8 @@ When a folder has a share link, moving a public file into it adds that file to t
 ## Upload into the right place
 
 - **Upload here**, beside the folder's path and in an empty folder, opens the upload page with the current folder selected. It appears only when your role has both `files.upload` and `folders.manage`, because Flare saves uploads into a folder only for roles that can manage folders. Earlier versions showed it with `files.upload` alone, and the upload then failed.
-- **Save to** on the upload page lets you choose a folder when you have folders.
-- Dropping files onto the library uploads them into the folder currently open.
+- **Save to** on the upload page lets you choose a folder when you have folders. It appears only with `folders.manage`; without it, uploads are unfiled, even from a link that opens the upload page with a folder selected. Earlier versions showed it anyway, and the upload then failed.
+- Dropping files onto the library uploads them into the folder currently open when your role has `folders.manage`, and leaves them unfiled otherwise. Earlier versions tried the open folder, and the upload then failed. See [quick drag-and-drop](./uploading#quick-drag-and-drop).
 - Dropping files elsewhere in the dashboard leaves them unfiled.
 
 An empty folder's message suggests only what your role allows: uploading here, or moving existing files in, which needs `files.update` and `folders.manage`. With neither, it says your role can't add files to folders.
