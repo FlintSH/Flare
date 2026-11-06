@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -20,6 +21,7 @@ vi.mock('@/lib/database/prisma', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllEnvs()
   state.session = null
 })
 describe('account security HTTP boundary', () => {
@@ -68,6 +70,33 @@ describe('account security HTTP boundary', () => {
         })
       )
     ).toEqual({ code: '123456' })
+  })
+  it('refuses throttled mutations for the whole 15-minute window', async () => {
+    vi.stubEnv('NEXTAUTH_URL', 'https://flare.example')
+    state.session = { user: { id: 'test', sessionVersion: 1 } }
+    state.findUnique.mockResolvedValue({ id: 'test', sessionVersion: 1 })
+    state.raw.mockResolvedValue([{ count: 21, resetsIn: 42 }])
+    const response = await routes(
+      '/api/auth/security',
+      securityRoutes
+    )(() =>
+      securitySession(
+        new Request('https://flare.example/api/auth/security', {
+          method: 'POST',
+          headers: { origin: 'https://flare.example' },
+        })
+      )
+    )(new Request('https://flare.example/api/auth/security'))
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('900')
+    expect(await response.json()).toEqual({
+      error: 'Too many security attempts. Try again in 15 minutes.',
+    })
+    const values = state.raw.mock.calls[0].slice(1)
+    expect(values).toContain(
+      createHash('sha256').update('auth:management:test').digest('hex')
+    )
+    expect(values).toContain(900)
   })
   it('never exposes database or provider errors and disables response caching', async () => {
     const response = await routes(

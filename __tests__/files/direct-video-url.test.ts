@@ -57,7 +57,7 @@ describe('direct video playback URL', () => {
       expect.anything(),
       null,
       password,
-      { requester: 'unknown' }
+      { requester: null }
     )
   })
 

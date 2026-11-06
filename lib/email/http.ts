@@ -14,7 +14,7 @@ export const emailRoutes: RouteContract = {
   translate: (error) => {
     if (error instanceof EmailRateLimitError)
       return new HttpError(429, error.message, {
-        headers: { 'Retry-After': '60' },
+        headers: { 'Retry-After': String(error.retryAfter) },
       })
   },
   failure: {

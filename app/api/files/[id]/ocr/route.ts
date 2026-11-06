@@ -5,7 +5,7 @@ import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { takeOcrRequest } from '@/lib/ocr/limits'
-import { getClientIp } from '@/lib/security/rate-limit'
+import { requesterKey } from '@/lib/security/rate-limit'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
 type Context = { params: Promise<{ id: string }> }
@@ -33,7 +33,7 @@ async function recognize(
     { fileId: file.id, filePath: file.path },
     {
       admit: () =>
-        takeOcrRequest(userId ? `user:${userId}` : `ip:${getClientIp(req)}`),
+        takeOcrRequest(userId ? `user:${userId}` : requesterKey(req)),
     }
   )
   switch (outcome.status) {

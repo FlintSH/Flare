@@ -112,7 +112,7 @@ The following owner-library archive operations require the owner's browser sessi
 
 ### Email account flows
 
-Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions.
+Email enrollment and change operations use an account session that remains available for verification/recovery flows. They deliberately do not use upload bearer credentials. These verification, enrollment, recovery, and confirmed address-change paths remain available independently of `profile.update`, subject to identity proof and email policy, including restricted verification sessions. Email requests are limited per client IP address and per email address ([limits](/admin/email#limits-and-delivery-history)); a refused request returns `429` with `Retry-After` set to the seconds until the limit that refused it resets.
 
 | Path                            | Methods | Authentication and purpose                                                              |
 | ------------------------------- | ------- | --------------------------------------------------------------------------------------- |

@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { RateLimiterMemory } from 'rate-limiter-flexible'
 import { z } from 'zod'
 
 import { setAuditActor, setAuditOutcome, setAuditTarget } from '@/lib/audit'
@@ -14,7 +13,7 @@ import {
   retryAfterMinutes,
 } from '@/lib/files/access'
 import { getUserAccess } from '@/lib/permissions/server'
-import { rateLimit } from '@/lib/security/rate-limit'
+import { rateLimit, requestLimit } from '@/lib/security/rate-limit'
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
 import { ArchiveError } from './errors'
@@ -43,31 +42,24 @@ export const sharedArchiveEntrySchema = z
   })
   .strict()
 
-// Share routes can be compiled into separate Next bundles. Keep one budget per
-// process rather than one limiter per route module. Listings poll while a slow
-// archive is read; entry reads include image loads and media seeking.
-const processState = globalThis as typeof globalThis & {
-  [key: symbol]: unknown
-}
+// Requests per client address per minute. Listings poll while a slow archive
+// is read; entry reads include image loads and media seeking.
 export const SHARED_ARCHIVE_RATE_LIMITS = {
   listing: 120,
   entry: 600,
 } as const
-const limiters = (processState[Symbol.for('flare.archive.share-limits')] ??= {
-  listing: new RateLimiterMemory({
-    points: SHARED_ARCHIVE_RATE_LIMITS.listing,
-    duration: 60,
-    keyPrefix: 'archive-share',
-  }),
-  entry: new RateLimiterMemory({
-    points: SHARED_ARCHIVE_RATE_LIMITS.entry,
-    duration: 60,
-    keyPrefix: 'archive-share-entry',
-  }),
-}) as Record<'listing' | 'entry', RateLimiterMemory>
+const limiters = {
+  listing: requestLimit('archive-share', SHARED_ARCHIVE_RATE_LIMITS.listing),
+  entry: requestLimit('archive-share-entry', SHARED_ARCHIVE_RATE_LIMITS.entry),
+}
 
 export const SHARED_ARCHIVE_BODY_TIMEOUT_MS = 5_000
 export const SHARED_ARCHIVE_PENDING_BODIES = 32
+// Share routes can be compiled into separate Next bundles; keep one pool of
+// pending bodies per process rather than one per route module.
+const processState = globalThis as typeof globalThis & {
+  [key: symbol]: unknown
+}
 const bodyKey = Symbol.for('flare.archive.pending-share-bodies')
 const pendingBodies = (processState[bodyKey] ??=
   new Set<symbol>()) as Set<symbol>

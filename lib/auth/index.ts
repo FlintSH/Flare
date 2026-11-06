@@ -20,7 +20,7 @@ import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
-import { headerRecord } from '@/lib/security/client-ip'
+import { clientIp, headerRecord } from '@/lib/security/client-ip'
 
 import { OidcProfile, resolveOidcUser } from './oidc-resolve-user'
 import { authenticatePasskey, passkeyCookieName } from './security/passkeys'
@@ -29,7 +29,6 @@ import { consumeSecondFactor } from './security/service'
 import {
   SecurityError,
   lockSecurityUser,
-  requestIp,
   securityLimit,
 } from './security/shared'
 import {
@@ -171,7 +170,7 @@ export const authOptions: NextAuthOptions = {
           { email: credentials?.email },
           async () => {
             try {
-              const ip = requestIp(headerRecord(req.headers))
+              const ip = clientIp(headerRecord(req.headers)) ?? 'unknown'
               await securityLimit(`password-ip:${ip}`, 100)
               await securityLimit(
                 `password-account:${credentials.email.trim().toLowerCase()}`,
@@ -250,7 +249,7 @@ export const authOptions: NextAuthOptions = {
           { passkeyId: passkeyAttemptId(credentials?.response) },
           async () => {
             try {
-              const ip = requestIp(headerRecord(req.headers))
+              const ip = clientIp(headerRecord(req.headers)) ?? 'unknown'
               await securityLimit(`passkey-login:${ip}`, 100)
               const cookieName = passkeyCookieName()
               const user = await authenticatePasskey(
@@ -300,7 +299,7 @@ export const authOptions: NextAuthOptions = {
           { email: credentials?.email?.trim() },
           async () => {
             try {
-              const ip = requestIp(headerRecord(req.headers))
+              const ip = clientIp(headerRecord(req.headers)) ?? 'unknown'
               await securityLimit(`passkey-recovery-ip:${ip}`, 100)
               await securityLimit(
                 `passkey-recovery-account:${credentials.email.trim().toLowerCase()}`,

@@ -9,9 +9,9 @@ import {
 } from '@/lib/archives/sharing'
 import { readArchiveUnlock } from '@/lib/archives/unlock'
 import { setAuditTarget } from '@/lib/audit'
-import { requestIp } from '@/lib/auth/security/shared'
 import { routes } from '@/lib/http/route'
-import { getClientIp } from '@/lib/security/rate-limit'
+import { clientIp } from '@/lib/security/client-ip'
+import { requesterKey } from '@/lib/security/rate-limit'
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -28,12 +28,12 @@ export const POST = api(
       id,
       input.password,
       readArchiveUnlock(request),
-      requestIp(request.headers)
+      clientIp(request.headers)
     )
     const response = await listSharedArchive(access, {
       ...parseListingQuery(input),
       signal: request.signal,
-      requester: `ip:${getClientIp(request)}`,
+      requester: requesterKey(request),
     })
     return withArchiveUnlock(response, access, request)
   },

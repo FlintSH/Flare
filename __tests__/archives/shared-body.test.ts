@@ -5,7 +5,9 @@ import { ArchiveOperation } from '@/lib/archives/operation'
 import {
   SHARED_ARCHIVE_BODY_TIMEOUT_MS,
   SHARED_ARCHIVE_PENDING_BODIES,
+  SHARED_ARCHIVE_RATE_LIMITS,
   sharedArchiveBody,
+  sharedArchiveGuard,
 } from '@/lib/archives/sharing'
 import { routes } from '@/lib/http/route'
 
@@ -167,5 +169,27 @@ describe('independently bounded shared archive request bodies', () => {
     })
     expect(cancelled).toHaveBeenCalledOnce()
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('shared archive request limits', () => {
+  const guard = (kind: 'listing' | 'entry', address: string) =>
+    sharedArchiveGuard(
+      new Request('http://localhost/api/files/source/archive/share', {
+        method: 'POST',
+        headers: { 'x-real-ip': address },
+      }),
+      kind
+    )
+
+  it('keeps separate per-address budgets for listings and entry reads', async () => {
+    for (let index = 0; index < SHARED_ARCHIVE_RATE_LIMITS.listing; index++)
+      expect(await guard('listing', '198.51.100.80')).toBeNull()
+    const refused = await guard('listing', '198.51.100.80')
+    expect(refused?.status).toBe(429)
+    expect(refused?.headers.get('Retry-After')).toBe('60')
+    // Polling a listing never spends the budget that previews and media use.
+    expect(await guard('entry', '198.51.100.80')).toBeNull()
+    expect(await guard('listing', '198.51.100.81')).toBeNull()
   })
 })

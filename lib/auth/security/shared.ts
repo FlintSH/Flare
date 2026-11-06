@@ -1,11 +1,8 @@
 import { Prisma } from '@prisma/client'
 
 import { lockUserRow } from '@/lib/database/locks'
-import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
-import { clientIp } from '@/lib/security/client-ip'
-
-import { securityHash } from './crypto'
+import { consumeLimit } from '@/lib/security/database-limit'
 
 export class SecurityError extends HttpError {
   constructor(
@@ -58,26 +55,26 @@ export function validateSecurityOrigin(req: Request) {
     throw new SecurityError('Use a browser session for account security.', 401)
 }
 
-export async function securityLimit(key: string, limit = 20, seconds = 900) {
-  const digest = securityHash(`auth:${key}`)
-  const rows = await prisma.$queryRaw<Array<{ count: number }>>`
-    INSERT INTO "AuthRateLimit" ("key", "count", "resetAt")
-    VALUES (${digest}, 1, NOW() + ${seconds} * INTERVAL '1 second')
-    ON CONFLICT ("key") DO UPDATE SET
-      "count" = CASE WHEN "AuthRateLimit"."resetAt" <= NOW() THEN 1 ELSE "AuthRateLimit"."count" + 1 END,
-      "resetAt" = CASE WHEN "AuthRateLimit"."resetAt" <= NOW() THEN NOW() + ${seconds} * INTERVAL '1 second' ELSE "AuthRateLimit"."resetAt" END
-    RETURNING "count"
-  `
-  if (rows[0].count > limit)
-    throw new SecurityError(
-      'Too many security attempts. Try again in 15 minutes.',
-      429,
-      { headers: { 'Retry-After': String(seconds) } }
-    )
-}
+const SECURITY_LIMIT_SECONDS = 15 * 60
 
-export function requestIp(headers: { get(name: string): string | null }) {
-  return clientIp(headers) ?? 'unknown'
+/**
+ * Counts one security attempt under `key`, such as an account or a client
+ * address, and refuses it once `limit` attempts fall in one 15-minute window.
+ */
+export async function securityLimit(key: string, limit = 20) {
+  const { allowed } = await consumeLimit(
+    'AuthRateLimit',
+    `auth:${key}`,
+    limit,
+    SECURITY_LIMIT_SECONDS
+  )
+  if (!allowed)
+    throw new SecurityError(
+      `Too many security attempts. Try again in ${SECURITY_LIMIT_SECONDS / 60} minutes.`,
+      429,
+      // The whole window, as the message says, not the time left in it.
+      { headers: { 'Retry-After': String(SECURITY_LIMIT_SECONDS) } }
+    )
 }
 
 export async function lockSecurityUser(

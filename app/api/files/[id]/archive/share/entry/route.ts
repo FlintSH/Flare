@@ -8,9 +8,9 @@ import {
 } from '@/lib/archives/sharing'
 import { readArchiveUnlock } from '@/lib/archives/unlock'
 import { setAuditTarget } from '@/lib/audit'
-import { requestIp } from '@/lib/auth/security/shared'
 import { routes } from '@/lib/http/route'
-import { getClientIp } from '@/lib/security/rate-limit'
+import { clientIp } from '@/lib/security/client-ip'
+import { requesterKey } from '@/lib/security/rate-limit'
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -33,7 +33,7 @@ export const GET = api(
     )
     return readSharedArchiveEntry(access, entrySelector(query), request, {
       inline: query.get('disposition') === 'inline',
-      requester: `ip:${getClientIp(request)}`,
+      requester: requesterKey(request),
     })
   },
   { audit }
@@ -53,11 +53,11 @@ export const POST = api(
       id,
       input.password,
       readArchiveUnlock(request),
-      requestIp(request.headers)
+      clientIp(request.headers)
     )
     return readSharedArchiveEntry(access, { path: input.path }, request, {
       inline: false,
-      requester: `ip:${getClientIp(request)}`,
+      requester: requesterKey(request),
     })
   },
   { audit }

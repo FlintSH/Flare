@@ -71,10 +71,7 @@ export async function checkFileAccess(
       return { allowed: false, reason: 'password_required', status: 401 }
     }
 
-    const requester =
-      options.requester && options.requester !== 'unknown'
-        ? options.requester
-        : null
+    const requester = options.requester || null
     const verifiedKey = await verifiedFilePasswordKey(
       file.id,
       file.password,

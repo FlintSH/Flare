@@ -7,11 +7,11 @@ import { Readable } from 'node:stream'
 
 import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
-import { requestIp } from '@/lib/auth/security/shared'
 import { prisma } from '@/lib/database/prisma'
 import { parseByteRange } from '@/lib/http/byte-range'
 import { readJson } from '@/lib/http/request'
 import { loggers } from '@/lib/logger'
+import { clientIp } from '@/lib/security/client-ip'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 
@@ -230,7 +230,7 @@ export async function authorizeFile<S extends Prisma.FileSelect = object>(
   const file = found as typeof found & DeliveredFile
   setAuditTarget({ type: 'file', id: file.id, name: file.name })
   const access = await checkFileAccess(file, session, password, {
-    requester: requestIp(request.headers),
+    requester: clientIp(request.headers),
   })
   if (access.allowed) return { file, session, password }
   setAuditOutcome('denied')
@@ -250,7 +250,7 @@ export async function checkPageAccess(
     headers(),
   ])
   const access = await checkFileAccess(file, session, password, {
-    requester: requestIp(requestHeaders),
+    requester: clientIp(requestHeaders),
   })
   return { session, access }
 }
