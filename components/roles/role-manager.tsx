@@ -45,6 +45,7 @@ import { Switch } from '@/components/ui/switch'
 import { apiRequest } from '@/lib/client/request'
 import { PERMISSION_GROUPS, hasPermission } from '@/lib/permissions/catalog'
 import {
+  type Access,
   ROLE_DEFAULTS,
   ROLE_LIMITS,
   canGrantPermissions,
@@ -66,6 +67,42 @@ type Draft = {
   permissions: string[]
 }
 const blank: Draft = { name: '', ...ROLE_DEFAULTS, permissions: [] }
+
+/**
+ * Whether the actor may edit the role in the editor. A new role is judged as
+ * it starts, not by its unsaved draft, so a position typed out of reach
+ * can't lock the field that corrects it.
+ */
+export function canEditRole(
+  actor: Access | null | undefined,
+  selected: Role | undefined
+) {
+  return canManageRole(actor, selected ?? blank)
+}
+
+/**
+ * The highest position the actor may give a role: one below their own
+ * highest role, unless they're an administrator.
+ */
+export function maxRolePosition(actor: Access | null | undefined) {
+  return hasPermission(actor, 'administrator')
+    ? ROLE_LIMITS.position.max
+    : Math.max(ROLE_LIMITS.position.min, highestRolePosition(actor) - 1)
+}
+
+/** Why a role can't be saved at this position, or null when it can. */
+export function rolePositionProblem(
+  actor: Access | null | undefined,
+  position: number
+) {
+  const { min } = ROLE_LIMITS.position
+  const max = maxRolePosition(actor)
+  if (Number.isInteger(position) && position >= min && position <= max)
+    return null
+  return hasPermission(actor, 'administrator')
+    ? `Use a whole number from ${min} to ${max.toLocaleString()}.`
+    : `Use a whole number from ${min} to ${max.toLocaleString()}, below your highest role.`
+}
 
 export function RoleManager() {
   const { data: session, update } = useSession()
@@ -95,12 +132,15 @@ export function RoleManager() {
   const focusNameOnClose = useRef(false)
   const selected = roles.find((role) => role.id === selectedId)
   const isEveryone = isEveryoneRole(selected)
-  const isAdministrator = hasPermission(actor, 'administrator')
-  const editable = canManageRole(actor, selected ?? draft ?? blank)
+  const editable = canEditRole(actor, selected)
   const canToggle = (permission: string) =>
     roleCanHold(selected, permission) &&
     canGrantPermissions(actor, [permission])
   const dirty = draft !== null && JSON.stringify(draft) !== savedDraft
+  const positionProblem =
+    draft && editable && !isEveryone
+      ? rolePositionProblem(actor, draft.position)
+      : null
 
   const select = useCallback((role: Role | 'new') => {
     const next =
@@ -457,14 +497,7 @@ export function RoleManager() {
                           type="number"
                           inputMode="numeric"
                           min={ROLE_LIMITS.position.min}
-                          max={
-                            isAdministrator
-                              ? ROLE_LIMITS.position.max
-                              : Math.max(
-                                  ROLE_LIMITS.position.min,
-                                  highestRolePosition(actor) - 1
-                                )
-                          }
+                          max={maxRolePosition(actor)}
                           required
                           value={draft.position}
                           onChange={(event) =>
@@ -473,10 +506,20 @@ export function RoleManager() {
                               position: Number(event.target.value),
                             })
                           }
+                          aria-invalid={Boolean(positionProblem)}
+                          aria-describedby="role-position-hint"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Higher numbers rank above lower numbers. Roles at the
-                          same position cannot manage one another.
+                        <p
+                          id="role-position-hint"
+                          className={cn(
+                            'text-xs',
+                            positionProblem
+                              ? 'text-destructive'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {positionProblem ??
+                            'Higher numbers rank above lower numbers. Roles at the same position cannot manage one another.'}
                         </p>
                       </div>
                     )}
@@ -639,7 +682,10 @@ export function RoleManager() {
                       Delete
                     </Button>
                   )}
-                  <Button type="submit" disabled={busy || !editable || !dirty}>
+                  <Button
+                    type="submit"
+                    disabled={busy || !editable || !dirty || !!positionProblem}
+                  >
                     {busy ? (
                       <Loader2 className="animate-spin" aria-hidden="true" />
                     ) : (

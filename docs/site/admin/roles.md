@@ -29,7 +29,7 @@ Everyone cannot be deleted, renamed, reordered, manually assigned, or granted Ad
 
 1. Choose **Admin → Roles**, then **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color. Until you save it, the role list shows the new role as **Not saved yet**.
 2. Under **Permissions**, use the grouped switches, **Find a permission…**, or **Enable group** / **Clear group** to choose the grants. Choose individual permissions for a narrowly scoped role.
-3. Set **Position** below the roles that should manage it. Higher positions mean higher authority for managing roles and accounts; position does not add feature permissions.
+3. Set **Position** below the roles that should manage it. Higher positions mean higher authority for managing roles and accounts; position does not add feature permissions. Below Administrator, you can choose only positions under your own highest role. Another number shows the allowed range under the field and keeps **Save role** off until you correct it. Earlier versions locked the whole editor of a new role, including **Position** and **Save role**, once its number reached your highest role, so only discarding the role got you out.
 4. Choose **Save role** in the bar at the end of the editor. While the role has unsaved changes, that bar stays at the bottom of the screen as you scroll. Creating a role does not assign it to anyone.
 5. In **Users**, open **Edit user → Roles** and select the additional roles it should receive. Everyone is already included automatically. Save the account.
 6. Ask the person to refresh their workspace. Confirm that their intended workflow works and unrelated administrative actions are unavailable.
