@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
       count: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -54,6 +55,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.tx.user.count.mockResolvedValue(3)
   mocks.tx.user.findFirst.mockResolvedValue(null)
+  mocks.tx.user.findMany.mockResolvedValue([])
   mocks.tx.user.findUnique.mockResolvedValue(null)
   mocks.tx.user.create.mockImplementation(async ({ data }) => ({
     id: 'created',
@@ -85,10 +87,10 @@ describe('createAccount', () => {
   })
 
   it('claims an exact address while email is disabled', async () => {
-    mocks.tx.user.findUnique.mockResolvedValue({ id: 'holder' })
+    mocks.tx.user.findFirst.mockResolvedValue({ id: 'holder' })
     expect(await createAccount(tx, account)).toBeNull()
-    expect(mocks.lockEmailAddress).not.toHaveBeenCalled()
-    expect(mocks.tx.user.findUnique).toHaveBeenCalledWith({
+    expect(mocks.lockEmailAddress).toHaveBeenCalledWith(tx, account.email)
+    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
       where: { email: account.email },
       select: { id: true },
     })

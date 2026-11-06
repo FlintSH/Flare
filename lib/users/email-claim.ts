@@ -34,20 +34,20 @@ export async function findAccountByEmail<Select extends Prisma.UserSelect>(
 }
 
 /**
- * Holds a mailbox address until the transaction ends and says whether it is
- * free for `accountId` (or a new account): with email enabled, no other
- * account may use it in any letter case.
+ * Holds a sign-in address until the transaction ends and says whether it is
+ * free for `accountId` (or a new account): no other account may use it as
+ * written, nor in any letter case while account email is enabled (`anyCase`).
  */
 export async function claimEmail(
   tx: Prisma.TransactionClient,
   email: string,
-  accountId?: string
+  { accountId, anyCase }: { accountId?: string; anyCase: boolean }
 ) {
   await lockEmailAddress(tx, email)
   const holder = await tx.user.findFirst({
     where: {
       ...(accountId ? { id: { not: accountId } } : {}),
-      email: sameAddress(email),
+      email: anyCase ? sameAddress(email) : email,
     },
     select: { id: true },
   })

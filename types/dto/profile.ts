@@ -1,4 +1,3 @@
-import { VanityIdSchema } from '@/types/dto/user'
 import { z } from 'zod'
 
 import {
@@ -6,6 +5,7 @@ import {
   accountNameSchema,
   accountPasswordSchema,
 } from '@/lib/users/account-policy'
+import { vanityIdSchema } from '@/lib/users/public-id'
 
 // No `image`: only POST /api/profile/avatar checks and stores an avatar, so
 // an `image` field here is dropped like any other unknown field.
@@ -20,7 +20,7 @@ export const UpdateProfileSchema = z.object({
     .enum(['DISABLED', 'HOUR', 'DAY', 'WEEK', 'MONTH'])
     .optional(),
   defaultFileExpirationAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
-  vanityId: VanityIdSchema.nullable().optional(),
+  vanityId: vanityIdSchema.nullable().optional(),
 })
 
 export interface ProfileResponse {

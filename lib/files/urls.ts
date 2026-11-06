@@ -53,10 +53,20 @@ function encodePath(path: string) {
   return `/${path.replace(/^\/+/, '').split('/').map(encodeSegment).join('/')}`
 }
 
+/**
+ * A stored path under another of its owner's IDs: `/{from}/{name}` becomes
+ * `/{to}/{name}`. A path under any other ID stays as it is.
+ */
+export function withOwnerId(urlPath: string, from: string, to: string) {
+  return urlPath.startsWith(`/${from}/`)
+    ? `/${to}${urlPath.slice(from.length + 1)}`
+    : urlPath
+}
+
 function sharePagePath(urlPath: string, owner: FileUrlOptions['owner']) {
-  if (!owner?.vanityId || !urlPath.startsWith(`/${owner.urlId}/`))
-    return urlPath
-  return `/${owner.vanityId}${urlPath.slice(owner.urlId.length + 1)}`
+  return owner?.vanityId
+    ? withOwnerId(urlPath, owner.urlId, owner.vanityId)
+    : urlPath
 }
 
 /** A URL with a file password in its query, as the password form sends it. */

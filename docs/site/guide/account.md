@@ -78,7 +78,7 @@ If Flare refuses the image, **Upload failed** gives its reason, for example **Th
 
 Wait for the avatar save to finish. Your existing photo stays in place if publication fails. If your account is deleted or its profile-edit permission is removed while the upload is running, the new image is not published; any written bytes are retained for cleanup. Sign in again or ask the instance administrator about an access error before retrying.
 
-Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults).
+Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults). The field keeps capital letters as you type them, because links use the vanity URL exactly as written; earlier versions turned everything into lowercase. Flare refuses a vanity URL that another account already uses as its vanity URL or URL ID, or that is your own URL ID, and says which.
 
 ## Change your password
 

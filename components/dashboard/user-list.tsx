@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 
-import { URL_ID_LENGTH, isUrlIdDraft } from '@/types/dto/user'
 import {
   ChevronLeft,
   ChevronRight,
@@ -114,6 +113,14 @@ import {
   isEveryoneRole,
   userManagementRefusal,
 } from '@/lib/permissions/policy'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  URL_ID_LENGTH,
+  VANITY_ID_MAX_LENGTH,
+  VANITY_ID_MIN_LENGTH,
+  isUrlIdDraft,
+  vanityIdDraft,
+} from '@/lib/users/public-id'
 import { cn, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -1240,7 +1247,7 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder="At least 8 characters"
+                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       required
                     />
@@ -1262,7 +1269,7 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder="At least 8 characters"
+                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       aria-describedby="newPassword-help"
                     />
@@ -1322,7 +1329,7 @@ export function UserList() {
                       id="urlId-help"
                       className="text-xs text-muted-foreground"
                     >
-                      Exactly 5 letters or numbers.
+                      Exactly {URL_ID_LENGTH} letters or numbers.
                     </p>
                   </div>
                 )}
@@ -1339,23 +1346,22 @@ export function UserList() {
                       spellCheck={false}
                       disabled={!!editingUser && !can('users.update')}
                       value={formData.vanityId || ''}
-                      onChange={(e) => {
-                        const value = e.target.value
-                          .toLowerCase()
-                          .replace(/[^a-z0-9-]/g, '')
-                        if (value.length <= 32) {
-                          setFormData({ ...formData, vanityId: value })
-                        }
-                      }}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          vanityId: vanityIdDraft(e.target.value),
+                        })
+                      }
                       placeholder="e.g. my-custom-url"
-                      maxLength={32}
+                      maxLength={VANITY_ID_MAX_LENGTH}
                       aria-describedby="vanityId-help"
                     />
                     <p
                       id="vanityId-help"
                       className="text-xs text-muted-foreground"
                     >
-                      3–32 letters, numbers or inner hyphens.
+                      {VANITY_ID_MIN_LENGTH}–{VANITY_ID_MAX_LENGTH} letters,
+                      numbers or inner hyphens.
                     </p>
                   </div>
                 )}

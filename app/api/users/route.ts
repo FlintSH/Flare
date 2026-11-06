@@ -3,7 +3,6 @@ import type { Prisma } from '@prisma/client'
 
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
 import { assertPermission, requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
@@ -21,14 +20,8 @@ import {
   validateRoleAssignment,
 } from '@/lib/permissions/server'
 import { createAccount } from '@/lib/users/create-account'
-import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
-import { claimEmail } from '@/lib/users/email-claim'
-
-class UserEmailPolicyError extends HttpError {
-  constructor(message: string) {
-    super(400, message)
-  }
-}
+import { hashAccountPassword } from '@/lib/users/credentials'
+import { updateAccount } from '@/lib/users/update-account'
 
 const api = routes('/api/users', {
   envelope: 'api',
@@ -158,7 +151,7 @@ export const POST = api(async (request) => {
       },
       { verifyWith: emailConfig }
     )
-    if (!created) throw new UserEmailPolicyError('Email already exists')
+    if (!created) throw new HttpError(400, 'Email already exists')
     return created
   })
 
@@ -205,49 +198,7 @@ export const PUT = api(async (request) => {
   if (!existingUser) {
     throw new HttpError(404, 'User not found')
   }
-  const requestedEmailChange =
-    body.email !== undefined && body.email !== existingUser.email
-  const requestedUrlIdChange =
-    body.urlId !== undefined && body.urlId !== existingUser.urlId
 
-  if (body.urlId) {
-    const existingUrlId = await prisma.user.findUnique({
-      where: { urlId: body.urlId },
-    })
-    if (existingUrlId && existingUrlId.id !== body.id) {
-      throw new HttpError(400, 'URL ID is already in use')
-    }
-  }
-
-  if (body.vanityId !== undefined && body.vanityId !== null) {
-    // Check vanityId doesn't collide with another user's vanityId
-    const existingVanity = await prisma.user.findUnique({
-      where: { vanityId: body.vanityId },
-    })
-    if (existingVanity && existingVanity.id !== body.id) {
-      throw new HttpError(400, 'This vanity URL is already taken')
-    }
-
-    // Check vanityId doesn't collide with any user's urlId
-    const existingVanityAsUrlId = await prisma.user.findUnique({
-      where: { urlId: body.vanityId },
-    })
-    if (existingVanityAsUrlId) {
-      throw new HttpError(
-        400,
-        'This vanity URL conflicts with an existing URL ID'
-      )
-    }
-  }
-
-  const updateData = {
-    updatedAt: new Date(),
-    ...(body.name !== undefined && { name: body.name }),
-    ...(requestedUrlIdChange && { urlId: body.urlId }),
-    ...(body.vanityId !== undefined && {
-      vanityId: body.vanityId || null,
-    }),
-  }
   const passwordHash = body.password
     ? await hashAccountPassword(body.password)
     : undefined
@@ -257,73 +208,41 @@ export const PUT = api(async (request) => {
     await requireActorPermission(tx, actor.id, requiredPermission)
     await assertCanManageUser(tx, actor.id, existingUser.id)
     const latestConfig = await getEmailConfigForUpdate(tx)
-    const currentUser = await lockEmailUser(tx, existingUser.id)
-    if (
-      (requestedEmailChange && currentUser.email !== existingUser.email) ||
-      (requestedUrlIdChange && currentUser.urlId !== existingUser.urlId) ||
-      (body.password &&
-        (currentUser.password !== existingUser.password ||
-          currentUser.sessionVersion !== existingUser.sessionVersion))
-    )
-      throw new UserEmailPolicyError(
-        'Account changed during update. Refresh the user and try again.'
-      )
-
-    // Full user forms carry unchanged identity fields. Preserve concurrent
-    // verification or role changes unless this request actually edited them.
-    const emailChanged =
-      requestedEmailChange && body.email !== currentUser.email
-    let roles: { set: { id: string }[] } | undefined
-    if (body.roleIds !== undefined) {
-      const currentRoles = await tx.user.findUniqueOrThrow({
-        where: { id: currentUser.id },
-        select: { roles: { select: { id: true } } },
-      })
-      const changed =
-        JSON.stringify(currentRoles.roles.map((r) => r.id).sort()) !==
-        JSON.stringify([...new Set(body.roleIds)].sort())
-      if (changed) {
-        await requireActorPermission(tx, actor.id, 'users.roles')
-        await validateRoleAssignment(tx, actor.id, currentUser.id, body.roleIds)
-        roles = { set: body.roleIds.map((id) => ({ id })) }
-      }
-    }
-    if (
-      emailChanged &&
-      latestConfig.enabled &&
-      !(await claimEmail(tx, body.email!, existingUser.id))
-    )
-      throw new UserEmailPolicyError('Email already exists')
-    if (emailChanged || passwordHash)
-      await changeCredentials(tx, existingUser.id, {
+    const { roleIds } = body
+    const updated = await updateAccount(
+      tx,
+      existingUser,
+      {
+        name: body.name,
+        email: body.email,
         password: passwordHash,
-        ...(emailChanged && {
-          email: { address: body.email!, verified: false },
-        }),
-      })
-    if (requestedUrlIdChange) {
-      // Public URLs and the user ID must change together. Storage paths are
-      // independent: moving objects can strand files if storage or DB writes fail.
-      const files = await tx.file.findMany({
-        where: { userId: existingUser.id },
-        select: { id: true, urlPath: true },
-      })
-      for (const file of files) {
-        await tx.file.update({
-          where: { id: file.id },
-          data: {
-            urlPath: file.urlPath.replace(
-              `/${currentUser.urlId}/`,
-              `/${body.urlId}/`
-            ),
-          },
-        })
-      }
-    }
-    const updated = await tx.user.update({
-      where: { id: body.id },
-      data: { ...updateData, ...(roles ? { roles } : {}) },
-      select: {
+        urlId: body.urlId,
+        vanityId: body.vanityId,
+        settings: { updatedAt: new Date() },
+      },
+      {
+        kind: 'administrator',
+        emailEnabled: latestConfig.enabled,
+        // Full user forms carry the roles unchanged. Keep a concurrent role
+        // change unless this request actually edits them.
+        roles: roleIds
+          ? async (account) => {
+              const current = await tx.user.findUniqueOrThrow({
+                where: { id: account.id },
+                select: { roles: { select: { id: true } } },
+              })
+              if (
+                JSON.stringify(current.roles.map((r) => r.id).sort()) ===
+                JSON.stringify([...new Set(roleIds)].sort())
+              )
+                return undefined
+              await requireActorPermission(tx, actor.id, 'users.roles')
+              await validateRoleAssignment(tx, actor.id, account.id, roleIds)
+              return { set: roleIds.map((id) => ({ id })) }
+            }
+          : undefined,
+      },
+      {
         id: true,
         name: true,
         email: true,
@@ -338,8 +257,8 @@ export const PUT = api(async (request) => {
             shortenedUrls: true,
           },
         },
-      },
-    })
+      }
+    )
     await assertAccessibleAdministrator(tx, latestConfig)
     return updated
   })

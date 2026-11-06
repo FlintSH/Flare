@@ -1,5 +1,5 @@
 import { UpdateProfileSchema } from '@/types/dto/profile'
-import { UrlIdSchema, UserSchema, isUrlIdDraft } from '@/types/dto/user'
+import { UserSchema } from '@/types/dto/user'
 import { describe, expect, it } from 'vitest'
 
 import { newFilePasswordSchema } from '@/lib/files/password-policy'
@@ -9,6 +9,7 @@ import {
   accountPasswordSchema,
   fitsPasswordHash,
 } from '@/lib/users/account-policy'
+import { isUrlIdDraft, urlIdSchema } from '@/lib/users/public-id'
 
 const admin = {
   name: 'admin',
@@ -99,10 +100,10 @@ describe('account passwords', () => {
 
 describe('URL IDs', () => {
   it('keep letter case, since file URLs use the ID as written', () => {
-    expect(UrlIdSchema.parse('aB3x9')).toBe('aB3x9')
+    expect(urlIdSchema.parse('aB3x9')).toBe('aB3x9')
     expect(UserSchema.partial().parse({ urlId: 'aB3x9' }).urlId).toBe('aB3x9')
     for (const urlId of ['aB3x', 'aB3x9z', 'aB-x9', ''])
-      expect(firstError(UrlIdSchema.safeParse(urlId))).toBe(
+      expect(firstError(urlIdSchema.safeParse(urlId))).toBe(
         'URL ID must be 5 alphanumeric characters'
       )
   })

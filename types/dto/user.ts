@@ -1,50 +1,12 @@
 import { z } from 'zod'
 
-import { RESERVED_URL_IDS } from '@/lib/middleware/constants'
 import type { RoleSummary } from '@/lib/permissions/catalog'
 import {
   accountEmailSchema,
   accountNameSchema,
   accountPasswordSchema,
 } from '@/lib/users/account-policy'
-
-export const URL_ID_LENGTH = 5
-const urlIdMessage = `URL ID must be ${URL_ID_LENGTH} alphanumeric characters`
-
-/** Letters and digits. File URLs use an ID as written, so letter case counts. */
-export const UrlIdSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9]*$/, urlIdMessage)
-  .length(URL_ID_LENGTH, urlIdMessage)
-
-/** Whether a URL ID being typed can still become valid: only its length may fall short. */
-export function isUrlIdDraft(value: string) {
-  const result = UrlIdSchema.safeParse(value)
-  return (
-    result.success ||
-    result.error.issues.every((issue) => issue.code === 'too_small')
-  )
-}
-
-/**
- * Vanity ID validation schema.
- * 3-32 characters, alphanumeric + hyphens, no leading/trailing hyphens.
- */
-export const VanityIdSchema = z
-  .string()
-  .min(3, 'Vanity URL must be at least 3 characters')
-  .max(32, 'Vanity URL must be at most 32 characters')
-  .regex(
-    /^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/,
-    'Vanity URL must start and end with alphanumeric characters and can contain hyphens'
-  )
-  .refine(
-    (val) =>
-      !RESERVED_URL_IDS.includes(
-        val.toLowerCase() as (typeof RESERVED_URL_IDS)[number]
-      ),
-    'This URL path is reserved and cannot be used'
-  )
+import { urlIdSchema, vanityIdSchema } from '@/lib/users/public-id'
 
 export const UserSchema = z
   .object({
@@ -53,9 +15,10 @@ export const UserSchema = z
     email: accountEmailSchema,
     password: accountPasswordSchema.optional(),
     roleIds: z.array(z.string().min(1).max(128)).max(100).optional(),
-    urlId: UrlIdSchema.optional(),
+    urlId: urlIdSchema.optional(),
     // Empty form fields clear the vanity URL; omitted fields leave it unchanged.
-    vanityId: VanityIdSchema.or(z.literal('').transform(() => null))
+    vanityId: vanityIdSchema
+      .or(z.literal('').transform(() => null))
       .nullable()
       .optional(),
   })

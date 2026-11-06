@@ -1,11 +1,9 @@
 import { ProfileResponse, UpdateProfileSchema } from '@/types/dto/profile'
-import { Prisma } from '@prisma/client'
 import { compare } from 'bcryptjs'
 
 import { securitySession } from '@/lib/auth/security/http'
 import { assertSecurityProof } from '@/lib/auth/security/service'
 import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
@@ -14,7 +12,8 @@ import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
-import { changeCredentials, hashAccountPassword } from '@/lib/users/credentials'
+import { hashAccountPassword } from '@/lib/users/credentials'
+import { updateAccount } from '@/lib/users/update-account'
 
 const api = routes('/api/profile', {
   envelope: 'api',
@@ -37,21 +36,6 @@ export const PUT = api(async (request) => {
       400,
       'Use the verified email change form to change your email address.'
     )
-  }
-
-  if (body.email) {
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        email: body.email,
-        NOT: {
-          id: user.id,
-        },
-      },
-    })
-
-    if (existingUser) {
-      throw new HttpError(400, 'Email already taken')
-    }
   }
 
   if (body.newPassword) {
@@ -78,88 +62,64 @@ export const PUT = api(async (request) => {
     }
   }
 
-  const updateData: Prisma.UserUpdateInput = {}
-  if (body.name) updateData.name = body.name
   const passwordHash = body.newPassword
     ? await hashAccountPassword(body.newPassword)
     : undefined
-  if (typeof body.randomizeFileUrls === 'boolean')
-    updateData.randomizeFileUrls = body.randomizeFileUrls
-  if (body.defaultFileExpiration)
-    updateData.defaultFileExpiration = body.defaultFileExpiration
-  if (body.defaultFileExpirationAction)
-    updateData.defaultFileExpirationAction = body.defaultFileExpirationAction
-
-  if (body.vanityId !== undefined) {
-    if (body.vanityId === null) {
-      // Clear vanity ID
-      updateData.vanityId = null
-    } else {
-      // Check vanityId doesn't collide with another user's vanityId
-      const existingVanity = await prisma.user.findUnique({
-        where: { vanityId: body.vanityId },
-      })
-      if (existingVanity && existingVanity.id !== user.id) {
-        throw new HttpError(400, 'This vanity URL is already taken')
-      }
-
-      // Check vanityId doesn't collide with any user's urlId
-      const existingUrlId = await prisma.user.findUnique({
-        where: { urlId: body.vanityId },
-      })
-      if (existingUrlId) {
-        throw new HttpError(
-          400,
-          'This vanity URL conflicts with an existing URL ID'
-        )
-      }
-
-      updateData.vanityId = body.vanityId
-    }
-  }
 
   const updatedUser = await prisma.$transaction(async (tx) => {
+    let emailEnabled = emailConfig.enabled
     if (emailChanged || passwordHash) {
       // Serialize the effective policy with this account mutation. An admin
       // enabling email must commit either before this check or after our save.
-      const currentEmailConfig = await getEmailConfigForUpdate(tx)
-      if (currentEmailConfig.enabled && emailChanged)
+      emailEnabled = (await getEmailConfigForUpdate(tx)).enabled
+      if (emailEnabled && emailChanged)
         throw new HttpError(
           400,
           'Use the verified email change form to change your email address.'
         )
-      const fresh = await lockEmailUser(tx, user.id)
-      if (security)
-        await assertSecurityProof(
-          tx,
-          fresh,
-          { password: body.currentPassword, code: body.securityCode },
-          security.session
-        )
-      if (fresh.password !== account.password || fresh.email !== account.email)
-        throw new HttpError(
-          400,
-          'Account changed during update. Please try again.'
-        )
-      await changeCredentials(tx, user.id, {
-        password: passwordHash,
-        ...(emailChanged && {
-          email: { address: body.email!, verified: false },
-        }),
-      })
     }
-    return tx.user.update({
-      where: { id: user.id },
-      data: updateData,
-      select: {
+    return updateAccount(
+      tx,
+      account,
+      {
+        name: body.name,
+        email: emailChanged ? body.email : undefined,
+        password: passwordHash,
+        vanityId: body.vanityId,
+        settings: {
+          ...(typeof body.randomizeFileUrls === 'boolean' && {
+            randomizeFileUrls: body.randomizeFileUrls,
+          }),
+          ...(body.defaultFileExpiration && {
+            defaultFileExpiration: body.defaultFileExpiration,
+          }),
+          ...(body.defaultFileExpirationAction && {
+            defaultFileExpirationAction: body.defaultFileExpirationAction,
+          }),
+        },
+      },
+      {
+        kind: 'self',
+        emailEnabled,
+        prove: security
+          ? (fresh) =>
+              assertSecurityProof(
+                tx,
+                fresh,
+                { password: body.currentPassword, code: body.securityCode },
+                security.session
+              )
+          : undefined,
+      },
+      {
         id: true,
         name: true,
         email: true,
         image: true,
         randomizeFileUrls: true,
         vanityId: true,
-      },
-    })
+      }
+    )
   })
 
   return apiResponse<ProfileResponse>(updatedUser)

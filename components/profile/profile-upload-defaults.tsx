@@ -17,6 +17,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { type ProfilePatch, updateProfile } from '@/lib/client/profile'
+import { VANITY_ID_MAX_LENGTH, vanityIdDraft } from '@/lib/users/public-id'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -75,14 +76,11 @@ export function ProfileUploadDefaults({ user, onUpdate }: ProfileAccountProps) {
                 id="vanity-url"
                 value={vanityId}
                 onChange={(e) => {
-                  const value = e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '')
-                  setVanityId(value)
+                  setVanityId(vanityIdDraft(e.target.value))
                   setVanityError(null)
                 }}
                 placeholder={`e.g. ${user.name?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'my-name'}`}
-                maxLength={32}
+                maxLength={VANITY_ID_MAX_LENGTH}
                 disabled={isLoading}
               />
               {vanityError && (

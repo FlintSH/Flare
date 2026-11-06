@@ -248,7 +248,12 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
         'Approve the change using the link sent to your current address first.'
       )
     }
-    if (!(await claimEmail(tx, record.email, user.id)))
+    if (
+      !(await claimEmail(tx, record.email, {
+        accountId: user.id,
+        anyCase: true,
+      }))
+    )
       throw new EmailHttpError('This email address is unavailable.')
     const oldEmail = user.email
     await changeCredentials(tx, user.id, {
@@ -371,7 +376,7 @@ export async function requestEmailChange(
       throw new EmailHttpError(
         'Your current email must be verified before changing it.'
       )
-    if (!(await claimEmail(tx, email, user.id)))
+    if (!(await claimEmail(tx, email, { accountId: user.id, anyCase: true })))
       throw new EmailHttpError('This email address is unavailable.')
     await invalidateEmailTokens(tx, user.id)
     const pending = await tx.user.update({

@@ -1,5 +1,4 @@
 import type { Prisma, User } from '@prisma/client'
-import { nanoid } from 'nanoid'
 
 import { sendAccountToken } from '@/lib/email/account'
 import type { EmailConfig } from '@/lib/email/schema'
@@ -8,33 +7,9 @@ import { isSetupComplete } from '@/lib/setup/status'
 
 import { newUploadToken } from './credentials'
 import { claimEmail } from './email-claim'
+import { newUrlId } from './public-id-claim'
 
 type TransactionClient = Prisma.TransactionClient
-
-function generateUrlId() {
-  const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  return nanoid(5)
-    .split('')
-    .map((char) => {
-      const index = Math.floor((alphabet.length * char.charCodeAt(0)) / 256)
-      return alphabet[index]
-    })
-    .join('')
-}
-
-async function generateUniqueUrlId(tx: TransactionClient) {
-  let urlId = generateUrlId()
-  let isUnique = false
-  while (!isUnique) {
-    const existing = await tx.user.findUnique({ where: { urlId } })
-    if (!existing) {
-      isUnique = true
-    } else {
-      urlId = generateUrlId()
-    }
-  }
-  return urlId
-}
 
 interface NewAccount {
   email: string
@@ -70,8 +45,9 @@ export function verifiesNewAccounts(config: EmailConfig) {
 /**
  * Creates an account that claims its address, or returns null when another
  * account already uses it: exactly, or in any letter case while email is
- * enabled. The first account becomes an administrator, so call this with
- * `lockRoleChanges` held, after the caller's own authority checks.
+ * enabled. The first account becomes an administrator and a new URL ID is
+ * claimed, so call this with `lockRoleChanges` held, after the caller's own
+ * authority checks.
  * Setup's first administrator passes no email settings.
  */
 export async function createAccount(
@@ -82,13 +58,8 @@ export async function createAccount(
   const settings = 'verifyWith' in email ? email.verifyWith : null
   const emailEnabled =
     'verifyWith' in email ? email.verifyWith.enabled : email.enabled
-  const free = emailEnabled
-    ? await claimEmail(tx, account.email)
-    : !(await tx.user.findUnique({
-        where: { email: account.email },
-        select: { id: true },
-      }))
-  if (!free) return null
+  if (!(await claimEmail(tx, account.email, { anyCase: emailEnabled })))
+    return null
 
   const roleIds = [...new Set(account.roleIds ?? [])]
   if (!(await isSetupComplete(tx))) {
@@ -109,7 +80,7 @@ export async function createAccount(
         ? 'pending_local'
         : account.emailVerificationSource,
       emailExempt: account.emailExempt,
-      urlId: await generateUniqueUrlId(tx),
+      urlId: await newUrlId(tx),
       roles: { connect: roleIds.map((id) => ({ id })) },
       ...(account.inviteId
         ? { invite: { connect: { id: account.inviteId } } }

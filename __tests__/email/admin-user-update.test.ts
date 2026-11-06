@@ -288,6 +288,30 @@ describe('administrator account update serialization', () => {
     expect(mocks.tx.user.update).not.toHaveBeenCalled()
   })
 
+  // Without account email, addresses are unique only as written, which the
+  // database enforces too: the duplicate was a server error before.
+  it('refuses an address another account uses as written while email is disabled', async () => {
+    mocks.getEmailConfigForUpdate.mockResolvedValue(
+      structuredClone(DEFAULT_EMAIL_CONFIG)
+    )
+    mocks.tx.user.findFirst.mockResolvedValue({ id: 'another-account' })
+    const response = await PUT(request({ email: 'Requested@example.com' }))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+    expect(mocks.lockEmailAddress).toHaveBeenCalledWith(
+      mocks.tx,
+      'Requested@example.com'
+    )
+    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
+      where: { id: { not: initial.id }, email: 'Requested@example.com' },
+      select: { id: true },
+    })
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
+
   it('matches an address with an underscore literally, not as a wildcard', async () => {
     const response = await PUT(request({ email: 'requested_x@example.com' }))
     expect(response.status).toBe(200)
@@ -387,11 +411,15 @@ describe('optional administrator vanity URLs', () => {
     expect(mocks.tx.user.update.mock.calls[0][0].data.vanityId).toBe(
       'custom-url'
     )
-    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
-      where: { vanityId: 'custom-url' },
-    })
-    expect(mocks.db.user.findUnique).toHaveBeenCalledWith({
-      where: { urlId: 'custom-url' },
+    // Both columns, in the transaction that saves the edit.
+    expect(mocks.tx.user.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { urlId: { in: ['custom-url'] } },
+          { vanityId: { in: ['custom-url'] } },
+        ],
+      },
+      select: { id: true, urlId: true, vanityId: true },
     })
   })
 
@@ -405,20 +433,39 @@ describe('optional administrator vanity URLs', () => {
     }
   )
 
-  it.each(['vanityId', 'urlId'])(
+  it.each([
+    ['vanityId', 'This vanity URL is already taken'],
+    ['urlId', 'This vanity URL conflicts with an existing URL ID'],
+  ])(
     'rejects a vanity URL that conflicts with another user’s %s',
-    async (field) => {
-      mocks.db.user.findUnique.mockImplementation(async ({ where }) => {
-        if (where.id === initial.id) return initial
-        return where[field] === 'custom-url' ? { id: 'another-user' } : null
-      })
+    async (field, error) => {
+      mocks.tx.user.findMany.mockResolvedValue([
+        {
+          id: 'another-user',
+          urlId: 'other',
+          vanityId: null,
+          [field]: 'custom-url',
+        },
+      ])
 
       const response = await PUT(request({ vanityId: 'custom-url' }))
 
       expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ success: false, error })
       expect(mocks.tx.user.update).not.toHaveBeenCalled()
     }
   )
+
+  it('rejects a vanity URL that is the account’s own URL ID', async () => {
+    const response = await PUT(request({ vanityId: initial.urlId }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'This vanity URL conflicts with an existing URL ID',
+    })
+    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
 })
 
 describe('user directory', () => {

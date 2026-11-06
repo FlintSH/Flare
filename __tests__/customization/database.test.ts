@@ -433,27 +433,51 @@ suite('customization contracts against disposable PostgreSQL', () => {
     })
     authentication.user = { id: 'owner-one', permissions: ['administrator'] }
     const users = await import('@/app/api/users/route')
-    const response = await users.PUT(
-      jsonRequest(
-        '/api/users',
-        {
-          id: 'owner-one',
-          name: 'Owner',
-          email: 'taken@example.test',
-          urlId: 'SPECC',
-        },
-        'PUT'
+    const edit = (email: string) =>
+      users.PUT(
+        jsonRequest(
+          '/api/users',
+          { id: 'owner-one', name: 'Owner', email, urlId: 'SPECC' },
+          'PUT'
+        )
       )
+    async function expectUnchanged() {
+      expect((await principal()).urlId).toBe('owner-one')
+      for (const file of [first, second]) {
+        const saved = await prisma.file.findUniqueOrThrow({
+          where: { id: file.id },
+        })
+        expect(saved.urlPath).toBe(file.urlPath)
+        expect(saved.path).toBe(file.path)
+        expect(await storage.getFileSize(saved.path)).toBeGreaterThan(0)
+      }
+    }
+    // The address is claimed before anything moves; with email disabled, a
+    // duplicate was a database error (500) before.
+    const duplicate = await edit('taken@example.test')
+    expect(duplicate.status).toBe(400)
+    expect(await duplicate.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+    await expectUnchanged()
+    // Fail the account's own update, after its file URLs have moved.
+    await prisma.$executeRawUnsafe(
+      `CREATE FUNCTION customization_test_reject_url_id() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected account update failure'; END $$`
     )
-    expect(response.status).toBe(500)
-    expect((await principal()).urlId).toBe('owner-one')
-    for (const file of [first, second]) {
-      const saved = await prisma.file.findUniqueOrThrow({
-        where: { id: file.id },
-      })
-      expect(saved.urlPath).toBe(file.urlPath)
-      expect(saved.path).toBe(file.path)
-      expect(await storage.getFileSize(saved.path)).toBeGreaterThan(0)
+    await prisma.$executeRawUnsafe(
+      `CREATE TRIGGER customization_test_reject_url_id BEFORE UPDATE OF "urlId" ON "User" FOR EACH ROW EXECUTE FUNCTION customization_test_reject_url_id()`
+    )
+    try {
+      expect((await edit('owner@example.test')).status).toBe(500)
+      await expectUnchanged()
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER customization_test_reject_url_id ON "User"'
+      )
+      await prisma.$executeRawUnsafe(
+        'DROP FUNCTION customization_test_reject_url_id()'
+      )
     }
   })
 
