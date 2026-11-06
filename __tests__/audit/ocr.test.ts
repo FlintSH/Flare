@@ -127,6 +127,10 @@ describe('OCR audit lifecycle', () => {
         data: { isOcrProcessed: true, ocrText: null, ocrConfidence: null },
       })
       expect(mocks.applyPendingOcrTags).not.toHaveBeenCalled()
+      // A worker that was started is stopped, whether or not reading worked.
+      expect(mocks.terminate).toHaveBeenCalledTimes(
+        stage === 'recognition' ? 1 : 0
+      )
     }
   )
 })

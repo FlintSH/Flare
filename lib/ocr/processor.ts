@@ -39,8 +39,7 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
     const worker = await createWorker()
     const {
       data: { text, confidence },
-    } = await worker.recognize(fileBuffer)
-    await worker.terminate()
+    } = await worker.recognize(fileBuffer).finally(() => worker.terminate())
 
     await prisma.file.update({
       where: { id: fileId },
