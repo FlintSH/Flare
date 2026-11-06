@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { publicOrigin } from '@/lib/security/public-origin'
 import { generatorProfile } from '@/lib/uploads/profiles'
 
@@ -135,8 +135,8 @@ export async function uploaderClientResponse<Id extends UploaderClientId>(
   const { user } = await requireSession(request, UPLOADER_DOWNLOAD_PERMISSION)
   const client = uploaderClients[id]
   const body = client.method === 'POST' ? await readJson(request) : {}
-  const { profileId } = postedProfile.parse(body)
-  const options = client.options.parse(body)
+  const { profileId } = parseInput(postedProfile, body)
+  const options = parseInput(client.options, body)
   const target = await resolveUploaderTarget(
     user.id,
     profileId ?? new URL(request.url).searchParams.get('profileId')

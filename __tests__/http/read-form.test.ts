@@ -74,7 +74,7 @@ describe('reading a form with a size limit', () => {
     })
   })
 
-  it('rejects a body that is not the form its content type names', async () => {
+  it('answers 400 for a body that is not the form its content type names', async () => {
     await expect(
       readForm(
         new Request('http://localhost/form', {
@@ -84,7 +84,7 @@ describe('reading a form with a size limit', () => {
         }),
         { limit: 1024 }
       )
-    ).rejects.toBeInstanceOf(TypeError)
+    ).rejects.toMatchObject({ status: 400, message: 'Invalid form data.' })
   })
 })
 

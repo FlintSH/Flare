@@ -1,8 +1,11 @@
-import { ZodError } from 'zod'
+import { z } from 'zod'
 
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
+import { parseInput, readJson } from '@/lib/http/request'
 import type { RouteContract } from '@/lib/http/route'
+
+import { emailConfigSchema } from './schema'
 
 export const emailSettingsRoutes: RouteContract = {
   invalid: (error) =>
@@ -12,16 +15,23 @@ export const emailSettingsRoutes: RouteContract = {
         .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
         .join('; ')
     ),
-  // SMTP and crypto wrappers expose only sanitized error messages. Prisma
-  // errors may include queries, so do not serialize them.
-  translate: (error) =>
-    error instanceof Error &&
-    !(error instanceof HttpError) &&
-    !(error instanceof ZodError) &&
-    !('clientVersion' in error)
-      ? new HttpError(400, error.message)
-      : undefined,
-  failure: { status: 400, message: 'Could not update email settings' },
+  failure: { message: 'Could not update email settings' },
+}
+
+const draftBody = z.object({
+  config: z.unknown().optional(),
+  clearPassword: z.unknown().optional(),
+  applyToExisting: z.unknown().optional(),
+})
+
+/** The Email tab's draft settings and its choices about the saved password and existing users. */
+export async function readEmailDraft(request: Request) {
+  const body = await readJson(request, draftBody)
+  return {
+    config: parseInput(emailConfigSchema, body.config),
+    clearPassword: body.clearPassword === true,
+    applyToExisting: body.applyToExisting === true,
+  }
 }
 
 export async function emailDiagnostics(enabled: boolean) {

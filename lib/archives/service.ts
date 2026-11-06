@@ -603,14 +603,19 @@ function plannedDirectories(manifest: ArchiveManifest) {
     const count = entry.type === 'directory' ? parts.length : parts.length - 1
     for (let index = 0; index < count; index++) {
       const path = parts.slice(0, index + 1).join('/')
-      const name = folderNameSchema.parse(parts[index])
-      if (name !== parts[index])
+      const name = folderNameSchema.safeParse(parts[index])
+      if (!name.success)
+        throw new ArchiveError(
+          name.error.issues[0]?.message || 'Invalid archive request.',
+          400
+        )
+      if (name.data !== parts[index])
         throw new ArchiveError(
           'Archive folder names cannot be represented without changing their paths.',
           400
         )
       directories.set(path, {
-        name,
+        name: name.data,
         parentPath: parts.slice(0, index).join('/'),
       })
     }

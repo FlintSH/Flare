@@ -2,6 +2,16 @@ import { createHmac } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 
+import { HttpError } from '@/lib/http/errors'
+
+/** A webhook destination Flare won't send to; the message is for the person adding it. */
+export class WebhookTargetError extends HttpError {
+  constructor(message: string) {
+    super(400, message)
+    this.name = 'WebhookTargetError'
+  }
+}
+
 export function signWebhook(
   secret: string,
   timestamp: string,
@@ -50,7 +60,7 @@ export function parseWebhookUrl(value: string): URL {
   try {
     url = new URL(value)
   } catch {
-    throw new Error('Enter a valid webhook URL.')
+    throw new WebhookTargetError('Enter a valid webhook URL.')
   }
   const privateAllowed =
     process.env.FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK === 'true'
@@ -58,11 +68,11 @@ export function parseWebhookUrl(value: string): URL {
     url.protocol !== 'https:' &&
     !(privateAllowed && url.protocol === 'http:')
   )
-    throw new Error(
+    throw new WebhookTargetError(
       'Webhooks require HTTPS. Local HTTP requires the operator private-network setting.'
     )
   if (url.username || url.password || url.hash || value.length > 2048)
-    throw new Error(
+    throw new WebhookTargetError(
       'Webhook URLs cannot contain credentials or fragments, or exceed 2048 characters.'
     )
   return url
@@ -75,10 +85,17 @@ export async function resolveWebhookTarget(value: string) {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const addresses = await Promise.race([
-      lookup(hostname, { all: true, verbatim: true }),
+      // A name that doesn't resolve is the destination's problem too.
+      lookup(hostname, { all: true, verbatim: true }).catch(
+        (error: unknown) => {
+          throw new WebhookTargetError(
+            error instanceof Error ? error.message : 'Invalid destination.'
+          )
+        }
+      ),
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error('Webhook DNS lookup timed out.')),
+          () => reject(new WebhookTargetError('Webhook DNS lookup timed out.')),
           3000
         )
       }),
@@ -88,7 +105,7 @@ export async function resolveWebhookTarget(value: string) {
       (process.env.FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK !== 'true' &&
         addresses.some(({ address }) => !isPublicAddress(address)))
     )
-      throw new Error(
+      throw new WebhookTargetError(
         'Webhook destination must resolve only to public IP addresses.'
       )
     return { url, address: addresses[0] }

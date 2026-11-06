@@ -75,7 +75,7 @@ curl --fail-with-body \
 }
 ```
 
-Links are ordered newest first. The endpoint returns the account's whole list; it has no pagination or filtering parameters. An empty account receives `data.urls: []`.
+Links are ordered newest first. The endpoint returns the account's whole list; it has no pagination or filtering parameters. An empty account receives `data.urls: []`. The answer carries `Cache-Control: private, no-store`; earlier versions sent no caching header with it.
 
 ## Delete a short link
 

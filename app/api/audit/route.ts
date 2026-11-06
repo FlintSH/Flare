@@ -4,17 +4,13 @@ import { auditQuerySchema, auditWhere } from '@/lib/audit/query'
 import type { AuditPage } from '@/lib/audit/types'
 import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
-import { HttpError } from '@/lib/http/errors'
+import { HttpError, unavailable } from '@/lib/http/errors'
 import { routes } from '@/lib/http/route'
 
-const api = routes('/api/audit', {
-  headers: { 'Cache-Control': 'private, no-store' },
-  failure: {
-    status: 503,
-    message:
-      'Unable to load audit events. Check database availability and migrations.',
-  },
-})
+const message =
+  'Unable to load audit events. Check database availability and migrations.'
+
+const api = routes('/api/audit', { failure: { message } })
 
 export const GET = api(
   async (request): Promise<AuditPage<AuditEvent>> => {
@@ -49,7 +45,7 @@ export const GET = api(
         orderBy: { action: 'asc' },
         take: 500,
       }),
-    ])
+    ]).catch(unavailable(message))
     return {
       events,
       total,

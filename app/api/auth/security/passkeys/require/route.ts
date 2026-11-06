@@ -13,8 +13,10 @@ const api = routes('/api/auth/security/passkeys/require', securityRoutes)
 
 export const POST = api(async (request) => {
   const { session } = await securitySession(request)
-  const { required } = z
-    .object({ required: z.boolean() })
-    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
+  const { required } = await readJson(
+    request,
+    z.object({ required: z.boolean() }),
+    { limit: SECURITY_BODY_LIMIT }
+  )
   return setPasskeyRequired(session, required)
 })

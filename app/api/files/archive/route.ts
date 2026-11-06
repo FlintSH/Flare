@@ -22,12 +22,10 @@ export const POST = api(
       actor.user.id,
       request.signal,
       async (operation) => {
-        const input = createArchiveSchema.parse(
-          await readJson(request, {
-            limit: ARCHIVE_BODY_LIMIT,
-            signal: operation.signal,
-          })
-        )
+        const input = await readJson(request, createArchiveSchema, {
+          limit: ARCHIVE_BODY_LIMIT,
+          signal: operation.signal,
+        })
         return createAccountArchive(actor, input, operation)
       }
     )

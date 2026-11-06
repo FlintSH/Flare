@@ -1,10 +1,9 @@
 import { prisma } from '@/lib/database/prisma'
-import { emailSettingsRoutes } from '@/lib/email/admin'
+import { emailSettingsRoutes, readEmailDraft } from '@/lib/email/admin'
 import { getEmailConfig, prepareEmailConfig } from '@/lib/email/config'
 import { hasVerifiedEmail, satisfiesEmailPolicy } from '@/lib/email/policy'
 import type { EmailConfig } from '@/lib/email/schema'
 import { requireSession } from '@/lib/http/access'
-import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
 async function impact(config: EmailConfig) {
@@ -37,12 +36,6 @@ export const GET = api(async (request) => {
 
 export const POST = api(async (request) => {
   await requireSession(request, 'settings.email')
-  const body = (await readJson(request)) as {
-    config?: unknown
-    clearPassword?: unknown
-  }
-  return impact(
-    (await prepareEmailConfig(body.config, body.clearPassword === true))
-      .effective
-  )
+  const { config, clearPassword } = await readEmailDraft(request)
+  return impact((await prepareEmailConfig(config, clearPassword)).effective)
 })

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 
-import { ZodError } from 'zod'
+import type { ZodError } from 'zod'
 
 import { auditRequest } from '@/lib/audit'
 import { type Logger, loggers } from '@/lib/logger'
 
-import { AccessError, HttpError } from './errors'
+import { AccessError, HttpError, InvalidInput } from './errors'
+import { mediaType } from './request'
 
 /** How one family of routes answers errors; the handlers only throw. */
 export interface RouteContract {
@@ -15,12 +16,15 @@ export interface RouteContract {
   respond?: (value: unknown) => Response
   /** Sent with every response these routes give, unless a handler set it. */
   headers?: Record<string, string>
-  /** Turn an error only this family raises, such as a database conflict, into an answer. */
+  /**
+   * Answer an error code outside the HTTP layer raises without being an
+   * HttpError, such as a database conflict.
+   */
   translate?: (error: unknown) => HttpError | undefined
-  /** Answer a body that failed its schema; defaults to the first issue's message. */
+  /** Word a 400 for request input; defaults to the first issue's message. */
   invalid?: (error: ZodError) => HttpError
-  /** Answer anything else. The error itself is logged, never sent. */
-  failure: { status?: number; message: string }
+  /** The message of the 500 for anything else. The error itself is logged, never sent. */
+  failure: { message: string }
   logger?: Logger
   audit?: {
     /** The audit action, when it depends on the request rather than only its method. */
@@ -76,32 +80,44 @@ export function routes(template: string, contract: RouteContract) {
           }
           for (const [name, value] of Object.entries(settings.headers ?? {}))
             if (!response.headers.has(name)) response.headers.set(name, value)
+          // JSON answers are private unless a handler says otherwise. File
+          // bytes, which carry Content-Disposition, keep what their route
+          // chose, even none: a public JSON file is still a file.
+          if (
+            !response.headers.has('Cache-Control') &&
+            !response.headers.has('Content-Disposition') &&
+            mediaType(response) === 'application/json'
+          )
+            response.headers.set('Cache-Control', 'private, no-store')
           return response
         }
       )) as RouteHandler<Context>
   }
 }
 
+/**
+ * An HttpError is answered as it is, and invalid request input as the family
+ * words it. Anything else is logged and answered with a 500; a 5xx HttpError
+ * logs what caused it.
+ */
 export function errorResponse(
   error: unknown,
   contract: RouteContract,
   label = 'Request'
 ): Response {
+  const logger = contract.logger ?? loggers.api
   let answer =
     contract.translate?.(error) ??
-    (error instanceof HttpError
-      ? error
-      : error instanceof ZodError
-        ? (contract.invalid?.(error) ??
-          new HttpError(400, error.issues[0]?.message ?? 'Invalid request.'))
+    (error instanceof InvalidInput
+      ? (contract.invalid?.(error.issues) ?? error)
+      : error instanceof HttpError
+        ? error
         : undefined)
   if (!answer) {
-    ;(contract.logger ?? loggers.api).error(`${label} failed`, error)
-    answer = new HttpError(
-      contract.failure.status ?? 500,
-      contract.failure.message
-    )
-  }
+    logger.error(`${label} failed`, error)
+    answer = new HttpError(500, contract.failure.message)
+  } else if (answer.status >= 500 && answer.cause !== undefined)
+    logger.error(`${label} failed`, answer.cause)
   return NextResponse.json(
     {
       ...(contract.envelope === 'api' && !(answer instanceof AccessError)

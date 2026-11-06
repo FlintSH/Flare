@@ -12,10 +12,7 @@ const api = routes('/api/roles', {
 
 export const GET = api(async (request) => {
   await requireSession(request, ['roles.manage', 'users.roles', 'users.read'])
-  return NextResponse.json(
-    { roles: await listRoles(), permissionGroups: PERMISSION_GROUPS },
-    { headers: { 'Cache-Control': 'private, no-store' } }
-  )
+  return { roles: await listRoles(), permissionGroups: PERMISSION_GROUPS }
 })
 
 export const POST = api(

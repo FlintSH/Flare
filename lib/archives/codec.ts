@@ -367,7 +367,9 @@ export async function createArchive(
 ): Promise<void> {
   signal?.throwIfAborted()
   if (!entries.length || entries.length > ARCHIVE_LIMITS.selectedFiles)
-    throw new ArchiveError('Select between 1 and 100 files.')
+    throw new ArchiveError(
+      `Select between 1 and ${ARCHIVE_LIMITS.selectedFiles} files.`
+    )
   const builder = new ManifestBuilder()
   for (const item of entries) builder.add(item.path, 'file', item.size)
   const archive =

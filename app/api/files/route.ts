@@ -184,14 +184,12 @@ export const GET = api(
     const expirations = await getFilesExpirationInfo(
       resultPage.files.map((file) => file.id)
     )
-    const result = paginatedResponse(
+    return paginatedResponse(
       resultPage.files.map((file) =>
         fileListItem(file, expirations.get(file.id) ?? null)
       ),
       resultPage.pagination
     )
-    result.headers.set('Cache-Control', 'private, no-store')
-    return result
   },
   {
     envelope: 'api',

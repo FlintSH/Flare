@@ -14,12 +14,13 @@ const api = routes('/api/auth/email/change', emailRoutes)
 export const POST = api(async (request) => {
   const account = await emailSession(request)
   assertEmailChangesEnabled(account.config)
-  const { email, password } = z
-    .object({
+  const { email, password } = await readJson(
+    request,
+    z.object({
       email: z.string().trim().email().max(254),
       password: z.string().max(1024).optional(),
     })
-    .parse(await readJson(request))
+  )
   await limitEmailRequest(request, account.config, email)
   return { message: await requestEmailChange(account, email, password) }
 })

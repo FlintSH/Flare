@@ -13,8 +13,10 @@ const api = routes('/api/auth/security/passkeys/options', securityRoutes)
 
 export const POST = api(async (request) => {
   const { session } = await securitySession(request)
-  const data = proofSchema
-    .extend({ name: passkeyName })
-    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
+  const data = await readJson(
+    request,
+    proofSchema.extend({ name: passkeyName }),
+    { limit: SECURITY_BODY_LIMIT }
+  )
   return registrationOptions(session, data, data.name)
 })

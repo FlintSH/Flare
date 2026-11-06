@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-
 import type { InputJsonValue } from '@prisma/client/runtime/library'
 
 import {
@@ -23,20 +21,15 @@ export const GET = api(async (request) => {
     where: { id: session.user.id },
     select: { preferences: true },
   })
-  return NextResponse.json(
-    { data: readPersonalAppearance(user?.preferences) },
-    { headers: { 'Cache-Control': 'private, no-store' } }
-  )
+  return { data: readPersonalAppearance(user?.preferences) }
 })
 
 export const PATCH = api(
   async (request) => {
     const { session } = await requireSession(request, 'appearance.personal')
-    const parsed = personalAppearanceSchema.safeParse(
-      await readJson(request, { limit: 1024 })
-    )
-    if (!parsed.success)
-      throw new HttpError(400, 'Choose inherit, system, light, or dark.')
+    const preference = await readJson(request, personalAppearanceSchema, {
+      limit: 1024,
+    })
     await prisma.$transaction(async (tx) => {
       await lockUserRow(tx, session.user.id)
       const user = await tx.user.findUniqueOrThrow({
@@ -54,12 +47,16 @@ export const PATCH = api(
         data: {
           preferences: {
             ...previous,
-            customization: parsed.data,
+            customization: preference,
           } as InputJsonValue,
         },
       })
     })
-    return { data: parsed.data }
+    return { data: preference }
   },
-  { failure: { status: 400, message: 'Preferences could not be saved.' } }
+  {
+    invalid: () =>
+      new HttpError(400, 'Choose inherit, system, light, or dark.'),
+    failure: { message: 'Preferences could not be saved.' },
+  }
 )

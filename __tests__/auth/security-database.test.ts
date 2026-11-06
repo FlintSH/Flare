@@ -1082,6 +1082,19 @@ suite('account security against disposable PostgreSQL', () => {
       residentKey: 'required',
       userVerification: 'required',
     })
+    // A response the WebAuthn library refuses is the browser's to retry.
+    await expect(
+      passkeys.registerPasskey(session(1, 'oidc'), options.challengeId, {
+        id: 'not-a-credential',
+        rawId: 'not-a-credential',
+        type: 'public-key',
+        response: { clientDataJSON: 'e30', attestationObject: 'e30' },
+        clientExtensionResults: {},
+      } as never)
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Unable to complete this security request. Please try again.',
+    })
   })
   it('binds passwordless challenges to the initiating browser and consumes successful claims once', async () => {
     const options = await passkeys.authenticationOptions()

@@ -32,7 +32,7 @@ export const DELETE = api(async (request, { params }: Context) => {
 export const PATCH = api(async (request, { params }: Context) => {
   await requireSession(request, 'content.update')
   const { id, fileId } = await params
-  const settings = settingsSchema.parse(await readJson(request))
+  const settings = await readJson(request, settingsSchema)
   return updateFileSettings(
     { as: 'moderator', accountId: id },
     fileId,

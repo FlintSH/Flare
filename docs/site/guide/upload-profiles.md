@@ -102,6 +102,8 @@ If another session changes a profile while you are editing, Flare checks the sav
 
 Before deleting a profile, update clients that select it explicitly and any bound tokens. A missing profile is an error rather than an automatic switch to weaker settings.
 
+A saved profile can hold a setting this version of Flare doesn't have, such as the retired copy format. Flare leaves it out when it reads the profile. If a saved setting has a value Flare can't read, uploads that use the profile fail with **Upload could not be completed.** and the server logs which setting it couldn't read, so tell your administrator. Earlier versions answered those uploads with **Invalid upload options.**, as if the upload itself had asked for something wrong, and logged nothing.
+
 ## Export and import a recipe
 
 **Export** downloads a versioned JSON recipe containing the name and settings. **Import recipe** creates a separate saved profile for review without making it your default. Recipes exclude credentials, passwords, and the profile's own identifier.

@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-
 import { getConfig } from '@/lib/config'
 import { appearanceCommandSchema } from '@/lib/customization/schema'
 import { saveAppearance } from '@/lib/customization/store'
@@ -23,22 +21,19 @@ const api = routes('/api/customization', {
 export const GET = api(async (request) => {
   const { user } = await requireSession(request)
   const { customization } = (await getConfig()).settings
-  return NextResponse.json(
-    {
-      data: hasPermission(user, 'appearance.manage')
-        ? customization
-        : { published: customization.published },
-    },
-    { headers: { 'Cache-Control': 'private, no-store' } }
-  )
+  return {
+    data: hasPermission(user, 'appearance.manage')
+      ? customization
+      : { published: customization.published },
+  }
 })
 
 export const POST = api(
   async (request) => {
     await requireSession(request, 'appearance.manage')
-    const command = appearanceCommandSchema.parse(
-      await readJson(request, { limit: 1_000_000 })
-    )
+    const command = await readJson(request, appearanceCommandSchema, {
+      limit: 1_000_000,
+    })
     const state = await saveAppearance(command)
     return { data: state }
   },

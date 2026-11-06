@@ -127,7 +127,7 @@ curl --fail-with-body \
   "$FLARE_URL/api/files"
 ```
 
-Base defaults are public visibility, no expiration, delete on expiration, original-name URLs, no tags, and framed sharing. Account defaults supply naming and expiration settings, and the instance's published sharing configuration supplies the base share style. A selected profile overrides those defaults; permitted request options take final precedence. The retired `copyFormat` option is ignored for compatibility.
+Base defaults are public visibility, no expiration, delete on expiration, original-name URLs, no tags, and framed sharing. Account defaults supply naming and expiration settings, and the instance's published sharing configuration supplies the base share style. A selected profile overrides those defaults; permitted request options take final precedence. The retired `copyFormat` option is ignored for compatibility, in requests and in saved profiles alike. A saved profile option Flare can't read answers `500` with `Upload could not be completed.`; earlier versions answered `400` with `Invalid upload options.` and logged nothing.
 
 ### Upload errors and limits
 
@@ -141,7 +141,7 @@ Base defaults are public visibility, no expiration, delete on expiration, origin
 | `413`  | Instance upload limit, remaining quota, or part-size limit exceeded                                                                                             | Check the instance limit, free storage, or send smaller parts.                                                                |
 | `415`  | A browser session sent a chunk step's JSON with another content type                                                                                            | Send `Content-Type: application/json`, as the [browser-session write rule](./authentication#browser-session-writes) requires. |
 | `429`  | Too many upload starts                                                                                                                                          | Honor `Retry-After: 60`.                                                                                                      |
-| `500`  | Upload/storage operation failed                                                                                                                                 | Check instance health and operator logs. Avoid blindly repeating a multipart upload if its response was lost.                 |
+| `500`  | Upload/storage operation failed, or saved settings or profile options Flare can't read; the server logs the cause                                               | Check instance health and operator logs. Avoid blindly repeating a multipart upload if its response was lost.                 |
 
 `POST /api/files` and `POST /api/files/chunks` share a limit of **30 requests per 60 seconds per client IP per application process**. It runs before authentication. Limits reset on process restart and are not a distributed rate-limit service. Proxies should supply accurate client IP headers. Other file-read and part/completion routes do not use this upload-start limiter.
 

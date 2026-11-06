@@ -35,9 +35,10 @@ export const GET = api(async (request, { params }: Context) => {
 export const POST = api(async (request, { params }: Context) => {
   const { user: actor } = await requireSession(request, 'users.email')
   const { id } = await params
-  const { action } = z
-    .object({ action: z.enum(['exempt', 'require', 'resend']) })
-    .parse(await readJson(request))
+  const { action } = await readJson(
+    request,
+    z.object({ action: z.enum(['exempt', 'require', 'resend']) })
+  )
   let config = await getEmailConfig()
   if (!config.enabled) throw new EmailHttpError('Email is disabled.')
   await limitEmailRequest(request, config)

@@ -1,7 +1,8 @@
 import { requireAccount } from '@/lib/http/access'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
+import { BATCH_LIMIT } from '@/lib/library/contract'
 import { tagRoutes } from '@/lib/tags/http'
 import { fileTagMembership } from '@/lib/tags/membership'
 import { fileTagsInputSchema } from '@/lib/tags/schema'
@@ -13,22 +14,20 @@ export const GET = api(async (request) => {
   const user = await requireAccount(request)
   const params = new URL(request.url).searchParams
   if (params.getAll('fileIds').length !== 1)
-    throw new TagError('Choose between 1 and 100 files.')
-  const fileIds = fileTagsInputSchema.shape.fileIds.parse(
+    throw new TagError(`Choose between 1 and ${BATCH_LIMIT} files.`)
+  const fileIds = parseInput(
+    fileTagsInputSchema.shape.fileIds,
     params
       .get('fileIds')!
       .split(',')
       .map((id) => id.trim())
   )
-  const files = await fileTagMembership(user.id, fileIds)
-  const result = apiResponse({ files })
-  result.headers.set('Cache-Control', 'private, no-store')
-  return result
+  return apiResponse({ files: await fileTagMembership(user.id, fileIds) })
 })
 
 export const PATCH = api(async (request) => {
   const user = await requireAccount(request)
-  const input = fileTagsInputSchema.parse(await readJson(request))
+  const input = await readJson(request, fileTagsInputSchema)
   const count = await changeFileTags(user.id, input)
   return apiResponse({ count })
 })

@@ -6,7 +6,7 @@ import {
   prepareEmailConfig,
   resolveEmailConfig,
 } from '@/lib/email/config'
-import { validateEnabledEmail } from '@/lib/email/schema'
+import { emailConfigSchema, validateEnabledEmail } from '@/lib/email/schema'
 import {
   describeMailError,
   sendTestEmail,
@@ -14,7 +14,7 @@ import {
 } from '@/lib/email/transport'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { assertEmailEncryptionKey } from '@/lib/security/secret-box'
 
@@ -29,9 +29,14 @@ const api = routes('/api/settings/email/test', emailSettingsRoutes)
 
 export const POST = api(async (request) => {
   await requireSession(request, 'settings.email')
-  const body = testSchema.parse(await readJson(request))
+  const body = await readJson(request, testSchema)
   const saved = body.config
-    ? (await prepareEmailConfig(body.config, body.clearPassword)).candidate
+    ? (
+        await prepareEmailConfig(
+          parseInput(emailConfigSchema, body.config),
+          body.clearPassword
+        )
+      ).candidate
     : await getSavedEmailConfig()
   const config = resolveEmailConfig(saved, process.env, {
     testDelivery: true,
@@ -40,11 +45,13 @@ export const POST = api(async (request) => {
   assertEmailEncryptionKey()
   try {
     if (body.action === 'connection') await verifySmtp(config)
-    else {
-      if (!body.recipient) throw new Error('A test recipient is required')
-      await sendTestEmail(config, body.recipient)
-    }
+    else if (!body.recipient)
+      throw new HttpError(400, 'A test recipient is required')
+    else await sendTestEmail(config, body.recipient)
   } catch (error) {
+    // Flare's own refusals, such as a full daily mail cap, answer as they
+    // are; provider errors are described without their details.
+    if (error instanceof HttpError) throw error
     throw new HttpError(400, describeMailError(error))
   }
   return {

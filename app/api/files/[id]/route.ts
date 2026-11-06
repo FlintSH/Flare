@@ -22,7 +22,7 @@ const api = routes('/api/files/[id]', {
 export const PATCH = api(async (request, { params }: Context) => {
   const { user } = await requireSession(request, 'files.share')
   const { id } = await params
-  const settings = fileSettingsSchema.parse(await readJson(request))
+  const settings = await readJson(request, fileSettingsSchema)
   return updateFileSettings({ as: 'owner', userId: user.id }, id, settings)
 })
 

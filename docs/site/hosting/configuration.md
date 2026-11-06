@@ -19,6 +19,8 @@ For email, precedence is **environment or secret file → saved value → defaul
 
 Saved settings apply from the next request without a restart. Each request checks the saved configuration's revision in PostgreSQL and reuses the settings it already read only while that revision is unchanged and Flare's own code hasn't been reloaded, as happens in development. A change saved through another replica, written by a maintenance script, or edited directly in the database is therefore seen on the next request too. Storage is the exception: a Flare process keeps its storage connection until that same process saves a storage change, so restart any other replicas after changing storage settings.
 
+Each save checks the whole settings document, the saved values merged with the change. A submitted value the check refuses answers `400` with **Could not update settings. Check the values and try again.** and saves nothing. If the saved document itself no longer passes the check, for example after an edit made directly in the database, the save answers `500` and the server logs which value failed; restore or correct that value. Earlier versions answered both cases the same way: `400` from Settings and `500` from the older whole-settings form, without a log line.
+
 ## Core environment variables
 
 | Variable                              | Default                                      | Purpose                                                                                                                                                            |
@@ -90,7 +92,7 @@ Meticulous's hosted CI workflow has been retired. Its recorder variables and dis
 
 ## Email environment variables
 
-Every variable in the following tables also accepts a `_FILE` variant. For example, `FLARE_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password` reads that file's contents, trimming trailing whitespace. Set **one** of the direct variable or its `_FILE` variant. Booleans must be exactly `true` or `false`; numbers must be nonnegative integer strings and satisfy the listed range.
+Every variable in the following tables also accepts a `_FILE` variant. For example, `FLARE_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password` reads that file's contents, trimming trailing whitespace. Set **one** of the direct variable or its `_FILE` variant. Booleans must be exactly `true` or `false`; numbers must be nonnegative integer strings and satisfy the listed range. An override that breaks these rules, or an email encryption key Flare can't use, isn't something the Email tab can fix: loading, saving and testing there answer **Could not update email settings**, and the server log names the variable. Earlier versions showed the variable's problem in Settings → Email instead.
 
 ### Connection and sending
 

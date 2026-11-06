@@ -11,9 +11,10 @@ const api = routes('/api/settings/email/retry', emailSettingsRoutes)
 
 export const POST = api(async (request) => {
   await requireSession(request, 'settings.email')
-  const { id } = z
-    .object({ id: z.string().min(1).max(100) })
-    .parse(await readJson(request))
+  const { id } = await readJson(
+    request,
+    z.object({ id: z.string().min(1).max(100) })
+  )
   const queued = await retryMail(id)
   if (!queued)
     throw new HttpError(

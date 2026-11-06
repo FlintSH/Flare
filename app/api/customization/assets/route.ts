@@ -5,8 +5,11 @@ import { HttpError } from '@/lib/http/errors'
 import { readForm } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 
+const unreadable = 'This image could not be read.'
+
 const api = routes('/api/customization/assets', {
-  failure: { status: 400, message: 'This image could not be read.' },
+  invalid: () => new HttpError(400, unreadable),
+  failure: { message: unreadable },
 })
 
 export const POST = api(async (request) => {

@@ -10,7 +10,6 @@ import { everyoneCanInvite, setEveryoneCanInvite } from '@/lib/invites/service'
 const policySchema = z.object({ everyoneCanInvite: z.boolean() }).strict()
 
 const api = routes('/api/settings/invites', {
-  headers: { 'Cache-Control': 'private, no-store' },
   failure: { message: 'Internal server error' },
 })
 

@@ -9,8 +9,6 @@ import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 import { newUploadToken } from '@/lib/users/credentials'
 
 const api = routes('/api/profile/upload-token', {
-  // The answer is a credential, like the generated uploader configurations.
-  headers: { 'Cache-Control': 'private, no-store' },
   failure: { message: 'Internal server error' },
   logger: loggers.users,
 })

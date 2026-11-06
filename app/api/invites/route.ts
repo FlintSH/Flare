@@ -16,7 +16,6 @@ import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 export const dynamic = 'force-dynamic'
 
 const api = routes('/api/invites', {
-  headers: { 'Cache-Control': 'private, no-store' },
   failure: { message: 'Could not load invites' },
 })
 

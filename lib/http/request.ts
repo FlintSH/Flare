@@ -1,11 +1,13 @@
+import { ZodError, type z } from 'zod'
+
 import { isSameOriginRequest } from '@/lib/security/request-origin'
 
-import { HttpError } from './errors'
+import { HttpError, InvalidInput } from './errors'
 
-/** The request's media type without parameters, lower-cased. */
-export function mediaType(request: Request) {
+/** The media type of a request or response, without parameters, lower-cased. */
+export function mediaType(message: { headers: Headers }) {
   return (
-    request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ??
+    message.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ??
     ''
   )
 }
@@ -74,23 +76,52 @@ export async function readBody(
   }
 }
 
+/** Request input as `schema` reads it, or a 400 the route family words. */
+export function parseInput<Schema extends z.ZodType>(
+  schema: Schema,
+  value: unknown
+): z.output<Schema> {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) throw new InvalidInput(parsed.error)
+  return parsed.data
+}
+
 /** JSON bodies are capped at 1 MiB unless a route sets a smaller limit. */
 export const JSON_BODY_LIMIT = 1024 * 1024
 
+type BodyOptions = { limit?: number; signal?: AbortSignal }
+
+/** The JSON body as `schema` reads it; without one, whatever it holds. */
+export async function readJson<Schema extends z.ZodType>(
+  request: Request,
+  schema: Schema,
+  options?: BodyOptions
+): Promise<z.output<Schema>>
 export async function readJson(
   request: Request,
-  {
-    limit = JSON_BODY_LIMIT,
-    signal,
-  }: { limit?: number; signal?: AbortSignal } = {}
+  options?: BodyOptions
+): Promise<unknown>
+export async function readJson(
+  request: Request,
+  schemaOrOptions?: z.ZodType | BodyOptions,
+  options: BodyOptions = {}
 ): Promise<unknown> {
+  const schema =
+    schemaOrOptions && 'safeParse' in schemaOrOptions
+      ? schemaOrOptions
+      : undefined
+  const { limit = JSON_BODY_LIMIT, signal } = schema
+    ? options
+    : ((schemaOrOptions as BodyOptions | undefined) ?? {})
   if (browserWrites.has(request)) assertMediaType(request, 'application/json')
   const text = (await readBody(request, limit, signal)).toString('utf8')
+  let value: unknown
   try {
-    return JSON.parse(text)
+    value = JSON.parse(text)
   } catch {
     throw new HttpError(400, 'Invalid JSON.')
   }
+  return schema ? parseInput(schema, value) : value
 }
 
 /** Room for the boundaries and part headers around one file in a multipart body. */
@@ -98,8 +129,8 @@ export const FORM_FRAMING_BYTES = 64 * 1024
 
 /**
  * The form in the body, refusing to buffer more than `limit` bytes; a larger
- * body answers 413 with `tooLarge`. Like `request.formData()`, it rejects with
- * a TypeError when the body isn't the form its content type names.
+ * body answers 413 with `tooLarge`, and one that isn't the form its content
+ * type names is invalid input.
  */
 export async function readForm(
   request: Request,
@@ -115,7 +146,14 @@ export async function readForm(
       ? new HttpError(413, tooLarge)
       : error
   })
-  return new Response(new Uint8Array(body), {
-    headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
-  }).formData()
+  try {
+    return await new Response(new Uint8Array(body), {
+      headers: { 'Content-Type': request.headers.get('content-type') ?? '' },
+    }).formData()
+  } catch {
+    const message = 'Invalid form data.'
+    throw new InvalidInput(
+      new ZodError([{ code: 'custom', message, path: [], input: undefined }])
+    )
+  }
 }

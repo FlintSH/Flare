@@ -1,8 +1,10 @@
 import { PublicSettings, SettingsUpdateResponse } from '@/types/dto/settings'
+import { z } from 'zod'
 
 import {
   ConfigValidationError,
   FlareConfig,
+  SETTINGS_NOT_SAVED,
   applyConfigUpdate,
   getConfig,
 } from '@/lib/config'
@@ -29,17 +31,24 @@ import {
 import { settingsPatchAllowed } from '@/lib/permissions/settings'
 import { invalidateStorageProvider } from '@/lib/storage'
 
-const patchFailure =
-  'Could not update settings. Check the values and try again.'
+/** A change to some sections, or one section by name. */
+const settingsPatch = z.object({
+  settings: z.unknown().optional(),
+  section: z.unknown().optional(),
+  data: z.unknown().optional(),
+})
+
+/** The legacy whole-settings form posts the entire settings document. */
+const settingsDocument = z.looseObject({
+  settings: z.looseObject({
+    advanced: z.looseObject({ customCSS: z.string().optional() }),
+  }),
+})
 
 const api = routes('/api/settings', {
   envelope: 'api',
-  translate: (error) =>
-    error instanceof ConfigValidationError
-      ? new HttpError(400, error.message)
-      : undefined,
-  // Settings the schema rejects on save were answered like any other failure.
-  invalid: () => new HttpError(500, 'Internal server error'),
+  // A body these routes can't read is answered like settings the schema refuses.
+  invalid: () => new ConfigValidationError(),
   failure: { message: 'Internal server error' },
   logger: loggers.config,
 })
@@ -63,16 +72,11 @@ export const GET = api(async (request) => {
 export const PATCH = api(
   async (request) => {
     const { user } = await requireSession(request)
-    const body = (await readJson(request)) as {
-      settings?: Partial<FlareConfig['settings']>
-      section?: string
-      data?: unknown
-    }
-    const settings =
-      body.settings ??
+    const body = await readJson(request, settingsPatch)
+    const settings = (body.settings ??
       (body.section
-        ? ({ [body.section]: body.data } as Partial<FlareConfig['settings']>)
-        : null)
+        ? { [body.section as string]: body.data }
+        : null)) as Partial<FlareConfig['settings']> | null
     if (!settings || typeof settings !== 'object' || Array.isArray(settings))
       throw new HttpError(400, 'Choose settings to update')
     if (!settingsPatchAllowed(user, settings))
@@ -98,21 +102,16 @@ export const PATCH = api(
     if (settings.general?.storage) invalidateStorageProvider()
     return apiResponse({ message: 'Settings updated successfully' })
   },
-  {
-    invalid: () => new HttpError(400, patchFailure),
-    failure: { status: 400, message: patchFailure },
-  }
+  { failure: { message: SETTINGS_NOT_SAVED } }
 )
 
 export const POST = api(async (request) => {
   const { user } = await requireSession(request, 'administrator')
-  const config = (await readJson(request)) as FlareConfig
+  const config = await readJson(request, settingsDocument)
   // The Email tab owns this section. A stale whole-settings form must not
   // overwrite its policy or submit masked SMTP credentials as a password.
-  if (config.settings)
-    delete (config.settings as Partial<FlareConfig['settings']>).email
-  if (config.settings)
-    delete (config.settings as Partial<FlareConfig['settings']>).customization
+  delete config.settings.email
+  delete config.settings.customization
 
   keepSavedCredentials(config.settings)
   if (config.settings.advanced.customCSS) {
@@ -124,11 +123,11 @@ export const POST = api(async (request) => {
   await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
     await requireActorPermission(tx, user.id, 'administrator')
-    await applyConfigUpdate(tx, config)
+    await applyConfigUpdate(tx, config as Partial<FlareConfig>)
     await assertAccessibleAdministrator(tx)
   })
 
-  if (config.settings?.general?.storage) {
+  if ((config.settings as Partial<FlareConfig['settings']>).general?.storage) {
     invalidateStorageProvider()
   }
 

@@ -15,7 +15,7 @@ const api = routes('/api/folders/[id]', folderRoutes)
 export const PATCH = api(async (request, { params }: Context) => {
   const user = await requireAccount(request)
   const { id } = await params
-  const input = folderUpdateSchema.parse(await readJson(request))
+  const input = await readJson(request, folderUpdateSchema)
   if (input.sharing !== undefined && !hasPermission(user, 'folders.share'))
     throw new HttpError(403, 'You do not have permission to share folders.')
   return apiResponse(await updateFolder(user.id, id, input))

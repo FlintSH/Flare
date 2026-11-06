@@ -740,10 +740,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           password: 'signup-password',
         })
       )
-      // The email routes' own answer when they can't queue a message.
+      // A full daily mail cap answers with its own message.
       expect(response.status).toBe(400)
       expect(await response.json()).toEqual({
-        error: 'Unable to complete this email request. Please try again.',
+        error:
+          'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.',
       })
       expect(
         await prisma.user.findUnique({ where: { email: address } })

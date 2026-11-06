@@ -17,7 +17,7 @@ const api = routes('/api/upload-profiles/[id]', uploadProfileRoutes)
 export const PUT = api(async (request, { params }: Context) => {
   const { user } = await requireSession(request, 'uploadProfiles.manage')
   const { id } = await params
-  const { revision, ...input } = updateSchema.parse(await readJson(request))
+  const { revision, ...input } = await readJson(request, updateSchema)
   return Response.json({
     data: await updateProfile(user.id, id, revision, input),
   })

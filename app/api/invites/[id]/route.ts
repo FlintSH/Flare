@@ -7,7 +7,6 @@ import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 type Context = { params: Promise<{ id: string }> }
 
 const api = routes('/api/invites/[id]', {
-  headers: { 'Cache-Control': 'private, no-store' },
   failure: { message: 'Could not revoke the invite' },
 })
 

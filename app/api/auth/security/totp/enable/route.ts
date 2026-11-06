@@ -14,11 +14,13 @@ const api = routes('/api/auth/security/totp/enable', securityRoutes)
 
 export const POST = api(async (request) => {
   const { session } = await securitySession(request)
-  const { code, challengeId } = z
-    .object({
+  const { code, challengeId } = await readJson(
+    request,
+    z.object({
       code: z.string().refine(isTotpCode),
       challengeId: z.string().min(20).max(100),
-    })
-    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
+    }),
+    { limit: SECURITY_BODY_LIMIT }
+  )
   return enableTotp(session, code, challengeId)
 })

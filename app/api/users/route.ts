@@ -5,8 +5,6 @@ import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
-import { emailRoutes } from '@/lib/email/http'
-import { MailLimitError } from '@/lib/email/outbox'
 import { assertPermission, requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
@@ -34,15 +32,6 @@ class UserEmailPolicyError extends HttpError {
 
 const api = routes('/api/users', {
   envelope: 'api',
-  // A full daily mail cap stops the verification email; answer it as the
-  // email routes do.
-  translate: (error) =>
-    error instanceof MailLimitError
-      ? new HttpError(
-          emailRoutes.failure.status ?? 500,
-          emailRoutes.failure.message
-        )
-      : undefined,
   failure: { message: 'Internal server error' },
   logger: loggers.users,
 })

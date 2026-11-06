@@ -10,10 +10,10 @@ const api = routes('/api/upload-profiles/default', uploadProfileRoutes)
 
 export const PUT = api(async (request) => {
   const { user } = await requireSession(request, 'uploadProfiles.manage')
-  const { profileId } = z
-    .object({ profileId: z.string().max(100).nullable() })
-    .strict()
-    .parse(await readJson(request))
+  const { profileId } = await readJson(
+    request,
+    z.object({ profileId: z.string().max(100).nullable() }).strict()
+  )
   await setDefaultProfile(user.id, profileId)
   return Response.json({ data: { defaultProfileId: profileId } })
 })

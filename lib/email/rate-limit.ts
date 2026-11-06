@@ -1,12 +1,16 @@
+import { HttpError } from '@/lib/http/errors'
 import { clientIp } from '@/lib/security/client-ip'
 import { consumeLimit } from '@/lib/security/database-limit'
 
 import type { EmailConfig } from './schema'
 
 /** A full email limit refused the request; it resets in `retryAfter` seconds. */
-export class EmailRateLimitError extends Error {
+export class EmailRateLimitError extends HttpError {
   constructor(readonly retryAfter: number) {
-    super('Too many email requests. Please try again later.')
+    super(429, 'Too many email requests. Please try again later.', {
+      headers: { 'Retry-After': String(retryAfter) },
+    })
+    this.name = 'EmailRateLimitError'
   }
 }
 

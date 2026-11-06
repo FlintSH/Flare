@@ -71,7 +71,7 @@ describe('integrations route', () => {
   it('answers invalid and unauthorized commands before any change', async () => {
     const invalid = await post({ action: 'delete-webhook' })
     expect(invalid.status).toBe(400)
-    expect(invalid.headers.get('cache-control')).toBeNull()
+    expect(invalid.headers.get('cache-control')).toBe('private, no-store')
     expect(await invalid.json()).toEqual({
       error: 'Check the integration settings and try again.',
     })

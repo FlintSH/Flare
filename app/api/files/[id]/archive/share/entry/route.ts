@@ -8,6 +8,7 @@ import {
 } from '@/lib/archives/sharing'
 import { readArchiveUnlock } from '@/lib/archives/unlock'
 import { setAuditTarget } from '@/lib/audit'
+import { parseInput } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { clientIp } from '@/lib/security/client-ip'
 import { requesterKey } from '@/lib/security/rate-limit'
@@ -46,7 +47,8 @@ export const POST = api(
     setAuditTarget({ type: 'file', id })
     const limited = await sharedArchiveGuard(request, 'entry')
     if (limited) return limited
-    const input = sharedArchiveEntrySchema.parse(
+    const input = parseInput(
+      sharedArchiveEntrySchema,
       await sharedArchiveBody(request, true)
     )
     const access = await authorizeSharedArchive(

@@ -418,6 +418,12 @@
                   "data": { "types": ["application/pdf", "image/png"] }
                 }
               }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string" },
+                "example": "private, no-store"
+              }
             }
           },
           "401": {
@@ -1086,6 +1092,12 @@
                     ]
                   }
                 }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": { "type": "string" },
+                "example": "private, no-store"
               }
             }
           },

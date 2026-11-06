@@ -18,14 +18,16 @@ export const DELETE = api(async (request, { params }: Context) => {
   return changePasskey(
     session,
     (await params).id,
-    proofSchema.parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
+    await readJson(request, proofSchema, { limit: SECURITY_BODY_LIMIT })
   )
 })
 
 export const PATCH = api(async (request, { params }: Context) => {
   const { session } = await securitySession(request)
-  const data = proofSchema
-    .extend({ name: passkeyName })
-    .parse(await readJson(request, { limit: SECURITY_BODY_LIMIT }))
+  const data = await readJson(
+    request,
+    proofSchema.extend({ name: passkeyName }),
+    { limit: SECURITY_BODY_LIMIT }
+  )
   return changePasskey(session, (await params).id, data, data.name)
 })

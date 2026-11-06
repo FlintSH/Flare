@@ -127,12 +127,18 @@ export async function registerPasskey(
       (await tx.passkey.count({ where: { userId: user.id } })) >= MAX_PASSKEYS
     )
       throw new SecurityError(`You can save up to ${MAX_PASSKEYS} passkeys.`)
+    // The library throws for a response that fails its checks, such as one
+    // from another origin or without user verification.
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: challenge.challenge,
       expectedOrigin: rp.origin,
       expectedRPID: rp.rpID,
       requireUserVerification: true,
+    }).catch(() => {
+      throw new SecurityError(
+        'Unable to complete this security request. Please try again.'
+      )
     })
     if (!verification.verified)
       throw new SecurityError('Unable to verify this passkey.')
@@ -213,6 +219,8 @@ export async function authenticatePasskey(
         counter: Number(fresh.counter),
         transports: fresh.transports as AuthenticatorTransport[],
       },
+    }).catch(() => {
+      throw new SecurityError('Unable to sign in with this passkey.')
     })
     if (!verification.verified)
       throw new SecurityError('Unable to sign in with this passkey.')

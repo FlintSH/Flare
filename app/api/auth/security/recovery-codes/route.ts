@@ -14,7 +14,7 @@ export const POST = api(async (request) => {
   const { session } = await securitySession(request)
   return changeTotp(
     session,
-    proofSchema.parse(await readJson(request, { limit: SECURITY_BODY_LIMIT })),
+    await readJson(request, proofSchema, { limit: SECURITY_BODY_LIMIT }),
     false
   )
 })

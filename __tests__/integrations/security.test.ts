@@ -6,6 +6,7 @@ import {
   scopeUsable,
 } from '@/lib/integrations/bearer-routes'
 import {
+  WebhookTargetError,
   isPublicAddress,
   parseWebhookUrl,
   resolveWebhookTarget,
@@ -167,5 +168,27 @@ describe('webhook destination and signing contracts', () => {
       'public IP'
     )
     expect(dns.lookup).toHaveBeenCalledTimes(2)
+  })
+  it('refuses an unusable destination with a 400 for the person adding it', async () => {
+    vi.stubEnv('FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK', '')
+    expect(() => parseWebhookUrl('not a url')).toThrow(WebhookTargetError)
+    dns.lookup.mockResolvedValue([{ address: '10.0.0.1', family: 4 }])
+    await expect(
+      resolveWebhookTarget('https://example.com/hook')
+    ).rejects.toMatchObject({ status: 400 })
+    // A name that doesn't resolve keeps the lookup's own explanation.
+    dns.lookup.mockRejectedValue(
+      Object.assign(new Error('getaddrinfo ENOTFOUND hooks.invalid'), {
+        code: 'ENOTFOUND',
+      })
+    )
+    const missing = await resolveWebhookTarget(
+      'https://hooks.invalid/hook'
+    ).catch((error: unknown) => error)
+    expect(missing).toBeInstanceOf(WebhookTargetError)
+    expect(missing).toMatchObject({
+      status: 400,
+      message: 'getaddrinfo ENOTFOUND hooks.invalid',
+    })
   })
 })

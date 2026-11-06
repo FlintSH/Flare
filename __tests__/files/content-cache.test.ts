@@ -241,12 +241,16 @@ describe('file content cache headers', () => {
       }
     )
 
-    it('leaves public, unprotected content without a cache directive', async () => {
-      expect(await cacheControl(rawRequest())).toEqual({
-        status: 200,
-        cache: null,
-      })
-    })
+    it.each(['video/mp4', 'application/json'])(
+      'leaves public, unprotected content without a cache directive (%s)',
+      async (mimeType) => {
+        file.mimeType = mimeType
+        expect(await cacheControl(rawRequest())).toEqual({
+          status: 200,
+          cache: null,
+        })
+      }
+    )
 
     it('does not let a cache store a denial', async () => {
       file.visibility = 'PRIVATE'
@@ -303,12 +307,16 @@ describe('file content cache headers', () => {
       }
     )
 
-    it('leaves public, unprotected downloads without a cache directive', async () => {
-      expect(await cacheControl(downloadRequest())).toEqual({
-        status: 200,
-        cache: null,
-      })
-    })
+    it.each(['video/mp4', 'application/json'])(
+      'leaves public, unprotected downloads without a cache directive (%s)',
+      async (mimeType) => {
+        file.mimeType = mimeType
+        expect(await cacheControl(downloadRequest())).toEqual({
+          status: 200,
+          cache: null,
+        })
+      }
+    )
 
     it.each(['GET', 'POST'] as const)(
       'does not let a cache store a private-file denial (%s)',

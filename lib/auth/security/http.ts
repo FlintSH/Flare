@@ -31,7 +31,6 @@ export const securityRoutes: RouteContract = {
   headers: { 'Cache-Control': 'no-store' },
   invalid: () => new HttpError(400, 'Invalid security request.'),
   failure: {
-    status: 400,
     message: 'Unable to complete this security request. Please try again.',
   },
 }

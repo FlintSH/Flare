@@ -10,13 +10,11 @@ const api = routes('/api/folders', folderRoutes)
 
 export const GET = api(async (request) => {
   const user = await requireAccount(request)
-  const result = apiResponse(await listFolders(user.id))
-  result.headers.set('Cache-Control', 'private, no-store')
-  return result
+  return apiResponse(await listFolders(user.id))
 })
 
 export const POST = api(async (request) => {
   const user = await requireAccount(request)
-  const input = folderInputSchema.parse(await readJson(request))
+  const input = await readJson(request, folderInputSchema)
   return apiResponse(await createFolder(user.id, input))
 })

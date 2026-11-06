@@ -2,7 +2,7 @@ import { DEFAULT_CONFIG, configSchema, replaceConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
@@ -27,11 +27,11 @@ export const POST = api(async (request) => {
   const limited = await rateLimit(request, setupLimiter)
   if (limited) return limited
 
-  const validatedData = setupSchema.parse(await readJson(request))
+  const validatedData = await readJson(request, setupSchema)
 
   const hashedPassword = await hashAccountPassword(validatedData.admin.password)
 
-  const initialConfig = configSchema.parse({
+  const initialConfig = parseInput(configSchema, {
     ...DEFAULT_CONFIG,
     settings: {
       ...DEFAULT_CONFIG.settings,

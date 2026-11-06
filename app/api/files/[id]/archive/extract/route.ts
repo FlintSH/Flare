@@ -27,12 +27,10 @@ export const POST = api(
       actor.user.id,
       request.signal,
       async (operation) => {
-        const input = extractArchiveSchema.parse(
-          await readJson(request, {
-            limit: ARCHIVE_BODY_LIMIT,
-            signal: operation.signal,
-          })
-        )
+        const input = await readJson(request, extractArchiveSchema, {
+          limit: ARCHIVE_BODY_LIMIT,
+          signal: operation.signal,
+        })
         return extractArchive(actor, id, input, operation)
       }
     )

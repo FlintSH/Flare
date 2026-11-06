@@ -154,7 +154,7 @@ const refusals = {
     missing: () => new Response('File not found', { status: 404 }),
     denied: content.denied,
   },
-  /** The `/direct` video lookup, whose answers carry no cache directive. */
+  /** The `/direct` video lookup, whose refusals carry no cache directive. */
   lookup: {
     missing,
     denied: (access) =>

@@ -13,7 +13,7 @@ const api = routes('/api/tags/[id]', tagRoutes)
 export const PATCH = api(async (request, { params }: Context) => {
   const user = await requireAccount(request)
   const { id } = await params
-  const input = tagInputSchema.parse(await readJson(request))
+  const input = await readJson(request, tagInputSchema)
   return apiResponse(await updateTag(user.id, id, input))
 })
 

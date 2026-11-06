@@ -12,11 +12,7 @@ const api = routes('/api/files/timeline', {
 
 export const GET = api(async (request) => {
   const user = await requireAccount(request)
-  const timeline = await fileTimeline(
-    user.id,
-    new URL(request.url).searchParams
+  return apiResponse(
+    await fileTimeline(user.id, new URL(request.url).searchParams)
   )
-  const result = apiResponse(timeline)
-  result.headers.set('Cache-Control', 'private, no-store')
-  return result
 })

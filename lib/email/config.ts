@@ -19,6 +19,7 @@ import {
 } from '@/lib/security/secret-box'
 
 import { emailCapabilities } from './eligibility'
+import { EmailHttpError } from './errors'
 import { effectiveVerificationMode, isEnforcedVerificationMode } from './policy'
 import {
   EmailConfig,
@@ -137,13 +138,29 @@ function validateEffectiveConfig(saved: EmailConfig): EmailConfig {
   return config
 }
 
+/**
+ * The effective settings Flare runs with. Unusable ones, such as an
+ * environment that enables email without an SMTP host, are the server's
+ * fault, not a requester's: they throw a plain error, which routes log and
+ * answer with a 500, instead of the 400 a submitted draft gets.
+ */
+function effectiveConfig(saved: EmailConfig): EmailConfig {
+  try {
+    return validateEffectiveConfig(saved)
+  } catch (error) {
+    if (error instanceof EmailHttpError)
+      throw new Error(error.message, { cause: error })
+    throw error
+  }
+}
+
 /** Read policy under the same lock as settings writers, before taking user locks. */
 export async function getEmailConfigForUpdate(
   tx: Prisma.TransactionClient
 ): Promise<EmailConfig> {
   await lockSettings(tx)
   const saved = await getSavedEmailConfig(tx)
-  const config = validateEffectiveConfig(saved)
+  const config = effectiveConfig(saved)
   if (config.verification.appliedMode !== effectiveVerificationMode(config)) {
     const transition = transitionEmailPolicy(saved, config)
     // Persist only server-owned transition state, never environment overrides.
@@ -151,13 +168,13 @@ export async function getEmailConfigForUpdate(
     saved.verification.graceEndsAt = transition.graceEndsAt
     saved.verification.appliedMode = transition.appliedMode
     if (await replaceSavedConfigSection(tx, 'email', saved))
-      return validateEffectiveConfig(saved)
+      return effectiveConfig(saved)
   }
   return config
 }
 
 export async function getEmailConfig(): Promise<EmailConfig> {
-  const config = validateEffectiveConfig(await getSavedEmailConfig())
+  const config = effectiveConfig(await getSavedEmailConfig())
   // A mutation uses getEmailConfigForUpdate directly, keeping policy stable until
   // commit. Ordinary reads take the lock only to record an environment transition.
   if (config.verification.appliedMode !== effectiveVerificationMode(config))
@@ -221,7 +238,9 @@ export async function prepareEmailConfig(
       candidate.smtp.password = previous.smtp.password
     else {
       if (isEncryptedSecret(candidate.smtp.password))
-        throw new Error('Enter a new SMTP password, not an encrypted value')
+        throw new EmailHttpError(
+          'Enter a new SMTP password, not an encrypted value'
+        )
       candidate.smtp.password = encryptSecret(
         candidate.smtp.password,
         SMTP_PURPOSE
@@ -257,7 +276,7 @@ export async function saveEmailConfig(
       previous.verification.appliedMode !== 'all_users'
     ) {
       if (!options.applyToExisting)
-        throw new Error(
+        throw new EmailHttpError(
           'Review affected existing users and confirm applying verification to them'
         )
     }
@@ -271,7 +290,9 @@ export async function saveEmailConfig(
       await assertAccessibleAdministrator(tx, finalConfig)
     }
     if (!(await replaceSavedConfigSection(tx, 'email', candidate)))
-      throw new Error('Complete instance setup before configuring email')
+      throw new EmailHttpError(
+        'Complete instance setup before configuring email'
+      )
     if (!finalConfig.enabled) {
       await tx.mailOutbox.updateMany({
         where: { status: { in: ['pending', 'processing'] } },

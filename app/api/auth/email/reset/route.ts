@@ -11,12 +11,13 @@ import { accountPasswordSchema } from '@/lib/users/account-policy'
 const api = routes('/api/auth/email/reset', emailRoutes)
 
 export const POST = api(async (request) => {
-  const { token, password } = z
-    .object({
+  const { token, password } = await readJson(
+    request,
+    z.object({
       token: z.string().max(128),
       password: accountPasswordSchema,
     })
-    .parse(await readJson(request))
+  )
   const config = await getEmailConfig()
   await limitEmailRequest(request, config)
   await resetPassword(token, password, config)

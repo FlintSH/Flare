@@ -172,14 +172,15 @@ describe('administrator account update serialization', () => {
     })
   })
 
-  it('answers a full daily mail cap the way the email routes do', async () => {
+  it('answers a full daily mail cap with its own message', async () => {
     mocks.db.user.findUnique.mockResolvedValue(null)
     mocks.createAccount.mockRejectedValue(new MailLimitError())
     const response = await POST(request({}, 'POST'))
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       success: false,
-      error: 'Unable to complete this email request. Please try again.',
+      error:
+        'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.',
     })
   })
 

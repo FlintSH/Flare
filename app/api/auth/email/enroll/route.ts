@@ -11,9 +11,10 @@ const api = routes('/api/auth/email/enroll', emailRoutes)
 export const POST = api(async (request) => {
   const account = await emailSession(request)
   const address = requireEmailAddress(account.user, account.config)
-  const { password } = z
-    .object({ password: z.string().max(1024).optional() })
-    .parse(await readJson(request))
+  const { password } = await readJson(
+    request,
+    z.object({ password: z.string().max(1024).optional() })
+  )
   await limitEmailRequest(request, account.config, address)
   return { message: await enrollEmail(account, password) }
 })

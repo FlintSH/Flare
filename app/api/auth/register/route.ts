@@ -7,12 +7,10 @@ import { getConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
-import { emailRoutes } from '@/lib/email/http'
-import { MailLimitError } from '@/lib/email/outbox'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { HttpError } from '@/lib/http/errors'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { InviteError, redeemInvite } from '@/lib/invites/service'
 import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
@@ -32,20 +30,12 @@ const registerSchema = z.object({
 })
 
 const api = routes('/api/auth/register', {
-  translate: (error) => {
-    if (error instanceof InviteError)
-      return new HttpError(400, error.message, {
-        body: { code: `invite_${error.reason}` },
-      })
-    // The verification email is limited like the email routes' mail, and a
-    // full daily mail cap gets their answer too.
-    if (error instanceof MailLimitError)
-      return new HttpError(
-        emailRoutes.failure.status ?? 500,
-        emailRoutes.failure.message
-      )
-    return emailRoutes.translate?.(error)
-  },
+  translate: (error) =>
+    error instanceof InviteError
+      ? new HttpError(400, error.message, {
+          body: { code: `invite_${error.reason}` },
+        })
+      : undefined,
   failure: { message: 'Internal server error' },
 })
 
@@ -69,7 +59,7 @@ export const POST = api(async (request) => {
   }
   if (!json || typeof json !== 'object' || Array.isArray(json))
     throw new HttpError(400, 'Provide a JSON object')
-  const body = registerSchema.parse(json)
+  const body = parseInput(registerSchema, json)
   const emailConfig = await getEmailConfig()
   if (verifiesNewAccounts(emailConfig))
     await limitEmailRequest(request, emailConfig, body.email)

@@ -13,9 +13,10 @@ const api = routes('/api/auth/email/request-reset', emailRoutes)
 export const POST = api(async (request) => {
   const started = Date.now()
   try {
-    const { email } = z
-      .object({ email: z.string().trim().email().max(254) })
-      .parse(await readJson(request))
+    const { email } = await readJson(
+      request,
+      z.object({ email: z.string().trim().email().max(254) })
+    )
     const config = await getEmailConfig()
     const message =
       'If this address is eligible for recovery, a password reset email will arrive shortly.'

@@ -17,7 +17,7 @@ import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { hashFilePassword } from '@/lib/files/password-hash'
-import { readJson } from '@/lib/http/request'
+import { parseInput, readJson } from '@/lib/http/request'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import {
@@ -43,8 +43,8 @@ import {
 } from './options'
 import {
   type ResolvedUploadOptions,
-  discardLegacyCopyFormat,
-  uploadRequestOptionsSchema,
+  requestFields,
+  uploadRequestOptionFields,
 } from './schema'
 
 const TEMP_DIR = join(process.cwd(), 'tmp', 'uploads')
@@ -156,13 +156,12 @@ export async function requireUploadMetadata(
   return metadata
 }
 
-const initSchema = uploadRequestOptionsSchema.out
-  .extend({
-    filename: z.string().min(1).max(255),
-    mimeType: z.string().min(1).max(255),
-    size: z.number().int().positive(),
-  })
-  .strict()
+const initSchema = requestFields({
+  ...uploadRequestOptionFields,
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(255),
+  size: z.number().int().positive(),
+})
 
 export async function initializeChunkUpload(
   req: Request,
@@ -173,7 +172,7 @@ export async function initializeChunkUpload(
     mimeType,
     size,
     ...bodyOptions
-  } = initSchema.parse(discardLegacyCopyFormat(await readJson(req)))
+  } = await readJson(req, initSchema)
   // A path in `filename` names the file, never a storage location.
   const filename = uploadDisplayName(requestedName)
   if (!filename) throw new UploadError('Invalid filename.')
@@ -227,22 +226,21 @@ export async function initializeChunkUpload(
   return { uploadId, fileKey: destination.filePath }
 }
 
-const completeSchema = uploadRequestOptionsSchema.out
-  .extend({
-    uploadId: z.string().optional(),
-    parts: z
-      .array(
-        z
-          .object({
-            ETag: z.string().min(1).max(512),
-            PartNumber: z.number().int().min(1).max(10000),
-          })
-          .strict()
-      )
-      .min(1)
-      .max(10000),
-  })
-  .strict()
+const completeSchema = requestFields({
+  ...uploadRequestOptionFields,
+  uploadId: z.string().optional(),
+  parts: z
+    .array(
+      z
+        .object({
+          ETag: z.string().min(1).max(512),
+          PartNumber: z.number().int().min(1).max(10000),
+        })
+        .strict()
+    )
+    .min(1)
+    .max(10000),
+})
 
 /** Serialize assembly across both completion routes and all application processes. */
 export async function withUploadLock<T>(
@@ -267,7 +265,7 @@ export async function completeChunkUpload(
     parts,
     uploadId: _uploadId,
     ...overrides
-  } = completeSchema.parse(discardLegacyCopyFormat(body))
+  } = parseInput(completeSchema, body)
   if (new Set(parts.map((part) => part.PartNumber)).size !== parts.length)
     throw new UploadError('Duplicate upload part.')
   const metadata = await requireUploadMetadata(user, id)

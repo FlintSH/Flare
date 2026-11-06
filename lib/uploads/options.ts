@@ -3,6 +3,7 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { HttpError } from '@/lib/http/errors'
+import { parseInput } from '@/lib/http/request'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { validateOwnedTagIds } from '@/lib/tags/service'
 
@@ -16,6 +17,7 @@ import {
   type UploadRequestOptions,
   mergeUploadOptions,
   uploadProfileOptionsSchema,
+  uploadRequestOptionFields,
   uploadRequestOptionsSchema,
 } from './schema'
 
@@ -42,7 +44,7 @@ export function requestUploadOptions(req: Request): UploadRequestOptions {
   if (folderHeader && folderQuery && folderHeader !== folderQuery)
     throw new UploadError('Conflicting upload folder selections.')
   const folder = folderHeader ?? folderQuery
-  return uploadRequestOptionsSchema.parse({
+  return parseInput(uploadRequestOptionsSchema, {
     ...(value ? { profileId: value === 'none' ? null : value } : {}),
     ...(folder ? { folderId: folder === 'none' ? null : folder } : {}),
   })
@@ -53,7 +55,7 @@ export function parseUploadFields(
   fields: Record<string, string>
 ): UploadRequestOptions {
   const values: Record<string, unknown> = {}
-  for (const key of Object.keys(uploadRequestOptionsSchema.out.shape)) {
+  for (const key of Object.keys(uploadRequestOptionFields)) {
     if (fields[key] === undefined) continue
     if (key === 'tagIds') {
       try {
@@ -75,7 +77,7 @@ export function parseUploadFields(
           ? null
           : fields[key]
   }
-  return uploadRequestOptionsSchema.parse(values)
+  return parseInput(uploadRequestOptionsSchema, values)
 }
 
 function sameOption(left: unknown, right: unknown) {
@@ -94,7 +96,7 @@ export async function resolveUploadOptions(
   input: UploadRequestOptions = {},
   now = new Date()
 ): Promise<ResolvedUploadOptions> {
-  const request = uploadRequestOptionsSchema.parse(input)
+  const request = parseInput(uploadRequestOptionsSchema, input)
   const account = await prisma.user.findUnique({
     where: { id: user.id },
     select: {
@@ -131,7 +133,7 @@ export async function resolveUploadOptions(
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.out.shape
+      uploadProfileOptionsSchema.shape
     ) as (keyof typeof profileOptions)[]) {
       if (request[key] !== undefined && !sameOption(request[key], bound[key]))
         throw new UploadError(
@@ -145,14 +147,7 @@ export async function resolveUploadOptions(
         403
       )
   }
-  let resolved: ResolvedUploadOptions
-  try {
-    resolved = mergeUploadOptions(defaults, profileOptions, request, now)
-  } catch (error) {
-    throw new UploadError(
-      error instanceof Error ? error.message : 'Invalid upload options.'
-    )
-  }
+  const resolved = mergeUploadOptions(defaults, profileOptions, request, now)
   return {
     ...resolved,
     folderId: await validateOwnedFolderId(user.id, request.folderId ?? null),
@@ -176,7 +171,7 @@ export function applyUploadOverrides(
   resolved: ResolvedUploadOptions,
   input: UploadRequestOptions
 ): ResolvedUploadOptions {
-  const request = uploadRequestOptionsSchema.parse(input)
+  const request = parseInput(uploadRequestOptionsSchema, input)
   if (
     request.folderId !== undefined &&
     request.folderId !== (resolved.folderId ?? null)
@@ -201,7 +196,7 @@ export function applyUploadOverrides(
     )
   if (user.apiToken?.profileId) {
     for (const key of Object.keys(
-      uploadProfileOptionsSchema.out.shape
+      uploadProfileOptionsSchema.shape
     ) as (keyof typeof resolved)[]) {
       if (
         key in request &&
@@ -218,22 +213,15 @@ export function applyUploadOverrides(
         403
       )
   }
-  let merged: ResolvedUploadOptions
-  try {
-    merged = mergeUploadOptions({}, resolved, {
-      ...request,
-      expiresAt:
-        request.expiresAt !== undefined
-          ? request.expiresAt
-          : request.expiration !== undefined
-            ? undefined
-            : resolved.expiresAt,
-    })
-  } catch (error) {
-    throw new UploadError(
-      error instanceof Error ? error.message : 'Invalid upload options.'
-    )
-  }
+  const merged = mergeUploadOptions({}, resolved, {
+    ...request,
+    expiresAt:
+      request.expiresAt !== undefined
+        ? request.expiresAt
+        : request.expiration !== undefined
+          ? undefined
+          : resolved.expiresAt,
+  })
   return {
     ...merged,
     folderId: resolved.folderId ?? null,

@@ -14,6 +14,7 @@ import { customizationSchema } from '@/lib/customization/schema'
 import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { emailConfigSchema } from '@/lib/email/schema'
+import { HttpError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
 
 const logger = loggers.config
@@ -374,8 +375,17 @@ type ConfigUpdate = {
   }
 }
 
+/** What someone saving settings is told when the save fails. */
+export const SETTINGS_NOT_SAVED =
+  'Could not update settings. Check the values and try again.'
+
 /** A submitted setting was rejected; the message is safe to show to the person saving. */
-export class ConfigValidationError extends Error {}
+export class ConfigValidationError extends HttpError {
+  constructor(message = SETTINGS_NOT_SAVED, cause?: unknown) {
+    super(400, message, cause === undefined ? {} : { cause })
+    this.name = 'ConfigValidationError'
+  }
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
@@ -422,7 +432,12 @@ export async function applyConfigUpdate(
       throw new ConfigValidationError(
         `Classic appearance supports at most ${MAX_LEGACY_COLORS} colors, including colors already saved.`
       )
-    return merged
+    // The saved settings passed the schema when they were read, so a merge
+    // that fails it carries a submitted value the schema refuses.
+    const checked = configSchema.safeParse(merged)
+    if (!checked.success)
+      throw new ConfigValidationError(undefined, checked.error)
+    return checked.data
   })
   logger.info('Configuration updated successfully')
   return saved

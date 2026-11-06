@@ -14,9 +14,9 @@ const api = routes('/api/auth/security/passkeys/verify', securityRoutes)
 
 export const POST = api(async (request) => {
   const { session } = await securitySession(request)
-  const data = challengeResponseSchema.parse(
-    await readJson(request, { limit: SECURITY_BODY_LIMIT })
-  )
+  const data = await readJson(request, challengeResponseSchema, {
+    limit: SECURITY_BODY_LIMIT,
+  })
   return registerPasskey(
     session,
     data.challengeId,

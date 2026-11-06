@@ -10,6 +10,6 @@ const api = routes('/api/files/folders', folderRoutes)
 
 export const POST = api(async (request) => {
   const user = await requireAccount(request)
-  const input = fileFoldersInputSchema.parse(await readJson(request))
+  const input = await readJson(request, fileFoldersInputSchema)
   return apiResponse({ count: await moveFilesToFolder(user.id, input) })
 })

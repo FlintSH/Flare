@@ -3,9 +3,11 @@ import { randomUUID } from 'node:crypto'
 
 import { lockMailBudget, lockMailClaims } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
 import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 import { getEmailConfig } from './config'
+import { EmailHttpError } from './errors'
 import { emailLinkAvailable, isEmailLinkPurpose } from './links'
 import type { EmailConfig } from './schema'
 import { type RenderedEmail, renderAccountEmail } from './templates'
@@ -16,9 +18,10 @@ import {
   sendMail,
 } from './transport'
 
-export class MailLimitError extends MailDeliveryError {
+export class MailLimitError extends HttpError {
   constructor() {
     super(
+      400,
       'The daily email sending limit has been reached. Try again tomorrow or contact your administrator.'
     )
     this.name = 'MailLimitError'
@@ -45,7 +48,7 @@ export async function enqueueMail(
   config?: EmailConfig
 ): Promise<MailOutbox> {
   const settings = config ?? (await getEmailConfig())
-  if (!settings.enabled) throw new Error('Email delivery is disabled.')
+  if (!settings.enabled) throw new EmailHttpError('Email delivery is disabled.')
   // Serialize admission across replicas. This includes messages later rejected by SMTP.
   await lockMailBudget(tx)
   const midnight = new Date()
@@ -309,7 +312,7 @@ export async function cleanupMail(config: EmailConfig): Promise<void> {
 /** A manual retry never revives an expired/revoked account link. */
 export async function retryMail(id: string): Promise<boolean> {
   const config = await getEmailConfig()
-  if (!config.enabled) throw new Error('Email delivery is disabled.')
+  if (!config.enabled) throw new EmailHttpError('Email delivery is disabled.')
   const mail = await prisma.mailOutbox.findUnique({ where: { id } })
   if (
     !mail ||

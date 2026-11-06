@@ -10,9 +10,10 @@ import { routes } from '@/lib/http/route'
 const api = routes('/api/auth/email/verify', emailRoutes)
 
 export const POST = api(async (request) => {
-  const { token } = z
-    .object({ token: z.string().max(128) })
-    .parse(await readJson(request))
+  const { token } = await readJson(
+    request,
+    z.object({ token: z.string().max(128) })
+  )
   const config = await getEmailConfig()
   await limitEmailRequest(request, config)
   return { message: await confirmEmailToken(token, config) }

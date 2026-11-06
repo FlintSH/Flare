@@ -25,7 +25,7 @@ const api = routes('/api/profile', {
 export const PUT = api(async (request) => {
   const user = await requireAccount(request)
 
-  const body = UpdateProfileSchema.parse(await readJson(request))
+  const body = await readJson(request, UpdateProfileSchema)
   const account = await prisma.user.findUnique({ where: { id: user.id } })
   if (!account) throw new HttpError(404, 'User not found')
   const emailConfig = await getEmailConfig()

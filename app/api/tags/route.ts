@@ -10,13 +10,11 @@ const api = routes('/api/tags', tagRoutes)
 
 export const GET = api(async (request) => {
   const user = await requireAccount(request)
-  const result = apiResponse(await listTags(user.id))
-  result.headers.set('Cache-Control', 'private, no-store')
-  return result
+  return apiResponse(await listTags(user.id))
 })
 
 export const POST = api(async (request) => {
   const user = await requireAccount(request)
-  const input = tagInputSchema.parse(await readJson(request))
+  const input = await readJson(request, tagInputSchema)
   return apiResponse(await createTag(user.id, input))
 })

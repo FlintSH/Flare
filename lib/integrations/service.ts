@@ -168,16 +168,8 @@ export async function runIntegrationCommand(account: Account, body: unknown) {
       'You do not have permission to perform this action.'
     )
   // Resolve DNS before taking the account's locks.
-  if (command.action === 'create-webhook') {
-    try {
-      await resolveWebhookTarget(command.url)
-    } catch (error) {
-      throw new HttpError(
-        400,
-        error instanceof Error ? error.message : 'Invalid destination.'
-      )
-    }
-  }
+  if (command.action === 'create-webhook')
+    await resolveWebhookTarget(command.url)
   const userId = account.id
   return prisma.$transaction(async (tx) => {
     // Bound management changes across replicas, including test/retry admission.

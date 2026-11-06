@@ -1,20 +1,11 @@
 import { requireSession } from '@/lib/http/access'
-import { HttpError } from '@/lib/http/errors'
 import type { RouteContract } from '@/lib/http/route'
 
 import { getEmailConfig } from './config'
-import { EmailRateLimitError } from './rate-limit'
 
 /** Account email routes. Provider errors, credentials, database details and token values never reach the response. */
 export const emailRoutes: RouteContract = {
-  translate: (error) => {
-    if (error instanceof EmailRateLimitError)
-      return new HttpError(429, error.message, {
-        headers: { 'Retry-After': String(error.retryAfter) },
-      })
-  },
   failure: {
-    status: 400,
     message: 'Unable to complete this email request. Please try again.',
   },
 }

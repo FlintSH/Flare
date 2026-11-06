@@ -11,6 +11,12 @@ Use the [OpenAPI document](/openapi.json) for custom clients using `flr_…` tok
 
 Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all path segments. Methods listed here are the implemented handlers; do not assume another method is supported because the path exists.
 
+## Answers and errors
+
+JSON answers, errors included, carry `Cache-Control: private, no-store` unless the route sets its own value: account security sends `no-store`, and file content follows the file's [sharing state](./files#content-caching). Earlier builds sent no `Cache-Control` with many of them, private ones included: `GET /api/urls`, `/api/upload-profiles`, `/api/users`, `/api/users/{id}/files`, `/api/users/{id}/urls`, `/api/users/{id}/email`, `/api/settings/email` and `/api/files/{id}/expiry` among them.
+
+An error answer is `{ "error": "…" }`, with `success: false` on routes whose successful answers use `{ "success": true, "data": … }`, except sign-in and permission refusals. A request whose body, query or form a route can't read answers `400` with that route's message. Anything else that goes wrong answers `500` with the route's general message, and the server logs the cause. That includes saved settings or upload profile options Flare can't read. Earlier builds answered some of those failures with `400` and logged nothing: an upload whose saved profile options or settings weren't valid answered `Invalid upload options.`, and unexpected failures on account security, account email, email settings, the settings form, the logo upload and personal appearance answered `400`.
+
 ## Named-token API
 
 All of these routes also use Flare's shared account authentication helper. A named token must have the specific scope and its owner must currently have the matching role permission. Results are limited to its owner's account. See the [scope-to-permission table](./authentication#scopes-and-account-roles).
