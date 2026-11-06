@@ -1,0 +1,603 @@
+{
+  "build": "LjrzqbRACLi2egsZ3OOTl",
+  "results": [
+    {
+      "mode": "dark",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "dark",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 23, 42)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 23, 42)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "midnight",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "midnight",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(248, 250, 252)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "midnight-light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 23, 42)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "midnight-light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 23, 42)"
+      },
+      "contrast": 17.06,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "orbit",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(167, 139, 250)"
+      },
+      "contrast": 6.56,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "orbit",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(167, 139, 250)"
+      },
+      "contrast": 6.56,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "orbit-light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(124, 58, 237)"
+      },
+      "contrast": 5.45,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "orbit-light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(124, 58, 237)"
+      },
+      "contrast": 5.45,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "tide",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(94, 234, 212)"
+      },
+      "contrast": 12.07,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "tide",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(94, 234, 212)"
+      },
+      "contrast": 12.07,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "tide-light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 118, 110)"
+      },
+      "contrast": 5.23,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "tide-light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(15, 118, 110)"
+      },
+      "contrast": 5.23,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "ember",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(253, 186, 116)"
+      },
+      "contrast": 10.59,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "ember",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(253, 186, 116)"
+      },
+      "contrast": 10.59,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "ember-light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(194, 65, 12)"
+      },
+      "contrast": 4.95,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "ember-light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(194, 65, 12)"
+      },
+      "contrast": 4.95,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "extreme",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(255, 255, 255)"
+      },
+      "contrast": 17.85,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "extreme",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(255, 255, 255)"
+      },
+      "contrast": 17.85,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "extreme-light",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(0, 0, 0)"
+      },
+      "contrast": 20.07,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "extreme-light",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(248, 250, 252)",
+        "background": "rgb(0, 0, 0)"
+      },
+      "contrast": 20.07,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "saturated",
+      "width": 1440,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(250, 204, 21)"
+      },
+      "contrast": 11.66,
+      "enterFocusesMain": true
+    },
+    {
+      "mode": "saturated",
+      "width": 390,
+      "initial": {
+        "x": 24,
+        "y": -72,
+        "width": 144,
+        "height": 48
+      },
+      "focused": {
+        "position": "fixed",
+        "rect": {
+          "x": 24,
+          "y": 24,
+          "width": 144,
+          "height": 48
+        },
+        "color": "rgb(15, 23, 42)",
+        "background": "rgb(250, 204, 21)"
+      },
+      "contrast": 11.66,
+      "enterFocusesMain": true
+    }
+  ]
+}

@@ -6,6 +6,8 @@ import * as SwitchPrimitives from '@radix-ui/react-switch'
 
 import { cn } from '@/lib/utils'
 
+import './touch-controls.css'
+
 /**
  * Off is an outlined track with a small thumb, on a filled track, like the
  * checkbox: the two states differ in shape as well as colour, so a locked
@@ -17,7 +19,7 @@ const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:data-[state=checked]:border-muted-foreground disabled:data-[state=checked]:bg-muted-foreground data-[state=unchecked]:border-control data-[state=unchecked]:bg-transparent',
+      'flare-touch-switch peer relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:data-[state=checked]:border-muted-foreground disabled:data-[state=checked]:bg-muted-foreground data-[state=unchecked]:border-control data-[state=unchecked]:bg-transparent',
       className
     )}
     {...props}

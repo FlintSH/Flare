@@ -54,6 +54,7 @@ export default {
         ring: 'hsl(var(--ring))',
         control: 'var(--control)',
         overlay: 'var(--overlay)',
+        panel: 'var(--panel)',
         scrim: 'var(--scrim)',
         success: 'hsl(var(--success))',
         warning: 'hsl(var(--warning))',

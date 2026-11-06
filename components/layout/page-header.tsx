@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 /** A translucent panel on the page background, as used by page sections. */
 export const pagePanelClassName =
-  'rounded-2xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur-xl'
+  'rounded-2xl border border-border/60 bg-panel p-4 sm:p-6 shadow-sm'
 
 /** The title block each dashboard page starts with. */
 export function PageHeader({
@@ -34,18 +34,18 @@ export function PageHeader({
     <h1
       ref={headingRef}
       tabIndex={headingRef ? -1 : undefined}
-      className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
+      className="text-2xl font-semibold tracking-tight outline-none sm:text-3xl"
     >
       {title}
     </h1>
   )
   const eyebrowLine = eyebrow && (
-    <p className="mb-3 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
+    <p className="mb-2 text-[11px] font-medium uppercase tracking-[.2em] text-muted-foreground">
       {eyebrow}
     </p>
   )
   const descriptionLine = description && (
-    <p className="mt-3 max-w-3xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+    <p className="mt-2 max-w-3xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
       {description}
     </p>
   )
@@ -57,13 +57,13 @@ export function PageHeader({
   // title and a tighter description, so the first row of files stays in view.
   if (actionsBesideTitle)
     return (
-      <header className={cn('border-b border-border/60 pb-7', className)}>
+      <header className={cn('border-b border-border/60 pb-5', className)}>
         {eyebrowLine}
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <h1
             ref={headingRef}
             tabIndex={headingRef ? -1 : undefined}
-            className="text-3xl font-semibold tracking-tight outline-none"
+            className="text-2xl font-semibold tracking-tight outline-none"
           >
             {title}
           </h1>
@@ -80,7 +80,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        'flex flex-wrap items-start justify-between gap-5 border-b border-border/60 pb-7',
+        'flex flex-wrap items-start justify-between gap-5 border-b border-border/60 pb-5',
         className
       )}
     >

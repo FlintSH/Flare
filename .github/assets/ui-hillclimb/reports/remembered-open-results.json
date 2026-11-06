@@ -1,0 +1,45 @@
+{
+  "buildId": "4YZIRT4WBaFbMFf4ybwba",
+  "coreStatus": "passed",
+  "coreChecks": [
+    "Remembered-open directory restores actual layout after reload",
+    "Desktop file navigation and Back with remembered-open directory",
+    "Desktop deep reload with remembered-open directory",
+    "Real same-column width resize preserves open-directory anchor",
+    "Desktop to phone resize preserves open-directory anchor",
+    "Phone file navigation and Back with remembered-open directory",
+    "Phone deep reload with remembered-open directory",
+    "Phone to desktop resize preserves open-directory anchor"
+  ],
+  "strictFullProbeExitCode": 1,
+  "strictExtraAssertion": "Oldest history Back with remembered-open directory: same-layout anchor has no pixel shift",
+  "tailControlStatus": "passed",
+  "tailCases": [
+    {
+      "directory": "closed",
+      "rank": 11988,
+      "month": "July 2018",
+      "beforeY": -158,
+      "afterBackY": 96,
+      "afterReloadY": 96,
+      "deltaY": 254
+    },
+    {
+      "directory": "open",
+      "rank": 11988,
+      "month": "July 2018",
+      "beforeY": -158,
+      "afterBackY": 96,
+      "afterReloadY": 96,
+      "deltaY": 254
+    }
+  ],
+  "noUncaughtJavaScriptErrors": true,
+  "fixtureUnchanged": true,
+  "folderStorageRestored": null,
+  "notes": [
+    "The strict extra tail pixel-equality assertion is retained and failed.",
+    "Closed/open control proves identical rank-to-start behavior; source origin/main already stores rank, not a pixel delta.",
+    "No application source changes or weakened assertions."
+  ]
+}

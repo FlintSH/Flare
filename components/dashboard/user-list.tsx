@@ -65,6 +65,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -93,12 +95,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import type { AccountFile, FileSettings } from '@/lib/files/manage'
@@ -155,7 +151,7 @@ function UserTableSkeleton() {
       aria-busy="true"
     >
       <Table>
-        <TableHeader className="bg-muted/30">
+        <TableHeader className="sr-only bg-muted/30 sm:not-sr-only sm:table-header-group">
           <TableRow>
             <TableHead className="pl-4">User</TableHead>
             <TableHead className="hidden sm:table-cell">Roles</TableHead>
@@ -493,6 +489,16 @@ export function UserList() {
   const [isViewingFiles, setIsViewingFiles] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [viewingUser, setViewingUser] = useState<User | null>(null)
+  const rowMenuTrigger = useRef<HTMLButtonElement | null>(null)
+  const restoreRowMenuFocus = (event: Event) => {
+    event.preventDefault()
+    const target = rowMenuTrigger.current?.isConnected
+      ? rowMenuTrigger.current
+      : (document.querySelector<HTMLElement>(
+          'button[aria-label^="More actions for"]'
+        ) ?? document.getElementById('main-content'))
+    target?.focus()
+  }
   const filesRequest = useRef(0)
   const urlsRequest = useRef(0)
   const [filesLoading, setFilesLoading] = useState(false)
@@ -960,279 +966,223 @@ export function UserList() {
           className="overflow-hidden rounded-xl border bg-card"
           aria-busy={isLoading}
         >
-          <TooltipProvider>
-            <Table className="table-fixed lg:table-auto" aria-label="Users">
-              <TableHeader className="bg-muted/30">
-                <TableRow>
-                  <TableHead className="pl-3 sm:pl-4">User</TableHead>
-                  <TableHead className="hidden w-32 sm:table-cell lg:w-auto">
-                    Roles
-                  </TableHead>
-                  <TableHead className="hidden lg:table-cell">URL ID</TableHead>
-                  <TableHead className="hidden text-right lg:table-cell">
-                    Files
-                  </TableHead>
-                  <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">
-                    Storage used
-                  </TableHead>
-                  <TableHead className="hidden text-right lg:table-cell">
-                    URLs
-                  </TableHead>
-                  <TableHead className="w-[140px] pr-3 text-right sm:w-[184px] sm:pr-4 lg:w-auto">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="py-3 pl-3 sm:pl-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="hidden h-8 w-8 shrink-0 sm:flex">
-                          <AvatarImage src={user.image || undefined} alt="" />
-                          <AvatarFallback>
-                            {user.name
-                              ?.split(' ')
-                              .map((name) => name[0])
-                              .join('')
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0 lg:max-w-[240px] xl:max-w-sm">
-                          <p className="truncate font-medium" title={user.name}>
-                            {user.name}
+          <Table className="table-fixed lg:table-auto" aria-label="Users">
+            <TableHeader className="sr-only bg-muted/30 sm:not-sr-only sm:table-header-group">
+              <TableRow>
+                <TableHead className="pl-3 sm:pl-4">User</TableHead>
+                <TableHead className="hidden w-32 sm:table-cell lg:w-auto">
+                  Roles
+                </TableHead>
+                <TableHead className="hidden lg:table-cell">URL ID</TableHead>
+                <TableHead className="hidden text-right lg:table-cell">
+                  Files
+                </TableHead>
+                <TableHead className="hidden whitespace-nowrap text-right lg:table-cell">
+                  Storage used
+                </TableHead>
+                <TableHead className="hidden text-right lg:table-cell">
+                  URLs
+                </TableHead>
+                <TableHead className="w-[136px] pr-3 text-right sm:pr-4">
+                  Actions
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="py-3 pl-3 sm:pl-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="hidden h-8 w-8 shrink-0 sm:flex">
+                        <AvatarImage src={user.image || undefined} alt="" />
+                        <AvatarFallback>
+                          {user.name
+                            ?.split(' ')
+                            .map((name) => name[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 lg:max-w-[240px] xl:max-w-sm">
+                        <p className="truncate font-medium" title={user.name}>
+                          {user.name}
+                        </p>
+                        <p
+                          className="truncate text-xs text-muted-foreground"
+                          title={user.email}
+                        >
+                          {user.email}
+                        </p>
+                        {user.invitedBy && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            Invited by {user.invitedBy.name || 'an account'}
                           </p>
-                          <p
-                            className="truncate text-xs text-muted-foreground"
-                            title={user.email}
-                          >
-                            {user.email}
+                        )}
+                        <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
+                          <p className="sm:hidden">
+                            <RoleBadges roles={user.roles} />
                           </p>
-                          {user.invitedBy && (
-                            <p className="truncate text-xs text-muted-foreground">
-                              Invited by {user.invitedBy.name || 'an account'}
-                            </p>
-                          )}
-                          <div className="mt-1 space-y-1 text-xs text-muted-foreground lg:hidden">
-                            <p className="sm:hidden">
-                              <RoleBadges roles={user.roles} />
-                            </p>
-                            <p className="flex min-w-0 flex-wrap items-center gap-1 text-foreground">
-                              <code className="rounded bg-muted px-1.5 py-0.5">
-                                {user.urlId}
+                          <p className="flex min-w-0 flex-wrap items-center gap-1 text-foreground">
+                            <code className="rounded bg-muted px-1.5 py-0.5">
+                              {user.urlId}
+                            </code>
+                            {user.vanityId && (
+                              <code
+                                className="max-w-full truncate rounded bg-primary/10 px-1.5 py-0.5"
+                                title={user.vanityId}
+                              >
+                                {user.vanityId}
                               </code>
-                              {user.vanityId && (
-                                <code
-                                  className="max-w-full truncate rounded bg-primary/10 px-1.5 py-0.5"
-                                  title={user.vanityId}
-                                >
-                                  {user.vanityId}
-                                </code>
-                              )}
-                            </p>
-                            {/* Each separator wraps with the item after it,
+                            )}
+                          </p>
+                          {/* Each separator wraps with the item after it,
                                 so no line ends in one. */}
-                            <p className="tabular-nums">
-                              {countOf(user._count.files, 'file')}{' '}
-                              <span className="whitespace-nowrap">
-                                · {formatFileSize(user.storageUsed)}
-                              </span>{' '}
-                              <span className="whitespace-nowrap">
-                                · {countOf(user._count.shortenedUrls, 'URL')}
-                              </span>
-                            </p>
-                          </div>
+                          <p className="tabular-nums">
+                            {countOf(user._count.files, 'file')}{' '}
+                            <span className="whitespace-nowrap">
+                              · {formatFileSize(user.storageUsed)}
+                            </span>{' '}
+                            <span className="whitespace-nowrap">
+                              · {countOf(user._count.shortenedUrls, 'URL')}
+                            </span>
+                          </p>
                         </div>
                       </div>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <RoleBadges roles={user.roles} />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <div className="flex flex-col items-start gap-1">
-                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                          {user.urlId}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <RoleBadges roles={user.roles} />
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <div className="flex flex-col items-start gap-1">
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                        {user.urlId}
+                      </code>
+                      {user.vanityId && (
+                        <code
+                          className="max-w-40 truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs"
+                          title={user.vanityId}
+                        >
+                          {user.vanityId}
                         </code>
-                        {user.vanityId && (
-                          <code
-                            className="max-w-40 truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs"
-                            title={user.vanityId}
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                    {user._count.files.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">
+                    {formatFileSize(user.storageUsed)}
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                    {user._count.shortenedUrls.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="pr-3 sm:pr-4">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 gap-1.5 px-2.5"
+                        disabled={
+                          !canManageUser(user) ||
+                          (!can('users.update') &&
+                            !can('users.roles') &&
+                            !can('users.email'))
+                        }
+                        onClick={() => handleEdit(user)}
+                        aria-label={`Edit ${user.name}`}
+                        title="Edit user"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        Edit
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 data-[state=open]:bg-accent"
+                            onFocus={(event) => {
+                              rowMenuTrigger.current = event.currentTarget
+                            }}
+                            onPointerDownCapture={(event) => {
+                              rowMenuTrigger.current = event.currentTarget
+                            }}
+                            aria-label={`More actions for ${user.name}`}
+                            title="More actions"
                           >
-                            {user.vanityId}
-                          </code>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden text-right tabular-nums lg:table-cell">
-                      {user._count.files.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="hidden whitespace-nowrap text-right tabular-nums lg:table-cell">
-                      {formatFileSize(user.storageUsed)}
-                    </TableCell>
-                    <TableCell className="hidden text-right tabular-nums lg:table-cell">
-                      {user._count.shortenedUrls.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="pr-3 sm:pr-4">
-                      {/* One row of icons in steady columns. Phones keep
-                          edit, content and delete in view and move the rarer
-                          session and avatar actions into a menu. The negative
-                          margin lines the last icon up with the header. */}
-                      <div className="-mr-2 flex justify-end sm:gap-0.5">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
+                            <MoreVertical
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-56"
+                          aria-label={`Actions for ${user.name}`}
+                        >
+                          <DropdownMenuLabel
+                            className="truncate"
+                            title={user.name}
+                          >
+                            {user.name}
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={!can('content.read')}
+                            onSelect={() => handleViewFiles(user)}
+                            aria-label={`View content for ${user.name}`}
+                          >
+                            <FolderOpen aria-hidden="true" />
+                            View content
+                          </DropdownMenuItem>
+                          {can('users.sessions') && (
+                            <DropdownMenuItem
+                              disabled={!canManageUser(user)}
+                              onSelect={() => setUserToSignOut(user)}
+                              aria-label={`Revoke sessions for ${user.name}`}
+                            >
+                              <LogOut aria-hidden="true" />
+                              Revoke sessions
+                            </DropdownMenuItem>
+                          )}
+                          {user.image && (
+                            <DropdownMenuItem
                               disabled={
-                                !canManageUser(user) ||
-                                (!can('users.update') &&
-                                  !can('users.roles') &&
-                                  !can('users.email'))
+                                !can('users.update') || !canManageUser(user)
                               }
-                              onClick={() => handleEdit(user)}
-                              aria-label={`Edit ${user.name}`}
+                              onSelect={() => handleRemoveAvatar(user.id)}
+                              aria-label={`Remove avatar for ${user.name}`}
                             >
-                              <Edit2 className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit user</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              disabled={!can('content.read')}
-                              onClick={() => handleViewFiles(user)}
-                              aria-label={`View content for ${user.name}`}
-                            >
-                              <FolderOpen
-                                className="h-4 w-4"
-                                aria-hidden="true"
-                              />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>View content</TooltipContent>
-                        </Tooltip>
-                        {can('users.sessions') || user.image ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 sm:hidden"
-                                aria-label={`More actions for ${user.name}`}
-                              >
-                                <MoreVertical
-                                  className="h-4 w-4"
-                                  aria-hidden="true"
-                                />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {can('users.sessions') && (
-                                <DropdownMenuItem
-                                  disabled={!canManageUser(user)}
-                                  onSelect={() => setUserToSignOut(user)}
-                                >
-                                  <LogOut aria-hidden="true" />
-                                  Revoke sessions
-                                </DropdownMenuItem>
-                              )}
-                              {user.image && (
-                                <DropdownMenuItem
-                                  disabled={
-                                    !can('users.update') || !canManageUser(user)
-                                  }
-                                  onSelect={() => handleRemoveAvatar(user.id)}
-                                >
-                                  <UserX aria-hidden="true" />
-                                  Remove avatar
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : (
-                          <span
-                            className="h-8 w-8 shrink-0 sm:hidden"
-                            aria-hidden="true"
-                          />
-                        )}
-                        {can('users.sessions') && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="hidden h-8 w-8 shrink-0 sm:inline-flex"
-                                disabled={!canManageUser(user)}
-                                onClick={() => setUserToSignOut(user)}
-                                aria-label={`Revoke sessions for ${user.name}`}
-                              >
-                                <LogOut
-                                  className="h-4 w-4"
-                                  aria-hidden="true"
-                                />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Revoke sessions</TooltipContent>
-                          </Tooltip>
-                        )}
-                        {user.image ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="hidden h-8 w-8 shrink-0 sm:inline-flex"
-                                disabled={
-                                  !can('users.update') || !canManageUser(user)
-                                }
-                                onClick={() => handleRemoveAvatar(user.id)}
-                                aria-label={`Remove avatar for ${user.name}`}
-                              >
-                                <UserX className="h-4 w-4" aria-hidden="true" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Remove avatar</TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          // Keeps the action icons in columns across rows.
-                          <span
-                            className="hidden h-8 w-8 shrink-0 sm:block"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-destructive hover:bg-danger/10 hover:text-destructive"
-                              onClick={() => {
-                                setUserToDelete(user)
-                                setIsDeleteDialogOpen(true)
-                              }}
-                              disabled={
-                                !can('users.delete') || !canManageUser(user)
-                              }
-                              aria-label={`Delete ${user.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete user</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TooltipProvider>
+                              <UserX aria-hidden="true" />
+                              Remove avatar
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:bg-danger/10 focus:text-destructive"
+                            onSelect={() => {
+                              setUserToDelete(user)
+                              setIsDeleteDialogOpen(true)
+                            }}
+                            disabled={
+                              !can('users.delete') || !canManageUser(user)
+                            }
+                            aria-label={`Delete ${user.name}`}
+                          >
+                            <Trash2 aria-hidden="true" />
+                            Delete user
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -1457,7 +1407,10 @@ export function UserList() {
           }
         }}
       >
-        <DialogContent className={cn(formDialogClassName, 'max-w-4xl')}>
+        <DialogContent
+          onCloseAutoFocus={restoreRowMenuFocus}
+          className={cn(formDialogClassName, 'max-w-4xl')}
+        >
           <DialogHeader className="shrink-0">
             <DialogTitle>{viewingUser?.name}&apos;s content</DialogTitle>
             <DialogDescription>
@@ -1549,7 +1502,7 @@ export function UserList() {
                       className="table-fixed"
                       aria-label={`Files uploaded by ${viewingUser?.name ?? 'this user'}`}
                     >
-                      <TableHeader className="bg-muted/30">
+                      <TableHeader className="sr-only bg-muted/30 sm:not-sr-only sm:table-header-group">
                         <TableRow>
                           <TableHead className="w-14">
                             <span className="sr-only">Preview</span>
@@ -1765,7 +1718,7 @@ export function UserList() {
                       className="table-fixed"
                       aria-label={`Short links created by ${viewingUser?.name ?? 'this user'}`}
                     >
-                      <TableHeader className="bg-muted/30">
+                      <TableHeader className="sr-only bg-muted/30 sm:not-sr-only sm:table-header-group">
                         <TableRow>
                           <TableHead className="pl-4 sm:w-40">
                             Short URL
@@ -2009,7 +1962,7 @@ export function UserList() {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
       >
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreRowMenuFocus}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete user</AlertDialogTitle>
             <AlertDialogDescription className="break-words">
@@ -2050,7 +2003,7 @@ export function UserList() {
           if (!open && !signingOut) setUserToSignOut(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreRowMenuFocus}>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out {userToSignOut?.name}?</AlertDialogTitle>
             <AlertDialogDescription>

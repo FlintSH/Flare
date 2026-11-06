@@ -1,0 +1,96 @@
+[
+  {
+    "check": "Library geometry and disclosures at 1440",
+    "firstPreviewY": 380
+  },
+  {
+    "check": "Library geometry and disclosures at 390",
+    "firstPreviewY": 415
+  },
+  {
+    "check": "Library geometry and disclosures at 320",
+    "firstPreviewY": 486
+  },
+  {
+    "check": "Library geometry and disclosures at 820",
+    "firstPreviewY": 432
+  },
+  {
+    "check": "Removing one filter preserves all unrelated constraints"
+  },
+  {
+    "check": "Complete mobile section picker, focus, Back and account anchor navigation"
+  },
+  {
+    "check": "All six account shortcuts move keyboard focus consistently"
+  },
+  {
+    "check": "Settings section changes retain unsaved edits and name dirty sections"
+  },
+  {
+    "check": "Permission groups disclose explicitly and searching exposes matching controls"
+  },
+  {
+    "check": "Audit presets apply supported filters and can return to All activity"
+  },
+  {
+    "check": "User overflow menu exposes named secondary and destructive actions"
+  },
+  {
+    "check": "Cancelling Delete and Revoke returns focus to the user menu trigger"
+  },
+  {
+    "check": "paste keeps private/password overrides when options close and persists real content"
+  },
+  {
+    "check": "upload keeps private/password overrides when options close and persists real content"
+  },
+  {
+    "check": "Real coarse-pointer switch extension toggles without enlarging visible track"
+  },
+  {
+    "check": "Phone folder creation remains visibly labeled at 320"
+  },
+  {
+    "check": "paste closed-option short and multibyte password recovery at 320"
+  },
+  {
+    "check": "upload closed-option short and multibyte password recovery at 320"
+  },
+  {
+    "check": "Actual touch calendar targets, selection and no overflow at 320"
+  },
+  {
+    "check": "Phone date popover bounds and selected-range clearing at 320×740"
+  },
+  {
+    "check": "Phone date popover bounds and selected-range clearing at 320×844"
+  },
+  {
+    "check": "Phone folder creation remains visibly labeled at 390"
+  },
+  {
+    "check": "paste closed-option short and multibyte password recovery at 390"
+  },
+  {
+    "check": "upload closed-option short and multibyte password recovery at 390"
+  },
+  {
+    "check": "Actual touch calendar targets, selection and no overflow at 390"
+  },
+  {
+    "check": "Phone date popover bounds and selected-range clearing at 390×740"
+  },
+  {
+    "check": "Phone date popover bounds and selected-range clearing at 390×844"
+  },
+  {
+    "check": "Real coarse-pointer tablet tabs at 820"
+  },
+  {
+    "check": "200% layout emulation at 720 CSS px with 2x device scale"
+  },
+  {
+    "check": "No uncaught browser errors"
+  }
+]

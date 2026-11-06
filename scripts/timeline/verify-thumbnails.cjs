@@ -235,7 +235,16 @@ async function main() {
     const moderator = await login(browser, accountIds[1])
     await moderator.page.goto(origin + '/dashboard/users')
     await moderator.page
-      .getByRole('button', { name: 'View content for Alex Morgan' })
+      .getByRole('button', {
+        name: 'More actions for Alex Morgan',
+        exact: true,
+      })
+      .click()
+    await moderator.page
+      .getByRole('menuitem', {
+        name: 'View content for Alex Morgan',
+        exact: true,
+      })
       .click()
     const dialog = moderator.page.getByRole('dialog')
     await dialog

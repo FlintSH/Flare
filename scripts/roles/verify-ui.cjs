@@ -200,6 +200,12 @@ async function checkSessionRevocation(admin, member, user) {
   await page.getByPlaceholder('Search by name or email…').fill(user.email)
   await page
     .getByRole('button', {
+      name: `More actions for ${user.name}`,
+      exact: true,
+    })
+    .click()
+  await page
+    .getByRole('menuitem', {
       name: `Revoke sessions for ${user.name}`,
       exact: true,
     })

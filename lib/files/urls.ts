@@ -104,7 +104,8 @@ export function fileUrls(
 /**
  * Whether Next's image optimizer may resize a file's thumbnail. It fetches
  * without the viewer's session, so only a public file without a password
- * qualifies. Animated GIFs would lose their animation.
+ * qualifies. Animated GIFs would lose their animation; SVG thumbnails use
+ * the browser directly because Next's optimizer intentionally rejects SVG.
  */
 export function canOptimizeThumbnail(file: {
   visibility: string
@@ -114,7 +115,8 @@ export function canOptimizeThumbnail(file: {
   return (
     file.visibility === 'PUBLIC' &&
     !file.hasPassword &&
-    file.mimeType !== 'image/gif'
+    file.mimeType !== 'image/gif' &&
+    file.mimeType !== 'image/svg+xml'
   )
 }
 

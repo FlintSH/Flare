@@ -7,13 +7,15 @@ import { Circle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
+import './touch-controls.css'
+
 const RadioGroup = React.forwardRef<
   React.ElementRef<typeof RadioGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Root>
 >(({ className, ...props }, ref) => {
   return (
     <RadioGroupPrimitive.Root
-      className={cn('grid gap-2', className)}
+      className={cn('flare-radio-group grid gap-2', className)}
       {...props}
       ref={ref}
     />
@@ -29,7 +31,7 @@ const RadioGroupItem = React.forwardRef<
     <RadioGroupPrimitive.Item
       ref={ref}
       className={cn(
-        'aspect-square h-4 w-4 rounded-full border-2 border-control text-primary shadow focus-visible:outline-none data-[state=checked]:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
+        'flare-touch-radio relative aspect-square h-4 w-4 rounded-full border-2 border-control text-primary shadow focus-visible:outline-none data-[state=checked]:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50',
         className
       )}
       {...props}

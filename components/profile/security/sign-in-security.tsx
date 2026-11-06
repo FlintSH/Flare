@@ -307,7 +307,7 @@ function AccountSignInSecurity() {
       : status.passkeyRequired && !hasRecentSecurityProof(status))
 
   return (
-    <Card id="sign-in-security" className="scroll-mt-28">
+    <Card id="sign-in-security" className="scroll-mt-28 outline-none">
       <CardHeader>
         <CardTitle>Sign-in security</CardTitle>
         <CardDescription>
