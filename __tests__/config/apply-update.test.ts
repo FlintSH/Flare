@@ -154,3 +154,28 @@ describe('saving storage settings', () => {
     expect(saved).toHaveLength(1)
   })
 })
+
+describe('saving custom CSS', () => {
+  const css = '\n\nbody {}\n\n\n\na {}\n'
+
+  it('trims it and keeps at most one blank line in a row, whichever route saves it', async () => {
+    const { tx, saved } = transaction(structuredClone(DEFAULT_CONFIG))
+    await applyConfigUpdate(tx, change({ advanced: { customCSS: css } }))
+    expect(
+      (saved[0] as typeof DEFAULT_CONFIG).settings.advanced.customCSS
+    ).toBe('body {}\n\na {}')
+  })
+
+  it('leaves saved custom CSS as it is when a save does not change it', async () => {
+    const current = structuredClone(DEFAULT_CONFIG)
+    current.settings.advanced.customCSS = css
+    const { tx, saved } = transaction(current)
+    await applyConfigUpdate(
+      tx,
+      change({ general: { registrations: { enabled: false } } })
+    )
+    expect(
+      (saved[0] as typeof DEFAULT_CONFIG).settings.advanced.customCSS
+    ).toBe(css)
+  })
+})

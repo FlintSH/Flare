@@ -112,11 +112,6 @@ export const POST = api(async (request) => {
   delete config.settings.customization
 
   keepSavedCredentials(config.settings)
-  if (config.settings.advanced.customCSS) {
-    config.settings.advanced.customCSS = config.settings.advanced.customCSS
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  }
 
   await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)

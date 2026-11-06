@@ -229,6 +229,8 @@ Administration writes follow the [browser-session write rule](./authentication#b
 
 A `/api/settings` save that includes storage settings with S3 selected answers `400` with the missing or invalid value, such as `Bucket name is required`, when the [saved result](/hosting/storage#s3-compatible-storage) would lack a bucket, region, either key, or a valid HTTP(S) endpoint; a blank key keeps the saved one. Earlier builds saved such settings.
 
+`PATCH` and the legacy `POST` on `/api/settings` both save submitted custom CSS trimmed, with at most one blank line in a row. Earlier builds tidied it only in the `POST`, so CSS saved from Settings kept its extra blank lines.
+
 ## Public and bootstrap routes
 
 | Path                            | Methods   | Authentication and purpose                                                                                                                                                                      |

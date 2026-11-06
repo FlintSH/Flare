@@ -128,6 +128,8 @@ With the **Administrator** permission, open **Settings → Appearance → Custom
 
 Use these controls for an intentional site-wide change and test the login, dashboard, share, and mobile layouts after saving. Prefer studio fields for colors and identity when they provide the behavior you need. CSS selectors tied to internal components may need adjustment after upgrades. Treat head HTML as code with access to your site's browser context; only add content you understand and control.
 
+Saving custom CSS removes blank space before and after it and keeps at most one empty line in a row, whether you save it from **Settings** or through the older whole-settings form. Earlier versions tidied it only from the older form, so CSS saved from **Settings** kept every blank line.
+
 ## Recover an unusable appearance
 
 Sign in as an administrator and open:

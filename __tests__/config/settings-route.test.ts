@@ -92,7 +92,7 @@ describe('POST /api/settings', () => {
   it('saves the whole document without the Email tab and appearance studio sections', async () => {
     const response = await post({
       settings: {
-        advanced: { customCSS: '\n\nbody {}\n\n\n\na {}\n' },
+        advanced: { customCSS: 'body {}' },
         email: { enabled: true },
         customization: {},
       },
@@ -100,7 +100,7 @@ describe('POST /api/settings', () => {
     expect(response.status).toBe(200)
     expect(mocks.apply).toHaveBeenCalledWith(
       {},
-      { settings: { advanced: { customCSS: 'body {}\n\na {}' } } }
+      { settings: { advanced: { customCSS: 'body {}' } } }
     )
   })
 })

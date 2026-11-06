@@ -224,7 +224,7 @@ Setup also maintains `general.setup.completed` (initially `false`) and `general.
 
 ### Saved appearance fields
 
-Legacy appearance remains in `settings.appearance`: `theme` defaults to `dark`; `favicon` is initially `null`; `customColors` is the original HSL palette. `settings.advanced.customCSS` and `settings.advanced.customHead` are empty strings initially. The favicon and custom styles are separate from studio packs.
+Legacy appearance remains in `settings.appearance`: `theme` defaults to `dark`; `favicon` is initially `null`; `customColors` is the original HSL palette. `settings.advanced.customCSS` and `settings.advanced.customHead` are empty strings initially. A save that changes `customCSS` stores it trimmed, with at most one blank line in a row, whether it comes from Settings or the older whole-settings form; earlier versions tidied it only from the older form. The favicon and custom styles are separate from studio packs.
 
 `theme` must be `dark`, `light`, or `system`. Each `customColors` entry needs a name made of letters and digits that starts with a lowercase letter, and an HSL triplet such as `222.2 84% 4.9%` or a hex color, which is stored as HSL. Submitted colors are merged into the saved palette, which holds at most 64 colors, counting the ones already saved. Saving other values, or a change that would take the palette past 64 colors, returns `400` and saves nothing. Values written by earlier builds or edited directly in the database are read leniently: an invalid theme counts as `dark`, invalid colors are ignored, and both are removed the next time any settings are saved.
 

@@ -440,6 +440,11 @@ export async function applyConfigUpdate(
         s3: { ...storage.s3, ...usable.data.s3 },
       }
     }
+    // Tidy custom CSS only when it is submitted; other saves leave the saved
+    // text as it is.
+    const { advanced } = checked.data.settings
+    if (update.settings?.advanced?.customCSS !== undefined)
+      advanced.customCSS = advanced.customCSS.replace(/\n{3,}/g, '\n\n').trim()
     return checked.data
   })
   logger.info('Configuration updated successfully')
