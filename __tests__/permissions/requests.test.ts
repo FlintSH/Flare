@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { requestPermissions } from '@/lib/permissions/requests'
+import {
+  requestPermissions,
+  requiredApiScope,
+} from '@/lib/integrations/bearer-routes'
 import { settingsPatchAllowed } from '@/lib/permissions/settings'
 
 describe('bearer route permissions', () => {
   it.each([
+    ['GET', '/api/settings', []],
     ['GET', '/api/files', ['files.read']],
     ['GET', '/api/files/timeline', ['files.read']],
     ['GET', '/api/files/tags', ['files.read']],
@@ -41,6 +45,45 @@ describe('bearer route permissions', () => {
   ])('does not implicitly authorize %s', (path) => {
     expect(requestPermissions('POST', path)).toBeNull()
   })
+  it.each([
+    ['GET', '/api/files', 'files:read', ['files.read']],
+    ['PUT', '/api/files/chunks/abc/part/1', 'files:upload', ['files.upload']],
+    ['POST', '/api/urls', 'urls:write', ['links.create']],
+    ['DELETE', '/api/urls/cm_link', 'urls:write', ['links.delete']],
+  ])(
+    '%s %s takes its token scope and role grants from one entry',
+    (method, path, scope, permissions) => {
+      expect(requiredApiScope(method, path)).toBe(scope)
+      expect(requestPermissions(method, path)).toEqual(permissions)
+    }
+  )
+  it('keeps session-only routes off the named-token allowlist', () => {
+    expect(requestPermissions('GET', '/api/files/tags')).toEqual(['files.read'])
+    expect(requiredApiScope('GET', '/api/files/tags')).toBeNull()
+  })
+  it.each([
+    ['GET', '/api/files/chunks/a.b/part/1'],
+    ['PUT', '/api/files/chunks/a%2Fb/part/1'],
+    ['POST', '/api/files/chunks/a%2fb/complete'],
+    ['DELETE', '/api/urls/a.b'],
+  ])(
+    'refuses %s %s for every credential: named-token routes accept only plain IDs',
+    (method, path) => {
+      expect(requestPermissions(method, path)).toBeNull()
+      expect(requiredApiScope(method, path)).toBeNull()
+    }
+  )
+  it.each([
+    ['PATCH', '/api/folders/a.b', ['folders.manage']],
+    ['DELETE', '/api/tags/a.b', ['tags.manage']],
+    ['POST', '/api/tags/a.b/apply', ['tags.manage', 'files.update']],
+    ['GET', '/api/files/a.b/expiry', ['files.read']],
+  ])(
+    'leaves any ID segment of the session-only %s %s to its handler',
+    (method, path, permissions) => {
+      expect(requestPermissions(method, path)).toEqual(permissions)
+    }
+  )
 })
 
 describe('delegated settings', () => {

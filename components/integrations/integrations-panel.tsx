@@ -45,6 +45,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+import {
+  API_SCOPE_CATALOG,
+  scopeUsable,
+} from '@/lib/integrations/bearer-routes'
+
 import { usePermissions } from '@/hooks/use-permissions'
 
 type Token = {
@@ -73,12 +78,6 @@ type Snapshot = {
   deliveries: Delivery[]
   profiles: { id: string; name: string }[]
 }
-const scopes = [
-  ['files:upload', 'Upload files', 'Send screenshots and files'],
-  ['files:read', 'Read files', 'List your files and metadata'],
-  ['urls:read', 'Read short links', 'List your shortened URLs'],
-  ['urls:write', 'Manage short links', 'Create and delete your short links'],
-] as const
 // Card titles that are also headings, so each card is reachable by heading.
 const cardTitle = 'font-semibold leading-none tracking-tight'
 // One header layout for cards with actions, as on the other profile tabs:
@@ -378,46 +377,37 @@ export function IntegrationsPanel({
                     <legend className="mb-2 text-sm font-medium">
                       Allowed actions
                     </legend>
-                    {scopes
-                      .filter(
-                        ([scope]) =>
-                          ({
-                            'files:upload': can('files.upload'),
-                            'files:read': can('files.read'),
-                            'urls:read': can('links.read'),
-                            'urls:write':
-                              can('links.create') || can('links.delete'),
-                          })[scope]
-                      )
-                      .map(([value, label, description]) => (
-                        <label
-                          key={value}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            checked={selectedScopes.includes(value)}
-                            onChange={(event) =>
-                              setSelectedScopes(
-                                event.target.checked
-                                  ? [...selectedScopes, value]
-                                  : selectedScopes.filter(
-                                      (scope) => scope !== value
-                                    )
-                              )
-                            }
-                          />
-                          <span>
-                            <span className="block text-sm font-medium">
-                              {label}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {description}
-                            </span>
+                    {API_SCOPE_CATALOG.filter(({ scope }) =>
+                      scopeUsable(scope, can)
+                    ).map(({ scope: value, label, description }) => (
+                      <label
+                        key={value}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={selectedScopes.includes(value)}
+                          onChange={(event) =>
+                            setSelectedScopes(
+                              event.target.checked
+                                ? [...selectedScopes, value]
+                                : selectedScopes.filter(
+                                    (scope) => scope !== value
+                                  )
+                            )
+                          }
+                        />
+                        <span>
+                          <span className="block text-sm font-medium">
+                            {label}
                           </span>
-                        </label>
-                      ))}
+                          <span className="text-xs text-muted-foreground">
+                            {description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
                   </fieldset>
                   <div className="space-y-2">
                     <Label htmlFor="token-profile">Upload profile</Label>
@@ -481,15 +471,8 @@ export function IntegrationsPanel({
                   </p>
                 )}
                 {data?.tokens.map((token) => {
-                  const tokenScopes = token.scopes.filter(
-                    (scope) =>
-                      ({
-                        'files:upload': can('files.upload'),
-                        'files:read': can('files.read'),
-                        'urls:read': can('links.read'),
-                        'urls:write':
-                          can('links.create') || can('links.delete'),
-                      })[scope]
+                  const tokenScopes = token.scopes.filter((scope) =>
+                    scopeUsable(scope, can)
                   )
                   return (
                     <div
@@ -547,8 +530,9 @@ export function IntegrationsPanel({
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {tokenScopes.map((scope) => (
                             <Badge key={scope}>
-                              {scopes.find(([value]) => value === scope)?.[1] ||
-                                scope}
+                              {API_SCOPE_CATALOG.find(
+                                (entry) => entry.scope === scope
+                              )?.label || scope}
                             </Badge>
                           ))}
                           {/* The bound profile is a different kind of chip

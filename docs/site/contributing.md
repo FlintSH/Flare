@@ -605,7 +605,7 @@ The former `.github/workflows/meticulous.yaml` workflow has been removed. Once t
 
 `npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide.
 
-Changes to role and user-management components or `lib/permissions/` require administration guidance; changes to the permission-to-route map also require the API reference. The gate tests these paths with an isolated Git fixture.
+Changes to role and user-management components or `lib/permissions/` require administration guidance; changes to the bearer route table in `lib/integrations/bearer-routes.ts`, which maps API routes to permissions and token scopes, also require the API reference. The gate tests these paths with an isolated Git fixture.
 
 CI also checks each non-merge commit on pull requests and direct pushes to `main`:
 

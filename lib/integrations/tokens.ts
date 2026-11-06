@@ -1,12 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-export const API_SCOPES = [
-  'files:read',
-  'files:upload',
-  'urls:read',
-  'urls:write',
-] as const
-export type ApiScope = (typeof API_SCOPES)[number]
+import { requiredApiScope } from './bearer-routes'
+
 export const TOKEN_PREFIX = 'flr_'
 
 // Tokens contain 32 cryptographically random bytes (256 bits), so SHA-256 is a
@@ -20,37 +15,9 @@ export function createRandomApiToken(): { token: string; hash: string } {
   return { token, hash: hashApiToken(token) }
 }
 
-/** Explicit routes prevent new account/admin endpoints inheriting bearer access. */
-export function requiredApiScope(
-  method: string,
-  pathname: string
-): ApiScope | null {
-  if (
-    method === 'GET' &&
-    ['/api/files', '/api/files/types', '/api/files/timeline'].includes(pathname)
-  )
-    return 'files:read'
-  if (method === 'POST' && pathname === '/api/files') return 'files:upload'
-  if (
-    ['POST', 'GET', 'PUT'].includes(method) &&
-    pathname === '/api/files/chunks'
-  )
-    return 'files:upload'
-  if (
-    ['GET', 'PUT'].includes(method) &&
-    /^\/api\/files\/chunks\/[a-zA-Z0-9_-]+\/part\/\d+$/.test(pathname)
-  )
-    return 'files:upload'
-  if (
-    method === 'POST' &&
-    /^\/api\/files\/chunks\/[a-zA-Z0-9_-]+\/complete$/.test(pathname)
-  )
-    return 'files:upload'
-  if (method === 'GET' && pathname === '/api/urls') return 'urls:read'
-  if (method === 'POST' && pathname === '/api/urls') return 'urls:write'
-  if (method === 'DELETE' && /^\/api\/urls\/[a-zA-Z0-9_-]+$/.test(pathname))
-    return 'urls:write'
-  return null
+/** Unlike an API token, a signing secret is stored encrypted: Flare signs every delivery with it. */
+export function createWebhookSecret(): string {
+  return 'whsec_' + randomBytes(32).toString('base64url')
 }
 
 export function tokenAllowsRequest(

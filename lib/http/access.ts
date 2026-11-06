@@ -3,8 +3,8 @@ import {
   type AuthenticatedUser,
   getAuthenticatedUser,
 } from '@/lib/auth/api-auth'
+import { requestPermissions } from '@/lib/integrations/bearer-routes'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
-import { requestPermissions } from '@/lib/permissions/requests'
 
 import { AccessError } from './errors'
 

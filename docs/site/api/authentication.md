@@ -10,7 +10,7 @@ With `tokens.manage`, create one named API token for each script or service in *
 ## Create a token
 
 1. Choose a name of 1–80 characters. Use the name to identify the machine, service, or purpose.
-2. Select one or more scopes from the table below.
+2. Select one or more scopes from the table below. The form offers a scope only while your role allows at least one of its operations, as listed in [Scopes and account roles](#scopes-and-account-roles). For example, `urls:write` appears with either `links.create` or `links.delete`.
 3. Optionally select an expiration in the future. Without an expiration, the token remains active until revoked.
 4. If it uploads files, optionally bind it to one of your saved upload profiles.
 5. Create the token and save the displayed `flr_…` secret in your tool's secret store.
@@ -43,6 +43,8 @@ A named `flr_` bearer token uses its own authority even if browser cookies accom
 | `urls:write`   | `POST /api/urls`; `DELETE /api/urls/{id}`                                                                                                                            |
 
 Scopes are independent. `files:upload` does not include listing, and `urls:write` does not include listing. Select both relevant scopes when a service needs both capabilities.
+
+The `{uploadId}` and `{id}` path segments in these routes accept letters, digits, `_`, and `-`, which covers every ID Flare returns. A path whose ID contains any other character is outside the allowlist: a named token gets `401`, and a browser session or the legacy upload token gets `403`.
 
 `files:read` returns your file metadata, including private files. It does **not** authorize private file downloads, thumbnails, or OCR routes. Those use the file's sharing rules and browser session. `files:upload` does not provide a chunk cancellation or uploaded-parts listing endpoint.
 

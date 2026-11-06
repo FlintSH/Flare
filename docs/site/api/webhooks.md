@@ -66,9 +66,9 @@ The payload does not contain file contents, storage paths, share URLs, passwords
 
 ### Test events
 
-A test has the same version/type and data fields, adds **`"test": true`**, and uses an ID beginning with `test:`. Its sample file is `example.png` with ID `example-file`. It does not create a file or consume your file quota. Branch on `test === true` when production side effects would be inappropriate.
+A test has the same version/type and data fields, adds **`"test": true`**, and uses an ID beginning with `test:`. Its sample file is `example.png` with ID `example-file`: a public 1,024-byte PNG without a password, with `occurredAt` set to when you sent the test. It does not create a file or consume your file quota. Branch on `test === true` when production side effects would be inappropriate.
 
-Tests use the normal delivery queue and signature protocol. Each destination can receive **10 test sends per hour**. A paused webhook must be enabled before testing.
+Tests use the normal delivery queue and signature protocol. Each destination can receive **10 test sends per hour**. A paused webhook must be enabled before testing. The [queue limits](#queue-and-network-limits) apply too, but unlike upload events, which are skipped at capacity, a test or a manual retry is refused with `Webhook queue is full` while the destination has 1,000 pending or processing deliveries or the account has 5,000.
 
 ## Verify each delivery
 

@@ -21,17 +21,13 @@ const errors = []
 const inventory = await read('docs/site/api/endpoint-inventory.md')
 const config = await read('docs/site/hosting/configuration.md')
 const spec = JSON.parse(await read('docs/site/public/openapi.json'))
-const moduleSource = stripTypeScriptTypes(
-  await read('lib/integrations/tokens.ts')
+// A data: URL module cannot resolve imports, so the two modules loaded this way,
+// the bearer route table and the permission catalog, import nothing but types.
+const bearerRouteSource = stripTypeScriptTypes(
+  await read('lib/integrations/bearer-routes.ts')
 )
-const { requiredApiScope } = await import(
-  `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`
-)
-const permissionSource = stripTypeScriptTypes(
-  await read('lib/permissions/requests.ts')
-)
-const { requestPermissions } = await import(
-  `data:text/javascript;base64,${Buffer.from(permissionSource).toString('base64')}`
+const { requestPermissions, requiredApiScope } = await import(
+  `data:text/javascript;base64,${Buffer.from(bearerRouteSource).toString('base64')}`
 )
 const catalogSource = stripTypeScriptTypes(
   await read('lib/permissions/catalog.ts')
@@ -63,11 +59,11 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
       /export\s+(?:(?:async\s+)?function|const)\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g
     ),
   ].map((match) => match[1])
+  const examplePath = path
+    .replace(/\{partNumber\}/g, '1')
+    .replace(/\{[^}]+\}/g, 'example-id')
   for (const method of methods) {
-    const scope = requiredApiScope(
-      method,
-      path.replace(/\{partNumber\}/g, '1').replace(/\{[^}]+\}/g, 'example-id')
-    )
+    const scope = requiredApiScope(method, examplePath)
     if (!scope) continue
     operations.add(`${method.toLowerCase()} ${path}`)
     const operation = spec.paths?.[path]?.[method.toLowerCase()]
@@ -78,10 +74,7 @@ for (const file of (await walk(resolve(repo, 'app/api'))).filter((file) =>
         `Wrong OpenAPI scope for ${method} ${path}: expected ${scope}`
       )
     if (operation) {
-      const permissions = requestPermissions(
-        method,
-        path.replace(/\{partNumber\}/g, '1').replace(/\{[^}]+\}/g, 'example-id')
-      )
+      const permissions = requestPermissions(method, examplePath)
       if (
         JSON.stringify(operation['x-flare-permissions']) !==
         JSON.stringify(permissions)

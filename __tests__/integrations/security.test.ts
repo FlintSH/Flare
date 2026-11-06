@@ -2,6 +2,10 @@ import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  API_SCOPE_CATALOG,
+  scopeUsable,
+} from '@/lib/integrations/bearer-routes'
+import {
   isPublicAddress,
   parseWebhookUrl,
   resolveWebhookTarget,
@@ -9,9 +13,11 @@ import {
 } from '@/lib/integrations/security'
 import {
   createRandomApiToken,
+  createWebhookSecret,
   hashApiToken,
   tokenAllowsRequest,
 } from '@/lib/integrations/tokens'
+import type { Permission } from '@/lib/permissions/catalog'
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }))
 vi.mock('node:dns/promises', () => dns)
@@ -30,6 +36,26 @@ describe('scoped API tokens', () => {
     expect(hashApiToken(first.token)).toBe(first.hash)
     expect(first.token).not.toBe(second.token)
     expect(first.hash).not.toBe(second.hash)
+  })
+  it('mints high entropy webhook signing secrets', () => {
+    const secret = createWebhookSecret()
+    expect(secret).toMatch(/^whsec_[\w-]{43}$/)
+    expect(createWebhookSecret()).not.toBe(secret)
+  })
+  it('offers a scope while the owner can use at least one of its routes', () => {
+    const usable = (granted: Permission[]) =>
+      API_SCOPE_CATALOG.map(({ scope }) => scope).filter((scope) =>
+        scopeUsable(scope, (permission) => granted.includes(permission))
+      )
+    expect(usable(['files.upload', 'files.read', 'links.read'])).toEqual([
+      'files:upload',
+      'files:read',
+      'urls:read',
+    ])
+    expect(usable(['links.create'])).toEqual(['urls:write'])
+    expect(usable(['links.delete'])).toEqual(['urls:write'])
+    expect(usable(['tokens.manage', 'files.update', 'tags.manage'])).toEqual([])
+    expect(scopeUsable('files:delete', () => true)).toBe(false)
   })
   it('allows only exact route/method combinations and never account or token management', () => {
     const allowed = (method: string, path: string, scopes = ['files:upload']) =>
