@@ -125,6 +125,8 @@ The card menu and the buttons shown when you hover a file follow the same permis
 
 <Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
 
+When you confirm **Delete file**, the file's size stops counting toward your storage use in **Profile → Your data** at once. Flare removes the stored copy in the same step. If the storage service fails at that moment, the file is still deleted from your library and you see **File deleted**; Flare records the failure for your administrator, who may need to remove the leftover copy.
+
 ## Work with several files
 
 Choose **Select**, then select individual cards or **Select visible files**. The latter selects loaded cards currently on screen, up to the selection limit; it does not select your whole library or files loaded just beyond the screen. Scroll to add files from another part of the library. Your selection stays selected as cards leave the screen, and the selection bar remains available while you scroll.

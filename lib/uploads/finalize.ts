@@ -1,5 +1,4 @@
 import { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { basename, extname } from 'node:path'
 
@@ -15,6 +14,7 @@ import {
   storedExpiry,
 } from '@/lib/files/expiry'
 import { urlSafeFilename } from '@/lib/files/filename'
+import { hashFilePassword } from '@/lib/files/password-hash'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
@@ -97,9 +97,7 @@ export async function prepareUpload(
   const passwordHash =
     input.passwordHash !== undefined
       ? input.passwordHash
-      : options.password
-        ? await hash(options.password, 10)
-        : null
+      : await hashFilePassword(options.password)
   return { ...input, passwordHash, [validatedUpload]: true }
 }
 

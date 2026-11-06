@@ -10,6 +10,7 @@ import { emailRoutes } from '@/lib/email/http'
 import { MailLimitError } from '@/lib/email/outbox'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
+import { pageWindow } from '@/lib/http/pagination'
 import { assertJsonMutation, readJson } from '@/lib/http/request'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
@@ -51,14 +52,6 @@ export const GET = api(async (request) => {
   await requireSession('users.read')
 
   const { searchParams } = new URL(request.url)
-  const requestedPage = Number(searchParams.get('page') || '1')
-  const requestedLimit = Number(searchParams.get('limit') || '25')
-  const safePage =
-    Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
-  const limit =
-    Number.isSafeInteger(requestedLimit) && requestedLimit > 0
-      ? Math.min(requestedLimit, 100)
-      : 25
   const search = (searchParams.get('search') || '').trim().slice(0, 200)
   const roleId = searchParams.get('roleId')
   const everyone = await prisma.role.findUnique({
@@ -78,8 +71,14 @@ export const GET = api(async (request) => {
       : {}),
   }
   const total = await prisma.user.count({ where })
-  const page = Math.min(safePage, Math.max(1, Math.ceil(total / limit)))
-  const skip = (page - 1) * limit
+  const { page, pages, limit, skip } = pageWindow(
+    total,
+    {
+      page: Number(searchParams.get('page')),
+      limit: Number(searchParams.get('limit')),
+    },
+    { defaultLimit: 25, maxLimit: 100 }
+  )
 
   const users = await prisma.user.findMany({
     where,
@@ -109,7 +108,7 @@ export const GET = api(async (request) => {
 
   const pagination = {
     total,
-    pageCount: Math.ceil(total / limit),
+    pageCount: pages,
     page,
     limit,
   }

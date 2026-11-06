@@ -1214,4 +1214,95 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     await prisma.auditEvent.findMany()
     expect(await base.auditEvent.count()).toBe(1)
   })
+
+  it("moderates a file only through its owner's account and keeps the deletion evidence", async () => {
+    const { deleteFile, updateFileSettings } =
+      await import('@/lib/files/manage')
+    const { loggers } = await import('@/lib/logger')
+    const logged = vi.spyOn(loggers.files, 'error').mockImplementation(() => {})
+    await base.user.create({
+      data: {
+        id: 'file-owner',
+        name: 'Sam',
+        urlId: 'file-owner',
+        uploadToken: 'owner-fixture-secret',
+        storageUsed: 5,
+      },
+    })
+    await base.file.create({
+      data: {
+        id: 'moderated-file',
+        name: 'notes.txt',
+        userId: 'file-owner',
+        urlPath: 'moderated-file',
+        path: 'fixture/moderated-file',
+        mimeType: 'text/plain',
+        size: 2,
+      },
+    })
+    const moderating = (accountId: string) =>
+      ({ as: 'moderator', accountId }) as const
+
+    // Through another account the file is missing: no update is attempted,
+    // so no failed mutation is recorded either.
+    await expect(
+      updateFileSettings(moderating('audit-actor'), 'moderated-file', {
+        visibility: 'PRIVATE',
+      })
+    ).rejects.toMatchObject({ status: 404, message: 'File not found' })
+    await expect(
+      deleteFile(moderating('audit-actor'), 'moderated-file')
+    ).rejects.toMatchObject({ status: 404 })
+    expect(await base.auditEvent.count()).toBe(0)
+
+    const changed = await updateFileSettings(
+      moderating('file-owner'),
+      'moderated-file',
+      { visibility: 'PRIVATE', password: 'correct horse battery' }
+    )
+    expect(changed).toMatchObject({ visibility: 'PRIVATE', hasPassword: true })
+    expect(changed).not.toHaveProperty('password')
+
+    // This suite's storage stub cannot delete, so the record goes anyway.
+    await deleteFile(moderating('file-owner'), 'moderated-file')
+    expect(await base.file.count()).toBe(0)
+    expect(
+      await base.user.findUniqueOrThrow({
+        where: { id: 'file-owner' },
+        select: { storageUsed: true },
+      })
+    ).toEqual({ storageUsed: 3 })
+    expect(logged).toHaveBeenCalledWith(
+      'Error deleting file from storage',
+      expect.any(Error),
+      { fileId: 'moderated-file', filePath: 'fixture/moderated-file' }
+    )
+    const events = await base.auditEvent.findMany({
+      select: { action: true, outcome: true, targetId: true, details: true },
+    })
+    expect(events).toHaveLength(3)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'file.update',
+          outcome: 'success',
+          targetId: 'moderated-file',
+          details: expect.objectContaining({
+            changedFields: ['visibility', 'password'],
+          }),
+        }),
+        expect.objectContaining({
+          action: 'storage.delete_failed',
+          outcome: 'failure',
+          targetId: 'moderated-file',
+          details: expect.objectContaining({ ownerId: 'file-owner' }),
+        }),
+        expect.objectContaining({
+          action: 'file.delete',
+          outcome: 'success',
+          targetId: 'moderated-file',
+        }),
+      ])
+    )
+  })
 })

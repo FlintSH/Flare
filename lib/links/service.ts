@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
+import { pageWindow } from '@/lib/http/pagination'
 import type { AccountShortLinkPage, ShortLink } from '@/lib/links/schema'
 
 class ShortLinkError extends HttpError {
@@ -24,17 +25,12 @@ const shortLinkSelect = {
 
 /** Codes are random, so another draw almost always finds a free one. */
 const CODE_ATTEMPTS = 5
-const DEFAULT_PAGE_LIMIT = 10
-const MAX_PAGE_LIMIT = 100
 
 function linkView<Link extends { createdAt: Date }>(
   link: Link
 ): Omit<Link, 'createdAt'> & { createdAt: string } {
   return { ...link, createdAt: link.createdAt.toISOString() }
 }
-
-const positiveInteger = (value: number) =>
-  Number.isSafeInteger(value) && value > 0
 
 /** A new link under a free six-character code. */
 export async function createShortLink(
@@ -80,18 +76,11 @@ export async function deleteOwnShortLink(userId: string, id: string) {
   await prisma.shortenedUrl.delete({ where: { id } })
 }
 
-/**
- * One page of an account's links for moderators, newest first. A page or
- * limit that isn't a positive integer gets its default; the limit is capped
- * at 100 and the page at the last one.
- */
+/** One page of an account's links for moderators, newest first: 10 unless asked, at most 100. */
 export async function listAccountShortLinks(
   userId: string,
   query: { page: number; limit: number; search: string }
 ): Promise<AccountShortLinkPage> {
-  const limit = positiveInteger(query.limit)
-    ? Math.min(query.limit, MAX_PAGE_LIMIT)
-    : DEFAULT_PAGE_LIMIT
   const where: Prisma.ShortenedUrlWhereInput = {
     userId,
     ...(query.search
@@ -104,15 +93,14 @@ export async function listAccountShortLinks(
       : {}),
   }
   const total = await prisma.shortenedUrl.count({ where })
-  const pages = Math.ceil(total / limit)
-  const page = Math.min(
-    positiveInteger(query.page) ? query.page : 1,
-    Math.max(1, pages)
-  )
+  const { page, pages, limit, skip } = pageWindow(total, query, {
+    defaultLimit: 10,
+    maxLimit: 100,
+  })
   const links = await prisma.shortenedUrl.findMany({
     where,
     orderBy: { createdAt: 'desc' },
-    skip: (page - 1) * limit,
+    skip,
     take: limit,
     select: { ...shortLinkSelect, userId: false },
   })

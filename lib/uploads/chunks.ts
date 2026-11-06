@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { hash } from 'bcryptjs'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   mkdir,
@@ -17,6 +16,7 @@ import { getConfig, readConfig } from '@/lib/config'
 import { maxUploadBytes, storageQuotaBytes } from '@/lib/config/limits'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { hashFilePassword } from '@/lib/files/password-hash'
 import { readJson } from '@/lib/http/request'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
@@ -207,9 +207,7 @@ export async function initializeChunkUpload(
     mimeType
   )
   const uploadId = randomUUID().replace(/-/g, '')
-  const passwordHash = options.password
-    ? await hash(options.password, 10)
-    : null
+  const passwordHash = await hashFilePassword(options.password)
   await saveUploadMetadata(uploadId, {
     fileKey: destination.filePath,
     filename: destination.displayName,

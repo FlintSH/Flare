@@ -511,7 +511,8 @@ export function UserList() {
         if (requestId !== filesRequest.current) return
         setUserFiles(data.files)
         setFilePagination(data.pagination)
-        setFilePage(page)
+        // A page past the end comes back as the last page.
+        setFilePage(data.pagination.page)
       } catch (error) {
         if (requestId !== filesRequest.current) return
         console.error('Error fetching user files:', error)
@@ -547,7 +548,7 @@ export function UserList() {
         if (requestId !== urlsRequest.current) return
         setUserUrls(data.urls)
         setUrlPagination(data.pagination)
-        setUrlPage(page)
+        setUrlPage(data.pagination.page)
       } catch (error) {
         if (requestId !== urlsRequest.current) return
         console.error('Error fetching user URLs:', error)
