@@ -1173,7 +1173,7 @@ suite('customization contracts against disposable PostgreSQL', () => {
       where: { id: pending.id },
       data: { status: 'PROCESSING' },
     })
-    expect(await expiry.cancelFileExpiration(retained.id, 'owner-one')).toBe(
+    expect(await expiry.cancelFileExpiration('owner-one', retained.id)).toBe(
       true
     )
     await expiry.applyFileExpiration(stale)

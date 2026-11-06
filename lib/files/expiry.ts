@@ -4,9 +4,13 @@ import type { Event, Prisma } from '@prisma/client'
 import { recordAudit } from '@/lib/audit'
 import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { HttpError } from '@/lib/http/errors'
 import { createLogger } from '@/lib/logger'
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
+import type { PermissionSubject } from '@/lib/permissions/catalog'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
+import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
 const logger = createLogger('file-expiry')
 
@@ -127,20 +131,60 @@ async function clearSchedules(tx: Prisma.TransactionClient, fileId: string) {
   return pending.count + processing.count
 }
 
-/** Replace an owned file's expiry. Callers check the action's permission. */
-export async function scheduleFileExpiration(
-  fileId: string,
+async function ownedFile(
+  db: Pick<Prisma.TransactionClient, 'file'>,
   userId: string,
-  expiresAt: Date,
-  action: ExpiryAction = ExpiryAction.DELETE
-): Promise<void> {
-  const expiry = fileExpiry(expiresAt, action)
-  if (!expiry || expiry.expiresAt <= new Date())
-    throw new Error('Invalid file expiration.')
+  fileId: string
+) {
+  const file = await db.file.findFirst({ where: { id: fileId, userId } })
+  if (!file) throw new HttpError(404, 'File not found')
+  return file
+}
+
+/** An owned file's earliest pending expiry, or null when none is pending. */
+export async function pendingExpiration(
+  userId: string,
+  fileId: string
+): Promise<Date | null> {
+  await ownedFile(prisma, userId, fileId)
+  return (await getFilesExpirationInfo([fileId])).get(fileId) ?? null
+}
+
+/**
+ * Replace an owned file's expiry with the one `request` asks for: a future
+ * time in the ISO 8601 form uploads take, with `Z` or an offset, and an action,
+ * deletion unless it names another. The action also needs the permission of
+ * what it does.
+ */
+export async function scheduleFileExpiration(
+  owner: PermissionSubject & { id: string },
+  fileId: string,
+  request: unknown
+): Promise<Date> {
+  const { expiresAt, action = ExpiryAction.DELETE } = (request ?? {}) as {
+    expiresAt?: unknown
+    action?: unknown
+  }
+  if (!expiresAt) throw new HttpError(400, 'Expiration date is required')
+  if (!isoDateTimeWithOffset.safeParse(expiresAt).success)
+    throw new HttpError(
+      400,
+      'Invalid expiration date. Use an ISO 8601 timestamp with a timezone.'
+    )
+  const instant = new Date(expiresAt as string)
+  if (instant <= new Date())
+    throw new HttpError(400, 'Invalid expiration date. Must be in the future.')
   await prisma.$transaction(async (tx) => {
-    await lockUserRow(tx, userId)
-    const file = await tx.file.findFirst({ where: { id: fileId, userId } })
-    if (!file) throw new Error('File not found.')
+    await lockUserRow(tx, owner.id)
+    const file = await ownedFile(tx, owner.id, fileId)
+    if (!isExpiryAction(action))
+      throw new HttpError(400, 'Invalid expiration action')
+    if (!allows(owner, EXPIRY_EFFECTS[action]))
+      throw new HttpError(
+        403,
+        'You do not have permission for this expiration action.'
+      )
+    const expiry = { expiresAt: instant, action }
     await clearSchedules(tx, fileId)
     await tx.file.update({
       where: { id: fileId },
@@ -153,17 +197,17 @@ export async function scheduleFileExpiration(
     })
     await queueFileExpiration(tx, file, expiry)
   })
+  return instant
 }
 
 /** Remove an owned file's pending expiry; false when none was pending. */
 export async function cancelFileExpiration(
-  fileId: string,
-  userId: string
+  userId: string,
+  fileId: string
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     await lockUserRow(tx, userId)
-    const file = await tx.file.findFirst({ where: { id: fileId, userId } })
-    if (!file) return false
+    const file = await ownedFile(tx, userId, fileId)
     const count = await clearSchedules(tx, fileId)
     const options = jsonObject(file.uploadOptions)
     await tx.file.updateMany({

@@ -86,10 +86,9 @@ beforeEach(() => {
 describe('file expiration audit actions', () => {
   it('records the locked file name, deadline, action and owner when scheduling without copying upload options', async () => {
     await scheduleFileExpiration(
+      { id: 'owner-1', permissions: ['files.share'] },
       'file-1',
-      'owner-1',
-      expiresAt,
-      ExpiryAction.SET_PRIVATE
+      { expiresAt: expiresAt.toISOString(), action: ExpiryAction.SET_PRIVATE }
     )
     expect(mocks.recordAudit).toHaveBeenCalledWith({
       action: 'file.expiration.scheduled',
@@ -109,7 +108,7 @@ describe('file expiration audit actions', () => {
   })
 
   it('records actual cancellation and does not claim another cancellation after no schedules remain', async () => {
-    expect(await cancelFileExpiration('file-1', 'owner-1')).toBe(true)
+    expect(await cancelFileExpiration('owner-1', 'file-1')).toBe(true)
     expect(mocks.recordAudit).toHaveBeenCalledWith({
       action: 'file.expiration.cancelled',
       category: 'files',
@@ -125,7 +124,7 @@ describe('file expiration audit actions', () => {
     })
     mocks.recordAudit.mockClear()
     mocks.deleteEvents.mockResolvedValue({ count: 0 })
-    expect(await cancelFileExpiration('file-1', 'owner-1')).toBe(false)
+    expect(await cancelFileExpiration('owner-1', 'file-1')).toBe(false)
     expect(mocks.recordAudit).not.toHaveBeenCalled()
   })
 

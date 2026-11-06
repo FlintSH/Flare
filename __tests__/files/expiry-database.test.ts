@@ -287,10 +287,28 @@ suite('file expiry against disposable PostgreSQL', () => {
     ).toBe('PRIVATE')
   })
 
+  it('answers 404 for a file that is gone by the time its owner’s row is locked', async () => {
+    const row = await file()
+    await prisma.file.delete({ where: { id: row.id } })
+    const actor = { id: owner, permissions: ['files.delete'] }
+    const expiresAt = new Date(Date.now() + 60 * minute).toISOString()
+    await expect(
+      expiry.scheduleFileExpiration(actor, row.id, { expiresAt })
+    ).rejects.toMatchObject({ status: 404, message: 'File not found' })
+    await expect(
+      expiry.cancelFileExpiration(owner, row.id)
+    ).rejects.toMatchObject({ status: 404, message: 'File not found' })
+    expect(await prisma.event.count()).toBe(0)
+  })
+
   it('leaves a file alone when its owner cancels while a poller holds the job', async () => {
     const deadline = new Date(Date.now() + 60 * minute)
     const row = await file({ expiryAction: 'DELETE' })
-    await expiry.scheduleFileExpiration(row.id, owner, deadline)
+    await expiry.scheduleFileExpiration(
+      { id: owner, permissions: ['files.delete'] },
+      row.id,
+      { expiresAt: deadline.toISOString() }
+    )
     expect((await expiry.getFilesExpirationInfo([row.id])).get(row.id)).toEqual(
       deadline
     )
@@ -298,7 +316,7 @@ suite('file expiry against disposable PostgreSQL', () => {
       where: { id: (await prisma.event.findFirstOrThrow()).id },
       data: { status: 'PROCESSING' },
     })
-    expect(await expiry.cancelFileExpiration(row.id, owner)).toBe(true)
+    expect(await expiry.cancelFileExpiration(owner, row.id)).toBe(true)
     await expiry.applyFileExpiration(claimed)
     expect(
       await prisma.file.findUnique({ where: { id: row.id } })

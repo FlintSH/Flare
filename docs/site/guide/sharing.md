@@ -138,7 +138,7 @@ With `files.update`, use **Manage expiration** to schedule one of two actions:
 
 A previously scheduled expiration keeps running if a role grant is later revoked; cancel the schedule explicitly to stop it. Expiry work runs through the server's scheduled worker. A link can remain available until that worker processes the action. Downloaded copies and external caches cannot be recalled by expiration or deletion.
 
-Changing account or profile defaults affects future uploads. To change the lifetime of a file already in the library, update that file's expiration directly.
+Changing account or profile defaults affects future uploads. To change the lifetime of a file already in the library, update that file's expiration directly. If the file is deleted while you save its expiration, for example from another tab, **Couldn’t update expiration** says **File not found**. Earlier versions said **Failed to schedule file expiry**, or reported a removed expiration as **Expiration removed**.
 
 ## Control presentation
 
