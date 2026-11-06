@@ -9,7 +9,7 @@ import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
-import { EmailCapabilities, emailRequest } from '@/components/email/api'
+import { fetchEmailCapabilities } from '@/components/email/api'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { isEnforcedVerificationMode } from '@/lib/email/policy'
 import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 
 export function RegisterForm({
@@ -34,11 +35,10 @@ export function RegisterForm({
   const [verificationRequired, setVerificationRequired] = useState(false)
 
   useEffect(() => {
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
+    fetchEmailCapabilities()
       .then((email) =>
         setVerificationRequired(
-          email.enabled &&
-            ['new_users', 'all_users'].includes(email.verificationMode)
+          isEnforcedVerificationMode(email.verificationMode)
         )
       )
       .catch(() => {})

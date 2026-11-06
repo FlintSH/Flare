@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/database/prisma'
 import { emailSettingsRoutes, requireEmailAdmin } from '@/lib/email/admin'
 import { getEmailConfig, prepareEmailConfig } from '@/lib/email/config'
-import { hasVerifiedEmail } from '@/lib/email/policy'
+import { hasVerifiedEmail, satisfiesEmailPolicy } from '@/lib/email/policy'
 import type { EmailConfig } from '@/lib/email/schema'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -17,10 +17,12 @@ async function impact(config: EmailConfig) {
     },
   })
   const unverified = users.filter((user) => !hasVerifiedEmail(user, config))
+  // The accounts all-user verification shuts out once its grace period ends.
+  const affected = users.filter((user) => !satisfiesEmailPolicy(user, config))
   return {
     data: {
       unverifiedUsers: unverified.length,
-      affectedUsers: unverified.filter((user) => !user.emailExempt).length,
+      affectedUsers: affected.length,
     },
   }
 }

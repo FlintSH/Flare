@@ -126,7 +126,9 @@ Keep at least one accessible local administrator account. Flare rejects supporte
 
 With `users.email`, the user edit dialog exposes email verification state and exemption controls when email is enabled. This capability is separate from changing the instance email policy (`settings.email`). You can exempt a user, remove their exemption, or resend an eligible pending verification message.
 
-An exemption permits access under the verification policy; it does not make an address verified or recoverable. Older accounts must enroll their recovery address from their own signed-in Profile. If resend says the user must enroll their address, ask them to complete that flow rather than assuming an old saved email is trustworthy.
+**Send verification** appears only while Flare can send that account another link: the person enrolled the address from their own Profile and hasn't confirmed it yet. Earlier versions showed it for every unverified account and then refused with **This user must enroll their recovery address from their own profile.**
+
+An exemption permits access under the verification policy; it does not make an address verified or recoverable. Older accounts must enroll their recovery address from their own signed-in Profile. When **Send verification** is missing for an unverified account, ask the person to complete that flow rather than assuming an old saved email is trustworthy.
 
 Removing the last administrator exemption under an all-user policy requires a verified administrator recovery path. [Email policy details](/admin/email#choose-an-access-policy).
 

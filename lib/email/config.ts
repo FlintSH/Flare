@@ -7,7 +7,6 @@ import {
   readSavedConfigValue,
   replaceSavedConfigSection,
 } from '@/lib/config'
-import { localSignInAllowed } from '@/lib/config/oidc'
 import { lockRoleChanges, lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { assertAccessibleAdministrator } from '@/lib/permissions/server'
@@ -18,6 +17,8 @@ import {
   isEncryptedSecret,
 } from '@/lib/security/secret-box'
 
+import { emailCapabilities } from './eligibility'
+import { effectiveVerificationMode, isEnforcedVerificationMode } from './policy'
 import {
   EmailConfig,
   emailConfigSchema,
@@ -141,10 +142,7 @@ export async function getEmailConfigForUpdate(
   await lockSettings(tx)
   const saved = await getSavedEmailConfig(tx)
   const config = validateEffectiveConfig(saved)
-  if (
-    config.verification.appliedMode !==
-    (config.enabled ? config.verification.mode : 'off')
-  ) {
+  if (config.verification.appliedMode !== effectiveVerificationMode(config)) {
     const transition = transitionEmailPolicy(saved, config)
     // Persist only server-owned transition state, never environment overrides.
     saved.verification.requiredSince = transition.requiredSince
@@ -160,10 +158,7 @@ export async function getEmailConfig(): Promise<EmailConfig> {
   const config = validateEffectiveConfig(await getSavedEmailConfig())
   // A mutation uses getEmailConfigForUpdate directly, keeping policy stable until
   // commit. Ordinary reads take the lock only to record an environment transition.
-  if (
-    config.verification.appliedMode !==
-    (config.enabled ? config.verification.mode : 'off')
-  )
+  if (config.verification.appliedMode !== effectiveVerificationMode(config))
     return prisma.$transaction(getEmailConfigForUpdate)
   return config
 }
@@ -173,7 +168,7 @@ export function transitionEmailPolicy(
   next: EmailConfig,
   now = new Date()
 ): EmailConfig['verification'] {
-  const appliedMode = next.enabled ? next.verification.mode : 'off'
+  const appliedMode = effectiveVerificationMode(next)
   const prior = previous.verification.appliedMode
   const verification = {
     ...next.verification,
@@ -182,8 +177,8 @@ export function transitionEmailPolicy(
     appliedMode,
   }
   if (
-    ['new_users', 'all_users'].includes(appliedMode) &&
-    (!['new_users', 'all_users'].includes(prior) || !verification.requiredSince)
+    isEnforcedVerificationMode(appliedMode) &&
+    (!isEnforcedVerificationMode(prior) || !verification.requiredSince)
   )
     verification.requiredSince = now.toISOString()
   if (appliedMode === 'all_users' && prior !== 'all_users')
@@ -293,12 +288,5 @@ export async function saveEmailConfig(
 
 export async function getEmailCapabilities() {
   const config = await getEmailConfig()
-  const oidc = (await getConfig()).settings.general.oidc
-  return {
-    enabled: config.enabled,
-    recoveryEnabled:
-      config.enabled && config.recovery.enabled && localSignInAllowed(oidc),
-    verificationMode: config.enabled ? config.verification.mode : 'off',
-    changesEnabled: config.enabled && config.changes.enabled,
-  }
+  return emailCapabilities(config, (await getConfig()).settings.general.oidc)
 }

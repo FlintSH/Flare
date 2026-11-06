@@ -11,7 +11,7 @@ import { signIn } from 'next-auth/react'
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
 import { passkeyError } from '@/components/auth/security-api'
-import { EmailCapabilities, emailRequest } from '@/components/email/api'
+import { fetchEmailCapabilities } from '@/components/email/api'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -56,10 +56,8 @@ export function LoginForm({
 
   useEffect(() => {
     setPasskeysSupported(window.isSecureContext && !!window.PublicKeyCredential)
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
-      .then((email) =>
-        setRecoveryEnabled(email.enabled && email.recoveryEnabled)
-      )
+    fetchEmailCapabilities()
+      .then((email) => setRecoveryEnabled(email.recoveryEnabled))
       .catch(() => {})
     return () => {
       pendingCredentials.current = null

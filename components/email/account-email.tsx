@@ -10,10 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import type { AccountEmailStatus } from '@/lib/email/eligibility'
+
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useSignOut } from '@/hooks/use-sign-out'
 
-import { AccountEmailStatus, emailPost, emailRequest } from './api'
+import { emailPost, emailRequest } from './api'
 
 export function useAccountEmailStatus() {
   const [status, setStatus] = useState<AccountEmailStatus | null>(null)
@@ -59,8 +61,6 @@ export function AccountEmail({
   const [error, setError] = useState('')
   const [changeOpen, setChangeOpen] = useState(false)
   const [cooldown, setCooldown] = useState(0)
-  const canChange =
-    status.canChangeEmail && (!status.requiresOldEmail || status.verified)
   const needsPasskey =
     security?.passkeyRequired && !hasRecentSecurityProof(security)
   const requiresPassword = status.requiresPassword && !security?.passkeyRequired
@@ -118,7 +118,7 @@ export function AccountEmail({
       setMessage(result.message)
       setPassword('')
       if (path === 'enroll' || path === 'resend')
-        setCooldown(status.resendSeconds || 60)
+        setCooldown(status.resendSeconds)
       await refresh()
       router.refresh()
     } catch (error) {
@@ -146,16 +146,12 @@ export function AccountEmail({
                 : 'Your email address has not been verified.'}
         </p>
       </div>
-      {!status.verified &&
-        !status.exempt &&
-        !status.required &&
-        status.verificationMode === 'all_users' &&
-        status.graceEndsAt && (
-          <p className="text-sm text-muted-foreground">
-            Verify by {new Date(status.graceEndsAt).toLocaleString()} to keep
-            access to your account.
-          </p>
-        )}
+      {status.verifyBy && (
+        <p className="text-sm text-muted-foreground">
+          Verify by {new Date(status.verifyBy).toLocaleString()} to keep access
+          to your account.
+        </p>
+      )}
       {!status.verified && status.canEnroll && !status.canResend && (
         <form
           className="space-y-3"
@@ -234,14 +230,14 @@ export function AccountEmail({
           </Button>
         </div>
       )}
-      {status.canChangeEmail && !canChange && (
+      {status.canChangeEmail && !status.canRequestChange && (
         <p className="text-sm text-muted-foreground">
           This instance requires your current address to be verified before it
           can be changed. Contact your administrator if you cannot access that
           inbox.
         </p>
       )}
-      {canChange && !status.pendingEmail && (
+      {status.canRequestChange && !status.pendingEmail && (
         <Button
           type="button"
           variant="outline"
@@ -254,7 +250,7 @@ export function AccountEmail({
           {changeOpen ? 'Cancel' : 'Change email address'}
         </Button>
       )}
-      {changeOpen && canChange && !status.pendingEmail && (
+      {changeOpen && status.canRequestChange && !status.pendingEmail && (
         <form
           className="space-y-3"
           onSubmit={(event) => {

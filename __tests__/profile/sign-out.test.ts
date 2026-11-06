@@ -4,10 +4,11 @@ import { signOut } from 'next-auth/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AccountEmail } from '@/components/email/account-email'
-import type { AccountEmailStatus } from '@/components/email/api'
 import { ProfileDeleteAccount } from '@/components/profile/profile-delete-account'
 import { AlertDialogAction } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+
+import type { AccountEmailStatus } from '@/lib/email/eligibility'
 
 import { useSignOut } from '@/hooks/use-sign-out'
 
@@ -179,6 +180,8 @@ const unverified: AccountEmailStatus = {
   requiresOldEmail: false,
   resendSeconds: 60,
   graceEndsAt: null,
+  canRequestChange: false,
+  verifyBy: null,
 }
 
 describe('signing out from the email verification page', () => {

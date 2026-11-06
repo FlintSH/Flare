@@ -6,6 +6,7 @@ import { prisma } from '@/lib/database/prisma'
 import { decryptSecret, encryptSecret } from '@/lib/security/secret-box'
 
 import { getEmailConfig } from './config'
+import { emailLinkAvailable, isEmailLinkPurpose } from './links'
 import type { EmailConfig } from './schema'
 import { type RenderedEmail, renderAccountEmail } from './templates'
 import {
@@ -174,9 +175,7 @@ export async function deliverClaimedMail(
       })
       return false
     }
-  } else if (
-    ['verify', 'reset', 'change', 'change_approval'].includes(mail.purpose)
-  ) {
+  } else if (isEmailLinkPurpose(mail.purpose)) {
     // A deleted token sets tokenId to null. Never send its orphaned account link.
     await finishMail(mail, {
       status: 'cancelled',
@@ -213,9 +212,8 @@ export async function deliverClaimedMail(
     const current = mail.purpose === 'test' ? config : await getEmailConfig()
     if (
       !current.enabled ||
-      (mail.purpose === 'reset' && !current.recovery.enabled) ||
-      (['change', 'change_approval'].includes(mail.purpose) &&
-        !current.changes.enabled)
+      (isEmailLinkPurpose(mail.purpose) &&
+        !emailLinkAvailable(current, mail.purpose))
     ) {
       await finishMail(mail, {
         status: 'cancelled',

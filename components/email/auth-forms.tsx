@@ -24,7 +24,7 @@ import {
 } from '@/lib/users/account-policy'
 
 import { AccountEmail, useAccountEmailStatus } from './account-email'
-import { EmailCapabilities, emailPost, emailRequest } from './api'
+import { emailPost, fetchEmailCapabilities } from './api'
 
 function Feedback({ error, message }: { error: string; message: string }) {
   return (
@@ -46,16 +46,14 @@ function Feedback({ error, message }: { error: string; message: string }) {
 }
 
 export function ForgotPasswordForm() {
-  const [capabilities, setCapabilities] = useState<EmailCapabilities | null>(
-    null
-  )
+  const [recoveryEnabled, setRecoveryEnabled] = useState<boolean | null>(null)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
-    emailRequest<EmailCapabilities>('/api/auth/email/capabilities')
-      .then(setCapabilities)
+    fetchEmailCapabilities()
+      .then((capabilities) => setRecoveryEnabled(capabilities.recoveryEnabled))
       .catch(() =>
         setError(
           'Unable to check whether recovery is available. Please try again later.'
@@ -85,7 +83,7 @@ export function ForgotPasswordForm() {
   }
   return (
     <div className="space-y-5">
-      {capabilities?.enabled && capabilities.recoveryEnabled ? (
+      {recoveryEnabled ? (
         <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
           <div className="space-y-2">
             <Label htmlFor="recovery-email">Email address</Label>
@@ -104,7 +102,7 @@ export function ForgotPasswordForm() {
             {busy ? 'Requesting…' : 'Send reset link'}
           </Button>
         </form>
-      ) : capabilities ? (
+      ) : recoveryEnabled === false ? (
         <Alert variant="info" role="status">
           <Info aria-hidden="true" />
           <AlertDescription>

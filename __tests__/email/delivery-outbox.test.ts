@@ -270,6 +270,62 @@ describe('mail processing and recovery', () => {
     )
   })
 
+  it.each([
+    ['reset', 'recovery'],
+    ['change', 'changes'],
+    ['change_approval', 'changes'],
+  ] as const)(
+    'cancels a claimed %s link once %s are turned off',
+    async (purpose, feature) => {
+      doubles.db.emailToken.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        purpose,
+        email: 'user@example.com',
+        consumedAt: null,
+        expiresAt: new Date(now.getTime() + 60_000),
+      })
+      doubles.getEmailConfig.mockResolvedValue({
+        ...config,
+        [feature]: { ...config[feature], enabled: false },
+      })
+      expect(await deliverClaimedMail(queued({ purpose }), config)).toBe(false)
+      expect(doubles.sendMail).not.toHaveBeenCalled()
+      expect(doubles.db.mailOutbox.updateMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'cancelled',
+            lastError: 'This email feature was disabled.',
+          }),
+        })
+      )
+    }
+  )
+
+  it('still sends verification links and notices with recovery and changes off', async () => {
+    doubles.getEmailConfig.mockResolvedValue({
+      ...config,
+      recovery: { ...config.recovery, enabled: false },
+      changes: { ...config.changes, enabled: false },
+    })
+    doubles.db.emailToken.findUnique.mockResolvedValue({
+      userId: 'user-1',
+      purpose: 'verify',
+      email: 'user@example.com',
+      consumedAt: null,
+      expiresAt: new Date(now.getTime() + 60_000),
+    })
+    expect(
+      await deliverClaimedMail(queued({ purpose: 'verify' }), config)
+    ).toBe(true)
+    expect(
+      await deliverClaimedMail(
+        queued({ purpose: 'password_changed', tokenId: null }),
+        config
+      )
+    ).toBe(true)
+    expect(doubles.sendMail).toHaveBeenCalledTimes(2)
+  })
+
   it('refuses to manually retry expired or consumed links', async () => {
     doubles.db.mailOutbox.findUnique.mockResolvedValue(
       queued({ status: 'failed', expiresAt: now })

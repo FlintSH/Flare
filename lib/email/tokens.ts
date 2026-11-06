@@ -4,9 +4,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { lockUserRow } from '@/lib/database/locks'
 
 import { EmailHttpError } from './errors'
-
-export type EmailTokenPurpose =
-  'verify' | 'reset' | 'change' | 'change_approval'
+import type { EmailTokenPurpose } from './links'
 
 export function hashEmailToken(token: string) {
   return createHash('sha256').update(token).digest('hex')

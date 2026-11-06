@@ -4,9 +4,9 @@ import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
+import { canResendVerification, userEmailStatus } from '@/lib/email/eligibility'
 import { EmailHttpError } from '@/lib/email/errors'
 import { emailRoutes, validateEmailOrigin } from '@/lib/email/http'
-import { hasVerifiedEmail, requiresEmailVerification } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { requireSession } from '@/lib/http/access'
 import { readJson } from '@/lib/http/request'
@@ -29,12 +29,7 @@ export const GET = api(async (request, { params }: Context) => {
     getEmailConfig(),
   ])
   if (!user) throw new EmailHttpError('Account not found.', 404)
-  return {
-    verified: hasVerifiedEmail(user, config),
-    exempt: user.emailExempt,
-    required: requiresEmailVerification(user, config),
-    pendingEmail: user.pendingEmail,
-  }
+  return userEmailStatus(user, config)
 })
 
 export const POST = api(async (request, { params }: Context) => {
@@ -55,10 +50,7 @@ export const POST = api(async (request, { params }: Context) => {
     await assertCanManageUser(tx, actor.id, id)
     const user = await lockEmailUser(tx, id)
     if (action === 'resend') {
-      if (
-        user.emailVerificationSource !== 'pending_local' ||
-        hasVerifiedEmail(user, config)
-      )
+      if (!canResendVerification(user, config))
         throw new EmailHttpError(
           'This user must enroll their recovery address from their own profile.'
         )

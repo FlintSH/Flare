@@ -1,8 +1,12 @@
 import { POST as changeEmail } from '@/app/api/auth/email/change/route'
 import { POST as enroll } from '@/app/api/auth/email/enroll/route'
 import { POST as resend } from '@/app/api/auth/email/resend/route'
+import { GET as emailStatus } from '@/app/api/auth/email/status/route'
 import { POST as register } from '@/app/api/auth/register/route'
-import { POST as adminEmail } from '@/app/api/users/[id]/email/route'
+import {
+  POST as adminEmail,
+  GET as adminEmailStatus,
+} from '@/app/api/users/[id]/email/route'
 import { Prisma, type User } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
 import { createHash, randomUUID } from 'node:crypto'
@@ -784,6 +788,46 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
           .emailExempt
       ).toBe(true)
+    })
+
+    it('answers the account and its administrators with the same resend and change rules', async () => {
+      config.changes.requireOldEmail = true
+      const account = await user({
+        emailVerifiedFor: null,
+        emailVerificationSource: 'pending_local',
+      })
+      state.session = {
+        user: { id: account.id, permissions: ['administrator'] },
+      }
+      const status = await emailStatus(
+        new Request('https://flare.example/api/auth/email/status')
+      )
+      expect(await status.json()).toMatchObject({
+        recoveryEnabled: true,
+        verified: false,
+        canChangeEmail: true,
+        canRequestChange: false,
+        canResend: true,
+        hasPassword: true,
+        requiresPassword: true,
+        verifyBy: null,
+      })
+      const administered = await adminEmailStatus(
+        new Request(`https://flare.example/api/users/${account.id}/email`),
+        { params: Promise.resolve({ id: account.id }) }
+      )
+      expect(await administered.json()).toEqual({
+        verified: false,
+        exempt: false,
+        required: false,
+        pendingEmail: null,
+        canResend: true,
+      })
+      state.enforceSso = true
+      const enforced = await emailStatus(
+        new Request('https://flare.example/api/auth/email/status')
+      )
+      expect((await enforced.json()).recoveryEnabled).toBe(false)
     })
 
     it('does not issue or consume reset tokens using a stale enabled policy', async () => {

@@ -128,6 +128,8 @@ Email enrollment and change operations use an account session that remains avail
 
 Email session mutations validate the request origin when provided. Password/identity confirmation, feature enablement, verified-address policy, and cooldowns are additional checks beyond the authentication column. An account that requires passkeys must supply fresh passkey or dedicated passkey-recovery session proof for enrollment and address changes; password/SSO proof cannot substitute. Password resets preserve that requirement.
 
+`GET /api/auth/email/status` gives the account's eligibility already worked out, by the rules the email routes apply. `canRequestChange` says whether the account may ask for a new address now, which also needs a verified current address when the old address must approve changes. `verifyBy` is the date the account must verify by to keep access during an all-user grace period, or `null` when no deadline applies to it. Both fields are new; the older ones keep their values. `canChangeEmail` only says whether the instance allows address changes, `graceEndsAt` is the instance's grace end whether or not it applies to the account, `verificationMode` is the saved mode even while email is disabled (`/api/auth/email/capabilities` gives the mode in force), and `hasPassword` and `requiresPassword` always carry the same value.
+
 ### Authenticator, recovery-code, and passkey flows
 
 Security management uses the account browser session, independently of `profile.update`, and requires fresh identity proof for sensitive changes. Neither named tokens nor the legacy upload credential are accepted. Mutation origins must match `NEXTAUTH_URL`. See [session security contracts](./security) for request bodies, responses, limits, and sign-in behavior.
@@ -201,7 +203,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/users/{id}`                | DELETE         | `users.delete`; remove an account within delegation limits. Returns `204` after account removal and durable storage-cleanup work commit.                  |
 | `/api/users/{id}/avatar`         | DELETE         | `users.update`; clear an account's avatar and queue its stored bytes for cleanup; `204` after commit.                                                     |
 | `/api/users/{id}/sessions`       | DELETE         | `users.sessions`; invalidate an account’s browser sessions. Success is `204 No Content`, with no JSON body. API credentials remain active.                |
-| `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access.                                                                                                               |
+| `/api/users/{id}/email`          | GET, POST      | `users.email`; inspect/manage email access. GET adds `canResend`, whether the resend action would send another verification link.                         |
 | `/api/users/{id}/files`          | GET            | `content.read`; page through an account's files (`limit` default 10, at most 100). [Contract](/admin/users#moderate-files-and-shortened-links).           |
 | `/api/users/{id}/files/{fileId}` | PATCH, DELETE  | PATCH: `content.update`; DELETE: `content.delete`, returns `204`. Wrong owner/missing file returns `404` (PATCH returned `500` before).                   |
 | `/api/users/{id}/urls`           | GET            | `content.read`; page through an account's short links: `page`, `limit` (default 10, at most 100), `search`. [Contract](./short-links#moderation-routes).  |

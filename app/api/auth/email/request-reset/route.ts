@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requestPasswordReset } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
 import { emailRoutes } from '@/lib/email/http'
+import { emailLinkAvailable } from '@/lib/email/links'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -18,7 +19,7 @@ export const POST = api(async (request) => {
     const config = await getEmailConfig()
     const message =
       'If this address is eligible for recovery, a password reset email will arrive shortly.'
-    if (!config.enabled || !config.recovery.enabled) return { message }
+    if (!emailLinkAvailable(config, 'reset')) return { message }
     await limitEmailRequest(request, config, email)
     // Delivery/admission failures must not reveal whether this address has an account.
     try {
