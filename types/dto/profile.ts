@@ -1,12 +1,18 @@
 import { VanityIdSchema } from '@/types/dto/user'
 import { z } from 'zod'
 
+import {
+  accountEmailSchema,
+  accountNameSchema,
+  accountPasswordSchema,
+} from '@/lib/users/account-policy'
+
 export const UpdateProfileSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
+  name: accountNameSchema.optional(),
+  email: accountEmailSchema.optional(),
   currentPassword: z.string().max(256).optional(),
   securityCode: z.string().max(80).optional(),
-  newPassword: z.string().min(8).optional(),
+  newPassword: accountPasswordSchema.optional(),
   image: z.string().optional(),
   randomizeFileUrls: z.boolean().optional(),
   defaultFileExpiration: z

@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client'
+
 import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
@@ -68,53 +70,32 @@ export async function getAuthenticatedUser(
     }
   }
   const session = await getAccessSession()
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        randomizeFileUrls: true,
-        email: true,
-        emailVerified: true,
-        emailVerifiedFor: true,
-        emailVerificationSource: true,
-        emailExempt: true,
-        createdAt: true,
-      },
-    })
-    if (!user || requiresEmailVerification(user, await getEmailConfig()))
-      return null
-    setAuditActor({ id: user.id, name: user.name })
-    return { ...user, ...(await getUserAccess(user.id)) }
-  }
-
-  if (suppliedToken) {
-    const user = await prisma.user.findUnique({
-      where: { uploadToken: suppliedToken },
-      select: {
-        id: true,
-        name: true,
-        storageUsed: true,
-        urlId: true,
-        vanityId: true,
-        randomizeFileUrls: true,
-        email: true,
-        emailVerified: true,
-        emailVerifiedFor: true,
-        emailVerificationSource: true,
-        emailExempt: true,
-        createdAt: true,
-      },
-    })
-    if (!user || requiresEmailVerification(user, await getEmailConfig()))
-      return null
-    setAuditActor({ id: user.id, name: user.name })
-    return { ...user, ...(await getUserAccess(user.id)) }
-  }
-
+  if (session?.user) return accountUser({ id: session.user.id })
+  if (suppliedToken) return accountUser({ uploadToken: suppliedToken })
   return null
+}
+
+/** The account behind a browser session or the legacy upload token, unless it must verify its email first. */
+async function accountUser(where: Prisma.UserWhereUniqueInput) {
+  const user = await prisma.user.findUnique({
+    where,
+    select: {
+      id: true,
+      name: true,
+      storageUsed: true,
+      urlId: true,
+      vanityId: true,
+      randomizeFileUrls: true,
+      email: true,
+      emailVerified: true,
+      emailVerifiedFor: true,
+      emailVerificationSource: true,
+      emailExempt: true,
+      createdAt: true,
+    },
+  })
+  if (!user || requiresEmailVerification(user, await getEmailConfig()))
+    return null
+  setAuditActor({ id: user.id, name: user.name })
+  return { ...user, ...(await getUserAccess(user.id)) }
 }

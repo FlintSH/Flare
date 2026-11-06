@@ -2,6 +2,7 @@ import { GET, POST, PUT } from '@/app/api/users/route'
 import type { User } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { MailLimitError } from '@/lib/email/outbox'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
 import { AccessError } from '@/lib/http/errors'
 
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   lockEmailUser: vi.fn(),
   lockEmailAddress: vi.fn(),
   sendAccountToken: vi.fn(),
-  createUser: vi.fn(),
+  createAccount: vi.fn(),
   invalidateEmailTokens: vi.fn(),
   db: {
     user: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   tx: {
     $executeRaw: vi.fn(),
     user: { update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    authChallenge: { deleteMany: vi.fn() },
   },
 }))
 
@@ -53,7 +55,9 @@ vi.mock('@/lib/email/tokens', () => ({
 }))
 vi.mock('@/lib/logger', () => ({ loggers: { users: { error: vi.fn() } } }))
 vi.mock('@/lib/storage', () => ({ getStorageProvider: vi.fn() }))
-vi.mock('@/lib/users/create-user', () => ({ createUser: mocks.createUser }))
+vi.mock('@/lib/users/create-account', () => ({
+  createAccount: mocks.createAccount,
+}))
 
 const initial: User = {
   passkeyRequired: false,
@@ -119,7 +123,7 @@ beforeEach(() => {
   })
   mocks.tx.user.findFirst.mockResolvedValue(null)
   mocks.tx.user.findMany.mockResolvedValue([])
-  mocks.createUser.mockImplementation(async (_tx, data) => ({
+  mocks.createAccount.mockImplementation(async (_tx, data) => ({
     ...initial,
     ...data,
   }))
@@ -147,21 +151,58 @@ describe('administrator account update serialization', () => {
     expect(response.status).toBe(200)
     expect(
       mocks.getEmailConfigForUpdate.mock.invocationCallOrder[0]
-    ).toBeLessThan(mocks.lockEmailAddress.mock.invocationCallOrder[0])
-    expect(mocks.createUser).toHaveBeenCalledWith(
+    ).toBeLessThan(mocks.createAccount.mock.invocationCallOrder[0])
+    // createAccount decides on the verification link from these settings.
+    expect(mocks.createAccount).toHaveBeenCalledWith(
       mocks.tx,
-      expect.objectContaining({
-        emailExempt: false,
-        emailVerificationSource: 'pending_local',
-      })
-    )
-    expect(mocks.sendAccountToken).toHaveBeenCalledWith(
-      mocks.tx,
-      expect.objectContaining({ email: initial.email }),
-      'verify',
-      currentConfig
+      expect.objectContaining({ email: initial.email, emailExempt: false }),
+      { verifyWith: currentConfig }
     )
   })
+
+  it('refuses an address another account already uses', async () => {
+    mocks.db.user.findUnique.mockResolvedValue(null)
+    mocks.createAccount.mockResolvedValue(null)
+    const response = await POST(request({}, 'POST'))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Email already exists',
+    })
+  })
+
+  it('answers a full daily mail cap the way the email routes do', async () => {
+    mocks.db.user.findUnique.mockResolvedValue(null)
+    mocks.createAccount.mockRejectedValue(new MailLimitError())
+    const response = await POST(request({}, 'POST'))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Unable to complete this email request. Please try again.',
+    })
+  })
+
+  it.each([false, true])(
+    'refuses a new password over 72 bytes (email enabled: %s)',
+    async (enabled) => {
+      mocks.getEmailConfigForUpdate.mockResolvedValue({
+        ...structuredClone(DEFAULT_EMAIL_CONFIG),
+        enabled,
+      })
+      for (const response of [
+        await POST(request({ password: '🔒'.repeat(19) }, 'POST')),
+        await PUT(request({ password: 'a'.repeat(73) })),
+      ]) {
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({
+          success: false,
+          error: 'Password must use at most 72 bytes.',
+        })
+      }
+      expect(mocks.createAccount).not.toHaveBeenCalled()
+      expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    }
+  )
   it('preserves a concurrently verified address and its proof during an unrelated name edit', async () => {
     const verified = {
       ...initial,
@@ -214,7 +255,12 @@ describe('administrator account update serialization', () => {
       emailVerificationSource: null,
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
+    })
+    expect(mocks.tx.user.update.mock.calls[1][0].data).toEqual({
       sessionVersion: { increment: 1 },
+    })
+    expect(mocks.tx.authChallenge.deleteMany).toHaveBeenCalledWith({
+      where: { userId: initial.id },
     })
     expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(
       mocks.tx,
@@ -227,10 +273,7 @@ describe('administrator account update serialization', () => {
   })
 
   it('uses the newly enabled policy when checking case-insensitive mailbox conflicts', async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({
-      id: 'another-account',
-      email: 'REQUESTED@example.com',
-    })
+    mocks.tx.user.findFirst.mockResolvedValue({ id: 'another-account' })
     const response = await PUT(request({ email: 'requested@example.com' }))
     expect(response.status).toBe(400)
     expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
@@ -238,8 +281,21 @@ describe('administrator account update serialization', () => {
         id: { not: initial.id },
         email: { equals: 'requested@example.com', mode: 'insensitive' },
       },
+      select: { id: true },
     })
     expect(mocks.tx.user.update).not.toHaveBeenCalled()
+  })
+
+  it('matches an address with an underscore literally, not as a wildcard', async () => {
+    const response = await PUT(request({ email: 'requested_x@example.com' }))
+    expect(response.status).toBe(200)
+    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: { not: initial.id },
+        email: { equals: 'requested\\_x@example.com', mode: 'insensitive' },
+      },
+      select: { id: true },
+    })
   })
 
   it('preserves assigned roles when an identity update omits roleIds', async () => {
@@ -254,24 +310,27 @@ describe('administrator account update serialization', () => {
     )
   })
 
-  it('revokes sessions for password changes even when email is disabled', async () => {
+  it('revokes sessions and cancels a pending email change for password changes even when email is disabled', async () => {
     mocks.getEmailConfigForUpdate.mockResolvedValue(
       structuredClone(DEFAULT_EMAIL_CONFIG)
     )
-    const response = await PUT(request({ password: 'a'.repeat(73) }))
+    const response = await PUT(request({ password: 'a-new-password' }))
     expect(response.status).toBe(200)
-    expect(mocks.tx.user.update.mock.calls[0][0].data).toMatchObject({
-      sessionVersion: { increment: 1 },
-    })
-    expect(mocks.tx.user.update.mock.calls[0][0].data).not.toHaveProperty(
-      'passkeyRequired'
+    const [credentials, signOut] = mocks.tx.user.update.mock.calls.map(
+      ([update]) => update.data
     )
-  })
-
-  it('enforces the enabled-instance password limit after the policy changes', async () => {
-    const response = await PUT(request({ password: 'a'.repeat(73) }))
-    expect(response.status).toBe(400)
-    expect(mocks.tx.user.update).not.toHaveBeenCalled()
+    expect(credentials).toMatchObject({
+      password: expect.any(String),
+      pendingEmail: null,
+      pendingEmailOldConfirmed: false,
+    })
+    expect(credentials).not.toHaveProperty('email')
+    expect(credentials).not.toHaveProperty('passkeyRequired')
+    expect(signOut).toEqual({ sessionVersion: { increment: 1 } })
+    expect(mocks.invalidateEmailTokens).toHaveBeenCalledWith(
+      mocks.tx,
+      initial.id
+    )
   })
 })
 

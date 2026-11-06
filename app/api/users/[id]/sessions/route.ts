@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+import { revokeSecuritySessions } from '@/lib/auth/security/service'
 import { requireSession } from '@/lib/http/access'
 import { assertSameOrigin } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
@@ -20,14 +21,7 @@ export const DELETE = api(async (request, { params }: Context) => {
   const { id } = await params
 
   await mutateAccount(user.id, id, 'users.sessions', (tx) =>
-    tx.user.update({
-      where: { id },
-      data: {
-        sessionVersion: {
-          increment: 1,
-        },
-      },
-    })
+    revokeSecuritySessions(tx, id)
   )
 
   return new NextResponse(null, { status: 204 })

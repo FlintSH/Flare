@@ -1,7 +1,7 @@
 import { hash } from 'bcryptjs'
 
 import { DEFAULT_CONFIG, configSchema, replaceConfig } from '@/lib/config'
-import { lockSettings } from '@/lib/database/locks'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
@@ -10,7 +10,7 @@ import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
 import { setupSchema } from '@/lib/setup/schema'
 import { invalidateStorageProvider } from '@/lib/storage'
-import { createUser } from '@/lib/users/create-user'
+import { createAccount } from '@/lib/users/create-account'
 
 const api = routes('/api/setup', {
   invalid: (error) => {
@@ -53,15 +53,17 @@ export const POST = api(async (request) => {
   // Account and settings succeed together. Serializing bootstrap also prevents
   // simultaneous setup requests from creating multiple initial administrators.
   const user = await prisma.$transaction(async (tx) => {
-    await lockSettings(tx)
+    // Account creation needs the role lock, which takes the settings lock first.
+    await lockRoleChanges(tx)
     const userCount = await tx.user.count()
     if (userCount > 0) throw new HttpError(400, 'Setup already completed')
-    const admin = await createUser(tx, {
+    const admin = await createAccount(tx, {
       name: validatedData.admin.name,
       email: validatedData.admin.email,
       password: hashedPassword,
       emailExempt: true,
     })
+    if (!admin) throw new HttpError(400, 'Setup already completed')
     await replaceConfig(tx, initialConfig)
     return admin
   })

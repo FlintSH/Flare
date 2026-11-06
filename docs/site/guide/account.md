@@ -70,7 +70,7 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## Update your name and avatar
 
-Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. The name can appear as uploader attribution on share pages when the administrator enables it.
+Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
 
 Choose **Change avatar** and select an image to update your photo. Flare checks that the supplied content is an image. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
@@ -80,7 +80,7 @@ Changing your username does not automatically change file URL paths. For a memor
 
 ## Change your password
 
-In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place.
+In **Profile → Account → Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place. The new password also cancels an email address change you haven't finished, and links Flare already emailed you, such as verification links, stop working.
 
 If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
 
@@ -134,6 +134,8 @@ When email features are enabled:
 4. If the instance requires approval from both addresses, check both your current and new inboxes.
 
 Your current address remains active until the change is approved. The controls show the pending address and offer **Cancel pending change**. A policy requiring old-address approval may first require you to verify your current email.
+
+An address another account uses is unavailable, whatever its capitalization. Only capitalization is ignored: `a_b@example.com` and `axb@example.com` are different addresses. Earlier versions read `_` and `%` as wildcards here and could refuse an address because it resembled another account's.
 
 These behaviors depend on the administrator's [email settings](../admin/email). If the action is unavailable, use the explanation shown in the interface or contact the administrator.
 

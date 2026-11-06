@@ -1,6 +1,6 @@
-import { lockEmailAddress, lockRoleChanges } from '@/lib/database/locks'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { createUser } from '@/lib/users/create-user'
+import { createAccount } from '@/lib/users/create-account'
 
 export interface OidcProfile {
   sub: string
@@ -68,7 +68,8 @@ export async function resolveOidcUser(
     return { ok: true, user: toResolvedUser(existingBySubject) }
   }
 
-  if (!profile.email) {
+  const email = profile.email
+  if (!email) {
     return { ok: false, reason: 'no_email' }
   }
 
@@ -77,7 +78,7 @@ export async function resolveOidcUser(
   }
 
   const existingByEmail = await prisma.user.findUnique({
-    where: { email: profile.email },
+    where: { email },
     select: userSelect,
   })
 
@@ -94,30 +95,20 @@ export async function resolveOidcUser(
 
   const created = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
-    if (config.emailEnabled) {
-      await lockEmailAddress(tx, profile.email as string)
-      if (
-        await tx.user.findFirst({
-          where: {
-            email: { equals: profile.email as string, mode: 'insensitive' },
-          },
-        })
-      )
-        return null
-    }
-    return createUser(tx, {
-      email: profile.email as string,
-      name: profile.name || profile.email!.split('@')[0],
-      image: profile.picture,
-      oidcSubject: profile.sub,
-      emailVerified: profile.email_verified === true ? new Date() : undefined,
-      ...(config.trustEmail && profile.email_verified === true
-        ? {
-            emailVerifiedFor: profile.email as string,
-            emailVerificationSource: 'oidc',
-          }
-        : {}),
-    })
+    return createAccount(
+      tx,
+      {
+        email,
+        name: profile.name || email.split('@')[0],
+        image: profile.picture,
+        oidcSubject: profile.sub,
+        emailVerified: profile.email_verified === true ? new Date() : undefined,
+        ...(config.trustEmail && profile.email_verified === true
+          ? { emailVerifiedFor: email, emailVerificationSource: 'oidc' }
+          : {}),
+      },
+      { enabled: config.emailEnabled === true }
+    )
   })
 
   if (!created) return { ok: false, reason: 'account_exists' }

@@ -257,9 +257,6 @@ importers:
       tesseract.js:
         specifier: ^6.0.1
         version: 6.0.1
-      uuid:
-        specifier: ^14.0.2
-        version: 14.0.2
       yauzl:
         specifier: ^3.4.0
         version: 3.4.0
@@ -4898,10 +4895,6 @@ packages:
 
   uuid@11.1.1:
     resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
-    hasBin: true
-
-  uuid@14.0.2:
-    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
     hasBin: true
 
   vite@8.3.5:
@@ -10242,8 +10235,6 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   uuid@11.1.1: {}
-
-  uuid@14.0.2: {}
 
   vite@8.3.5(@types/node@24.13.6)(jiti@1.21.7)(yaml@2.9.1):
     dependencies:

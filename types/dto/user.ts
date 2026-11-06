@@ -2,6 +2,29 @@ import { z } from 'zod'
 
 import { RESERVED_URL_IDS } from '@/lib/middleware/constants'
 import type { RoleSummary } from '@/lib/permissions/catalog'
+import {
+  accountEmailSchema,
+  accountNameSchema,
+  accountPasswordSchema,
+} from '@/lib/users/account-policy'
+
+export const URL_ID_LENGTH = 5
+const urlIdMessage = `URL ID must be ${URL_ID_LENGTH} alphanumeric characters`
+
+/** Letters and digits. File URLs use an ID as written, so letter case counts. */
+export const UrlIdSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9]*$/, urlIdMessage)
+  .length(URL_ID_LENGTH, urlIdMessage)
+
+/** Whether a URL ID being typed can still become valid: only its length may fall short. */
+export function isUrlIdDraft(value: string) {
+  const result = UrlIdSchema.safeParse(value)
+  return (
+    result.success ||
+    result.error.issues.every((issue) => issue.code === 'too_small')
+  )
+}
 
 /**
  * Vanity ID validation schema.
@@ -26,14 +49,11 @@ export const VanityIdSchema = z
 export const UserSchema = z
   .object({
     id: z.string().optional(),
-    name: z.string().min(2),
-    email: z.string().email(),
-    password: z.string().min(8).optional(),
+    name: accountNameSchema,
+    email: accountEmailSchema,
+    password: accountPasswordSchema.optional(),
     roleIds: z.array(z.string().min(1).max(128)).max(100).optional(),
-    urlId: z
-      .string()
-      .regex(/^[A-Za-z0-9]{5}$/, 'URL ID must be 5 alphanumeric characters')
-      .optional(),
+    urlId: UrlIdSchema.optional(),
     // Empty form fields clear the vanity URL; omitted fields leave it unchanged.
     vanityId: VanityIdSchema.or(z.literal('').transform(() => null))
       .nullable()

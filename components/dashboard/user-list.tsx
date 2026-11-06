@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 
+import { URL_ID_LENGTH, isUrlIdDraft } from '@/types/dto/user'
 import {
   Archive,
   ChevronLeft,
@@ -1377,13 +1378,12 @@ export function UserList() {
                       disabled={!!editingUser && !can('users.update')}
                       value={formData.urlId || ''}
                       onChange={(e) => {
-                        const value = e.target.value.toUpperCase()
-                        if (/^[A-Z0-9]*$/.test(value) && value.length <= 5) {
-                          setFormData({ ...formData, urlId: value })
-                        }
+                        // File URLs use the ID as written, so case stays as typed.
+                        if (isUrlIdDraft(e.target.value))
+                          setFormData({ ...formData, urlId: e.target.value })
                       }}
                       placeholder="e.g. ABC12"
-                      maxLength={5}
+                      maxLength={URL_ID_LENGTH}
                       aria-describedby="urlId-help"
                     />
                     <p

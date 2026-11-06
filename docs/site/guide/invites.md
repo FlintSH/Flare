@@ -42,7 +42,7 @@ Opening an active link shows **You’re invited** with the name of the person wh
 <Screenshot src="/screenshots/invites/register-invite-mobile.webp" alt="You're invited page on a 390-pixel phone screen with the registration form" caption="The same invite page on a phone." />
 </div>
 
-The usual registration rules still apply: a username of at least two characters, a valid email address that no other account uses, and a password of at least eight characters (at most 72 UTF-8 bytes when account email is enabled). If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
+The usual registration rules still apply: a username of at least one character, a valid email address that no other account uses, and a password of at least eight characters and at most 72 UTF-8 bytes. If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
 
 If the link cannot be used, the page explains why, such as **This invite link has already been used.** On an instance with closed registration, the page is titled **Invite unavailable** and offers **Go to sign in**. If public registration is open, the ordinary sign-up form appears with a note that the invite cannot be used; an account created that way does not receive the invite's roles.
 

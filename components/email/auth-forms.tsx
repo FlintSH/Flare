@@ -18,6 +18,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import {
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_BYTES,
+} from '@/lib/users/account-policy'
+
 import { AccountEmail, useAccountEmailStatus } from './account-email'
 import { EmailCapabilities, emailPost, emailRequest } from './api'
 
@@ -181,13 +186,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
-                maxLength={72}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_BYTES}
                 required
                 disabled={busy}
               />
               <p className="text-sm text-muted-foreground">
-                Use at least 8 characters.
+                Use at least {ACCOUNT_PASSWORD_MIN_LENGTH} characters.
               </p>
             </div>
             <div className="space-y-2">
@@ -198,8 +203,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 name="confirmPassword"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
-                maxLength={72}
+                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_BYTES}
                 required
                 disabled={busy}
               />

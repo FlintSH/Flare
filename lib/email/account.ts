@@ -1,13 +1,14 @@
 import { Prisma, type User } from '@prisma/client'
 import { compare, hash } from 'bcryptjs'
 import type { Session } from 'next-auth'
-import { randomUUID } from 'node:crypto'
 
 import { assertRecentPasskeyProof } from '@/lib/auth/security/required-passkeys'
 import { getConfig, readConfig } from '@/lib/config'
 import { localSignInAllowed } from '@/lib/config/oidc'
-import { lockEmailAddress, lockUserRow } from '@/lib/database/locks'
+import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { changeCredentials } from '@/lib/users/credentials'
+import { claimEmail, findAccountByEmail } from '@/lib/users/email-claim'
 
 import { getEmailConfigForUpdate } from './config'
 import { EmailHttpError } from './errors'
@@ -18,7 +19,6 @@ import { renderAccountEmail } from './templates'
 import {
   type EmailTokenPurpose,
   consumeEmailToken,
-  invalidateEmailTokens,
   issueEmailToken,
 } from './tokens'
 
@@ -104,15 +104,21 @@ export async function sendAccountToken(
 export async function requestPasswordReset(email: string, config: EmailConfig) {
   if (!(await isPasswordRecoveryAvailable(config))) return
   // Case-insensitive collisions are ambiguous; never merge or choose one legacy account.
-  const matches = await prisma.user.findMany({
-    where: { email: { equals: email.trim(), mode: 'insensitive' } },
-    take: 2,
+  const match = await findAccountByEmail(prisma, email, {
+    id: true,
+    password: true,
+    email: true,
+    emailVerified: true,
+    emailVerifiedFor: true,
+    emailVerificationSource: true,
+    emailExempt: true,
+    createdAt: true,
   })
-  if (matches.length !== 1 || !canRecoverPassword(matches[0], config)) return
+  if (!match || !canRecoverPassword(match, config)) return
   await prisma.$transaction(async (tx) => {
     config = await getEmailConfigForUpdate(tx)
     if (!(await isPasswordRecoveryAvailable(config, tx))) return
-    const user = await lockEmailUser(tx, matches[0].id)
+    const user = await lockEmailUser(tx, match.id)
     if (!canRecoverPassword(user, config)) return
     await sendAccountToken(tx, user, 'reset', config)
   })
@@ -134,19 +140,10 @@ export async function resetPassword(
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
       throw new EmailHttpError('This email link is invalid or expired.')
-    await tx.user.update({
-      where: { id: user.id },
-      data: {
-        password: passwordHash,
-        sessionVersion: { increment: 1 },
-        pendingEmail: null,
-        pendingEmailOldConfirmed: false,
-        ...(config.recovery.rotateUploadToken
-          ? { uploadToken: randomUUID() }
-          : {}),
-      },
+    await changeCredentials(tx, user.id, {
+      password: passwordHash,
+      rotateUploadToken: config.recovery.rotateUploadToken,
     })
-    await invalidateEmailTokens(tx, user.id)
     const message = renderAccountEmail(config, {
       kind: 'password_changed',
       recipient: record.email,
@@ -237,28 +234,12 @@ export async function confirmEmailToken(token: string, config: EmailConfig) {
         'Approve the change using the link sent to your current address first.'
       )
     }
-    await lockEmailAddress(tx, record.email)
-    const conflict = await tx.user.findFirst({
-      where: {
-        id: { not: user.id },
-        email: { equals: record.email, mode: 'insensitive' },
-      },
-    })
-    if (conflict) throw new EmailHttpError('This email address is unavailable.')
+    if (!(await claimEmail(tx, record.email, user.id)))
+      throw new EmailHttpError('This email address is unavailable.')
     const oldEmail = user.email
-    await tx.user.update({
-      where: { id: user.id },
-      data: {
-        email: record.email,
-        emailVerified: new Date(),
-        emailVerifiedFor: record.email,
-        emailVerificationSource: 'email',
-        pendingEmail: null,
-        pendingEmailOldConfirmed: false,
-        sessionVersion: { increment: 1 },
-      },
+    await changeCredentials(tx, user.id, {
+      email: { address: record.email, verified: true },
     })
-    await invalidateEmailTokens(tx, user.id)
     if (oldEmail && hasVerifiedEmail(user, config)) {
       const message = renderAccountEmail(config, {
         kind: 'email_changed',

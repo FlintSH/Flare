@@ -45,7 +45,7 @@ vi.mock('@/lib/email/account', () => ({
   sendAccountToken: vi.fn(),
 }))
 vi.mock('@/lib/email/tokens', () => ({ invalidateEmailTokens: vi.fn() }))
-vi.mock('@/lib/users/create-user', () => ({ createUser: vi.fn() }))
+vi.mock('@/lib/users/create-account', () => ({ createAccount: vi.fn() }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: mocks.getStorageProvider,
 }))

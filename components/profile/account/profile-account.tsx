@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { ACCOUNT_NAME_MIN_LENGTH } from '@/lib/users/account-policy'
+
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
@@ -233,7 +235,7 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                   ref={nameRef}
                   defaultValue={user.name || ''}
                   placeholder="Your username"
-                  minLength={2}
+                  minLength={ACCOUNT_NAME_MIN_LENGTH}
                   autoComplete="username"
                   required
                   disabled={isLoading}

@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+
 export function RegisterForm({
   invite,
   inviteRoles = [],
@@ -59,8 +61,10 @@ export function RegisterForm({
       return
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
+    if (password.length < ACCOUNT_PASSWORD_MIN_LENGTH) {
+      setError(
+        `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters long`
+      )
       setIsLoading(false)
       return
     }
@@ -177,11 +181,11 @@ export function RegisterForm({
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="new-password"
             placeholder="Create a password"
-            minLength={8}
+            minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
             aria-describedby="password-hint"
           />
           <p id="password-hint" className="text-xs text-muted-foreground">
-            Use at least 8 characters.
+            {`Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`}
           </p>
         </div>
         <div className="space-y-2">

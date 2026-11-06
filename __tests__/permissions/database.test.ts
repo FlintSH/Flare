@@ -45,7 +45,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
   let service: typeof import('@/lib/permissions/server')
   let collection: typeof import('@/app/api/roles/route')
   let detail: typeof import('@/app/api/roles/[id]/route')
-  let createUser: typeof import('@/lib/users/create-user').createUser
+  let createAccount: typeof import('@/lib/users/create-account').createAccount
   let cleanup: typeof import('@/lib/storage/deletion')
   let LocalStorage: typeof import('@/lib/storage/providers/local').LocalStorageProvider
   const cleanupPaths = new Set<string>()
@@ -64,7 +64,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     service = await import('@/lib/permissions/server')
     collection = await import('@/app/api/roles/route')
     detail = await import('@/app/api/roles/[id]/route')
-    createUser = (await import('@/lib/users/create-user')).createUser
+    createAccount = (await import('@/lib/users/create-account')).createAccount
     cleanup = await import('@/lib/storage/deletion')
     LocalStorage = (await import('@/lib/storage/providers/local'))
       .LocalStorageProvider
@@ -173,17 +173,19 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     await prisma.user.deleteMany()
     const created = await Promise.all(
       ['one', 'two', 'three'].map((name) =>
-        prisma.$transaction((tx) =>
-          createUser(tx, {
+        prisma.$transaction(async (tx) => {
+          // Every caller creates accounts under the role lock.
+          await lockRoleChanges(tx)
+          return createAccount(tx, {
             name,
             email: `${name}@example.test`,
             password: 'fixture-only',
           })
-        )
+        })
       )
     )
     const access = await Promise.all(
-      created.map((user) => service.getUserAccess(user.id))
+      created.map((user) => service.getUserAccess(user!.id))
     )
     expect(
       access.filter((user) => user.permissions.includes('administrator'))

@@ -2,11 +2,12 @@ import { UserResponse, UserSchema } from '@/types/dto/user'
 import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
 
-import { lockEmailAddress, lockRoleChanges } from '@/lib/database/locks'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
+import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfigForUpdate } from '@/lib/email/config'
-import { invalidateEmailTokens } from '@/lib/email/tokens'
+import { emailRoutes } from '@/lib/email/http'
+import { MailLimitError } from '@/lib/email/outbox'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { assertJsonMutation, readJson } from '@/lib/http/request'
@@ -20,7 +21,9 @@ import {
   requireActorPermission,
   validateRoleAssignment,
 } from '@/lib/permissions/server'
-import { createUser } from '@/lib/users/create-user'
+import { createAccount } from '@/lib/users/create-account'
+import { changeCredentials } from '@/lib/users/credentials'
+import { claimEmail } from '@/lib/users/email-claim'
 
 class UserEmailPolicyError extends HttpError {
   constructor(message: string) {
@@ -30,6 +33,15 @@ class UserEmailPolicyError extends HttpError {
 
 const api = routes('/api/users', {
   envelope: 'api',
+  // A full daily mail cap stops the verification email; answer it as the
+  // email routes do.
+  translate: (error) =>
+    error instanceof MailLimitError
+      ? new HttpError(
+          emailRoutes.failure.status ?? 500,
+          emailRoutes.failure.message
+        )
+      : undefined,
   failure: { message: 'Internal server error' },
   logger: loggers.users,
 })
@@ -145,34 +157,18 @@ export const POST = api(async (request) => {
       await validateRoleAssignment(tx, actor.id, null, body.roleIds)
     }
     const emailConfig = await getEmailConfigForUpdate(tx)
-    if (
-      emailConfig.enabled &&
-      body.password &&
-      Buffer.byteLength(body.password, 'utf8') > 72
+    const created = await createAccount(
+      tx,
+      {
+        email: body.email,
+        name: body.name,
+        password: hashedPassword,
+        roleIds: body.roleIds,
+        emailExempt: emailConfig.verification.adminCreated === 'exempt',
+      },
+      { verifyWith: emailConfig }
     )
-      throw new UserEmailPolicyError('Password must use at most 72 bytes.')
-    const sendVerification =
-      emailConfig.enabled &&
-      (emailConfig.verification.mode !== 'off' || emailConfig.recovery.enabled)
-    if (emailConfig.enabled) {
-      await lockEmailAddress(tx, body.email)
-      if (
-        await tx.user.findFirst({
-          where: { email: { equals: body.email, mode: 'insensitive' } },
-        })
-      )
-        throw new UserEmailPolicyError('Email already exists')
-    }
-    const created = await createUser(tx, {
-      email: body.email,
-      name: body.name,
-      password: hashedPassword,
-      roleIds: body.roleIds,
-      emailExempt: emailConfig.verification.adminCreated === 'exempt',
-      ...(sendVerification ? { emailVerificationSource: 'pending_local' } : {}),
-    })
-    if (sendVerification)
-      await sendAccountToken(tx, created, 'verify', emailConfig)
+    if (!created) throw new UserEmailPolicyError('Email already exists')
     return created
   })
 
@@ -257,13 +253,12 @@ export const PUT = api(async (request) => {
   const updateData = {
     updatedAt: new Date(),
     ...(body.name !== undefined && { name: body.name }),
-    ...(requestedEmailChange && { email: body.email }),
-    ...(body.password && { password: await hash(body.password, 10) }),
     ...(requestedUrlIdChange && { urlId: body.urlId }),
     ...(body.vanityId !== undefined && {
       vanityId: body.vanityId || null,
     }),
   }
+  const passwordHash = body.password ? await hash(body.password, 10) : undefined
 
   const user = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
@@ -281,12 +276,6 @@ export const PUT = api(async (request) => {
       throw new UserEmailPolicyError(
         'Account changed during update. Refresh the user and try again.'
       )
-    if (
-      latestConfig.enabled &&
-      body.password &&
-      Buffer.byteLength(body.password, 'utf8') > 72
-    )
-      throw new UserEmailPolicyError('Password must use at most 72 bytes.')
 
     // Full user forms carry unchanged identity fields. Preserve concurrent
     // verification or role changes unless this request actually edited them.
@@ -307,21 +296,19 @@ export const PUT = api(async (request) => {
         roles = { set: body.roleIds.map((id) => ({ id })) }
       }
     }
-    if (emailChanged || body.password) {
-      if (latestConfig.enabled && emailChanged) {
-        await lockEmailAddress(tx, body.email!)
-        if (
-          await tx.user.findFirst({
-            where: {
-              id: { not: existingUser.id },
-              email: { equals: body.email, mode: 'insensitive' },
-            },
-          })
-        )
-          throw new UserEmailPolicyError('Email already exists')
-      }
-      await invalidateEmailTokens(tx, existingUser.id)
-    }
+    if (
+      emailChanged &&
+      latestConfig.enabled &&
+      !(await claimEmail(tx, body.email!, existingUser.id))
+    )
+      throw new UserEmailPolicyError('Email already exists')
+    if (emailChanged || passwordHash)
+      await changeCredentials(tx, existingUser.id, {
+        password: passwordHash,
+        ...(emailChanged && {
+          email: { address: body.email!, verified: false },
+        }),
+      })
     if (requestedUrlIdChange) {
       // Public URLs and the user ID must change together. Storage paths are
       // independent: moving objects can strand files if storage or DB writes fail.
@@ -343,23 +330,7 @@ export const PUT = api(async (request) => {
     }
     const updated = await tx.user.update({
       where: { id: body.id },
-      data: {
-        ...updateData,
-        ...(roles ? { roles } : {}),
-        ...(emailChanged && {
-          emailVerified: null,
-          emailVerifiedFor: null,
-          emailVerificationSource: null,
-          pendingEmail: null,
-          pendingEmailOldConfirmed: false,
-        }),
-        ...(emailChanged || body.password
-          ? { sessionVersion: { increment: 1 } }
-          : {}),
-        ...(latestConfig.enabled && body.password
-          ? { pendingEmail: null, pendingEmailOldConfirmed: false }
-          : {}),
-      },
+      data: { ...updateData, ...(roles ? { roles } : {}) },
       select: {
         id: true,
         name: true,

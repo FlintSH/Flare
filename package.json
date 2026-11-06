@@ -109,7 +109,6 @@
     "tailwindcss-animate": "^1.0.7",
     "tar-stream": "^3.2.2",
     "tesseract.js": "^6.0.1",
-    "uuid": "^14.0.2",
     "yauzl": "^3.4.0",
     "zod": "^4.6.6"
   },

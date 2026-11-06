@@ -2,6 +2,7 @@ import type { Prisma, User } from '@prisma/client'
 import type { Session } from 'next-auth'
 
 import { prisma } from '@/lib/database/prisma'
+import { findAccountByEmail } from '@/lib/users/email-claim'
 
 import { newPasskeyRecoveryCodes, passkeyRecoveryHash } from './crypto'
 import { hasFallbackSignIn } from './fallback'
@@ -102,20 +103,12 @@ export async function authenticatePasskeyRecovery(email: string, code: string) {
   const normalized = code.replace(/[\s-]/g, '').toLowerCase()
   if (!/^[a-f0-9]{32}$/.test(normalized)) return null
   // Legacy case-variant addresses are ambiguous, even when one matches exactly.
-  // Prisma implements insensitive equality with ILIKE; keep email characters literal.
-  const literalEmail = email
-    .trim()
-    .replace(/[\\%_]/g, (character) => `\\${character}`)
-  const where: Prisma.UserWhereInput = {
-    email: { equals: literalEmail, mode: 'insensitive' },
-  }
-  const accounts = await prisma.user.findMany({
-    where,
-    take: 2,
-    select: { id: true, email: true, sessionVersion: true },
+  const account = await findAccountByEmail(prisma, email, {
+    id: true,
+    email: true,
+    sessionVersion: true,
   })
-  if (accounts.length !== 1) return null
-  const account = accounts[0]
+  if (!account) return null
   return prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, account.id)
     if (
@@ -125,12 +118,8 @@ export async function authenticatePasskeyRecovery(email: string, code: string) {
     )
       return null
     // An email change may introduce a collision while this attempt waits for the lock.
-    const matches = await tx.user.findMany({
-      where,
-      take: 2,
-      select: { id: true },
-    })
-    if (matches.length !== 1 || matches[0].id !== user.id) return null
+    if ((await findAccountByEmail(tx, email, { id: true }))?.id !== user.id)
+      return null
     const removed = await tx.passkeyRecoveryCode.deleteMany({
       where: {
         userId: user.id,

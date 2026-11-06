@@ -141,6 +141,11 @@ export async function consumeChallenge(
   return challenge
 }
 
+/**
+ * Signs an account out everywhere: moving its session version on ends every
+ * browser session, and its pending security challenges are deleted. Revoking
+ * sessions does only this; `changeCredentials` in `lib/users` builds on it.
+ */
 export async function revokeSecuritySessions(
   tx: Prisma.TransactionClient,
   userId: string

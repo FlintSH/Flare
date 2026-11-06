@@ -4,7 +4,9 @@ import type { Session } from 'next-auth'
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { clientIp } from '@/lib/security/client-ip'
+import { findAccountByEmail } from '@/lib/users/email-claim'
 
+import { revokeSecuritySessions } from './security/service'
 import { SecurityError, lockSecurityUser } from './security/shared'
 
 export const BROWSER_SESSION_SECONDS = 30 * 24 * 60 * 60
@@ -117,17 +119,12 @@ export async function recordFailedLogin(
       select: { id: true, name: true },
     })
   else if (identity.email && identity.email.length <= 320) {
-    if (authMethod === 'passkey-recovery') {
-      const email = identity.email
-        .trim()
-        .replace(/[\\%_]/g, (character) => `\\${character}`)
-      const matches = await prisma.user.findMany({
-        where: { email: { equals: email, mode: 'insensitive' } },
-        select: { id: true, name: true },
-        take: 2,
+    if (authMethod === 'passkey-recovery')
+      user = await findAccountByEmail(prisma, identity.email, {
+        id: true,
+        name: true,
       })
-      if (matches.length === 1) user = matches[0]
-    } else
+    else
       user = await prisma.user.findUnique({
         where: { email: identity.email },
         select: { id: true, name: true },
@@ -195,11 +192,7 @@ export async function revokeBrowserSessions(session: Session, id?: string) {
       data: { revokedAt: now },
     })
     if (id && !revoked.count) throw new SecurityError('Session not found.', 404)
-    if (!id)
-      await tx.user.update({
-        where: { id: user.id },
-        data: { sessionVersion: { increment: 1 } },
-      })
+    if (!id) await revokeSecuritySessions(tx, user.id)
     return {
       revokedCount: revoked.count,
       signedOut: !id || id === session.user.sessionId,

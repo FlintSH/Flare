@@ -7,7 +7,6 @@ import { assertSecurityProof } from '@/lib/auth/security/service'
 import { prisma } from '@/lib/database/prisma'
 import { lockEmailUser } from '@/lib/email/account'
 import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
-import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
@@ -15,6 +14,7 @@ import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { deleteAccountWithStorageCleanup } from '@/lib/storage/deletion'
+import { changeCredentials } from '@/lib/users/credentials'
 
 const api = routes('/api/profile', {
   envelope: 'api',
@@ -29,12 +29,6 @@ export const PUT = api(async (request) => {
   const account = await prisma.user.findUnique({ where: { id: user.id } })
   if (!account) throw new HttpError(404, 'User not found')
   const emailConfig = await getEmailConfig()
-  if (
-    emailConfig.enabled &&
-    body.newPassword &&
-    Buffer.byteLength(body.newPassword, 'utf8') > 72
-  )
-    throw new HttpError(400, 'Password must use at most 72 bytes.')
   const emailChanged = Boolean(body.email && body.email !== account.email)
   const security =
     emailChanged || body.newPassword ? await securitySession(request) : null
@@ -86,15 +80,9 @@ export const PUT = api(async (request) => {
 
   const updateData: Prisma.UserUpdateInput = {}
   if (body.name) updateData.name = body.name
-  if (emailChanged) updateData.email = body.email
-  if (body.newPassword) updateData.password = await hash(body.newPassword, 10)
-  if (emailChanged) {
-    updateData.emailVerified = null
-    updateData.emailVerifiedFor = null
-    updateData.emailVerificationSource = null
-    updateData.pendingEmail = null
-    updateData.pendingEmailOldConfirmed = false
-  }
+  const passwordHash = body.newPassword
+    ? await hash(body.newPassword, 10)
+    : undefined
   if (body.image) updateData.image = body.image
   if (typeof body.randomizeFileUrls === 'boolean')
     updateData.randomizeFileUrls = body.randomizeFileUrls
@@ -132,7 +120,7 @@ export const PUT = api(async (request) => {
   }
 
   const updatedUser = await prisma.$transaction(async (tx) => {
-    if (emailChanged || body.newPassword) {
+    if (emailChanged || passwordHash) {
       // Serialize the effective policy with this account mutation. An admin
       // enabling email must commit either before this check or after our save.
       const currentEmailConfig = await getEmailConfigForUpdate(tx)
@@ -141,16 +129,6 @@ export const PUT = api(async (request) => {
           400,
           'Use the verified email change form to change your email address.'
         )
-      if (body.newPassword || emailChanged) {
-        if (
-          body.newPassword &&
-          Buffer.byteLength(body.newPassword, 'utf8') > 72
-        )
-          throw new HttpError(400, 'Password must use at most 72 bytes.')
-        updateData.sessionVersion = { increment: 1 }
-        updateData.pendingEmail = null
-        updateData.pendingEmailOldConfirmed = false
-      }
       const fresh = await lockEmailUser(tx, user.id)
       if (security)
         await assertSecurityProof(
@@ -164,7 +142,12 @@ export const PUT = api(async (request) => {
           400,
           'Account changed during update. Please try again.'
         )
-      await invalidateEmailTokens(tx, user.id)
+      await changeCredentials(tx, user.id, {
+        password: passwordHash,
+        ...(emailChanged && {
+          email: { address: body.email!, verified: false },
+        }),
+      })
     }
     return tx.user.update({
       where: { id: user.id },

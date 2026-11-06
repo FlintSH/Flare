@@ -60,6 +60,7 @@ import {
   setupSchema,
   setupStorageSchema,
 } from '@/lib/setup/schema'
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 import { cn } from '@/lib/utils'
 import { markSetupAsCompleted } from '@/lib/utils/setup-cache'
 
@@ -653,7 +654,7 @@ export function SetupWizard({
                           type: 'password',
                           placeholder: 'Choose a strong password',
                           autoComplete: 'new-password',
-                          hint: 'At least 8 characters.',
+                          hint: `At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`,
                         }
                       )}
                     </CardContent>

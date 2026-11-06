@@ -5,11 +5,11 @@ import { z } from 'zod'
 
 import { recordAudit } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
-import { lockEmailAddress, lockRoleChanges } from '@/lib/database/locks'
+import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
-import { sendAccountToken } from '@/lib/email/account'
 import { getEmailConfig } from '@/lib/email/config'
 import { emailRoutes } from '@/lib/email/http'
+import { MailLimitError } from '@/lib/email/outbox'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { HttpError } from '@/lib/http/errors'
@@ -17,12 +17,17 @@ import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { InviteError, redeemInvite } from '@/lib/invites/service'
 import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
-import { createUser } from '@/lib/users/create-user'
+import {
+  accountEmailSchema,
+  accountNameSchema,
+  accountPasswordSchema,
+} from '@/lib/users/account-policy'
+import { createAccount, verifiesNewAccounts } from '@/lib/users/create-account'
 
 const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(2),
+  email: accountEmailSchema,
+  password: accountPasswordSchema,
+  name: accountNameSchema,
   invite: z.string().max(200).optional(),
 })
 
@@ -32,7 +37,13 @@ const api = routes('/api/auth/register', {
       return new HttpError(400, error.message, {
         body: { code: `invite_${error.reason}` },
       })
-    // The verification email is rate limited like the email routes.
+    // The verification email is limited like the email routes' mail, and a
+    // full daily mail cap gets their answer too.
+    if (error instanceof MailLimitError)
+      return new HttpError(
+        emailRoutes.failure.status ?? 500,
+        emailRoutes.failure.message
+      )
     return emailRoutes.translate?.(error)
   },
   failure: { message: 'Internal server error' },
@@ -60,12 +71,7 @@ export const POST = api(async (request) => {
     throw new HttpError(400, 'Provide a JSON object')
   const body = registerSchema.parse(json)
   const emailConfig = await getEmailConfig()
-  if (emailConfig.enabled && Buffer.byteLength(body.password, 'utf8') > 72)
-    throw new HttpError(400, 'Password must use at most 72 bytes.')
-  const sendVerification =
-    emailConfig.enabled &&
-    (emailConfig.verification.mode !== 'off' || emailConfig.recovery.enabled)
-  if (sendVerification)
+  if (verifiesNewAccounts(emailConfig))
     await limitEmailRequest(request, emailConfig, body.email)
 
   const hashedPassword = await hash(body.password, 10)
@@ -75,24 +81,18 @@ export const POST = api(async (request) => {
     // Redeemed in the same transaction: a rejected sign-up never spends a use.
     const redeemed =
       body.invite === undefined ? null : await redeemInvite(tx, body.invite)
-    if (emailConfig.enabled) await lockEmailAddress(tx, body.email)
-    const exists = emailConfig.enabled
-      ? await tx.user.findFirst({
-          where: { email: { equals: body.email, mode: 'insensitive' } },
-        })
-      : await tx.user.findUnique({ where: { email: body.email } })
-    if (exists) throw new HttpError(400, 'User already exists')
-
-    const created = await createUser(tx, {
-      email: body.email,
-      name: body.name,
-      password: hashedPassword,
-      roleIds: redeemed?.roleIds,
-      inviteId: redeemed?.id,
-      ...(sendVerification ? { emailVerificationSource: 'pending_local' } : {}),
-    })
-    if (sendVerification)
-      await sendAccountToken(tx, created, 'verify', emailConfig)
+    const created = await createAccount(
+      tx,
+      {
+        email: body.email,
+        name: body.name,
+        password: hashedPassword,
+        roleIds: redeemed?.roleIds,
+        inviteId: redeemed?.id,
+      },
+      { verifyWith: emailConfig }
+    )
+    if (!created) throw new HttpError(400, 'User already exists')
     return { user: created, redeemed }
   })
   if (redeemed)

@@ -3,7 +3,6 @@ import { PATCH as moderatePATCH } from '@/app/api/users/[id]/files/[fileId]/rout
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  FILE_PASSWORD_MAX_BYTES,
   FILE_PASSWORD_MIN_LENGTH,
   filePasswordHint,
   newFilePasswordSchema,
@@ -12,6 +11,7 @@ import { errorResponse } from '@/lib/http/route'
 import { uploadRoutes } from '@/lib/uploads/http'
 import { parseUploadFields } from '@/lib/uploads/options'
 import { uploadRequestOptionsSchema } from '@/lib/uploads/schema'
+import { PASSWORD_MAX_BYTES } from '@/lib/users/account-policy'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn() }))
 
@@ -31,7 +31,7 @@ vi.mock('@/lib/security/request-origin', () => ({
 describe('new file password rules', () => {
   it('requires 8 characters and at most 72 UTF-8 bytes', () => {
     expect(FILE_PASSWORD_MIN_LENGTH).toBe(8)
-    expect(FILE_PASSWORD_MAX_BYTES).toBe(72)
+    expect(PASSWORD_MAX_BYTES).toBe(72)
     expect(newFilePasswordSchema.safeParse('1234567').success).toBe(false)
     expect(newFilePasswordSchema.safeParse('12345678').success).toBe(true)
     expect(newFilePasswordSchema.safeParse('a'.repeat(72)).success).toBe(true)

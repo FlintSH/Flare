@@ -14,6 +14,7 @@ import { limitEmailRequest } from '@/lib/email/rate-limit'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
+import { claimEmail } from '@/lib/users/email-claim'
 
 const api = routes('/api/auth/email/change', emailRoutes)
 
@@ -51,13 +52,8 @@ export const POST = api(async (request) => {
       throw new EmailHttpError(
         'Your current email must be verified before changing it.'
       )
-    const conflict = await tx.user.findFirst({
-      where: {
-        id: { not: user.id },
-        email: { equals: email, mode: 'insensitive' },
-      },
-    })
-    if (conflict) throw new EmailHttpError('This email address is unavailable.')
+    if (!(await claimEmail(tx, email, user.id)))
+      throw new EmailHttpError('This email address is unavailable.')
     await invalidateEmailTokens(tx, user.id)
     const pending = await tx.user.update({
       where: { id: user.id },

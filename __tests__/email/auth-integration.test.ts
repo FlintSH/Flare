@@ -432,6 +432,82 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       ).toBe(1)
     })
 
+    it('reads underscores and percent signs in an address literally, not as wildcards', async () => {
+      const id = randomUUID()
+      const holder = await user({
+        email: `axb-${id}@example.com`,
+        emailVerifiedFor: `axb-${id}@example.com`,
+      })
+      for (const lookalike of [`a_b-${id}@example.com`, `a%-${id}@example.com`])
+        await requestPasswordReset(lookalike, config)
+      expect(
+        await prisma.emailToken.count({ where: { userId: holder.id } })
+      ).toBe(0)
+
+      const address = `a_b-${id}@example.com`
+      const registered = await register(
+        request({ email: address, name: 'L', password: 'signup-password' })
+      )
+      expect(
+        registered.status,
+        JSON.stringify(await registered.clone().json())
+      ).toBe(200)
+      ids.push((await registered.json()).user.id)
+      // Letter case still names the same mailbox. Expire the address's mail
+      // cooldown so the attempt reaches the claim.
+      await prisma.emailRateLimit.update({
+        where: {
+          key: createHash('sha256')
+            .update(`email:cooldown:${address}`)
+            .digest('hex'),
+        },
+        data: { resetAt: new Date(0) },
+      })
+      const duplicate = await register(
+        request({
+          email: address.toUpperCase(),
+          name: 'L',
+          password: 'signup-password',
+        })
+      )
+      expect(duplicate.status).toBe(400)
+      expect(await duplicate.json()).toEqual({ error: 'User already exists' })
+
+      const changer = await user()
+      await user({ email: `abc-${id}@example.com` })
+      state.session = { user: { id: changer.id } }
+      const change = await changeEmail(
+        request({ email: `a_c-${id}@example.com`, password: 'old-password' })
+      )
+      expect(change.status, JSON.stringify(await change.clone().json())).toBe(
+        200
+      )
+    })
+
+    it('applies the 72-byte password limit and the one-character name rule with email disabled', async () => {
+      state.config = { ...config, enabled: false }
+      const address = `${randomUUID()}@signup.example`
+      const long = await register(
+        request({ email: address, name: 'J', password: '🔒'.repeat(19) })
+      )
+      expect(long.status).toBe(400)
+      expect(await long.json()).toEqual({
+        error: 'Password must use at most 72 bytes.',
+      })
+      const created = await register(
+        request({ email: address, name: 'J', password: 'signup-password' })
+      )
+      expect(created.status, JSON.stringify(await created.clone().json())).toBe(
+        200
+      )
+      const body = await created.json()
+      ids.push(body.user.id)
+      expect(body).toMatchObject({
+        user: { name: 'J', email: address },
+        nextAction: 'sign_in',
+      })
+    })
+
     it('does not fabricate old-address approval when the policy makes it optional', async () => {
       const account = await user()
       state.session = { user: { id: account.id } }
@@ -650,7 +726,11 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
           password: 'signup-password',
         })
       )
-      expect(response.status).toBe(500)
+      // The email routes' own answer when they can't queue a message.
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error: 'Unable to complete this email request. Please try again.',
+      })
       expect(
         await prisma.user.findUnique({ where: { email: address } })
       ).toBeNull()

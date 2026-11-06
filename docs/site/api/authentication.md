@@ -97,6 +97,8 @@ New uploads use the profile's current settings. Chunked uploads keep the option 
 
 Flare also has an older account upload token. Generated ShareX, iTake, Flameshot, Spectacle, and Bash configurations use it for compatibility. Regenerating it invalidates existing generated configurations, so download them again afterward.
 
+`GET /api/profile/upload-token` returns `{ "uploadToken": "…" }`, and `POST` replaces the token and returns the new one. Both answer with `Cache-Control: private, no-store`, like the generated configurations, so browsers and shared caches don't keep the credential; earlier versions sent no caching header. A password reset replaces the token too when the administrator turned on **Rotate upload tokens after a password reset**.
+
 The legacy credential is accepted by the shared account authentication helper and does not have the named-token scope allowlist. Its supported route surface is therefore broader than `files:upload` on routes that use that helper, but current role permissions still restrict each request. It still does not satisfy routes that explicitly require a browser session or an administrator session. Prefer scoped named tokens for new custom integrations.
 
 ## Two-factor authentication and passkeys

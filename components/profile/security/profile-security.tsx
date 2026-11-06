@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useToast } from '@/hooks/use-toast'
 
@@ -147,7 +149,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               ref={newPasswordRef}
               placeholder="Enter your new password"
               autoComplete="new-password"
-              minLength={8}
+              minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
               required
               disabled={isLoading}
             />
@@ -161,7 +163,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               ref={confirmPasswordRef}
               placeholder="Confirm your new password"
               autoComplete="new-password"
-              minLength={8}
+              minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
               required
               disabled={isLoading}
             />
