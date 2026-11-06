@@ -72,6 +72,7 @@ import {
 } from '@/lib/customization/favicon'
 import type { CustomizationState } from '@/lib/customization/schema'
 import { getDocumentationUrl } from '@/lib/documentation'
+import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_ALIASES,
@@ -1633,6 +1634,7 @@ export function InstanceSettings({
             <div className="space-y-6">
               <CustomizationStudio
                 initialState={initialConfig.settings.customization}
+                creditsFooter={savedConfig.settings.general.credits.showFooter}
                 recovery={recovery}
                 onStateChange={handleStudioStateChange}
                 onDirtyChange={setStudioDirty}
@@ -1761,7 +1763,7 @@ export function InstanceSettings({
                   and packs are published separately above.
                 </p>
               </details>
-              {can('administrator') && (
+              {can(CUSTOM_STYLES_PERMISSION) && (
                 <details
                   id="advanced-styles"
                   className="scroll-mt-28 rounded-xl border bg-card p-5"

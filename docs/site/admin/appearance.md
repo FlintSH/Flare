@@ -68,7 +68,7 @@ Choose a default share-page layout:
 
 <Screenshot src="/screenshots/customization/share-delivery.png" alt="A real Flare public share page using the Delivery layout" caption="The Delivery layout gives a shared file a spacious presentation." />
 
-Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
+Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. The preview follows it too, using the saved **Show credits footer** setting from **General**; earlier versions previewed an inherited footer even when that setting was off. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
 
 Upload profiles can select a share style for new files. A file with no stored style inherits the current instance default, so changing the default can change how those older files appear too.
 
@@ -144,7 +144,7 @@ Sign in as an administrator and open:
 /dashboard/settings?section=appearance&recovery=1
 ```
 
-This view uses the original Flare theme and suppresses custom CSS/head HTML for the recovery page without changing the saved settings. Restore the previous studio appearance or repair custom styles at:
+This view uses the original Flare theme and suppresses custom CSS/head HTML for the recovery page without changing the saved settings. Restore the previous studio appearance there. With the **Administrator** permission, repair custom styles at the address below. **Custom CSS and HTML** appears only with that permission, so for a delegated designer the studio's recovery notice and its **Identity** section don't link to it; ask an administrator to repair custom styles.
 
 ```text
 /dashboard/settings?section=appearance&recovery=1#advanced-styles

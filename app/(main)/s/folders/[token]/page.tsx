@@ -15,6 +15,7 @@ import { pagePanelClassName } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 
 import { getConfig } from '@/lib/config'
+import { showsShareFooter } from '@/lib/customization/sharing'
 import { getSharedFolder } from '@/lib/folders/shared'
 import { cn, formatFileSize } from '@/lib/utils'
 
@@ -48,9 +49,12 @@ export default async function SharedFolderPage({
   const folder = await getSharedFolder(token, requestedPage)
   if (!folder || (folder.page > 1 && folder.page > folder.pageCount)) notFound()
   const config = await getConfig()
-  const { sharing } = config.settings.customization.published
-  const showFooter =
-    sharing.showFooter ?? config.settings.general.credits.showFooter
+  const appearance = config.settings.customization.published
+  const { sharing } = appearance
+  const showFooter = showsShareFooter(
+    appearance,
+    config.settings.general.credits.showFooter
+  )
 
   return (
     <div className="relative isolate flex min-h-dvh min-w-0 flex-col">

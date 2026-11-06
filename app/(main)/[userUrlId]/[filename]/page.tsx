@@ -20,7 +20,10 @@ import { Footer } from '@/components/layout/footer'
 import { recordAudit } from '@/lib/audit'
 import { getConfig } from '@/lib/config'
 import { resolveShareStyle } from '@/lib/customization/schema'
-import { shareMetadataText } from '@/lib/customization/sharing'
+import {
+  shareMetadataText,
+  showsShareFooter,
+} from '@/lib/customization/sharing'
 import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
 import { fileKind } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
@@ -170,8 +173,10 @@ export default async function FilePage({
 }: FilePageProps) {
   const config = await getConfig()
   const appearance = config.settings.customization.published
-  const showFooter =
-    appearance.sharing.showFooter ?? config.settings.general.credits.showFooter
+  const showFooter = showsShareFooter(
+    appearance,
+    config.settings.general.credits.showFooter
+  )
   const { userUrlId, filename } = await params
   const providedPassword = (await searchParams).password as string | undefined
 

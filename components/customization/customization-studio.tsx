@@ -54,8 +54,11 @@ import {
   appearancePackSchema,
 } from '@/lib/customization/schema'
 import { exportAppearancePack } from '@/lib/customization/state'
+import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import { cn } from '@/lib/utils'
 
+import { useHydrated } from '@/hooks/use-hydrated'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 import { AppearancePreview } from './appearance-preview'
@@ -184,21 +187,28 @@ function SettingRow({
 
 export function CustomizationStudio({
   initialState,
+  creditsFooter,
   recovery = false,
   onStateChange,
   onDirtyChange,
 }: {
   initialState: CustomizationState
+  /** The instance's saved Show credits footer setting, for the preview. */
+  creditsFooter: boolean
   recovery?: boolean
   onStateChange?: (state: CustomizationState) => void
   onDirtyChange?: (dirty: boolean) => void
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  // The Custom CSS and HTML editors render only for this permission.
+  const customStyles = usePermissions().can(CUSTOM_STYLES_PERMISSION)
   const [state, setState] = useState(initialState)
   const [document, setDocument] = useState<AppearanceDocument | null>(
     initialState?.draft || initialState?.published || null
   )
+  // The publish date is in the reader's time zone, which the server lacks.
+  const hydrated = useHydrated()
   const [section, setSection] =
     useState<(typeof sections)[number]['id']>('identity')
   const [mode, setMode] = useState<'light' | 'dark'>('dark')
@@ -349,13 +359,18 @@ export function CustomizationStudio({
             <p className="text-muted-foreground">
               This page uses Flare’s original appearance with custom CSS and
               head HTML disabled. Your saved settings are unchanged. Restore a
-              previous appearance below, or{' '}
-              <RecoveryLink
-                href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
-                className="underline underline-offset-4"
-              >
-                repair custom CSS and HTML below
-              </RecoveryLink>
+              previous appearance below
+              {customStyles ? (
+                <>
+                  , or{' '}
+                  <RecoveryLink
+                    href="/dashboard/settings?section=appearance&recovery=1#advanced-styles"
+                    className="underline underline-offset-4"
+                  >
+                    repair custom CSS and HTML below
+                  </RecoveryLink>
+                </>
+              ) : null}
               .
             </p>
             <RecoveryLink
@@ -549,21 +564,28 @@ export function CustomizationStudio({
                         />
                       </div>
                       <p className="text-pretty text-xs text-muted-foreground">
-                        Your favicon is below. Custom CSS and head HTML are
-                        under{' '}
-                        <a
-                          href="#advanced-styles"
-                          onClick={() => {
-                            const styles =
-                              window.document.getElementById('advanced-styles')
-                            if (styles instanceof HTMLDetailsElement)
-                              styles.open = true
-                          }}
-                          className="whitespace-nowrap underline underline-offset-4"
-                        >
-                          Custom CSS and HTML
-                        </a>
-                        .
+                        Your favicon is below.
+                        {customStyles && (
+                          <>
+                            {' '}
+                            Custom CSS and head HTML are under{' '}
+                            <a
+                              href="#advanced-styles"
+                              onClick={() => {
+                                const styles =
+                                  window.document.getElementById(
+                                    'advanced-styles'
+                                  )
+                                if (styles instanceof HTMLDetailsElement)
+                                  styles.open = true
+                              }}
+                              className="whitespace-nowrap underline underline-offset-4"
+                            >
+                              Custom CSS and HTML
+                            </a>
+                            .
+                          </>
+                        )}
                       </p>
                     </CardContent>
                   </>
@@ -1091,6 +1113,7 @@ export function CustomizationStudio({
               <div className="min-w-0 xl:sticky xl:top-28 self-start">
                 <AppearancePreview
                   document={document}
+                  creditsFooter={creditsFooter}
                   mode={mode}
                   onModeChange={setMode}
                   protectedPreview={protectedPreview}
@@ -1111,7 +1134,13 @@ export function CustomizationStudio({
             description={
               dirty || state.draft
                 ? 'Your live instance stays the same until you publish.'
-                : `Revision ${state.revision}${state.publishedAt ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}` : ' · Original Flare appearance'}`
+                : `Revision ${state.revision}${
+                    !state.publishedAt
+                      ? ' · Original Flare appearance'
+                      : hydrated
+                        ? ` · Published ${new Date(state.publishedAt).toLocaleDateString()}`
+                        : ' · Published'
+                  }`
             }
           >
             {state.previous && (

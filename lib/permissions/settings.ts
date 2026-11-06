@@ -4,6 +4,9 @@ const sectionPermissions: Record<string, Permission> = {
   appearance: 'appearance.manage',
   advanced: 'administrator',
 }
+/** Who may see and change custom CSS and head HTML, the `advanced` section. */
+export const CUSTOM_STYLES_PERMISSION = sectionPermissions.advanced
+
 const generalPermissions: Record<string, Permission> = {
   storage: 'settings.storage',
   oidc: 'settings.security',

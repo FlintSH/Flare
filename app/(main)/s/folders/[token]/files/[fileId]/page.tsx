@@ -11,6 +11,7 @@ import { PublicState } from '@/components/auth/public-state'
 import { Footer } from '@/components/layout/footer'
 
 import { getConfig } from '@/lib/config'
+import { showsShareFooter } from '@/lib/customization/sharing'
 import { checkPageAccess, findFile } from '@/lib/files/delivery'
 import {
   fileUrls,
@@ -70,9 +71,10 @@ export default async function SharedFolderFilePage({
   if (access.reason === 'private') notFound()
 
   const config = await getConfig()
-  const showFooter =
-    config.settings.customization.published.sharing.showFooter ??
+  const showFooter = showsShareFooter(
+    config.settings.customization.published,
     config.settings.general.credits.showFooter
+  )
 
   return (
     <PublicState

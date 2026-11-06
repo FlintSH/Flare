@@ -7,24 +7,22 @@ import { Footer } from '@/components/layout/footer'
 import { Button } from '@/components/ui/button'
 
 import { getConfig } from '@/lib/config'
-
-// Visitors land here from expired, private or mistyped share links, so the
-// page follows the share pages' footer setting.
-async function shareFooterVisible() {
-  const config = await getConfig()
-  return (
-    config.settings.customization.published.sharing.showFooter ??
-    config.settings.general.credits.showFooter
-  )
-}
+import { showsShareFooter } from '@/lib/customization/sharing'
 
 export default async function NotFound() {
+  const config = await getConfig()
+  // Visitors land here from expired, private or mistyped share links, so the
+  // page follows share pages.
+  const showFooter = showsShareFooter(
+    config.settings.customization.published,
+    config.settings.general.credits.showFooter
+  )
   return (
     <PublicState
       statusCode="404"
       title="Page not found"
       description="The link may have changed, the file may have expired, or you may not have access to it. Check the address or head back to your files."
-      footer={(await shareFooterVisible()) ? <Footer /> : undefined}
+      footer={showFooter ? <Footer /> : undefined}
     >
       <Button asChild className="h-11 w-full">
         <Link href="/dashboard">
