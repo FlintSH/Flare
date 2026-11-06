@@ -110,11 +110,14 @@ export default async function RootLayout({
       process.env.VERCEL_ENV === 'preview' ||
       process.env.METICULOUS_RECORDING_ENABLED === 'true') &&
     Boolean(process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN)
+  // While custom CSS mentions font-family, body text follows the studio's
+  // Typeface rule, which font-sans would outrank.
   const hasCustomFont =
     !recovery && config.settings.advanced.customCSS.includes('font-family')
 
+  // Inter is defined on <html>, where the studio's Typeface reads --font-inter.
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Explicit opt-in also supports the isolated recording container. */}
         {recordMeticulous && (
@@ -134,7 +137,7 @@ export default async function RootLayout({
         <CustomHead recovery={recovery} />
       </head>
       <body
-        className={`${!hasCustomFont ? inter.variable + ' font-sans' : ''} min-h-screen flex flex-col`}
+        className={`${hasCustomFont ? '' : 'font-sans '}min-h-screen flex flex-col`}
       >
         <ThemeProvider
           attribute="class"
