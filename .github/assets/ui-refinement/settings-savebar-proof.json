@@ -1,0 +1,30 @@
+{
+  "method": "Unmodified native headless Chromium frame from the compiled settings bar; local root32 CSS text-size simulation at320x568, not a physical device or native OS zoom.",
+  "sourceBuild": {
+    "sourceSha256": "1bcd3f351535e077882b3e45da233be7605de8f2d004a91eebe33ef4c12032fb",
+    "buildId": "-bwEcu1-hUBwo2CoBaU3e",
+    "componentSha256": {
+      "components/settings/instance-settings.tsx": "7fd9df54dda004f2cd3d2a6dbbf24581f15f84d3bd22b0b7c9dba208c052f4ad",
+      "components/shared/save-bar.tsx": "4fb47fb4f16d24d7b6b58d9819d73195a0396dff90ea7be91d921d6783b850a2"
+    }
+  },
+  "image": {
+    "path": ".github/assets/ui-refinement/settings-savebar-phone.png",
+    "sha256": "fbf962a0cc33dc32ebd0661274a67d0206e2db113e8f3ee8dfb5fa057278b1e4",
+    "sourceAndCopyBytesIdentical": true
+  },
+  "reviewedOriginal": true,
+  "checks": {
+    "nativeCases": 12,
+    "bothActionsInitiallyVisibleAndHittable": true,
+    "innerScrollingRequired": false,
+    "keyboardAndTouchDiscardRestoredDraft": true,
+    "discardSentSaveRequest": false,
+    "sourceAndFullRuntimeGuardsMatched": true
+  },
+  "limits": [
+    "Saved-success and failure responses were intercepted client simulations; no backend settings persistence is claimed.",
+    "Other library refinements in the working build remain outside this settings-only commit.",
+    "No physical-device, assistive-technology or cross-engine result is inferred."
+  ]
+}

@@ -1,6 +1,10 @@
 # UI refinement validation
 
-The frozen production candidate uses 675 source inputs (673 readable) and 245 QA inputs, Build `fYbB7toFZWMXaMRVps15p`. Source SHA is `7f4ff9e079f5dfb70006bd4725fe551d6f15da811249d8144991877cb5c7bfe6`; complete locked-dependency runtime SHA is `33ddda56a07983249f877a2d79579be9064a4b84d8fc24362a0439f44e2c8bb0`. Typecheck, lint, production build and packaging passed. Unit results: 2,346 passed, 0 failed and 312 database-dependent tests skipped.
+The settings save-bar follow-up has a separate [native phone frame](settings-savebar-phone.png) and [component/capture proof](settings-savebar-proof.json). Twelve current compiled cases verify that Discard and Save are initially visible and hittable, with no inner scrolling, at the selected phone sizes and root16/32 text simulations. Keyboard and touch Discard restore the draft without a save request. The Save success/failure responses are explicit client simulations, not backend persistence tests. The capture build includes other pending library work; its two settings component hashes match this change.
+
+The complete app-wide validation below belongs to the first follow-up commit, `e8de98de`. Further refinement remains in progress.
+
+That frozen production candidate uses 675 source inputs (673 readable) and 245 QA inputs, Build `fYbB7toFZWMXaMRVps15p`. Source SHA is `7f4ff9e079f5dfb70006bd4725fe551d6f15da811249d8144991877cb5c7bfe6`; complete locked-dependency runtime SHA is `33ddda56a07983249f877a2d79579be9064a4b84d8fc24362a0439f44e2c8bb0`. Typecheck, lint, production build and packaging passed. Unit results: 2,346 passed, 0 failed and 312 database-dependent tests skipped.
 
 Actual maintained suites passed Polish 27, Core 38, Refinement 35, Library 38, Timeline 17 and coarse continuity 2. Mixed continuity passed four cases/28 drags, recording 5,204 animation-frame samples, 0 maximum adjacent gap and 0 maximum pixel error across eight seam checks. Exact fixture restoration was followed by unchanged Timeline 17/coarse 2 passes. Compiled menu/settings/save-bar/geometry/text/name probes and restricted/setup/no-read/HTTP/loading/preview cases have separate current receipts. Root16/32 text enlargement, monospace substitution, delayed-response loading and CDP touch retain their simulation boundaries.
 

@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode, Ref } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -19,6 +19,9 @@ export function SaveBar({
   tone,
   title,
   description,
+  descriptionClassName,
+  actionsClassName,
+  containerRef,
   children,
   sticky = false,
   className,
@@ -27,6 +30,9 @@ export function SaveBar({
   tone?: keyof typeof tones
   title: ReactNode
   description?: ReactNode
+  descriptionClassName?: string
+  actionsClassName?: string
+  containerRef?: Ref<HTMLDivElement>
   children: ReactNode
   /** Follow the bottom of the screen, for editors taller than a screen. */
   sticky?: boolean
@@ -34,6 +40,7 @@ export function SaveBar({
   return (
     <div
       {...props}
+      ref={containerRef}
       className={cn(
         'flex flex-col gap-4 rounded-2xl border border-border/60 bg-panel px-6 py-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between',
         // Floating over the form, it takes the opaque lifted surface.
@@ -52,12 +59,22 @@ export function SaveBar({
           {title}
         </p>
         {description && (
-          <p className="mt-1 text-pretty text-xs text-muted-foreground">
+          <p
+            className={cn(
+              'mt-1 text-pretty text-xs text-muted-foreground',
+              descriptionClassName
+            )}
+          >
             {description}
           </p>
         )}
       </div>
-      <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto">
+      <div
+        className={cn(
+          'flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:flex-wrap sm:justify-end [&>*]:w-full sm:[&>*]:w-auto',
+          actionsClassName
+        )}
+      >
         {children}
       </div>
     </div>

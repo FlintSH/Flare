@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -131,7 +131,7 @@ const settingSwitchControlClassName =
 const settingSwitchIndicatorClassName =
   'pointer-events-none absolute end-[calc(100%_+_0.25rem)] top-1/2 -translate-y-1/2'
 const instanceSettingsSaveBarClassName =
-  'fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20 max-sm:inset-x-[16px] max-sm:bottom-[16px] max-sm:max-h-[35dvh] max-sm:gap-[8px] max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:px-[12px] max-sm:py-[12px] max-sm:[&>div:last-child]:gap-[8px] max-sm:[&>div:last-child]:shrink-0 max-sm:[&_button]:h-auto max-sm:[&_button]:!min-h-[44px] max-sm:[&_button]:max-w-full max-sm:[&_button]:whitespace-normal max-sm:[&_button]:px-[8px] max-sm:[&_button]:py-[8px] max-sm:[&_button]:leading-tight'
+  'fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20 max-sm:inset-x-[16px] max-sm:bottom-[16px] max-sm:gap-[8px] max-sm:px-[10px] max-sm:py-[10px] max-sm:[&_button]:h-auto max-sm:[&_button]:!min-h-[44px] max-sm:[&_button]:min-w-0 max-sm:[&_button]:max-w-full max-sm:[&_button]:whitespace-normal max-sm:[&_button]:px-[4px] max-sm:[&_button]:py-[6px] max-sm:[&_button]:leading-tight'
 
 export function InstanceSettings({
   initialConfig,
@@ -153,6 +153,24 @@ export function InstanceSettings({
     SETTINGS_SECTION_ALIASES
   )
   const [studioDirty, setStudioDirty] = useState(false)
+  const [saveBarElement, setSaveBarElement] = useState<HTMLDivElement | null>(
+    null
+  )
+  const [saveBarHeight, setSaveBarHeight] = useState(0)
+
+  useLayoutEffect(() => {
+    if (!saveBarElement) {
+      setSaveBarHeight(0)
+      return
+    }
+
+    const measure = () =>
+      setSaveBarHeight(Math.ceil(saveBarElement.getBoundingClientRect().height))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(saveBarElement)
+    return () => observer.disconnect()
+  }, [saveBarElement])
   const handleStudioStateChange = useCallback(
     (customization: CustomizationState) => {
       setSavedConfig((previous) => ({
@@ -2006,13 +2024,26 @@ export function InstanceSettings({
         )}
       </PreferencesPanel>
 
+      {hasChanges && (
+        <div aria-hidden="true" style={{ height: saveBarHeight + 32 }} />
+      )}
       {hasChanges &&
         createPortal(
           <SaveBar
             role="status"
             tone="unsaved"
-            title="You have unsaved instance settings"
+            containerRef={setSaveBarElement}
+            title={
+              <>
+                <span className="sm:hidden">Unsaved settings</span>
+                <span className="hidden sm:inline">
+                  You have unsaved instance settings
+                </span>
+              </>
+            }
             description={`${changedSettingsGroups.join(', ')}${pendingFaviconFile ? ' · Favicon' : ''}`}
+            descriptionClassName="sr-only sm:not-sr-only sm:mt-1"
+            actionsClassName="max-sm:grid max-sm:grid-cols-2 max-sm:gap-[8px]"
             className={instanceSettingsSaveBarClassName}
           >
             <Button
@@ -2020,16 +2051,30 @@ export function InstanceSettings({
               onClick={discardChanges}
               disabled={isSaving}
             >
-              <XCircle aria-hidden="true" />
+              <XCircle className="hidden sm:block" aria-hidden="true" />
               Discard
             </Button>
-            <Button onClick={saveChanges} disabled={isSaving}>
+            <Button
+              onClick={saveChanges}
+              disabled={isSaving}
+              aria-label={isSaving ? undefined : 'Save settings'}
+            >
               {isSaving ? (
-                <Icons.spinner className="animate-spin" aria-hidden="true" />
+                <Icons.spinner
+                  className="hidden animate-spin sm:block"
+                  aria-hidden="true"
+                />
               ) : (
-                <Save aria-hidden="true" />
+                <Save className="hidden sm:block" aria-hidden="true" />
               )}
-              {isSaving ? 'Saving…' : 'Save settings'}
+              {isSaving ? (
+                'Saving…'
+              ) : (
+                <>
+                  <span className="sm:hidden">Save</span>
+                  <span className="hidden sm:inline">Save settings</span>
+                </>
+              )}
             </Button>
           </SaveBar>,
           document.body
