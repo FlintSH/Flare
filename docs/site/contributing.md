@@ -562,6 +562,8 @@ Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted t
 
 Local replay runs Chromium locally, but still uses Meticulous services for authentication, execution configuration, and session/replay data; simulation results are uploaded to Meticulous. It is not an offline service or a guarantee of free access to every command. Use the capabilities available to your account without starting paid hosted work. Do not run `meticulous ci`, `meticulous agent upload-build`, or `meticulous agent trigger-test-run` as part of routine validation. If service access or a usable session is unavailable, report that limitation and use local browser checks instead.
 
+`scripts/ui-hillclimb/verify-refinement.cjs` waits for DOM readiness when its image-loading scenario deliberately holds the real response. It checks the loading indicator before releasing those bytes, so the test can inspect that state without waiting on the request it has paused.
+
 ### Start a disposable app
 
 Run these commands from the repository root with Docker available:

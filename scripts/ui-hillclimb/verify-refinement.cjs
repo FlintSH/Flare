@@ -1770,7 +1770,10 @@ async function main() {
         if (!/already handled|closed|canceled/i.test(error.message)) throw error
       })
     })
-    await page.goto(origin + '/z2pPQ/lisbon-rooftops-at-golden-hour.jpg')
+    // The gated image cannot finish load until the loading UI is checked.
+    await page.goto(origin + '/z2pPQ/lisbon-rooftops-at-golden-hour.jpg', {
+      waitUntil: 'domcontentloaded',
+    })
     await expect(
       page.getByText('Loading image…', { exact: true })
     ).toBeVisible()
