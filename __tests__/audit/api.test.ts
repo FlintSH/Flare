@@ -69,6 +69,10 @@ describe('session-only audit endpoint', () => {
   it.each([
     '?page=0',
     '?q=one&q=two',
+    '?view=all&view=changes',
+    '?view=unknown',
+    '?view=',
+    '?excludeCategory=requests',
     '?token=secret',
     '?from=invalid',
     '?limit=101',
@@ -77,6 +81,62 @@ describe('session-only audit endpoint', () => {
       (await GET(new Request(`http://localhost/api/audit${query}`))).status
     ).toBe(400)
     expect(mocks.findMany).not.toHaveBeenCalled()
+  })
+
+  it.each(['', '?view=all'])(
+    'preserves comprehensive results for the default and explicit All activity view %s',
+    async (query) => {
+      const response = await GET(
+        new Request(`http://localhost/api/audit${query}`)
+      )
+      expect(response.status).toBe(200)
+      expect(mocks.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} })
+      )
+      expect(mocks.count).toHaveBeenCalledWith({ where: {} })
+    }
+  )
+
+  it('uses the same Changes scope and combined filters for rows and paginated totals', async () => {
+    mocks.count.mockResolvedValue(26)
+    const response = await GET(
+      new Request(
+        'http://localhost/api/audit?view=changes&category=files&q=invoice&outcome=failure&targetId=file-1&limit=25'
+      )
+    )
+    const where = mocks.findMany.mock.calls[0][0].where
+    expect(where).toMatchObject({
+      category: 'files',
+      outcome: 'failure',
+      targetId: 'file-1',
+    })
+    expect(where.NOT).toEqual([
+      { category: 'requests' },
+      {
+        AND: [
+          { outcome: 'success' },
+          {
+            action: {
+              in: [
+                'file.thumbnail',
+                'file.view',
+                'file.read',
+                'file.download',
+                'archive.browse',
+                'archive.entry.read',
+                'archive.member.read',
+                'archive.source.read',
+              ],
+            },
+          },
+        ],
+      },
+    ])
+    expect(where.OR).toContainEqual({
+      targetName: { contains: 'invoice', mode: 'insensitive' },
+    })
+    expect(mocks.count).toHaveBeenCalledWith({ where })
+    expect(await response.json()).toMatchObject({ total: 26, pages: 2 })
   })
 
   it('paginates stably, includes facets, and marks sensitive responses non-cacheable', async () => {

@@ -1,3 +1,4 @@
+import { placeholderText } from './placeholder'
 import { type AppearanceDocument, LIGHT_PALETTE, type Palette } from './schema'
 
 export function hexToHsl(hex: string): string {
@@ -23,12 +24,15 @@ export function hexToHsl(hex: string): string {
 }
 
 export function paletteVariables(palette: Palette): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(palette).map(([key, value]) => [
-      `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
-      hexToHsl(value),
-    ])
-  )
+  return {
+    ...Object.fromEntries(
+      Object.entries(palette).map(([key, value]) => [
+        `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
+        hexToHsl(value),
+      ])
+    ),
+    '--placeholder-text': placeholderText(palette),
+  }
 }
 
 export function themeStyles(document: AppearanceDocument): string {

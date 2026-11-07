@@ -32,6 +32,7 @@ export function TagFilter({
   const [search, setSearch] = useState('')
   const { tags, loading, error, reload } = useTags()
   const selected = tags.find((tag) => tag.id === value)
+  const label = value === UNTAGGED ? 'Untagged' : selected?.name || 'Tags'
   const choose = (id: string | null) => {
     onChange(id)
     setOpen(false)
@@ -47,16 +48,14 @@ export function TagFilter({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          aria-label="Filter by tag"
+          aria-label={`Tags: ${label === 'Tags' ? 'filter files' : label}`}
           className={cn(
             'h-10 min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:w-auto',
             value && 'border-primary bg-primary/10 [&_svg]:text-foreground'
           )}
         >
           <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="max-w-28 truncate">
-            {value === UNTAGGED ? 'Untagged' : selected?.name || 'Tags'}
-          </span>
+          <span className="max-w-28 truncate">{label}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-2">

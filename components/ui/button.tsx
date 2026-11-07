@@ -6,17 +6,14 @@ import { type VariantProps, cva } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:text-muted-foreground disabled:opacity-50 disabled:grayscale [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&>svg:not(.ml-auto)]:mx-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:no-underline disabled:shadow-[inset_0_1px_3px_hsl(var(--foreground)/0.12)] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&>svg:not(.ml-auto)]:mx-0',
   {
     variants: {
       variant: {
-        // Disabled filled buttons become a faint outline with muted text, so
-        // they match disabled outline buttons in every palette instead of a
-        // grey that follows the accent.
         default:
-          'border border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/90 disabled:border-control disabled:bg-transparent disabled:shadow-none',
+          'border border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/90',
         destructive:
-          'border border-transparent bg-destructive-fill text-destructive-foreground shadow-sm hover:brightness-110 disabled:border-control disabled:bg-transparent disabled:shadow-none',
+          'border border-transparent bg-destructive-fill text-destructive-foreground shadow-sm hover:brightness-110',
         // Outline buttons take the surface they sit on, so they don't read as
         // recessed slots on lifted dialogs.
         outline:
@@ -55,6 +52,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         data-flare-control=""
+        data-flare-icon={size === 'icon' ? '' : undefined}
         {...props}
       />
     )

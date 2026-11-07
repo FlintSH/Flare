@@ -15,7 +15,7 @@ This guide is for people using an existing Flare instance. Everyone supplies the
 
 Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form.
 
-- **Registration available:** create an account, then follow any email-verification instructions.
+- **Registration available:** create an account, then follow any email-verification instructions. The password field keeps its requirements visible: at least eight characters and at most 72 bytes. Plain English letters use one byte each; emoji and accented letters can use more. Some combined emoji count as several characters toward the minimum. After leaving an invalid password field or trying to submit, an error stays beside that field until corrected; confirmation errors identify the confirmation field. A password outside those limits must be corrected before registration is sent.
 - **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 - **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
@@ -65,6 +65,12 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 The **Admin** menu lists only the pages your roles allow. If they allow just one, that page sits in the bar by itself instead of in a menu, for example **Audit log** for an account whose only administration permission is `audit.read`. Without any of these permissions there is no **Admin** menu. While you are on one of its pages, the **Admin** button is highlighted and the menu marks the current page. On **Profile**, a ring around your avatar shows where you are.
 
 The instance name and logo at the start of the bar open **Files**, or **Profile** if your roles don't include `files.read`. A bookmark or link to a page your roles don't allow opens **Profile** instead.
+
+**Upload**, **Paste**, and **Links** have a **Workspace** label above their page title. An unknown `/dashboard/...` address shows **Page not found** while keeping the dashboard navigation. Choose **Go to your files**, or **Go to Profile** when your roles do not allow Files, to return to a page you can open. The dashboard checks sign-in and required email verification before showing its navigation, including for a mistyped address.
+
+A missing workspace page returns HTTP 404, including nested or file-like addresses. If you are signed out, sign in first; required email verification still applies.
+
+The dashboard requires JavaScript. If a page stays on loading placeholders or a missing-page screen is blank, enable JavaScript for this site, check whether a browser extension blocked its scripts, and reload.
 
 <Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Your avatar opens the account menu. Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
 

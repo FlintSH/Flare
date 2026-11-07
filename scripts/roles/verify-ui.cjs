@@ -46,13 +46,11 @@ async function screenshot(page, name) {
   if (!screenshotDirectory) return
   // Dropdowns hide the background from accessibility tools, but the real header
   // must still be painted before capturing the whole page after a reload.
-  const brand = page.locator('header a[aria-label="Go to your dashboard"]')
+  const brand = page.locator('header a:has([data-flare-brand])')
   await expect(brand).toBeVisible()
   await expect(brand).toContainText('Flare')
   await page.waitForFunction(() => {
-    const brand = document.querySelector(
-      'header a[aria-label="Go to your dashboard"]'
-    )
+    const brand = document.querySelector('header a:has([data-flare-brand])')
     for (let element = brand; element; element = element.parentElement) {
       const style = getComputedStyle(element)
       if (Number(style.opacity) < 0.99 || style.visibility !== 'visible')

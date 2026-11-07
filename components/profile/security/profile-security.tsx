@@ -5,6 +5,10 @@ import { useRef, useState } from 'react'
 import { ProfileSecurityProps } from '@/types/components/profile'
 
 import {
+  PasswordFieldError,
+  usePasswordFields,
+} from '@/components/auth/password-field'
+import {
   hasRecentSecurityProof,
   recentSecurityProofName,
 } from '@/components/auth/security-api'
@@ -14,7 +18,10 @@ import { Label } from '@/components/ui/label'
 
 import { RECOVERY_CODE_INPUT_LENGTH } from '@/lib/auth/security/policy'
 import { updateProfile } from '@/lib/client/profile'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  ACCOUNT_PASSWORD_HELP,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from '@/lib/users/account-policy'
 
 import { useSecurityStatus } from '@/hooks/use-security-status'
 import { useSignOut } from '@/hooks/use-sign-out'
@@ -37,6 +44,11 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   const newPasswordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
   const securityCodeRef = useRef<HTMLInputElement>(null)
+  const passwords = usePasswordFields({
+    passwordId: 'new-password',
+    helpId: 'profile-password-help',
+    confirmationId: 'confirm-password',
+  })
 
   const changeFailed = (error: unknown, mutationStarted: boolean) => {
     if (mutationStarted) void refreshSecurity()
@@ -49,16 +61,18 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
   }
   const signOut = useSignOut({ onError: (error) => changeFailed(error, true) })
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (newPasswordRef.current?.value !== confirmPasswordRef.current?.value) {
-      toast({
-        title: 'Error',
-        description: 'New passwords do not match',
-        variant: 'destructive',
-      })
+    if (isLoading) return
+    const newPassword = newPasswordRef.current?.value || ''
+    if (
+      !passwords.validate(
+        newPassword,
+        confirmPasswordRef.current?.value || '',
+        e.currentTarget
+      )
+    )
       return
-    }
 
     setIsLoading(true)
     setProofNotice(null)
@@ -79,7 +93,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
       }
       mutationStarted = true
       await updateProfile(
-        { ...proof, newPassword: newPasswordRef.current?.value },
+        { ...proof, newPassword },
         'Failed to update password'
       )
 
@@ -146,8 +160,19 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               placeholder="Enter your new password"
               autoComplete="new-password"
               minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+              {...passwords.passwordProps}
               required
               disabled={isLoading}
+            />
+            <p
+              id="profile-password-help"
+              className="text-xs text-muted-foreground"
+            >
+              {ACCOUNT_PASSWORD_HELP}
+            </p>
+            <PasswordFieldError
+              id="new-password-error"
+              message={passwords.errors.password}
             />
           </div>
 
@@ -162,6 +187,11 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
               minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
               required
               disabled={isLoading}
+              {...passwords.confirmationProps}
+            />
+            <PasswordFieldError
+              id="confirm-password-error"
+              message={passwords.errors.confirmation}
             />
           </div>
           {(security?.twoFactorEnabled || security?.passkeyRequired) &&

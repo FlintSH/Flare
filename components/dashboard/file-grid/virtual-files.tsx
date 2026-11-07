@@ -17,8 +17,9 @@ import {
   useWindowVirtualizer,
   windowScroll,
 } from '@tanstack/react-virtual'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 
+import { fileCardHeight } from '@/components/dashboard/file-card/layout'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -60,7 +61,13 @@ export function VirtualFiles({
   // measured sizes/ranges even when its internal scroll subscription rerenders.
   const { timeline, getFile, hasFailed, ensureRange, revision, retry } = library
   const container = useRef<HTMLDivElement>(null)
-  const [dimensions, setDimensions] = useState({ width: 0, columns: 1, top: 0 })
+  const [dimensions, setDimensions] = useState({
+    width: 0,
+    columns: 1,
+    top: 0,
+    scale: 1,
+    cardHeight: fileCardHeight(true, false),
+  })
   const [focusedRow, setFocusedRow] = useState<number | null>(null)
   const initialized = useRef(false)
   const restoreIndex = useRef(initialIndex)
@@ -70,11 +77,12 @@ export function VirtualFiles({
   const continuitySizes = useRef<{
     width: number
     columns: number
+    cardHeight: number
     rows: Map<number, number>
   } | null>(null)
   const seekDestination = useRef<number | null>(null)
   const position = useRef(initialIndex)
-  const previousSize = useRef({ width: 0, columns: 1 })
+  const previousSize = useRef({ width: 0, columns: 1, cardHeight: 0 })
   const observeOffset = useRef<
     ((offset: number, isScrolling: boolean) => void) | null
   >(null)
@@ -137,25 +145,31 @@ export function VirtualFiles({
       const remembered = continuitySizes.current
       const knownSize =
         remembered?.width === dimensions.width &&
-        remembered.columns === dimensions.columns
+        remembered.columns === dimensions.columns &&
+        remembered.cardHeight === dimensions.cardHeight
           ? remembered.rows.get(index + windowStart)
           : undefined
-      // A card has a 4:3 preview plus 69px for its details and borders,
-      // and each row adds 16px of spacing, so this matches the measured row.
+      // Use image-card estimates before a row is measured. Generic rows can
+      // be shorter; include touch metadata and spacing in the initial estimate.
       return (
         knownSize ??
         (layout.row(index + windowStart).heading
-          ? 44
-          : ((dimensions.width - (dimensions.columns - 1) * 16) /
-              dimensions.columns) *
-              0.75 +
-            85)
+          ? 44 * dimensions.scale
+          : dimensions.cardHeight + 16 * dimensions.scale)
       )
     },
     [layout, dimensions, windowStart]
   )
+  const navigation =
+    typeof document === 'undefined'
+      ? null
+      : document.querySelector('[aria-label="Main navigation"]')
+  const headerBottom =
+    navigation?.closest('header')?.getBoundingClientRect().bottom ?? 0
+  const navigationBottom = navigation?.getBoundingClientRect().bottom ?? 58
   const topInset = Math.max(
     96,
+    headerBottom + 16,
     selectionBarRef.current?.getBoundingClientRect().bottom ?? 0
   )
   const virtualizer = useWindowVirtualizer({
@@ -170,6 +184,13 @@ export function VirtualFiles({
     overscan: 3,
     scrollMargin: dimensions.top,
     scrollPaddingStart: topInset,
+    // Explicit remeasurement must read the DOM, rather than return a cached
+    // size from before text/column changes. TanStack still owns row observation.
+    measureElement: (element, entry) =>
+      Math.round(
+        entry?.borderBoxSize?.[0]?.blockSize ??
+          element.getBoundingClientRect().height
+      ),
     rangeExtractor: useCallback(
       (range: Range) => {
         const indices = defaultRangeExtractor(range)
@@ -190,6 +211,7 @@ export function VirtualFiles({
   useLayoutEffect(() => {
     const element = container.current
     if (!element) return
+    const pointer = window.matchMedia('(pointer: coarse)')
     const measure = () => {
       const width = element.getBoundingClientRect().width
       const columns =
@@ -201,12 +223,20 @@ export function VirtualFiles({
               ? 2
               : 1
       const top = element.getBoundingClientRect().top + window.scrollY
+      const scale =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) / 16
+      const cardHeight = fileCardHeight(
+        window.innerWidth < 640,
+        pointer.matches,
+        scale
+      )
       setDimensions((old) =>
         old.width === width &&
         old.columns === columns &&
+        old.cardHeight === cardHeight &&
         Math.abs(old.top - top) < 1
           ? old
-          : { width, columns, top }
+          : { width, columns, top, cardHeight, scale }
       )
     }
     measure()
@@ -214,18 +244,40 @@ export function VirtualFiles({
     observer.observe(element)
     if (element.parentElement) observer.observe(element.parentElement)
     window.addEventListener('resize', measure)
+    pointer.addEventListener('change', measure)
     return () => {
       observer.disconnect()
       window.removeEventListener('resize', measure)
+      pointer.removeEventListener('change', measure)
     }
   }, [])
 
   useLayoutEffect(() => {
     virtualizer.measure()
+    // measure() clears sizes; connected rows need not resize again afterward.
+    // Seed the new cache from the mounted DOM before computing seek offsets.
+    container.current
+      ?.querySelectorAll<HTMLElement>('[data-index]')
+      .forEach(virtualizer.measureElement)
     // getOffsetForIndex reads the measurement cache directly. Rebuild it after
     // resetting sizes, before a pending seek uses the new section's coordinates.
     virtualizer.getTotalSize()
-  }, [dimensions.width, dimensions.columns, windowStart, virtualizer])
+  }, [
+    dimensions.width,
+    dimensions.columns,
+    dimensions.cardHeight,
+    windowStart,
+    virtualizer,
+  ])
+
+  useLayoutEffect(() => {
+    // Loaded pages can change a retained row from a skeleton to a shorter card.
+    // Measure that commit before paint; TanStack keeps native scrolling deferred
+    // while permitting its idle and programmatic-scroll measurement paths.
+    container.current
+      ?.querySelectorAll<HTMLElement>('[data-index]')
+      .forEach(virtualizer.measureElement)
+  }, [dimensions, revision, virtualizer, virtualizer.isScrolling])
 
   useLayoutEffect(() => {
     if (Math.abs((virtualizer.scrollOffset ?? 0) - window.scrollY) > 1)
@@ -253,6 +305,15 @@ export function VirtualFiles({
       }
     },
     [layout.rowCount, windowStart, virtualizer]
+  )
+  const seekFromControl = useCallback(
+    (row: number) => {
+      // A rail event moves the browser immediately. Commit its new range before
+      // paint, rather than briefly leaving the previous rows outside the viewport.
+      // Layout-effect rebases keep the asynchronous observer path above.
+      flushSync(() => seek(row))
+    },
+    [seek]
   )
 
   useLayoutEffect(() => {
@@ -285,7 +346,8 @@ export function VirtualFiles({
         window.scrollTo({ top: 0, behavior: 'instant' })
     } else if (
       previousSize.current.columns !== dimensions.columns ||
-      previousSize.current.width !== dimensions.width
+      previousSize.current.width !== dimensions.width ||
+      previousSize.current.cardHeight !== dimensions.cardHeight
     ) {
       previousSize.current = dimensions
       const target = layout.rowAt(
@@ -373,6 +435,7 @@ export function VirtualFiles({
       continuitySizes.current = {
         width: dimensions.width,
         columns: dimensions.columns,
+        cardHeight: dimensions.cardHeight,
         rows: new Map(rows.map((row) => [row.index + windowStart, row.size])),
       }
       pendingSeek.current = globalRow
@@ -390,6 +453,7 @@ export function VirtualFiles({
     rows,
     dimensions.width,
     dimensions.columns,
+    dimensions.cardHeight,
   ])
   const visibleKey = visibleRows
     .flatMap((row) => layout.row(row.index + windowStart).indices)
@@ -410,6 +474,7 @@ export function VirtualFiles({
   const loading = indices.some((index) => !getFile(index) && !hasFailed(index))
   const bucket = bucketAt(timeline!.buckets, firstIndex)
   const label = bucketLabel(bucket, timeline!.groupBy, timeline!.timezone)
+  const hasDateRail = chronological && layout.rowCount > 3
 
   return (
     <>
@@ -425,7 +490,9 @@ export function VirtualFiles({
         role="list"
         aria-label="Your files"
         aria-busy={loading}
-        className="relative mr-6 sm:mr-8 min-[1360px]:mr-0"
+        className={
+          hasDateRail ? 'relative mr-[28px] min-[1360px]:mr-0' : 'relative'
+        }
         style={{ height: virtualizer.getTotalSize(), overflowAnchor: 'none' }}
         onFocusCapture={(event) => {
           const row = (event.target as HTMLElement).closest<HTMLElement>(
@@ -499,7 +566,7 @@ export function VirtualFiles({
           </div>,
           document.body
         )}
-      {chronological && layout.rowCount > 3 && (
+      {hasDateRail && (
         <DateRail
           label={label}
           firstLabel={bucketLabel(
@@ -515,7 +582,12 @@ export function VirtualFiles({
           row={(firstRow?.index ?? 0) + windowStart}
           rowCount={layout.rowCount}
           scrolling={virtualizer.isScrolling}
-          onSeek={seek}
+          contentTop={dimensions.top - (virtualizer.scrollOffset ?? 0)}
+          rootFontSize={dimensions.scale * 16}
+          navigationBottom={navigationBottom}
+          compact={dimensions.columns === 1}
+          viewportHeight={virtualizer.scrollRect?.height ?? 0}
+          onSeek={seekFromControl}
         />
       )}
       <p className="py-6 text-center text-xs text-muted-foreground">

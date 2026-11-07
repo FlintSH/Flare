@@ -35,6 +35,23 @@ const evidence = {
   archiveSelections: [],
 }
 
+async function selectionAction(page, name) {
+  if (page.viewportSize().width < 640) {
+    await page.getByRole('button', { name: 'Actions', exact: true }).click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+  } else {
+    await page.getByRole('button', { name, exact: true }).click()
+  }
+}
+async function finishSelection(page) {
+  await page
+    .getByRole('button', {
+      name: page.viewportSize().width < 640 ? 'Done selecting files' : 'Done',
+      exact: true,
+    })
+    .click()
+}
+
 async function context(browser, storageState, mobile = false, record = false) {
   const recordingDirectory =
     record && videos
@@ -146,9 +163,7 @@ async function verifyArchiveSelection(page) {
     await expect(
       page.getByText('2 selected · up to 100', { exact: true })
     ).toBeInViewport()
-    await page
-      .getByRole('button', { name: 'Create archive', exact: true })
-      .click()
+    await selectionAction(page, 'Create archive')
     const dialog = page.getByRole('dialog', {
       name: 'Create archive',
       exact: true,
@@ -194,7 +209,7 @@ async function verifyArchiveSelection(page) {
       selectedNames,
       submitted: false,
     })
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await finishSelection(page)
     await top(page)
     passed(
       `Create archive retains both unmounted selections at ${page.viewportSize().width}px; Cancel clears selection without creating a file`
@@ -296,6 +311,203 @@ async function screenshot(page, name) {
   await sharp(bytes)
     .webp({ quality: 88 })
     .toFile(path.join(screenshots, `${name}.webp`))
+}
+
+async function verifyTouchSeekContinuity(browser, storageState) {
+  const ctx = await browser.newContext({
+    storageState,
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 1,
+    colorScheme: 'dark',
+    reducedMotion: 'reduce',
+    timezoneId: 'UTC',
+  })
+  const page = await ctx.newPage()
+  const trace = {
+    method:
+      'Chromium390×844 coarse/touch emulation, real CDP touch drags and per-animation-frame DOM samples; not a physical phone',
+    drags: [],
+    requests: [],
+    errors: [],
+    consoleMessages: [],
+  }
+  evidence.touchSeeks = trace
+  page.on('pageerror', (error) => trace.errors.push(error.message))
+  page.on('console', (message) => {
+    if (['warning', 'error'].includes(message.type()))
+      trace.consoleMessages.push({ type: message.type(), text: message.text() })
+  })
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname === '/api/files') trace.requests.push(url.search)
+  })
+  try {
+    await page.goto(origin + '/dashboard')
+    await ready(page)
+    assert.equal(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      true
+    )
+    await page.evaluate(() => {
+      window.__flareTouchSeek = { active: false, samples: [] }
+      const sampleFrame = () => {
+        const trace = window.__flareTouchSeek
+        if (trace.active) {
+          const header =
+            document
+              .querySelector('[aria-label="Main navigation"]')
+              ?.closest('header')
+              ?.getBoundingClientRect().bottom ?? 0
+          const mounted = [...document.querySelectorAll('[data-file-index]')]
+          const visible = mounted.flatMap((element) => {
+            const child = element.firstElementChild
+            const rect = child?.getBoundingClientRect()
+            return rect &&
+              rect.height > 0 &&
+              rect.bottom > Math.max(80, header) &&
+              rect.top < innerHeight
+              ? [
+                  {
+                    index: Number(element.dataset.fileIndex),
+                    top: rect.top,
+                    bottom: rect.bottom,
+                    loaded: !!element.querySelector('a[aria-label^="Open "]'),
+                  },
+                ]
+              : []
+          })
+          trace.samples.push({
+            time: performance.now(),
+            scrollY,
+            mounted: mounted.length,
+            visible,
+            busy: document
+              .querySelector('[role="list"][aria-label="Your files"]')
+              ?.getAttribute('aria-busy'),
+            loadingStatus: [
+              ...document.querySelectorAll('[role="status"]'),
+            ].some((element) => element.textContent === 'Loading files'),
+          })
+        }
+        requestAnimationFrame(sampleFrame)
+      }
+      requestAnimationFrame(sampleFrame)
+    })
+    const cdp = await ctx.newCDPSession(page)
+    const touch = (type, x, y) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints:
+          type === 'touchEnd'
+            ? []
+            : [{ id: 0, x, y, radiusX: 4, radiusY: 4, force: 1 }],
+      })
+    const rail = page.getByRole('slider', { name: 'Browse files by date' })
+    for (const oldest of [true, false]) {
+      const name = oldest ? 'first' : 'return'
+      const handle = await page.locator('[data-date-rail-handle]').boundingBox()
+      const track = await rail.boundingBox()
+      assert(handle && track)
+      assert(handle.width >= 43.99 && handle.height >= 43.99)
+      const x = handle.x + handle.width / 2
+      const from = handle.y + handle.height / 2
+      const to = oldest
+        ? track.y + track.height - handle.height / 2
+        : track.y + handle.height / 2
+      const geometry = []
+      await page.evaluate(() => {
+        window.__flareTouchSeek.samples = []
+        window.__flareTouchSeek.active = true
+      })
+      await touch('touchStart', x, from)
+      try {
+        for (let step = 1; step <= 20; step++) {
+          await touch('touchMove', x, from + ((to - from) * step) / 20)
+          await page.waitForTimeout(80)
+          geometry.push(await rail.boundingBox())
+          if (screenshots && [5, 15].includes(step)) {
+            await mkdir(screenshots, { recursive: true })
+            // Keep this actual in-flight frame, including any loading state.
+            // Settled-frame retries would hide the regression being tested.
+            await page.screenshot({
+              path: path.join(
+                screenshots,
+                `library-touch-${name}-drag-${step}.png`
+              ),
+            })
+          }
+        }
+        await ready(page)
+        await expect(rail).toHaveAttribute(
+          'aria-valuetext',
+          oldest ? 'July 2018' : 'October 2026'
+        )
+        await expect(
+          page.locator(`[data-file-index="${oldest ? 11999 : 0}"]`)
+        ).toBeInViewport()
+      } finally {
+        await touch('touchEnd')
+        const samples = await page.evaluate(() => {
+          window.__flareTouchSeek.active = false
+          return window.__flareTouchSeek.samples
+        })
+        trace.drags.push({
+          name,
+          steps: 20,
+          pauseBetweenMovesMs: 80,
+          track,
+          geometry,
+          samples,
+        })
+      }
+      const samples = trace.drags.at(-1).samples
+      assert(
+        samples.length >= 20,
+        'Sample actual rendered frames throughout the drag'
+      )
+      assert(
+        samples.every((sample) => sample.visible.length > 0),
+        `${name} touch seek always shows real cards or loading placeholders`
+      )
+      assert(
+        samples.every(
+          (sample) =>
+            sample.visible.every((file) => file.loaded) ||
+            (sample.busy === 'true' && sample.loadingStatus)
+        ),
+        'Destination placeholders retain the named Loading files busy status'
+      )
+      assert(
+        samples.every((sample) => sample.mounted <= 100),
+        'Continuous seeks keep the mounted card window bounded'
+      )
+      assert(
+        geometry.every(
+          (rect) =>
+            rect &&
+            Math.abs(rect.y - track.y) <= 1 &&
+            Math.abs(rect.height - track.height) <= 1
+        ),
+        'The rail remains fixed under the finger'
+      )
+    }
+    assert.deepEqual(trace.errors, [])
+    assert.deepEqual(
+      trace.consoleMessages.filter(({ text }) =>
+        /flushSync|Cannot update a component|while rendering/i.test(text)
+      ),
+      [],
+      'Event-only seeking emits no React lifecycle warnings'
+    )
+    passed(
+      'Real coarse touch drags to oldest and back retain visible cards or loading placeholders on every sampled frame'
+    )
+  } finally {
+    await ctx.close()
+    trace.contextClosed = true
+  }
 }
 
 async function cardHeights(
@@ -569,7 +781,7 @@ async function main() {
       })
     ).toBeChecked()
     await pause(page, 800)
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await finishSelection(page)
     passed(
       'Selecting visible cards survives scrolling and unmounting; Done clears selection'
     )
@@ -717,11 +929,18 @@ async function main() {
       page.getByRole('slider', { name: 'Browse files by date' })
     ).toHaveAttribute('aria-valuetext', 'October 2026')
     const phoneRail = page.getByRole('slider', { name: 'Browse files by date' })
-    const phoneRailBox = await phoneRail.boundingBox()
-    await page.mouse.click(
-      phoneRailBox.x + phoneRailBox.width / 2,
-      phoneRailBox.y + 14 + (phoneRailBox.height - 28) * (7970 / 11999)
-    )
+    // The rail clears the library header at the top, then follows the viewport.
+    // Read its current bounds for each seek after scrolling.
+    const clickPhoneRailRow = async (index) => {
+      // Native Home/top scrolling can reposition the rail after loaded rows are
+      // ready. Measure its settled position before computing pointer coordinates.
+      const box = await settledBox(phoneRail)
+      await page.mouse.click(
+        box.x + box.width / 2,
+        box.y + 22 + (box.height - 44) * (index / 11999)
+      )
+    }
+    await clickPhoneRailRow(7970)
     await expect(page.locator('[data-file-index="7970"]')).toBeAttached()
     await ready(page)
     const beforeBoundary = Number(await phoneRail.getAttribute('aria-valuenow'))
@@ -751,10 +970,7 @@ async function main() {
       'Native scrolling crosses the sliding window without losing its account position'
     )
     await top(page)
-    await page.mouse.click(
-      phoneRailBox.x + phoneRailBox.width / 2,
-      phoneRailBox.y + 14 + (phoneRailBox.height - 28) * (7979 / 11999)
-    )
+    await clickPhoneRailRow(7979)
     const seamAnchor = page.locator('[data-file-index="7979"]')
     await expect(seamAnchor).toBeAttached()
     await ready(page)
@@ -784,10 +1000,7 @@ async function main() {
     await phoneRail.press('End')
     await expect(page.locator('[data-file-index="11999"]')).toBeAttached()
     await ready(page)
-    await page.mouse.click(
-      phoneRailBox.x + phoneRailBox.width / 2,
-      phoneRailBox.y + 14 + (phoneRailBox.height - 28) * (4022 / 11999)
-    )
+    await clickPhoneRailRow(4022)
     const reverseAnchor = page.locator('[data-file-index="4022"]')
     await expect(reverseAnchor).toBeAttached()
     await ready(page)
@@ -824,6 +1037,8 @@ async function main() {
       '390px mobile library and date jump fit the viewport; desktop/mobile resizing preserves the historical month and Home returns to newest'
     )
 
+    await verifyTouchSeekContinuity(browser, storageState)
+
     const details = await context(browser, storageState)
     page = details.page
     page.on('pageerror', (error) => errors.push(error.message))
@@ -844,9 +1059,7 @@ async function main() {
       .getByRole('slider', { name: 'Browse files by date' })
       .press('End')
     await ready(page)
-    await page
-      .getByRole('button', { name: 'Create archive', exact: true })
-      .click()
+    await selectionAction(page, 'Create archive')
     const archiveDialog = page.getByRole('dialog', { name: 'Create archive' })
     await archiveDialog
       .getByText(`Selected files (${archiveSelection.length})`, { exact: true })
@@ -865,7 +1078,7 @@ async function main() {
     await expect(
       page.getByText('0 selected · up to 100', { exact: true })
     ).toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await finishSelection(page)
     passed('Create archive retains every selected file after its card unmounts')
 
     await top(page)
@@ -906,7 +1119,7 @@ async function main() {
       .press('End')
     await ready(page)
     await expect(page.locator('[data-file-index="0"]')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Edit tags', exact: true }).click()
+    await selectionAction(page, 'Edit tags')
     const tagDialog = page.getByRole('dialog', {
       name: 'Edit tags',
       exact: true,
@@ -935,18 +1148,33 @@ async function main() {
       )
     )
     await tagDialog.getByRole('button', { name: 'Done', exact: true }).click()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await finishSelection(page)
     passed(
       'Bulk tags refresh offscreen selections after a real external removal and submit add for the unchecked tag'
     )
     await verifyNamedReads(details.ctx)
     await top(page)
-    await page
-      .getByRole('link', {
-        name: 'Open Alpine morning 00001.webp',
-        exact: true,
-      })
-      .click()
+    const primaryPreview = page.getByRole('link', {
+      name: 'Open Alpine morning 00001.webp',
+      exact: true,
+    })
+    const previewBounds = await primaryPreview.boundingBox()
+    const previewPoint = {
+      x: previewBounds.width / 2,
+      y: previewBounds.height / 4,
+    }
+    // The compact shortcut row occupies the center. Exercise the real primary
+    // link at an uncovered point, including its hit target after hover reveals it.
+    await primaryPreview.hover({ position: previewPoint })
+    assert.ok(
+      await primaryPreview.evaluate((element, point) => {
+        const box = element.getBoundingClientRect()
+        const hit = document.elementFromPoint(box.x + point.x, box.y + point.y)
+        return hit === element || element.contains(hit)
+      }, previewPoint),
+      'The measured preview point must receive primary-link pointer events'
+    )
+    await primaryPreview.click({ position: previewPoint })
     await expect(page.getByRole('dialog')).toBeVisible()
     await expect(page.getByRole('dialog').getByRole('img')).toBeVisible()
     await screenshot(page, 'library-image-viewer')
@@ -962,7 +1190,9 @@ async function main() {
 
     await verifyArchiveSelection(page)
 
-    await page.getByRole('button', { name: 'Upload date', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Date and grouping', exact: true })
+      .click()
     await page
       .getByRole('combobox', { name: 'Group files by upload date' })
       .click()
@@ -1070,7 +1300,9 @@ async function main() {
     await expect(
       page.getByRole('slider', { name: 'Browse files by date' })
     ).toHaveAttribute('aria-valuetext', 'July 2018')
-    await page.getByRole('button', { name: 'Upload date', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Date and grouping', exact: true })
+      .click()
     await page
       .getByRole('combobox', { name: 'Group files by upload date' })
       .click()
@@ -1094,7 +1326,7 @@ async function main() {
     await expect(
       page.getByText('0 selected · up to 100', { exact: true })
     ).toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await finishSelection(page)
     await page
       .getByRole('button', { name: 'Clear file search', exact: true })
       .click()

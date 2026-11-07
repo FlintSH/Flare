@@ -6,10 +6,22 @@ import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 import { AUDIT_OUTCOMES } from './types'
 
 const filter = z.string().trim().max(200).optional()
+// Exact recorded actions only: mutations and unsuccessful access stay visible.
+const ROUTINE_ACCESS_ACTIONS = [
+  'file.thumbnail',
+  'file.view',
+  'file.read',
+  'file.download',
+  'archive.browse',
+  'archive.entry.read',
+  'archive.member.read',
+  'archive.source.read',
+]
 export const auditQuerySchema = z
   .object({
     q: filter,
     category: filter,
+    view: z.enum(['all', 'changes']).default('all'),
     action: filter,
     outcome: z.enum(AUDIT_OUTCOMES).optional(),
     actorId: filter,
@@ -46,6 +58,19 @@ export function auditWhere(filters: AuditQuery): Prisma.AuditEventWhereInput {
           ].map((key) => ({
             [key]: { contains: filters.q, mode: 'insensitive' },
           })),
+        }
+      : {}),
+    ...(filters.view === 'changes'
+      ? {
+          NOT: [
+            { category: 'requests' },
+            {
+              AND: [
+                { outcome: 'success' },
+                { action: { in: ROUTINE_ACCESS_ACTIONS } },
+              ],
+            },
+          ],
         }
       : {}),
     ...(filters.category ? { category: filters.category } : {}),

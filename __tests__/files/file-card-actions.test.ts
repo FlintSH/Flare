@@ -77,7 +77,7 @@ describe('file card actions', () => {
     expect(sharing).toContain('Change visibility')
     expect(sharing).toContain('Add password')
     expect(card('files.update')).toContain('Manage expiration')
-    expect(card('files.delete')).toContain('aria-label="Delete bundle.zip"')
+    expect(card('files.delete')).toContain('Delete file')
   })
 
   it('needs file editing as well as tags or folders to organize a file', () => {
@@ -99,11 +99,34 @@ describe('file card actions', () => {
       )
     }
     expect(render('files.update', 'tags.manage')).toContain(
-      'aria-label="View all 3 tags"'
+      'aria-label="+1: view all 3 tags"'
     )
     const viewer = render('files.read')
-    expect(viewer).not.toContain('View all 3 tags')
+    expect(viewer).not.toContain('aria-label="+1: view all 3 tags"')
     expect(viewer).toContain('title="3 tags"')
+  })
+
+  it('exposes exact activity totals as text while keeping abbreviated numbers decorative', () => {
+    session.permissions = []
+    const views = 1499
+    const downloads = 12345
+    const html = renderToStaticMarkup(
+      React.createElement(FileCard, { file: { ...file, views, downloads } })
+    )
+    const compact = new Intl.NumberFormat(undefined, { notation: 'compact' })
+    for (const [count, noun] of [
+      [views, 'views'],
+      [downloads, 'downloads'],
+    ] as const) {
+      expect(html).toContain(`title="${count.toLocaleString()} ${noun}"`)
+      expect(html).toContain(
+        `<span class="sr-only">${count.toLocaleString()} ${noun}</span>`
+      )
+      expect(html).toContain(
+        `<span aria-hidden="true">${compact.format(count)}</span>`
+      )
+    }
+    expect(html).not.toMatch(/<span[^>]*aria-label="[^"]*(?:views|downloads)"/)
   })
 })
 

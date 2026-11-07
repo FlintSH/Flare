@@ -25,6 +25,8 @@ On phones and narrow windows, use the labeled **Section** menu to see every Sett
 
 Choose **Documentation** in the **Settings** header to open the handbook in a new tab. The link stays available in every settings section, including on phones, so you can read a guide while keeping unsaved changes in the original tab.
 
+Editing a setting adds an unsaved count and a dot beside changed controls without shifting their touch targets. With enlarged text, switch rows wrap so their labels and controls stay inside the panel. The fixed instance-settings save bar keeps **Save settings** and **Discard** available on phones; it uses compact spacing and scrolls internally when a short window or very large text needs more room. Scroll within the bar to reach an action that is below its visible edge. **Discard** immediately restores the saved values and removes the unsaved markers and save bar, without showing another notification. It sends no save request; no change is applied until you choose **Save settings**. The appearance studio and email settings keep their separate save actions.
+
 Stable builds open the archive for their installed release; rolling builds open the published rolling handbook. During setup, versions before 2.1.0 open their archive homepage for the original setup instructions; newer versions open the dedicated setup guide. Rolling documentation follows the latest published rolling commit, so it may be ahead of an older rolling installation. An unknown or other prerelease version opens [Versions](/versions) for you to choose. Custom builds use their package version and configured release channel; see [build identity](/hosting/configuration#core-environment-variables) if those do not match your source.
 
 <Screenshot src="/screenshots/documentation-links/settings-desktop.webp" alt="Settings on desktop with a Documentation link above the General controls" caption="Open Documentation from the settings header without leaving your working form." />
@@ -47,7 +49,7 @@ OCR processing outcomes can be investigated in [Audit log](./audit); the audit d
 
 ### Credits
 
-The dashboard shows credits as a compact footer line; public pages retain their footer panel. **Show credits footer** controls the instance's Flare credit footer. Share pages can inherit that choice or explicitly show/hide their footer through the appearance studio; shared folders, file password pages, and the not-found page follow the share pages. The studio's footer text is a separate design field.
+The dashboard shows credits as a compact footer line; public pages retain their footer panel. **Show credits footer** controls the instance's Flare credit footer, including a missing page inside `/dashboard`. Share pages can inherit that choice or explicitly show/hide their footer through the appearance studio; shared folders, file password pages, and public not-found pages follow the share pages. The studio's footer text is a separate design field.
 
 ### Instance information
 

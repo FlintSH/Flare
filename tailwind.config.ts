@@ -70,7 +70,12 @@ export default {
       },
       // Destructive text keeps the destructive hue at a readable lightness
       // (see app/globals.css); fills and borders use the palette colour.
+      placeholderColor: {
+        'muted-foreground': 'var(--secondary-text)',
+      },
       textColor: {
+        'muted-foreground': 'var(--secondary-text)',
+        placeholder: 'var(--placeholder-text, hsl(var(--muted-foreground)))',
         destructive: { DEFAULT: 'var(--destructive-text)' },
       },
       borderRadius: {

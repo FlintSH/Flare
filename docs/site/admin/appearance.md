@@ -10,13 +10,19 @@ Open **Settings → Appearance** to design the instance's identity and public sh
 
 ## A draft-to-publish workflow
 
-1. Edit Identity, Theme, or Sharing. The preview follows your working design. On a phone, the section tabs stay on one row; swipe it sideways to reach **Appearance packs**.
+1. Choose **Identity**, **Theme**, or **Sharing** and edit the design. The preview follows your working design.
 2. Check light and dark modes, image and code examples, and a protected-file example.
 3. Choose **Save draft** to keep the design for later, or **Publish appearance** to make it live.
 4. Open a real share page and the dashboard on desktop and mobile.
 5. If you need to go back, choose **Restore previous**.
 
 These actions are in the bar under the studio, which also shows whether you have unsaved changes, a saved draft, or the published design. Flare keeps a saved draft, the published design, and the previous published design. This is a one-step restore, not an unlimited history. **Discard** removes the draft without changing the published appearance; with unsaved edits and no draft, it returns the studio to the published design. Concurrent saves use revisions, so a stale editor must reload instead of silently overwriting another administrator's work.
+
+The share-page preview simulates the draft. Its light and dark controls change only the preview, including its secondary text; they do not change your workspace mode or publish the design. Check a real share page after publishing.
+
+On a phone, **Section** and **Appearance section** share one row above the studio when there is room. Enlarged text stacks the controls when they need more width. **Section** changes the Settings area; **Appearance section** chooses **Identity**, **Theme**, **Sharing**, or **Appearance packs**. Selected names wrap instead of being clipped, and both controls stay at least 44px tall. The studio opens directly below them without a repeated section introduction. Its concise **Instance identity**, **Theme and colors**, **Shared pages**, and **Appearance packs** headings keep the controls close to their navigation. Phone headings and navigation use tighter spacing; the pickers keep comfortable side padding, grow taller for wrapped words, and scale their arrows with the text. Their menus stay within the available window and scroll when the full list does not fit, including with enlarged text. On tablets, the selected Settings area and subsection tabs replace a repeated Appearance introduction. On larger screens, choose a subsection tab; touch screens keep larger tap targets. Changing sections keeps your unsaved edits.
+
+<Screenshot src="/screenshots/refinement/appearance-mobile.png" alt="Phone Appearance settings with Section and Appearance section pickers above the Identity controls" caption="The phone navigation keeps Settings areas and appearance destinations together without clipping their names." />
 
 ## Identity
 
@@ -37,25 +43,27 @@ Choose **Light logo** or **Dark logo** and select a PNG, JPEG, or WebP image of 
 
 Enable **Use studio theme** to apply the studio palettes. Leaving it off keeps the original/legacy theme behavior while allowing identity and sharing choices to be saved. With it off, light mode uses Flare's original light palette too; light colors you changed in the studio, including a preset you tried, apply only once the studio theme is on. Earlier builds kept applying a saved studio light palette to light mode after the studio theme was switched off.
 
-Start with **Midnight**, **Orbit**, **Tide**, or **Ember**, then customize the light and dark palettes. A preset sets the primary and focus color for both modes. In dark mode it also sets the page color and gives borders, fields, and secondary text the same hue, so the violet, teal, or warm page doesn't show slate lines. A preset applied before this change keeps its stored colors; choose it again, then **Publish**, to pick up the matching neutrals. Palette fields accept six-digit hex colors. Foreground/background pairs exist for cards, popovers, primary, secondary, muted, accent, and destructive states, alongside page colors, borders, inputs, and focus rings. Preview text, buttons, error states, and keyboard focus when choosing colors.
+Start with **Midnight**, **Orbit**, **Tide**, or **Ember**, then customize the light and dark palettes. A preset sets the primary and focus color for both modes. In dark mode it also sets the page color and gives borders, fields, and secondary text the same hue, so the violet, teal, or warm page doesn't show slate lines. A preset applied before this change keeps its stored colors; choose it again, then **Publish**, to pick up the matching neutrals. Palette fields accept six-digit hex colors. Foreground/background pairs exist for cards, popovers, primary, secondary, muted, accent, and destructive states, alongside page colors, borders, inputs, and focus rings. Preview text, buttons, error states, and keyboard focus when choosing colors. The selected typeface also applies to navigation. Narrow controls can grow vertically to retain complete names with large text, including Monospace.
 
-A few colors are derived from the palette so they stay readable whatever it holds:
+A few colors are derived from the palette to support readable text and controls:
 
 - **Destructive** fills buttons such as **Delete**. Error messages and destructive menu items use the same hue, lightened in dark mode and darkened in light mode when the color is too dark or too light to read as text. In dark mode a very deep destructive color is also lifted for button fills (to about 55% lightness), so **Delete** reads as a clear red next to the red text instead of a maroon that looks disabled.
+- Dark-mode secondary copy and muted icons blend **Muted foreground** toward **Foreground** for more comfortable small-text reading. Light mode uses **Muted foreground** directly. Empty text fields and unselected picker prompts use italic placeholders and a separate, opaque color mixed from **Muted foreground** and **Background**, so examples and instructions differ from entered values. The mix backs off, or moves toward **Foreground**, when needed to keep it readable on field surfaces. These roles follow studio and classic colors without rewriting saved values; conflicting custom surface/text colors still need checking in the preview.
+- Disabled buttons use the same readable muted labels and recessed neutral fill across primary, destructive, outline, and other variants. Their subtle inset edge replaces the raised active treatment; labels keep full opacity, and unavailable actions remain native disabled controls.
 - Panels use **Card** directly in light mode. In dark mode they blend a small amount of **Card foreground** into **Card**, separating content from the page without replacing the configured palette. The glow background is quieter; **Plain** and **Grid** retain their selected behavior. These finish changes apply to existing installations without rewriting saved colors.
 - The outlines of text fields, selects, and unchecked switches mix **Input** with **Muted foreground**, so an empty field stays visible. With the default palettes they reach 3:1 against the page.
 - Success, warning, danger, and info labels, such as an invite's **Active** status or the audit log's outcomes, use fixed green, amber, red, and blue shades for each mode. They don't change with the palette.
 
-| Control       | Choices             |
-| ------------- | ------------------- |
-| Default mode  | System, Light, Dark |
-| Background    | Glow, Plain, Grid   |
-| Typeface      | Inter, System, Mono |
-| Corner radius | 0–1.5               |
+| Control       | Choices                      |
+| ------------- | ---------------------------- |
+| Default mode  | Follow device, Light, Dark   |
+| Background    | Soft glow, Plain, Quiet grid |
+| Typeface      | Inter, System, Monospace     |
+| Corner radius | 0–1.5 rem                    |
 
 <Screenshot src="/screenshots/customization/appearance-theme.png" alt="Appearance studio theme controls and a live preview" caption="Theme presets are starting points; paired palettes let both modes stay intentional." />
 
-Every account can separately choose **Inherit**, **System**, **Light**, or **Dark** under **Profile → Account → Workspace appearance**. That preference follows the account in the workspace. Public share pages use the instance appearance rather than the uploader's personal preference.
+Accounts with `appearance.personal` can separately choose **From instance**, **System**, **Light**, or **Dark** under **Profile → Account → Appearance**, in **Your workspace, your preference**. That preference follows the account in the workspace. Public share pages use the instance appearance rather than the uploader's personal preference.
 
 ## Sharing
 

@@ -34,6 +34,12 @@ If two links created at the same moment draw the same code, Flare gives the seco
 
 Each row starts with the shareable `/u/…` path and its copy action. The original destination appears below it, so long addresses do not hide the link you want to share. Clicks and creation date have their own columns on wider screens and move below the destination on phones. The delete action stays separate at the row's right edge. Newer links appear first.
 
+Use **Search links** above the list to find a destination, short code, `/u/…` path, or the complete short URL copied from this instance. Matching ignores letter case, and the count shows how many of your links match, such as **2 of 12 links**. A complete short URL uses the same origin as **Copy link**; an address from another domain is not treated as your copied link merely because its code matches. The list loads all your links; searching and sorting happen in your browser. Choose **Newest first** (the default), **Oldest first**, or **Most clicks** from the sort control. Equal dates or click counts keep their existing order. **Clear link search**, or **Clear search** when nothing matches, restores the full list without changing its sort.
+
+Switching accounts or browser sessions clears the search, sort, unfinished URL, created-link result, and open deletion confirmation before loading the new account's links. A creation or deletion already accepted by the server still takes effect for the original account; switching does not undo it.
+
+On phones and touch tablets, the complete destination wraps onto as many lines as needed so you can check its path and query before opening it. Wider mouse layouts keep destinations on one line; hover over an address to read the full destination.
+
 Use the copy action beside the path to copy the complete short URL, including your instance's domain. Open the short path to check the redirect, or open the destination below it directly. If clipboard access fails, right-click or press and hold the short path and use your browser's link menu to copy its address.
 
 To stop a redirect, choose its delete action and confirm. The generated short URL then stops resolving through Flare. If deleting fails, **Could not delete link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link is still available and to try again, which earlier versions said for every failure. Deleting the short link does not remove the original webpage or prevent someone using its full address.
@@ -65,3 +71,5 @@ For a custom integration, use a [named API token](../api/authentication) with `u
 | Short link no longer opens           | Check that it still exists and that the instance's domain is reachable.                                                                                                        |
 | Short link opens a destination error | The redirect may be working while the target page is unavailable or requires sign-in. Test the original URL.                                                                   |
 | Your list fails to load              | Use the retry control or reload after checking your connection. A load failure is not a successful deletion.                                                                   |
+
+The trash action stays neutral in the link list and turns red on hover or keyboard focus. Selecting it still opens a confirmation before the link is removed.

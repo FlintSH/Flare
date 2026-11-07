@@ -21,6 +21,8 @@ Choose a step, then enlarge the screenshot to inspect the details. The screensho
 
 These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.
 
+The audit, security, invitation, role, and session recordings retain an earlier visual revision. The recorded actions and server operations are unchanged. Current guide screenshots show the password guidance and administrator recovery hint now present in those forms.
+
 ### Browse a large library
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>
@@ -36,14 +38,15 @@ This recording uses real application requests and a disposable account seeded wi
 ### Browse the same library on a phone
 
 <div style="max-width: 390px; margin-inline: auto">
-<video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording with Chromium touch emulation" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 </div>
 
-1. Open the same demonstration library at a 390px viewport. Sorting and the labeled **Filters** control sit above the single-column cards; the folder directory starts collapsed. The date label fits beside the narrow rail.
-2. Scroll down through the newest uploads.
-3. Focus the rail and press End to reach July 2018, then Home to return to the newest uploads.
+1. Open the demonstration library at 390 × 844. The compact **Your files** row shows **12K files**. Search, **Filters**, and the collapsed folder directory sit above the first file. Sorting is inside **Filters**.
+2. Swipe upward through the newest uploads. The page scrolls normally, and the date bubble stays hidden.
+3. Drag the visible date-rail thumb down to the oldest uploads, from July 2018. The date bubble appears during the drag and disappears when the thumb is released; the first and last year labels stay hidden.
+4. Drag the thumb back up to October 2026, then swipe downward to return to the compact file controls and the first upload.
 
-This is Chromium rendering the real application at mobile width, using the same local database as the desktop recording. It demonstrates the narrow layout and full-library date navigation; it is not a physical-phone or touch-gesture recording.
+This recording uses Chromium touch emulation with a coarse pointer and real browser touch gestures against an isolated instance seeded with 12,000 demonstration files. The page scrolling, date jumps, and resulting files are real application behavior. This is not a physical-phone test or a measurement of your server's performance.
 
 ### Review and revoke browser sessions
 
@@ -61,13 +64,13 @@ The recording uses real browser sign-ins and server revocations against a dispos
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Investigate instance activity: silent Flare audit-log recording" :src="withBase('/demos/audit-investigation.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. Open **Admin → Audit log** on the isolated demonstration instance with an administrator session.
-2. Review recorded activity produced by a real demonstration upload, visibility changes, download, denied access, actual OCR of a generated receipt image, a rejected OCR request on a text file, deletion, role assignment, and settings change.
+1. Open **Admin → Audit log** on the isolated demonstration instance with an administrator session. The page starts in **Changes**, with **More filters** closed; this scope hides Requests and routine successful access.
+2. Review recent changes, including file deletion and the audit failures produced by invalid-filter checks.
 3. Enter **quarterly-report.txt** in **Search activity**, choose **Apply filters**, and expand a **File delete** event. The deleted filename and acting account remain recorded.
-4. Review **Recorded details** and request context. Choose **Clear filters**, set **Outcome** to **Denied**, and apply to inspect refused requests.
-5. Add **missing-demo-filename** to search and apply. Flare shows **No activity matches these filters**. Clear the filters and return to recent instance activity.
+4. Review **Recorded details** and request context. Open **More filters**, choose **Clear filters**, set **Event scope** to **All activity** and **Outcome** to **Denied**, and apply. Choose **Hide filters** to review refused requests.
+5. Add **missing-demo-filename** to search and apply. Flare shows **No activity matches these filters**. Reopen **More filters**, choose **Clear filters**, select the **Changes** quick view, and choose **Hide filters** to return to recent changes.
 
-These screens display real events produced by demonstration operations. The setup uses API requests before opening the recorded audit page; the recording shows investigation of those events. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
+These screens display real events. Before the recorded page opens, API requests upload demonstration files, change visibility, download a report, attempt denied access, run actual OCR on a generated receipt image, reject OCR on a text file, delete the report, assign a role, and change an instance setting. The recording shows investigation of those events; it does not show the setup operations. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
 
 The audit guide also includes a [separate real-server archive investigation capture](./admin/audit), produced by creating, browsing, downloading from, and extracting an archive on the disposable instance. [Reproduce the combined archive/audit check](./contributing#sessions-and-audit-browser-checks-and-demos) to verify those events; they are separate from the recorded investigation above.
 

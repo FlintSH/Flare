@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -76,6 +76,9 @@ export function UploadForm({
   const [completed, setCompleted] = useState<UploadResponse[]>([])
   const [uploadError, setUploadError] = useState('')
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const pickerId = useId()
+  const pickerTitleId = `${pickerId}-title`
+  const pickerHintId = `${pickerId}-hint`
   const { user: sessionUser } = usePermissions()
   const canShare = allows(sessionUser, 'shareFiles')
   // Until the session loads, keep a requested folder. The server refuses
@@ -107,7 +110,7 @@ export function UploadForm({
   const selectedFolder = folders.find((folder) => folder.id === folderId)
   const unavailableFolder = !!folderId && !selectedFolder && !foldersLoading
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop: (acceptedFiles) => {
       const tooLarge = add(acceptedFiles, maxSize)
       setUploadError(
@@ -117,6 +120,9 @@ export function UploadForm({
       )
     },
     disabled: isUploading,
+    multiple: true,
+    noClick: true,
+    noKeyboard: true,
   })
   const totalSize = files.reduce((total, { file }) => total + file.size, 0)
 
@@ -145,29 +151,58 @@ export function UploadForm({
     <div className="space-y-6">
       <div
         {...getRootProps({
-          role: 'button',
-          'aria-label': 'Choose files to upload',
+          role: 'region',
+          'aria-label': 'File selection',
+          'aria-describedby': pickerHintId,
           'aria-disabled': isUploading,
         })}
         className={cn(
           // The page's main input: a dashed 3:1 control outline, like the
           // fields below it.
-          'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 px-4 py-6 text-center outline-none transition-colors hover:border-primary hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          'relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 px-4 py-6 text-center transition-colors hover:border-primary hover:bg-primary/5',
           isDragActive && 'border-primary bg-primary/5',
           isUploading && 'pointer-events-none opacity-60'
         )}
       >
-        <input {...getInputProps()} />
+        <input
+          {...getInputProps({
+            id: `${pickerId}-input`,
+            'aria-label': 'Files to upload',
+            'aria-describedby': pickerHintId,
+            disabled: isUploading,
+          })}
+        />
+        {/* Keep the whole selection area clickable with a native button.
+            The input and descriptive hints remain its siblings. */}
+        <button
+          type="button"
+          data-flare-control=""
+          aria-labelledby={pickerTitleId}
+          aria-describedby={pickerHintId}
+          disabled={isUploading}
+          onClick={open}
+          className="absolute inset-0 z-10 min-h-11 w-full cursor-pointer rounded-xl border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        />
         <Upload
           className="mb-3 h-8 w-8 text-muted-foreground"
           aria-hidden="true"
         />
-        <p className="text-balance text-base font-medium">
-          {isDragActive
-            ? 'Drop your files here'
-            : 'Drag and drop files here, or click to select'}
+        <p id={pickerTitleId} className="text-balance text-base font-medium">
+          {isDragActive ? (
+            'Drop your files here'
+          ) : (
+            <>
+              <span>Choose files</span>
+              <span className="sr-only"> to upload</span>
+            </>
+          )}
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p id={pickerHintId} className="mt-1 text-sm text-muted-foreground">
+          {!isDragActive && (
+            <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">
+              Or drag and drop files here.{' '}
+            </span>
+          )}
           Maximum file size: {formattedMaxSize}
         </p>
       </div>

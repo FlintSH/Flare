@@ -7,9 +7,9 @@ description: Choose a personal light, dark, or system theme and understand how i
 
 Changing personal appearance requires `appearance.personal`. Instance branding is a separate permission, `appearance.manage`, which can be delegated through [roles](/admin/roles) without giving full Administrator access.
 
-Every account can choose how the signed-in workspace looks. Administrators can also change the instance's identity, colors, typography, surfaces, and public share pages. Those are separate settings with different scopes.
+Personal appearance controls how the signed-in workspace looks. Administrators can also change the instance's identity, colors, typography, surfaces, and public share pages. Those are separate settings with different scopes.
 
-<Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Account settings with personal workspace theme choices below identity and password controls" caption="Your personal workspace theme lives in Profile → Account and follows your account across devices." />
+<Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Profile Account section with an Appearance shortcut above the identity fields and role badges" caption="Choose Appearance from the Account shortcuts to reach your personal workspace theme." />
 
 ## Choose your workspace theme
 

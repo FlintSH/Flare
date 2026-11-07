@@ -15,6 +15,7 @@ import { endOfDay, format } from 'date-fns'
 import {
   AlertCircle,
   CheckSquare,
+  ChevronDown,
   FolderOpen,
   RefreshCw,
   SearchX,
@@ -49,6 +50,13 @@ import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 import { fileTypeLabel } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
@@ -70,6 +78,7 @@ import {
 } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
+import { cn } from '@/lib/utils'
 
 import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
@@ -104,7 +113,7 @@ function FilterChip({
       onClick={onRemove}
       aria-label={`Remove ${label} filter`}
       title={label}
-      className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:min-h-8"
     >
       {children}
       <span className="truncate">{label}</span>
@@ -323,23 +332,41 @@ function FileLibrary({ scope }: { scope: string }) {
       : undefined
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-4 sm:space-y-6"
+      onFocusCapture={(event) => {
+        if (!selecting) return
+        const target = event.target as HTMLElement
+        if (!target.closest('[data-file-index]')) return
+        // Native focus scrolling doesn't know about the selection toolbar.
+        // Let it finish before keeping the control below the measured bar.
+        window.requestAnimationFrame(() => {
+          if (document.activeElement !== target || !target.isConnected) return
+          const bottom = selectionBar.current?.getBoundingClientRect().bottom
+          if (bottom === undefined) return
+          const top = target.getBoundingClientRect().top
+          if (top < bottom + 8)
+            window.scrollBy({ top: top - bottom - 8, behavior: 'instant' })
+        })
+      }}
+    >
       <section
         aria-label="Find and filter files"
-        className={pagePanelClassName}
+        className={cn(pagePanelClassName, 'p-3 sm:p-6')}
       >
         <PageHeader
-          className="mb-4 border-0 pb-0"
+          className="mb-3 border-0 pb-0 sm:mb-4 [&>div]:gap-x-2 sm:[&>div]:gap-x-5 [&_h1]:text-xl sm:[&_h1]:text-2xl"
           actionsBesideTitle
           headingRef={libraryHeading}
           title="Your files"
           description="View and manage your uploaded files."
+          descriptionClassName="hidden sm:block"
           actions={
-            <>
+            <div className="flex items-center gap-1 sm:contents">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1.5 px-2"
+                className="h-11 min-w-11 gap-1.5 px-2 sm:h-8 sm:min-w-0"
                 disabled={
                   (!selecting && !files.length) ||
                   !BATCH_ACTIONS.some((action) =>
@@ -364,17 +391,35 @@ function FileLibrary({ scope }: { scope: string }) {
                 role="status"
                 aria-live="polite"
                 className="text-xs text-muted-foreground"
+                title={
+                  !isLoading && !error
+                    ? `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`
+                    : undefined
+                }
               >
-                {isLoading
-                  ? 'Loading…'
-                  : error
-                    ? 'Unavailable'
-                    : `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`}
+                {isLoading ? (
+                  'Loading…'
+                ) : error ? (
+                  'Unavailable'
+                ) : (
+                  <>
+                    <span className="sm:hidden" aria-hidden="true">
+                      {total.toLocaleString('en', {
+                        notation: 'compact',
+                        maximumFractionDigits: 1,
+                      })}{' '}
+                      {total === 1 ? 'file' : 'files'}
+                    </span>
+                    <span className="sr-only sm:not-sr-only">
+                      {total.toLocaleString()} {total === 1 ? 'file' : 'files'}
+                    </span>
+                  </>
+                )}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11 sm:h-8 sm:w-8"
                 aria-label="Refresh files"
                 disabled={isLoading}
                 onClick={refreshFiles}
@@ -383,10 +428,10 @@ function FileLibrary({ scope }: { scope: string }) {
                   className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
                 />
               </Button>
-            </>
+            </div>
           }
         />
-        <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="flex flex-wrap gap-2 sm:flex-col lg:flex-row lg:gap-3 [&_input[type=search]]:h-11 sm:[&_input[type=search]]:h-10">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
             hasTagFilter={Boolean(filters.tag)}
@@ -468,15 +513,17 @@ function FileLibrary({ scope }: { scope: string }) {
                 onRemove={() => setGroupBy('none')}
               />
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-lg text-xs"
-              onClick={resetFilters}
-            >
-              <X className="mr-1 h-3 w-3" />
-              Reset filters
-            </Button>
+            {timeline?.total !== 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-11 rounded-lg text-xs sm:h-8"
+                onClick={resetFilters}
+              >
+                <X className="mr-1 h-3 w-3" />
+                Reset filters
+              </Button>
+            )}
           </div>
         )}
         <FolderBrowser
@@ -493,9 +540,12 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           ref={selectionBar}
           aria-busy={selection.loading}
-          className="sticky top-24 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-overlay px-4 py-3 shadow-lg shadow-black/20"
+          className="sticky top-20 z-30 flex items-center gap-2 rounded-xl border border-border bg-overlay px-2 py-2 shadow-lg shadow-black/20 sm:top-24 sm:flex-wrap sm:gap-x-3 sm:gap-y-2 sm:px-4 sm:py-3"
         >
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <label
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-accent sm:h-auto sm:w-auto sm:justify-start sm:gap-2"
+            title="Select visible files"
+          >
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary"
@@ -518,15 +568,80 @@ function FileLibrary({ scope }: { scope: string }) {
                 )
               }
             />
-            Select visible files
+            <span className="sr-only text-sm sm:not-sr-only">
+              Select visible files
+            </span>
           </label>
-          <span className="text-xs text-muted-foreground" role="status">
-            {selectedIds.length} selected · up to {BATCH_LIMIT}
-            {selection.loading && ' · Refreshing selection…'}
+          <span
+            className="min-w-0 flex-1 text-xs text-muted-foreground sm:flex-none"
+            role="status"
+          >
+            <span className="block font-medium text-foreground sm:inline sm:font-normal sm:text-muted-foreground">
+              {selectedIds.length} selected
+            </span>
+            <span className="hidden sm:inline"> · </span>
+            <span className="block sm:inline">up to {BATCH_LIMIT}</span>
+            {selection.loading && (
+              <span className="sr-only sm:not-sr-only">
+                {' '}
+                · Refreshing selection…
+              </span>
+            )}
           </span>
-          {/* Phones lay the actions out in two equal columns, so wrapped
-              rows share their edges. */}
-          <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          <div className="flex shrink-0 items-center gap-1 sm:hidden">
+            {/* Locking body scroll changes the sticky bar's scroll ancestor
+                and moves a deep-library menu above the viewport. */}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-11 gap-1 px-2">
+                  Actions
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {BATCH_ACTIONS.map((action) => {
+                  if (!fileActionAllowed(user, action)) return null
+                  const { icon: Icon, batch } = FILE_ACTIONS[action]
+                  return (
+                    <DropdownMenuItem
+                      key={action}
+                      disabled={
+                        !selectedIds.length || isLoading || selection.loading
+                      }
+                      onSelect={() => void openSelection(action)}
+                    >
+                      <Icon aria-hidden="true" />
+                      {batch}
+                    </DropdownMenuItem>
+                  )
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setSelecting(false)
+                    clearSelection()
+                  }}
+                >
+                  <X aria-hidden="true" />
+                  Done selecting
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11"
+              aria-label="Done selecting files"
+              title="Done"
+              onClick={() => {
+                setSelecting(false)
+                clearSelection()
+              }}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
+          <div className="hidden sm:ml-auto sm:flex sm:flex-wrap sm:items-center sm:gap-2">
             {BATCH_ACTIONS.map((action) => {
               if (!fileActionAllowed(user, action)) return null
               const { icon: Icon, batch } = FILE_ACTIONS[action]
@@ -562,9 +677,14 @@ function FileLibrary({ scope }: { scope: string }) {
 
       {isLoading && !gallery ? (
         <div
+          role="status"
           aria-busy="true"
           aria-label="Loading files"
-          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-[1360px]:mr-0"
+          className={cn(
+            'grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+            isDateOrder(librarySort(filters.sortBy)) &&
+              'mr-[28px] min-[1360px]:mr-0'
+          )}
         >
           {Array.from({ length: 8 }, (_, index) => (
             <FileCardSkeleton key={index} />

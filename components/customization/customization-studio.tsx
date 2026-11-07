@@ -20,6 +20,10 @@ import {
   Upload,
 } from 'lucide-react'
 
+import {
+  PreferencesMobileNavigation,
+  mobilePreferenceSelectClassName,
+} from '@/components/preferences/preferences-shell'
 import { colorSwatchClassName } from '@/components/shared/form-styles'
 import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -233,7 +237,7 @@ export function CustomizationStudio({
     onDirtyChange?.(!!dirty)
   }, [dirty, onDirtyChange])
 
-  // On phones the section tabs scroll sideways: keep the chosen one in view,
+  // If the desktop section row overflows, keep the chosen tab in view,
   // centred so its neighbours still show on both sides.
   useEffect(() => {
     const nav = sectionNav.current
@@ -397,17 +401,50 @@ export function CustomizationStudio({
       {document && state && (
         <div className="space-y-6">
           <div className="space-y-6">
-            {/* The app's one segmented style, like the Users tabs. Narrow
-                screens keep one row that scrolls sideways, like the
-                settings sections; the padding leaves room for focus rings. */}
+            <PreferencesMobileNavigation>
+              <div className="min-w-0 space-y-1 sm:hidden">
+                <Label
+                  htmlFor="appearance-section"
+                  className="block text-xs leading-5 text-muted-foreground"
+                >
+                  Appearance section
+                </Label>
+                <Select
+                  value={section}
+                  onValueChange={(value) => {
+                    const nextSection = sections.find(
+                      (item) => item.id === value
+                    )
+                    if (nextSection) setSection(nextSection.id)
+                  }}
+                >
+                  <SelectTrigger
+                    id="appearance-section"
+                    className={mobilePreferenceSelectClassName}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sections.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </PreferencesMobileNavigation>
+            {/* Keep the app's segmented style on larger screens; padding
+                leaves room for focus rings. */}
             <nav
               ref={sectionNavRef}
               aria-label="Appearance sections"
-              className="-m-1 flex gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="-m-1 hidden gap-1 overflow-x-auto p-1 [scrollbar-width:none] sm:flex [&+*]:!mt-0 sm:[&+*]:!mt-6 [&::-webkit-scrollbar]:hidden"
             >
               {sections.map((item) => (
                 <button
                   key={item.id}
+                  data-flare-control=""
                   type="button"
                   onClick={() => setSection(item.id)}
                   aria-current={section === item.id ? 'page' : undefined}
@@ -428,10 +465,10 @@ export function CustomizationStudio({
               <Card className="min-w-0" data-flare-surface>
                 {section === 'identity' && (
                   <>
-                    <CardHeader>
-                      <CardTitle>Give your instance an identity</CardTitle>
+                    <CardHeader className="space-y-[4px] py-[12px] sm:space-y-1.5 sm:py-6">
+                      <CardTitle>Instance identity</CardTitle>
                       <CardDescription>
-                        The details people see when they open one of your links.
+                        Name and logos shown on shared pages.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -589,11 +626,10 @@ export function CustomizationStudio({
                 )}
                 {section === 'theme' && (
                   <>
-                    <CardHeader>
-                      <CardTitle>Set the atmosphere</CardTitle>
+                    <CardHeader className="space-y-[4px] py-[12px] sm:space-y-1.5 sm:py-6">
+                      <CardTitle>Theme and colors</CardTitle>
                       <CardDescription>
-                        A matched light and dark palette, with room for your own
-                        details.
+                        Light and dark palettes for your workspace.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -851,11 +887,11 @@ export function CustomizationStudio({
                 )}
                 {section === 'sharing' && (
                   <>
-                    <CardHeader>
-                      <CardTitle>Make every link feel intentional</CardTitle>
+                    <CardHeader className="space-y-[4px] py-[12px] sm:space-y-1.5 sm:py-6">
+                      <CardTitle>Shared pages</CardTitle>
                       <CardDescription>
-                        Choose the default page for new and existing shares.
-                        Upload profiles can select a different layout.
+                        Defaults for new and existing shares. Upload profiles
+                        can choose another layout.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
@@ -1037,11 +1073,10 @@ export function CustomizationStudio({
                 )}
                 {section === 'packs' && (
                   <>
-                    <CardHeader>
-                      <CardTitle>A design worth passing along</CardTitle>
+                    <CardHeader className="space-y-[4px] py-[12px] sm:space-y-1.5 sm:py-6">
+                      <CardTitle>Appearance packs</CardTitle>
                       <CardDescription>
-                        Bring an appearance into Flare, or give someone a
-                        starting point of their own.
+                        Import or export a reusable appearance.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">

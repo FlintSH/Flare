@@ -122,6 +122,17 @@ function ChangeIndicator() {
   )
 }
 
+const settingSwitchRowClassName =
+  'flex min-w-0 flex-wrap items-center justify-between gap-4'
+const settingSwitchTextClassName =
+  'min-w-0 max-w-full flex-[1_1_12rem] space-y-0.5 break-words'
+const settingSwitchControlClassName =
+  'relative ml-auto flex shrink-0 items-center gap-2'
+const settingSwitchIndicatorClassName =
+  'pointer-events-none absolute end-[calc(100%_+_0.25rem)] top-1/2 -translate-y-1/2'
+const instanceSettingsSaveBarClassName =
+  'fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20 max-sm:inset-x-[16px] max-sm:bottom-[16px] max-sm:max-h-[35dvh] max-sm:gap-[8px] max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:px-[12px] max-sm:py-[12px] max-sm:[&>div:last-child]:gap-[8px] max-sm:[&>div:last-child]:shrink-0 max-sm:[&_button]:h-auto max-sm:[&_button]:!min-h-[44px] max-sm:[&_button]:max-w-full max-sm:[&_button]:whitespace-normal max-sm:[&_button]:px-[8px] max-sm:[&_button]:py-[8px] max-sm:[&_button]:leading-tight'
+
 export function InstanceSettings({
   initialConfig,
   initialSection,
@@ -286,11 +297,6 @@ export function InstanceSettings({
 
     setWorkingConfig(structuredClone(savedConfig))
     setEveryoneCanInvite(savedEveryoneCanInvite)
-
-    toast({
-      title: 'Changes discarded',
-      description: 'All changes have been reverted to the saved state.',
-    })
   }
 
   const handleSettingChange = useCallback(
@@ -495,7 +501,11 @@ export function InstanceSettings({
       activeSection={activeSection}
       onSectionChange={setSection}
       actions={
-        <Button variant="outline" asChild>
+        <Button
+          variant="outline"
+          className="gap-[4px] px-[6px] [&_svg]:size-[16px] min-[360px]:max-sm:gap-[8px] min-[360px]:max-sm:px-[12px] sm:gap-2 sm:px-4 sm:[&_svg]:size-4"
+          asChild
+        >
           <a
             href={getDocumentationUrl(buildInfo)}
             target="_blank"
@@ -531,7 +541,7 @@ export function InstanceSettings({
             Read only. Your roles do not allow changing these settings.
           </p>
         )}
-        <fieldset disabled={!can('settings.general')}>
+        <fieldset className="min-w-0" disabled={!can('settings.general')}>
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -541,17 +551,22 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label>Background OCR processing</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
                       Enable OCR to allow searching through text content in
                       uploaded images.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className={settingSwitchControlClassName}>
                     {isFieldChanged('general', ['ocr', 'enabled']) && (
-                      <ChangeIndicator />
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
                     )}
                     <Switch
                       aria-label="Background OCR processing"
@@ -575,16 +590,21 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label>Show credits footer</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
                       Display Flare credits in the footer.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className={settingSwitchControlClassName}>
                     {isFieldChanged('general', ['credits', 'showFooter']) && (
-                      <ChangeIndicator />
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
                     )}
                     <Switch
                       aria-label="Show credits footer"
@@ -656,7 +676,7 @@ export function InstanceSettings({
             Read only. Your roles do not allow changing these settings.
           </p>
         )}
-        <fieldset disabled={!can('settings.security')}>
+        <fieldset className="min-w-0" disabled={!can('settings.security')}>
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -666,18 +686,25 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label>Allow registrations</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
                       Enable or disable new user registrations.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className={settingSwitchControlClassName}>
                     {isFieldChanged('general', [
                       'registrations',
                       'enabled',
-                    ]) && <ChangeIndicator />}
+                    ]) && (
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
+                    )}
                     <Switch
                       aria-label="Allow registrations"
                       checked={
@@ -750,8 +777,8 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label htmlFor="everyone-can-invite">
                       Let everyone create invites
                     </Label>
@@ -761,8 +788,15 @@ export function InstanceSettings({
                       to allow only some people instead.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {inviteAccessChanged && <ChangeIndicator />}
+                  <div className={settingSwitchControlClassName}>
+                    {inviteAccessChanged && (
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
+                    )}
                     <Switch
                       id="everyone-can-invite"
                       checked={everyoneCanInvite}
@@ -879,16 +913,21 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label>Enable OIDC sign-in</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
                       Enable or disable single sign-on with OIDC.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className={settingSwitchControlClassName}>
                     {isFieldChanged('general', ['oidc', 'enabled']) && (
-                      <ChangeIndicator />
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
                     )}
                     <Switch
                       aria-label="Enable OIDC sign-in"
@@ -1024,19 +1063,26 @@ export function InstanceSettings({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className={settingSwitchRowClassName}>
+                      <div className={settingSwitchTextClassName}>
                         <Label>Auto-provision users</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Create a new account automatically the first time
                           someone signs in through the provider.
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className={settingSwitchControlClassName}>
                         {isFieldChanged('general', [
                           'oidc',
                           'autoProvision',
-                        ]) && <ChangeIndicator />}
+                        ]) && (
+                          <span
+                            aria-hidden="true"
+                            className={settingSwitchIndicatorClassName}
+                          >
+                            <ChangeIndicator />
+                          </span>
+                        )}
                         <Switch
                           aria-label="Auto-provision users"
                           checked={
@@ -1064,8 +1110,8 @@ export function InstanceSettings({
                       or their previously linked SSO identity.
                     </p>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className={settingSwitchRowClassName}>
+                      <div className={settingSwitchTextClassName}>
                         <Label>Require verified email</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Require OIDC provider to confirm user email is
@@ -1073,11 +1119,18 @@ export function InstanceSettings({
                           may register with your provider.
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className={settingSwitchControlClassName}>
                         {isFieldChanged('general', [
                           'oidc',
                           'requireEmailVerified',
-                        ]) && <ChangeIndicator />}
+                        ]) && (
+                          <span
+                            aria-hidden="true"
+                            className={settingSwitchIndicatorClassName}
+                          >
+                            <ChangeIndicator />
+                          </span>
+                        )}
                         <Switch
                           aria-label="Require verified email"
                           checked={
@@ -1100,8 +1153,8 @@ export function InstanceSettings({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className={settingSwitchRowClassName}>
+                      <div className={settingSwitchTextClassName}>
                         <Label>OIDC auto-login</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Skip the login form and redirect straight to the
@@ -1109,9 +1162,14 @@ export function InstanceSettings({
                           reach the password login if you get locked out.
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className={settingSwitchControlClassName}>
                         {isFieldChanged('general', ['oidc', 'enforceSso']) && (
-                          <ChangeIndicator />
+                          <span
+                            aria-hidden="true"
+                            className={settingSwitchIndicatorClassName}
+                          >
+                            <ChangeIndicator />
+                          </span>
                         )}
                         <Switch
                           aria-label="OIDC auto-login"
@@ -1146,7 +1204,7 @@ export function InstanceSettings({
             Read only. Your roles do not allow changing these settings.
           </p>
         )}
-        <fieldset disabled={!can('settings.storage')}>
+        <fieldset className="min-w-0" disabled={!can('settings.storage')}>
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -1375,20 +1433,27 @@ export function InstanceSettings({
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className={settingSwitchRowClassName}>
+                      <div className={settingSwitchTextClassName}>
                         <Label>Force path style</Label>
                         <p className="text-pretty text-sm text-muted-foreground">
                           Enable this for S3-compatible services that require
                           path-style URLs.
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className={settingSwitchControlClassName}>
                         {isFieldChanged('general', [
                           'storage',
                           's3',
                           'forcePathStyle',
-                        ]) && <ChangeIndicator />}
+                        ]) && (
+                          <span
+                            aria-hidden="true"
+                            className={settingSwitchIndicatorClassName}
+                          >
+                            <ChangeIndicator />
+                          </span>
+                        )}
                         <Switch
                           aria-label="Force path style"
                           checked={
@@ -1502,19 +1567,26 @@ export function InstanceSettings({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                <div className={settingSwitchRowClassName}>
+                  <div className={settingSwitchTextClassName}>
                     <Label>User quotas</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
                       Enable storage limits per user.
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className={settingSwitchControlClassName}>
                     {isFieldChanged('general', [
                       'storage',
                       'quotas',
                       'enabled',
-                    ]) && <ChangeIndicator />}
+                    ]) && (
+                      <span
+                        aria-hidden="true"
+                        className={settingSwitchIndicatorClassName}
+                      >
+                        <ChangeIndicator />
+                      </span>
+                    )}
                     <Switch
                       aria-label="User quotas"
                       checked={
@@ -1545,6 +1617,7 @@ export function InstanceSettings({
                     <div className="flex items-center gap-2">
                       <Input
                         aria-label="Data quota per user"
+                        aria-describedby="storage-quota-help"
                         type="number"
                         inputMode="numeric"
                         value={
@@ -1597,6 +1670,7 @@ export function InstanceSettings({
                       >
                         <SelectTrigger
                           aria-label="Data quota per user unit"
+                          aria-describedby="storage-quota-help"
                           className={cn(
                             numberFieldClassName,
                             getFieldClasses('general', [
@@ -1622,6 +1696,14 @@ export function InstanceSettings({
                       ]) && <ChangeIndicator />}
                     </div>
                   </div>
+                  <p
+                    id="storage-quota-help"
+                    className="text-pretty text-sm text-muted-foreground"
+                  >
+                    {workingConfig.settings.general.storage.quotas.enabled
+                      ? 'Applies to accounts without quota bypass.'
+                      : 'Quotas are off. You can prepare this value for later; it applies when you enable User quotas.'}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -1931,7 +2013,7 @@ export function InstanceSettings({
             tone="unsaved"
             title="You have unsaved instance settings"
             description={`${changedSettingsGroups.join(', ')}${pendingFaviconFile ? ' · Favicon' : ''}`}
-            className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20"
+            className={instanceSettingsSaveBarClassName}
           >
             <Button
               variant="outline"

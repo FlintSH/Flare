@@ -41,6 +41,8 @@ This works well after a one-off upload batch. For a recurring source, let an upl
 
 Choose **Tags** beside the library filters, or click a tag on a file. On a phone, first open **Filters** to reveal **Tags**. The selected tag stays visible as a chip below search even when the filter controls are closed; choose its **×** to clear only that tag. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest when your role can edit tags. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
+With voice control, use the visible **Tags**, selected tag name, or **+N** label. The extra-tag button also announces the total tag count to screen readers.
+
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.
 - Choose **Reset filters** to clear the other filters too; your current folder remains selected.

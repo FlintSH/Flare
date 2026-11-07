@@ -2327,7 +2327,7 @@
       {
         "method": "GET",
         "path": "/api/audit",
-        "access": "audit.read permission; instance-wide filtered history."
+        "access": "audit.read permission; browser session only; instance-wide filtered history. Optional view=all|changes defaults to all; changes omits Requests and known successful file/archive access actions."
       }
     ]
   }

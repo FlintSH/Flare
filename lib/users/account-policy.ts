@@ -30,3 +30,15 @@ export const accountPasswordSchema = z
     fitsPasswordHash,
     `Password must use at most ${PASSWORD_MAX_BYTES} bytes.`
   )
+
+/** Persistent guidance for choosing a new account password. */
+export const ACCOUNT_PASSWORD_HELP = `Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters and at most ${PASSWORD_MAX_BYTES} bytes. Some emoji count as more than one toward the minimum. Plain English letters use one byte each; emoji and accented letters can use more.`
+
+/** Browser-safe feedback using the same rule that the account APIs enforce. */
+export function accountPasswordHint(password: string): string | null {
+  const result = accountPasswordSchema.safeParse(password)
+  if (result.success) return null
+  return result.error.issues[0].code === 'too_small'
+    ? `Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`
+    : `Use at most ${PASSWORD_MAX_BYTES} bytes. Emoji and accented letters can use several bytes.`
+}

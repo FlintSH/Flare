@@ -9,6 +9,10 @@ import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
+import {
+  PasswordFieldError,
+  usePasswordFields,
+} from '@/components/auth/password-field'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -18,7 +22,10 @@ import { Label } from '@/components/ui/label'
 
 import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  ACCOUNT_PASSWORD_HELP,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from '@/lib/users/account-policy'
 
 export function RegisterForm({
   invite,
@@ -35,10 +42,15 @@ export function RegisterForm({
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const passwords = usePasswordFields({
+    passwordId: 'password',
+    helpId: 'password-hint',
+    confirmationId: 'confirmPassword',
+  })
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setIsLoading(true)
+    if (isLoading) return
     setError(null)
 
     const formData = new FormData(event.currentTarget)
@@ -47,20 +59,10 @@ export function RegisterForm({
     const confirmPassword = formData.get('confirmPassword') as string
     const name = formData.get('name') as string
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setIsLoading(false)
+    if (!passwords.validate(password, confirmPassword, event.currentTarget))
       return
-    }
 
-    if (password.length < ACCOUNT_PASSWORD_MIN_LENGTH) {
-      setError(
-        `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters long`
-      )
-      setIsLoading(false)
-      return
-    }
-
+    setIsLoading(true)
     try {
       const { nextAction } = await apiRequest<{ nextAction?: string }>(
         '/api/auth/register',
@@ -163,11 +165,15 @@ export function RegisterForm({
             autoComplete="new-password"
             placeholder="Create a password"
             minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-            aria-describedby="password-hint"
+            {...passwords.passwordProps}
           />
           <p id="password-hint" className="text-xs text-muted-foreground">
-            {`Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`}
+            {ACCOUNT_PASSWORD_HELP}
           </p>
+          <PasswordFieldError
+            id="password-error"
+            message={passwords.errors.password}
+          />
         </div>
         <div className="space-y-2">
           <Label className="text-sm font-medium" htmlFor="confirmPassword">
@@ -182,6 +188,11 @@ export function RegisterForm({
             className="h-11 bg-background/50 focus:bg-background transition-colors"
             autoComplete="new-password"
             placeholder="Confirm your password"
+            {...passwords.confirmationProps}
+          />
+          <PasswordFieldError
+            id="confirmPassword-error"
+            message={passwords.errors.confirmation}
           />
         </div>
         {error && (

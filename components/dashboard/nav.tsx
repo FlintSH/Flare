@@ -9,6 +9,7 @@ import { ChevronDown, LogOut, Menu, Wrench } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { InstanceBrand } from '@/components/customization/instance-brand'
+import { useAppearance } from '@/components/providers/appearance-context'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -217,6 +218,7 @@ function SheetLinks({
 
 export function DashboardNav() {
   const pathname = usePathname()
+  const { brand } = useAppearance()
   const [open, setOpen] = useState(false)
   const { data: session, status } = useSession()
   const signOut = useSignOut()
@@ -234,14 +236,14 @@ export function DashboardNav() {
   return (
     <nav
       aria-label="Main navigation"
-      className="flex min-w-0 flex-1 items-center gap-4"
+      className="flex min-w-0 flex-1 items-center gap-[12px] sm:gap-4"
     >
       <Link
         href={dashboardHome(session?.user)}
-        aria-label="Go to your dashboard"
-        className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background xl:max-w-[220px]"
+        aria-label={`${brand.name} home`}
+        className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_[data-flare-brand]]:gap-[8px] sm:[&_[data-flare-brand]]:gap-[10px] xl:max-w-[220px]"
       >
-        <InstanceBrand iconClassName="h-6 w-6 text-primary" />
+        <InstanceBrand iconClassName="h-[24px] w-[24px] text-primary" />
       </Link>
 
       {showMenuButton && (
@@ -253,7 +255,12 @@ export function DashboardNav() {
         >
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open navigation">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open navigation"
+                className="h-[36px] w-[36px] [&_svg]:size-[20px]"
+              >
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>

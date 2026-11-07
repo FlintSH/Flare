@@ -32,14 +32,20 @@ export function DashboardWrapper({
         Skip to content
       </a>
       {/* The bar shares the content column's width and gutters. */}
-      <header className="fixed inset-x-0 top-0 z-40 pt-4">
+      <header
+        data-dashboard-header=""
+        className="fixed inset-x-0 top-0 z-40 pt-[8px] sm:pt-4"
+      >
         {/* Fades scrolled content out above and behind the floating bar. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background via-background/70 to-transparent"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background from-15% via-background/90 via-70% to-transparent"
         />
-        <div className="relative mx-auto max-w-7xl px-4">
-          <div className="flex h-16 items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-4 shadow-sm backdrop-blur-xl sm:px-6">
+        <div className="relative mx-auto max-w-7xl px-[16px]">
+          <div
+            data-dashboard-bar=""
+            className="flex min-h-[56px] items-center gap-[12px] rounded-[16px] border border-border/60 bg-background/95 px-[16px] py-[5px] shadow-sm backdrop-blur-xl sm:h-16 sm:rounded-2xl sm:px-6 sm:py-0"
+          >
             <DashboardNav />
             <div className="ml-auto flex shrink-0 items-center">
               <UserNav />
@@ -50,9 +56,9 @@ export function DashboardWrapper({
       <main
         id="main-content"
         tabIndex={-1}
-        className="relative z-10 w-full min-w-0 flex-1 pt-24 outline-none"
+        className="relative z-10 w-full min-w-0 flex-1 pt-[80px] outline-none sm:pt-24"
       >
-        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:py-6">{children}</div>
       </main>
       {showFooter && <Footer compact />}
     </div>

@@ -13,6 +13,10 @@ import {
 } from 'lucide-react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
+import {
+  PasswordFieldError,
+  usePasswordFields,
+} from '@/components/auth/password-field'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,8 +25,8 @@ import { Label } from '@/components/ui/label'
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { apiRequest } from '@/lib/client/request'
 import {
+  ACCOUNT_PASSWORD_HELP,
   ACCOUNT_PASSWORD_MIN_LENGTH,
-  PASSWORD_MAX_BYTES,
 } from '@/lib/users/account-policy'
 
 import { AccountEmail, useAccountEmailStatus } from './account-email'
@@ -47,27 +51,89 @@ function Feedback({ error, message }: { error: string; message: string }) {
   )
 }
 
+function useRecoveryAvailability(known: boolean | null) {
+  const [available, setAvailable] = useState<boolean | null>(null)
+  const [failure, setFailure] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    if (known !== null) return
+    let active = true
+    fetchEmailCapabilities()
+      .then((value) => {
+        if (active) setAvailable(value.recoveryEnabled)
+      })
+      .catch(() => {
+        if (active)
+          setFailure('Unable to check whether password recovery is available.')
+      })
+    return () => {
+      active = false
+    }
+  }, [known, attempt])
+  return {
+    available: known ?? available,
+    failure,
+    retry() {
+      setFailure('')
+      setAttempt((value) => value + 1)
+    },
+  }
+}
+
+function RecoveryUnavailable() {
+  return (
+    <Alert variant="info" role="status">
+      <Info aria-hidden="true" />
+      <AlertDescription>
+        Email password recovery is not enabled on this instance. Contact the
+        person who provided or manages your account.
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function RecoveryCheck({
+  failure,
+  retry,
+}: {
+  failure: string
+  retry: () => void
+}) {
+  return failure ? (
+    <div className="space-y-3">
+      <p role="alert" className="text-sm text-destructive">
+        {failure}
+      </p>
+      <Button type="button" variant="outline" onClick={retry}>
+        Check again
+      </Button>
+    </div>
+  ) : (
+    <p
+      className="flex items-center gap-2 text-sm text-muted-foreground"
+      role="status"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Checking recovery options…
+    </p>
+  )
+}
+
 /** `recoveryEnabled` is the page's answer; without one, the browser asks. */
 export function ForgotPasswordForm({
   recoveryEnabled: known = null,
 }: {
   recoveryEnabled?: boolean | null
 }) {
-  const [recoveryEnabled, setRecoveryEnabled] = useState(known)
+  const {
+    available: recoveryEnabled,
+    failure,
+    retry,
+  } = useRecoveryAvailability(known)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  useEffect(() => {
-    if (known !== null) return
-    fetchEmailCapabilities()
-      .then((capabilities) => setRecoveryEnabled(capabilities.recoveryEnabled))
-      .catch(() =>
-        setError(
-          'Unable to check whether recovery is available. Please try again later.'
-        )
-      )
-  }, [known])
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     setBusy(true)
@@ -111,23 +177,9 @@ export function ForgotPasswordForm({
           </Button>
         </form>
       ) : recoveryEnabled === false ? (
-        <Alert variant="info" role="status">
-          <Info aria-hidden="true" />
-          <AlertDescription>
-            Email password recovery is not enabled on this instance. Contact
-            your administrator for help.
-          </AlertDescription>
-        </Alert>
+        <RecoveryUnavailable />
       ) : (
-        !error && (
-          <p
-            className="flex items-center gap-2 text-sm text-muted-foreground"
-            role="status"
-          >
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Checking recovery options…
-          </p>
-        )
+        <RecoveryCheck failure={failure} retry={retry} />
       )}
       <Feedback error={error} message={message} />
       <AuthFooter>
@@ -139,24 +191,46 @@ export function ForgotPasswordForm({
   )
 }
 
-export function ResetPasswordForm({ token }: { token: string }) {
+export function ResetPasswordForm({
+  token,
+  recoveryEnabled: known = null,
+}: {
+  token: string
+  recoveryEnabled?: boolean | null
+}) {
+  const {
+    available: recoveryEnabled,
+    failure,
+    retry,
+  } = useRecoveryAvailability(known)
   const [busy, setBusy] = useState(false)
   const [complete, setComplete] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const passwords = usePasswordFields({
+    passwordId: 'reset-password',
+    helpId: 'reset-password-help',
+    confirmationId: 'reset-confirm',
+  })
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (busy) return
     const data = new FormData(event.currentTarget)
-    if (data.get('password') !== data.get('confirmPassword')) {
-      setError('Passwords do not match.')
+    const password = data.get('password') as string
+    if (
+      !passwords.validate(
+        password,
+        data.get('confirmPassword') as string,
+        event.currentTarget
+      )
+    )
       return
-    }
     setBusy(true)
     setError('')
     try {
       const result = await apiRequest<{ message: string }>(
         '/api/auth/email/reset',
-        { body: { token, password: data.get('password') } }
+        { body: { token, password } }
       )
       setComplete(true)
       setMessage(
@@ -174,7 +248,11 @@ export function ResetPasswordForm({ token }: { token: string }) {
   }
   return (
     <div className="space-y-5">
-      {!token ? (
+      {!complete && recoveryEnabled === false ? (
+        <RecoveryUnavailable />
+      ) : !complete && recoveryEnabled === null ? (
+        <RecoveryCheck failure={failure} retry={retry} />
+      ) : !token ? (
         <Alert variant="destructive">
           <AlertCircle aria-hidden="true" />
           <AlertDescription>
@@ -193,13 +271,20 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 type="password"
                 autoComplete="new-password"
                 minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-                maxLength={PASSWORD_MAX_BYTES}
+                {...passwords.passwordProps}
                 required
                 disabled={busy}
               />
-              <p className="text-sm text-muted-foreground">
-                Use at least {ACCOUNT_PASSWORD_MIN_LENGTH} characters.
+              <p
+                id="reset-password-help"
+                className="text-sm text-muted-foreground"
+              >
+                {ACCOUNT_PASSWORD_HELP}
               </p>
+              <PasswordFieldError
+                id="reset-password-error"
+                message={passwords.errors.password}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="reset-confirm">Confirm new password</Label>
@@ -210,9 +295,13 @@ export function ResetPasswordForm({ token }: { token: string }) {
                 type="password"
                 autoComplete="new-password"
                 minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-                maxLength={PASSWORD_MAX_BYTES}
                 required
                 disabled={busy}
+                {...passwords.confirmationProps}
+              />
+              <PasswordFieldError
+                id="reset-confirm-error"
+                message={passwords.errors.confirmation}
               />
             </div>
             <Button className="h-11 w-full" type="submit" disabled={busy}>
@@ -228,10 +317,16 @@ export function ResetPasswordForm({ token }: { token: string }) {
         </Button>
       ) : (
         <AuthFooter>
-          <Link href="/auth/forgot-password" className={authLinkClassName}>
-            Request a new reset link
-          </Link>
-          <span aria-hidden="true"> · </span>
+          {recoveryEnabled !== false && (
+            <>
+              <Link href="/auth/forgot-password" className={authLinkClassName}>
+                {recoveryEnabled
+                  ? 'Request a new reset link'
+                  : 'Check recovery options'}
+              </Link>
+              <span aria-hidden="true"> · </span>
+            </>
+          )}
           <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
             Back to sign in
           </Link>

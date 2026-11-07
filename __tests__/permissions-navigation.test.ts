@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   pathname: '/dashboard',
   loading: false,
+  brandName: 'Flare',
 }))
 vi.mock('next-auth/react', () => ({
   useSession: () =>
@@ -27,7 +28,10 @@ vi.mock('next-auth/react', () => ({
 }))
 vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname }))
 vi.mock('@/components/customization/instance-brand', () => ({
-  InstanceBrand: () => React.createElement('span', null, 'Flare'),
+  InstanceBrand: () => React.createElement('span', null, mocks.brandName),
+}))
+vi.mock('@/components/providers/appearance-context', () => ({
+  useAppearance: () => ({ brand: { name: mocks.brandName } }),
 }))
 
 const adminPages = ['users', 'roles', 'settings', 'audit']
@@ -66,6 +70,18 @@ describe('permission-aware dashboard navigation', () => {
       mocks.loading = false
     }
     expect(render([])).not.toContain('Open navigation')
+  })
+
+  it('includes the configurable visible brand in the home link name', () => {
+    expect(render(['files.read'])).toContain('aria-label="Flare home"')
+    mocks.brandName = 'Field Notes & Photos'
+    try {
+      const html = render([])
+      expect(html).toContain('aria-label="Field Notes &amp; Photos home"')
+      expect(html).toContain('>Field Notes &amp; Photos<')
+    } finally {
+      mocks.brandName = 'Flare'
+    }
   })
 
   it('moves Profile out of the bar and into the account menu', () => {

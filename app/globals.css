@@ -37,6 +37,7 @@ body {
    */
   :root,
   .light {
+    --secondary-text: hsl(var(--muted-foreground));
     --destructive-text: hsl(var(--destructive));
     --destructive-fill: hsl(var(--destructive));
     --control: color-mix(
@@ -63,6 +64,13 @@ body {
   }
 
   .dark {
+    /* Lift small descriptive copy toward the configured foreground without
+       rewriting the palette's stored muted color or its decorative uses. */
+    --secondary-text: color-mix(
+      in oklab,
+      hsl(var(--muted-foreground)) 76%,
+      hsl(var(--foreground))
+    );
     /* Lift panels within the configured card hue; preserve custom palettes. */
     --panel: color-mix(
       in oklab,
@@ -399,12 +407,44 @@ body {
 /* Coarse pointers get comfortable targets without changing desktop density.
    Restrict this to controls, not every button-shaped decorative element. */
 @media (pointer: coarse) {
-  [data-flare-control] {
+  /* Only the visible thumb scrubs on touch. The rest of the date track
+     passes swipes through to native scrolling, including while invisible. */
+  [data-date-rail-track] {
+    pointer-events: none;
+    touch-action: pan-y;
+  }
+  [data-date-rail-handle] {
+    pointer-events: auto;
+    touch-action: none;
+  }
+  [data-date-rail-handle] > div:first-child {
+    background-color: hsl(var(--muted-foreground));
+  }
+  [data-date-rail-handle][data-dragging] > div:first-child {
+    background-color: hsl(var(--primary));
+  }
+  /* Textareas already have an 80px minimum, with larger editors choosing
+     their own height. A touch floor must not replace those larger minima. */
+  [data-flare-control]:not(textarea) {
     min-height: 2.75rem;
   }
   [data-flare-control]:is(button, a),
   [role='tab'][data-flare-control] {
     min-width: 2.75rem;
+  }
+  /* Icon-only controls keep 44px targets while surrounding text grows.
+     Text controls retain the larger rem-based floor above. */
+  [data-flare-control][data-flare-icon] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  [data-flare-control][data-flare-icon] > svg {
+    max-width: 20px;
+    max-height: 20px;
   }
   [role='menuitem'],
   [role='menuitemcheckbox'],
@@ -415,6 +455,36 @@ body {
   input[data-flare-control],
   textarea[data-flare-control] {
     font-size: 1rem;
+  }
+  @container (max-width: 16rem) {
+    [data-file-card] [data-preview-text-shortcut] {
+      display: none;
+    }
+    [data-file-card] [data-preview-icon-shortcut] {
+      display: inline-flex;
+    }
+    [data-file-card] [data-preview-actions] {
+      gap: 8px;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    [data-file-card] [data-file-name] {
+      -webkit-line-clamp: unset;
+      line-clamp: unset;
+      overflow: visible;
+    }
+  }
+}
+
+@media (max-width: 639px) {
+  /* Enlarged date feedback uses its own header row rather than covering files. */
+  body:has([data-date-rail-expanded-text] [data-date-rail-track]:focus-visible)
+    [data-dashboard-bar],
+  body:has(
+      [data-date-rail-expanded-text] [data-date-rail-handle][data-dragging]
+    )
+    [data-dashboard-bar] {
+    padding-bottom: calc(5px + 1rem + 34px);
   }
 }
 

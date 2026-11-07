@@ -33,6 +33,10 @@ import {
 } from 'lucide-react'
 import { signIn } from 'next-auth/react'
 
+import {
+  PasswordFieldError,
+  usePasswordFields,
+} from '@/components/auth/password-field'
 import { EmailSettings } from '@/components/email/email-settings'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
@@ -70,7 +74,10 @@ import {
   setupSchema,
 } from '@/lib/setup/schema'
 import { storageSettingsSchema } from '@/lib/storage/settings'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  ACCOUNT_PASSWORD_HELP,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from '@/lib/users/account-policy'
 import { cn } from '@/lib/utils'
 
 import { useMarkSetupComplete } from '@/hooks/use-setup-status'
@@ -189,6 +196,10 @@ export function SetupWizard({
   const [busy, setBusy] = useState(false)
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const [error, setError] = useState<FormError | null>(null)
+  const password = usePasswordFields({
+    passwordId: 'setup-admin.password',
+    helpId: 'setup-admin.password-hint',
+  })
   const [emailEnabled, setEmailEnabled] = useState(initialEmailEnabled)
   const [emailRecoveryEnabled, setEmailRecoveryEnabled] = useState(
     initialEmailRecoveryEnabled
@@ -217,7 +228,7 @@ export function SetupWizard({
     if (field) document.getElementById(`setup-${field}`)?.focus()
   }
 
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting.current || created) return
     setError(null)
@@ -225,9 +236,12 @@ export function SetupWizard({
       const result = setupAdminSchema.safeParse(data.admin)
       if (!result.success) {
         const issue = result.error.issues[0]
-        showValidation(issue.message, `admin.${issue.path.join('.')}`)
+        if (issue.path[0] === 'password')
+          password.validate(data.admin.password, undefined, event.currentTarget)
+        else showValidation(issue.message, `admin.${issue.path.join('.')}`)
         return
       }
+      password.validate(data.admin.password, undefined, event.currentTarget)
       setData((previous) => ({ ...previous, admin: result.data }))
       go('storage')
       return
@@ -329,11 +343,27 @@ export function SetupWizard({
         type={options.type || 'text'}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        minLength={
+          path === 'admin.password' ? ACCOUNT_PASSWORD_MIN_LENGTH : undefined
+        }
         placeholder={options.placeholder}
         autoComplete={options.autoComplete}
         disabled={busy}
-        aria-invalid={error?.field === path}
-        aria-describedby={options.hint ? `setup-${path}-hint` : undefined}
+        {...(path === 'admin.password' ? password.passwordProps : {})}
+        aria-invalid={
+          error?.field === path
+            ? true
+            : path === 'admin.password'
+              ? password.passwordProps['aria-invalid']
+              : undefined
+        }
+        aria-describedby={
+          path === 'admin.password'
+            ? password.passwordProps['aria-describedby']
+            : options.hint
+              ? `setup-${path}-hint`
+              : undefined
+        }
       />
       {options.hint && (
         <p
@@ -342,6 +372,12 @@ export function SetupWizard({
         >
           {options.hint}
         </p>
+      )}
+      {path === 'admin.password' && (
+        <PasswordFieldError
+          id="setup-admin.password-error"
+          message={password.errors.password}
+        />
       )}
     </div>
   )
@@ -664,7 +700,7 @@ export function SetupWizard({
                           type: 'password',
                           placeholder: 'Choose a strong password',
                           autoComplete: 'new-password',
-                          hint: `At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`,
+                          hint: ACCOUNT_PASSWORD_HELP,
                         }
                       )}
                     </CardContent>

@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation'
 
 import { UploadForm } from '@/components/file/upload-form'
-import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import {
+  PageHeader,
+  pagePanelClassName,
+  workspaceFormPageClassName,
+} from '@/components/layout/page-header'
 
 import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
@@ -32,9 +36,9 @@ export default async function UploadPage() {
   const maxSizeBytes = maxUploadBytes(config)
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className={workspaceFormPageClassName}>
       <PageHeader
-        eyebrow="Your files"
+        eyebrow="Workspace"
         title="Upload files"
         description={
           hasPermission(session.user, 'files.share')
@@ -42,7 +46,7 @@ export default async function UploadPage() {
             : 'Upload files privately using your saved defaults.'
         }
       />
-      <div className={`${pagePanelClassName} max-w-4xl`}>
+      <div className={pagePanelClassName}>
         <UploadForm
           user={user}
           maxSize={maxSizeBytes}

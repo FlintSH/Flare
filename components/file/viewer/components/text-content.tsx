@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import CodeMirror, { EditorView } from '@uiw/react-codemirror'
-import { FileText } from 'lucide-react'
+import { FileText, WrapText } from 'lucide-react'
 import { useTheme } from 'next-themes'
+
+import { Button } from '@/components/ui/button'
 
 import type { Language } from '@/lib/files/file-kind'
 
@@ -12,10 +14,6 @@ import { codeViewerTheme } from './code-theme'
 import { ErrorState } from './error-state'
 import { LoadingState } from './loading-state'
 import { PreviewPlaceholder } from './preview-placeholder'
-
-/** Markdown prose wraps to the width; code, logs and other text keep their
- * lines and scroll sideways, so columns stay aligned. */
-const WRAPPED_LANGUAGES = new Set<Language>(['markdown'])
 
 const failedContent = (status?: number) =>
   status ? `Failed to fetch content: ${status}` : 'Failed to fetch content'
@@ -29,6 +27,9 @@ export function TextContent({
   url: string
   language: Language
 }) {
+  const [wrap, setWrap] = useState(
+    language === 'markdown' || /\.txt$/i.test(name)
+  )
   const preview = usePreviewText(url, failedContent)
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme !== 'light'
@@ -36,9 +37,9 @@ export function TextContent({
     () => [
       codeGrammar(language),
       codeViewerTheme(dark),
-      ...(WRAPPED_LANGUAGES.has(language) ? [EditorView.lineWrapping] : []),
+      ...(wrap ? [EditorView.lineWrapping] : []),
     ],
-    [language, dark]
+    [language, dark, wrap]
   )
 
   if (preview.status === 'failed') return <ErrorState error={preview.message} />
@@ -60,6 +61,19 @@ export function TextContent({
       className="w-full min-w-0 border-y border-border/60 font-mono text-[13px] sm:text-sm"
       aria-label={`${name} preview`}
     >
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2 font-sans">
+        <span className="text-xs text-muted-foreground">Text preview</span>
+        <Button
+          type="button"
+          variant={wrap ? 'secondary' : 'ghost'}
+          size="sm"
+          aria-pressed={wrap}
+          onClick={() => setWrap((value) => !value)}
+        >
+          <WrapText aria-hidden="true" />
+          Wrap lines
+        </Button>
+      </div>
       <CodeMirror
         value={preview.text}
         extensions={extensions}

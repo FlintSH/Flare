@@ -14,7 +14,7 @@ Use **Upload** when you want to review settings before sending files. For quick 
 ## Upload from your browser
 
 1. Open **Upload**.
-2. Click the file-selection area or drag files into it. You can select several files and add more to the queue before starting.
+2. Select **Choose files** to open your device's file picker, or drag files into the selection area with a mouse. With a keyboard, focus **Choose files** and press Enter or Space to open the same picker. You can select several files and add more to the queue before starting.
 3. Review filenames and sizes. Remove an individual file, or clear the queue if you want to start again.
 4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. The line under it shows the effective visibility, password protection, expiration action, and filename behavior for this batch. Without that permission, your saved defaults apply automatically.
 5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Open **Upload options** for one-time visibility, password, or expiration overrides. You can leave it closed to use your saved defaults.

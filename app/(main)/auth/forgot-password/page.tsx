@@ -32,7 +32,7 @@ export default async function ForgotPasswordPage() {
     return (
       <AuthShell
         title="Forgot your password?"
-        description="Ask your administrator for help signing in."
+        description="Contact the person who provided or manages your account for help signing in."
       >
         <Alert variant="info" role="status">
           <Info aria-hidden="true" />

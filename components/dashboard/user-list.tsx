@@ -26,6 +26,10 @@ import {
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
+import {
+  PasswordFieldError,
+  usePasswordFields,
+} from '@/components/auth/password-field'
 import { UserEmailControls } from '@/components/email/user-email-controls'
 import {
   FilePasswordHint,
@@ -111,7 +115,10 @@ import {
   isEveryoneRole,
   userManagementRefusal,
 } from '@/lib/permissions/policy'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import {
+  ACCOUNT_PASSWORD_HELP,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from '@/lib/users/account-policy'
 import {
   URL_ID_LENGTH,
   VANITY_ID_MAX_LENGTH,
@@ -146,6 +153,7 @@ interface FileResponse {
 function UserTableSkeleton() {
   return (
     <div
+      role="status"
       className="overflow-hidden rounded-xl border bg-card"
       aria-label="Loading users"
       aria-busy="true"
@@ -488,6 +496,11 @@ export function UserList() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isViewingFiles, setIsViewingFiles] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const passwordField = usePasswordFields({
+    passwordId: editingUser ? 'newPassword' : 'password',
+    helpId: editingUser ? 'newPassword-help' : 'password-help',
+    optional: !!editingUser,
+  })
   const [viewingUser, setViewingUser] = useState<User | null>(null)
   const rowMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const restoreRowMenuFocus = (event: Event) => {
@@ -639,6 +652,10 @@ export function UserList() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const password = formData.password || ''
+    if ((!editingUser || can('users.update')) && (!editingUser || password)) {
+      if (!passwordField.validate(password, undefined, e.currentTarget)) return
+    }
     try {
       if (editingUser) {
         const { roleIds, ...identity } = formData
@@ -664,6 +681,7 @@ export function UserList() {
   }
 
   const handleEdit = (user: User) => {
+    passwordField.reset()
     setEditingUser(user)
     setFormData({
       name: user.name,
@@ -678,6 +696,7 @@ export function UserList() {
   }
 
   const handleNew = () => {
+    passwordField.reset()
     setEditingUser(null)
     setFormData({
       name: '',
@@ -1242,9 +1261,21 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
+                      placeholder="Create a password"
                       autoComplete="new-password"
+                      minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                      {...passwordField.passwordProps}
                       required
+                    />
+                    <p
+                      id="password-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {ACCOUNT_PASSWORD_HELP}
+                    </p>
+                    <PasswordFieldError
+                      id="password-error"
+                      message={passwordField.errors.password}
                     />
                   </div>
                 )}
@@ -1264,16 +1295,22 @@ export function UserList() {
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
                       }
-                      placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
+                      placeholder="Enter a new password"
                       autoComplete="new-password"
-                      aria-describedby="newPassword-help"
+                      minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                      {...passwordField.passwordProps}
                     />
                     <p
                       id="newPassword-help"
                       className="text-xs text-muted-foreground"
                     >
-                      Leave empty to keep the current password.
+                      {ACCOUNT_PASSWORD_HELP} Leave empty to keep the current
+                      password.
                     </p>
+                    <PasswordFieldError
+                      id="newPassword-error"
+                      message={passwordField.errors.password}
+                    />
                   </div>
                 )}
                 <fieldset disabled={!can('users.roles')} className="space-y-2">

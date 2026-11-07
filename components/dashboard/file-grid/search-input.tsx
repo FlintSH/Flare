@@ -5,6 +5,8 @@ import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+import { cn } from '@/lib/utils'
+
 interface SearchInputProps {
   onSearch: (value: string) => void
   initialValue?: string
@@ -35,7 +37,7 @@ export const SearchInput = memo(function SearchInput({
   }
 
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="relative min-w-[min(100%,8rem)] flex-1">
       <Search
         aria-hidden="true"
         className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
@@ -43,8 +45,11 @@ export const SearchInput = memo(function SearchInput({
       <Input
         type="search"
         aria-label="Search files by name"
-        placeholder="Search your files…"
-        className="h-10 rounded-lg bg-background/70 pl-10 pr-12 [&::-webkit-search-cancel-button]:appearance-none"
+        placeholder="Search files…"
+        className={cn(
+          'h-10 rounded-lg bg-background/70 pl-10 [&::-webkit-search-cancel-button]:appearance-none',
+          value ? 'pr-12' : 'pr-3'
+        )}
         value={value}
         onChange={(event) => updateSearch(event.target.value)}
       />

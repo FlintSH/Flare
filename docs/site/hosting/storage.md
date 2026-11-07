@@ -67,6 +67,8 @@ Avatars don't use this setting. For every role, an avatar must be a PNG, JPEG, G
 
 Quotas are **disabled by default**. Enabling them applies a shared per-user allowance; its starting value is **10 GB**. Each account's recorded storage usage is checked against that allowance unless its roles grant `quotas.bypass` or Administrator. Grant quota bypass independently of administration when appropriate.
 
+You can edit **Data quota per user** while **User quotas** is off to prepare an allowance. The helper marks it as inactive; the saved value only applies after you enable quotas.
+
 This is one default quota for accounts without bypass. Flare does not currently expose separate per-account or per-role numeric quota values, shared group quotas, or reserved disk capacity. If you lower the allowance below a user's existing usage, their files remain, but further uploads are blocked until enough space is freed or the limit is raised.
 
 ## Archive processing

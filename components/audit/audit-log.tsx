@@ -12,10 +12,16 @@ import {
   RefreshCw,
   Search,
   Shield,
+  X,
   XCircle,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
+import {
+  auditActorLabel,
+  auditTargetSummary,
+  describeAuditAction,
+} from '@/components/audit/event-display'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +46,7 @@ import { SessionScoped } from '@/hooks/use-account-query'
 type Filters = {
   q: string
   category: string
+  view: AuditQuery['view']
   action: string
   outcome: string
   range: string
@@ -49,9 +56,11 @@ type Filters = {
   targetId: string
   requestId: string
 }
+type ConstraintKey = Exclude<keyof Filters, 'view' | 'from' | 'to'>
 const emptyFilters: Filters = {
   q: '',
   category: '',
+  view: 'all',
   action: '',
   outcome: '',
   range: 'all',
@@ -61,56 +70,58 @@ const emptyFilters: Filters = {
   targetId: '',
   requestId: '',
 }
+const initialFilters: Filters = { ...emptyFilters, view: 'changes' }
 
 /** UI shortcuts use the same exact filters as the audit form and API. */
-const INVESTIGATIONS = [
-  { label: 'All activity', category: '', action: '', outcome: '' },
-  { label: 'Failed activity', category: '', action: '', outcome: 'failure' },
+const QUICK_VIEWS = [
+  {
+    label: 'Changes',
+    category: '',
+    view: 'changes',
+    action: '',
+    outcome: '',
+  },
+  {
+    label: 'All activity',
+    category: '',
+    view: 'all',
+    action: '',
+    outcome: '',
+  },
+  {
+    label: 'Failed activity',
+    category: '',
+    view: 'all',
+    action: '',
+    outcome: 'failure',
+  },
   {
     label: 'Sign-ins',
     category: 'authentication',
+    view: 'all',
     action: 'auth.login',
     outcome: '',
   },
-  { label: 'Account changes', category: 'accounts', action: '', outcome: '' },
-  { label: 'Requests', category: 'requests', action: '', outcome: '' },
+  {
+    label: 'Account changes',
+    category: 'accounts',
+    view: 'all',
+    action: '',
+    outcome: '',
+  },
+  {
+    label: 'Requests',
+    category: 'requests',
+    view: 'all',
+    action: '',
+    outcome: '',
+  },
 ] as const
 
 const OUTCOME_LABELS: Record<AuditOutcome, string> = {
   success: 'Success',
   failure: 'Failure',
   denied: 'Denied',
-}
-
-const ACRONYMS = new Set([
-  'api',
-  'csv',
-  'http',
-  'id',
-  'oidc',
-  'ocr',
-  'sso',
-  'url',
-])
-const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head'])
-
-/** "http.get" -> "HTTP GET", "file_tag.createMany" -> "File tag create many". */
-function describeAction(action: string) {
-  const words = action
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .split(/[._\s]+/)
-    .filter(Boolean)
-    .map((word) => word.toLowerCase())
-  return words
-    .map((word, index) => {
-      if (
-        ACRONYMS.has(word) ||
-        (words[index - 1] === 'http' && HTTP_METHODS.has(word))
-      )
-        return word.toUpperCase()
-      return index === 0 ? word[0].toUpperCase() + word.slice(1) : word
-    })
-    .join(' ')
 }
 
 /**
@@ -168,8 +179,8 @@ function EventRow({
         ? XCircle
         : CheckCircle2
   const request = event.category === 'requests'
-  const actor =
-    event.actorName ?? (event.actorId ? 'Deleted account' : 'System')
+  const actor = auditActorLabel(event)
+  const target = auditTargetSummary(event)
   const outcome = (
     <div
       className={cn(
@@ -193,7 +204,11 @@ function EventRow({
     </div>
   )
   return (
-    <details className="group border-b last:border-0">
+    <details
+      data-audit-action={event.action}
+      data-audit-target-id={event.targetId ?? undefined}
+      className="group border-b last:border-0"
+    >
       <summary
         data-flare-control
         className={cn(
@@ -210,18 +225,13 @@ function EventRow({
                 context and exact IDs remain in the expandable details. */}
             <div className="flex min-w-0 items-baseline gap-2">
               <span className="shrink-0 font-mono text-xs font-semibold text-muted-foreground">
-                {event.method ?? describeAction(event.action)}
+                {event.method ?? describeAuditAction(event.action)}
               </span>
               <span
                 className="min-w-0 break-words font-mono text-xs [overflow-wrap:anywhere] lg:truncate"
-                title={event.route ?? event.targetName ?? undefined}
+                title={event.route ?? target.label}
               >
-                {wrapAfterSlashes(
-                  event.route ??
-                    event.targetName ??
-                    event.targetType ??
-                    'Instance activity'
-                )}
+                {wrapAfterSlashes(event.route ?? target.label)}
               </span>
             </div>
             <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground lg:contents">
@@ -257,7 +267,7 @@ function EventRow({
               </div>
               <div className="min-w-0">
                 <p className="break-words text-sm font-medium">
-                  {describeAction(event.action)}
+                  {describeAuditAction(event.action)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   <time dateTime={event.createdAt}>
@@ -277,17 +287,12 @@ function EventRow({
             </div>
             <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
               <p className="break-words text-xs md:text-sm">
-                {wrapAfterSlashes(
-                  event.targetName ??
-                    event.targetType ??
-                    event.route ??
-                    'Instance activity'
-                )}
-                {event.targetName && (
+                {wrapAfterSlashes(target.label)}
+                {target.context && (
                   <>
                     <span className="text-muted-foreground md:hidden"> · </span>
-                    <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
-                      {event.targetType}
+                    <span className="text-muted-foreground md:mt-1 md:block md:text-xs">
+                      {target.context}
                     </span>
                   </>
                 )}
@@ -375,8 +380,9 @@ export function AuditLog() {
 }
 
 function AccountAuditLog() {
-  const [draft, setDraft] = useState<Filters>(emptyFilters)
-  const [active, setActive] = useState<Filters>(emptyFilters)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [draft, setDraft] = useState<Filters>(initialFilters)
+  const [active, setActive] = useState<Filters>(initialFilters)
   const [page, setPage] = useState(1)
   const [refresh, setRefresh] = useState(0)
   const [result, setResult] = useState<AuditPage | null>(null)
@@ -393,6 +399,7 @@ function AccountAuditLog() {
         for (const field of [
           'q',
           'category',
+          'view',
           'action',
           'outcome',
           'actorId',
@@ -433,13 +440,26 @@ function AccountAuditLog() {
     return () => controller.abort()
   }, [active, page, refresh])
 
-  function update(field: keyof Filters, value: string) {
-    setDraft((previous) => ({ ...previous, [field]: value }))
+  function update<K extends keyof Filters>(field: K, value: Filters[K]) {
+    setDraft((previous) => ({
+      ...previous,
+      [field]: value,
+      ...(field === 'category' && value === 'requests'
+        ? { view: 'all' as const }
+        : {}),
+    }))
   }
   function apply(field: 'actorId' | 'targetId' | 'requestId', value: string) {
     const next = { ...active, [field]: value }
     setDraft(next)
     setActive(next)
+    setPage(1)
+  }
+  function removeConstraint(key: ConstraintKey) {
+    const cleared =
+      key === 'range' ? { range: 'all', from: '', to: '' } : { [key]: '' }
+    setDraft((previous) => ({ ...previous, ...cleared }))
+    setActive((previous) => ({ ...previous, ...cleared }))
     setPage(1)
   }
   const pendingFilters = JSON.stringify(draft) !== JSON.stringify(active)
@@ -453,26 +473,73 @@ function AccountAuditLog() {
       [...(result?.filters.actions ?? []), draft.action].filter(Boolean)
     ),
   ].sort()
-  const activeCriteria = [
-    active.q && `Search: ${active.q}`,
-    active.category && `Category: ${active.category}`,
-    active.action && `Action: ${describeAction(active.action)}`,
-    active.outcome &&
-      `Outcome: ${OUTCOME_LABELS[active.outcome as AuditOutcome]}`,
+  const hasTimeConstraint =
     active.range === 'custom'
-      ? `Time: ${active.from.replace('T', ' ') || 'any start'} to ${active.to.replace('T', ' ') || 'any end'}`
-      : active.range !== 'all' &&
-        `Time: last ${active.range} ${active.range === '1' ? 'day' : 'days'}`,
-    active.actorId && `Actor ID: ${active.actorId}`,
-    active.targetId && `Target ID: ${active.targetId}`,
-    active.requestId && `Request ID: ${active.requestId}`,
-  ].filter(Boolean)
-  const activeCount = Object.entries(active).filter(
-    ([key, value]) =>
-      value &&
-      !['from', 'to'].includes(key) &&
-      !(key === 'range' && value === 'all')
-  ).length
+      ? Boolean(active.from || active.to)
+      : active.range !== 'all'
+  const activeCriteria = (
+    [
+      { key: 'q', label: active.q.trim() && `Search: ${active.q.trim()}` },
+      {
+        key: 'category',
+        label: active.category && `Category: ${active.category}`,
+      },
+      {
+        key: 'action',
+        label:
+          active.action &&
+          `Action: ${describeAuditAction(active.action)} (${active.action})`,
+      },
+      {
+        key: 'outcome',
+        label:
+          active.outcome &&
+          `Outcome: ${OUTCOME_LABELS[active.outcome as AuditOutcome]}`,
+      },
+      {
+        key: 'range',
+        label: hasTimeConstraint
+          ? active.range === 'custom'
+            ? `Time: ${active.from.replace('T', ' ') || 'any start'} to ${active.to.replace('T', ' ') || 'any end'}`
+            : `Time: last ${active.range} ${active.range === '1' ? 'day' : 'days'}`
+          : '',
+      },
+      {
+        key: 'actorId',
+        label: active.actorId.trim() && `Actor ID: ${active.actorId.trim()}`,
+      },
+      {
+        key: 'targetId',
+        label: active.targetId.trim() && `Target ID: ${active.targetId.trim()}`,
+      },
+      {
+        key: 'requestId',
+        label:
+          active.requestId.trim() && `Request ID: ${active.requestId.trim()}`,
+      },
+    ] satisfies { key: ConstraintKey; label: string }[]
+  ).filter((criterion) => criterion.label)
+  const selectedPreset = QUICK_VIEWS.find(
+    (preset) =>
+      active.category === preset.category &&
+      active.view === preset.view &&
+      active.action === preset.action &&
+      active.outcome === preset.outcome
+  )
+  const selectedQuickView = selectedPreset?.label || ''
+  const applyQuickView = (preset: (typeof QUICK_VIEWS)[number]) => {
+    const next = {
+      ...draft,
+      category: preset.category,
+      view: preset.view,
+      action: preset.action,
+      outcome: preset.outcome,
+    }
+    setDraft(next)
+    setActive(next)
+    setPage(1)
+  }
+  const activeCount = activeCriteria.length
 
   return (
     <div className="container space-y-7">
@@ -481,14 +548,14 @@ function AccountAuditLog() {
         title="Audit log"
         description={
           <>
-            Trace file activity, sign-ins, account changes, and background
-            processing across your instance.
+            <span className="hidden sm:inline">
+              Trace file activity, sign-ins, and instance changes.
+            </span>
             {/* Balanced: the header's pretty wrapping (inherited) still
                 left a three-word last line. */}
             <span className="mt-2 block text-balance text-xs leading-relaxed">
-              Includes private filenames and historical account names. Events
-              are retained after account or file deletion. History begins when
-              audit logging was installed.
+              Includes private filenames and historical names. History starts at
+              installation and survives account or file deletion.
             </span>
           </>
         }
@@ -508,7 +575,7 @@ function AccountAuditLog() {
       />
 
       <form
-        className={cn(pagePanelClassName, 'space-y-4')}
+        className={cn(pagePanelClassName, 'space-y-3 sm:space-y-4')}
         onSubmit={(event) => {
           event.preventDefault()
           setActive({ ...draft })
@@ -516,63 +583,30 @@ function AccountAuditLog() {
         }}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">Filter activity</h2>
-          {activeCount > 0 && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              {activeCount} active
-            </span>
-          )}
+          <h2 className="sr-only">Filter activity</h2>
+          <Label htmlFor="audit-search">Search activity</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            aria-expanded={filtersOpen}
+            aria-controls="audit-filter-controls"
+            onClick={() => setFiltersOpen((value) => !value)}
+          >
+            {filtersOpen ? 'Hide filters' : 'More filters'}
+            <ChevronDown
+              className={cn(
+                'transition-transform',
+                filtersOpen && 'rotate-180'
+              )}
+              aria-hidden="true"
+            />
+          </Button>
         </div>
         <div className="space-y-2">
-          <div
-            role="group"
-            aria-label="Investigation presets"
-            className="flex flex-wrap gap-2"
-          >
-            {INVESTIGATIONS.map((preset) => (
-              <Button
-                key={preset.label}
-                type="button"
-                variant={
-                  active.category === preset.category &&
-                  active.action === preset.action &&
-                  active.outcome === preset.outcome
-                    ? 'secondary'
-                    : 'outline'
-                }
-                aria-pressed={
-                  active.category === preset.category &&
-                  active.action === preset.action &&
-                  active.outcome === preset.outcome
-                }
-                disabled={loading}
-                onClick={() => {
-                  const next = {
-                    ...draft,
-                    category: preset.category,
-                    action: preset.action,
-                    outcome: preset.outcome,
-                  }
-                  setDraft(next)
-                  setActive(next)
-                  setPage(1)
-                }}
-                className="rounded-lg"
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Presets apply immediately and keep your search, time range, and
-            exact IDs. Failed activity shows failures; choose Denied under
-            Outcome to investigate access refusals.
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="audit-search">Search activity</Label>
-            <div className="relative">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
@@ -580,130 +614,229 @@ function AccountAuditLog() {
               <Input
                 id="audit-search"
                 className="pl-9"
-                placeholder="File, person, action, or ID…"
+                placeholder="Name, action or ID"
                 value={draft.q}
                 maxLength={200}
                 onChange={(event) => update('q', event.target.value)}
               />
             </div>
+            <Button type="submit" disabled={loading}>
+              Apply filters
+            </Button>
           </div>
-          <FilterSelect
-            label="Category"
-            value={draft.category}
-            onChange={(value) => update('category', value)}
-          >
-            <option value="">All categories</option>
-            {categories.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Outcome"
-            value={draft.outcome}
-            onChange={(value) => update('outcome', value)}
-          >
-            <option value="">All outcomes</option>
-            {AUDIT_OUTCOMES.map((outcome) => (
-              <option key={outcome} value={outcome}>
-                {OUTCOME_LABELS[outcome]}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Action"
-            value={draft.action}
-            onChange={(value) => update('action', value)}
-          >
-            <option value="">All actions</option>
-            {actions.map((value) => (
-              <option key={value} value={value}>
-                {describeAction(value)}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Time range"
-            value={draft.range}
-            onChange={(value) => update('range', value)}
-          >
-            <option value="all">All time</option>
-            <option value="1">Last 24 hours</option>
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="custom">Custom range</option>
-          </FilterSelect>
-          {draft.range === 'custom' &&
-            (['from', 'to'] as const).map((field) => (
-              <div className="space-y-2" key={field}>
-                <Label htmlFor={`audit-${field}`}>
-                  {field === 'from' ? 'From' : 'To'} (local time)
-                </Label>
-                <Input
-                  id={`audit-${field}`}
-                  type="datetime-local"
-                  value={draft[field]}
-                  onChange={(event) => update(field, event.target.value)}
-                />
-              </div>
-            ))}
         </div>
-        <details
-          open={
-            Boolean(draft.actorId || draft.targetId || draft.requestId) ||
-            undefined
-          }
-        >
-          <summary
-            data-flare-control
-            className="w-fit cursor-pointer rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        <div className="space-y-2">
+          <p className="hidden text-xs font-medium text-muted-foreground sm:block">
+            Quick views
+          </p>
+          <div className="space-y-2 sm:hidden">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="audit-quick-view">Quick view</Label>
+              {pendingFilters && selectedPreset && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  aria-label={`Reapply ${selectedPreset.label} quick view`}
+                  onClick={() => applyQuickView(selectedPreset)}
+                >
+                  Reapply
+                </Button>
+              )}
+            </div>
+            <NativeSelect
+              id="audit-quick-view"
+              className="h-11"
+              value={selectedQuickView}
+              disabled={loading}
+              onChange={(event) => {
+                const preset = QUICK_VIEWS.find(
+                  (preset) => preset.label === event.target.value
+                )
+                if (preset) applyQuickView(preset)
+              }}
+            >
+              {!selectedQuickView && (
+                <option value="" disabled>
+                  Custom filters
+                </option>
+              )}
+              {QUICK_VIEWS.map((preset) => (
+                <option key={preset.label} value={preset.label}>
+                  {preset.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div
+            role="group"
+            aria-label="Quick views"
+            className="hidden flex-wrap gap-2 sm:flex"
           >
-            Filter by actor, target, or request ID
-          </summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {(
-              [
-                ['actorId', 'Actor ID'],
-                ['targetId', 'Target ID'],
-                ['requestId', 'Request ID'],
-              ] as const
-            ).map(([field, label]) => (
-              <div className="space-y-2" key={field}>
-                <Label htmlFor={`filter-${field}`}>{label}</Label>
-                <Input
-                  id={`filter-${field}`}
-                  value={draft[field]}
-                  maxLength={200}
-                  onChange={(event) => update(field, event.target.value)}
-                  placeholder="Exact ID"
-                />
-              </div>
+            {QUICK_VIEWS.map((preset) => (
+              <Button
+                key={preset.label}
+                type="button"
+                variant={
+                  selectedQuickView === preset.label ? 'secondary' : 'outline'
+                }
+                aria-pressed={selectedQuickView === preset.label}
+                disabled={loading}
+                onClick={() => applyQuickView(preset)}
+                className="rounded-lg"
+              >
+                {preset.label}
+              </Button>
             ))}
           </div>
-        </details>
-        {pendingFilters && (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {active.view === 'changes'
+              ? 'Changes hides Requests and successful reads.'
+              : 'All activity includes Requests and successful reads.'}
+            {pendingFilters &&
+              ' Choosing a quick view also applies your pending filters.'}
+          </p>
+        </div>
+        <div
+          id="audit-filter-controls"
+          className={cn('space-y-4', !filtersOpen && 'hidden')}
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FilterSelect
+              label="Category"
+              value={draft.category}
+              onChange={(value) => update('category', value)}
+            >
+              <option value="">All categories</option>
+              {categories.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              label="Event scope"
+              value={draft.view}
+              onChange={(value) => {
+                if (value === 'all' || value === 'changes')
+                  update('view', value)
+              }}
+            >
+              <option value="all">All activity</option>
+              <option value="changes" disabled={draft.category === 'requests'}>
+                Changes
+              </option>
+            </FilterSelect>
+            <FilterSelect
+              label="Outcome"
+              value={draft.outcome}
+              onChange={(value) => update('outcome', value)}
+            >
+              <option value="">All outcomes</option>
+              {AUDIT_OUTCOMES.map((outcome) => (
+                <option key={outcome} value={outcome}>
+                  {OUTCOME_LABELS[outcome]}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              label="Action"
+              value={draft.action}
+              onChange={(value) => update('action', value)}
+            >
+              <option value="">All actions</option>
+              {actions.map((value) => (
+                <option key={value} value={value}>
+                  {describeAuditAction(value)} ({value})
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              label="Time range"
+              value={draft.range}
+              onChange={(value) => update('range', value)}
+            >
+              <option value="all">All time</option>
+              <option value="1">Last 24 hours</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="custom">Custom range</option>
+            </FilterSelect>
+            {draft.range === 'custom' &&
+              (['from', 'to'] as const).map((field) => (
+                <div className="space-y-2" key={field}>
+                  <Label htmlFor={`audit-${field}`}>
+                    {field === 'from' ? 'From' : 'To'} (local time)
+                  </Label>
+                  <Input
+                    id={`audit-${field}`}
+                    type="datetime-local"
+                    value={draft[field]}
+                    onChange={(event) => update(field, event.target.value)}
+                  />
+                </div>
+              ))}
+          </div>
+          <details
+            open={
+              Boolean(draft.actorId || draft.targetId || draft.requestId) ||
+              undefined
+            }
+          >
+            <summary
+              data-flare-control
+              className="w-fit cursor-pointer rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              Filter by actor, target, or request ID
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              {(
+                [
+                  ['actorId', 'Actor ID'],
+                  ['targetId', 'Target ID'],
+                  ['requestId', 'Request ID'],
+                ] as const
+              ).map(([field, label]) => (
+                <div className="space-y-2" key={field}>
+                  <Label htmlFor={`filter-${field}`}>{label}</Label>
+                  <Input
+                    id={`filter-${field}`}
+                    value={draft[field]}
+                    maxLength={200}
+                    onChange={(event) => update(field, event.target.value)}
+                    placeholder="Exact ID"
+                  />
+                </div>
+              ))}
+            </div>
+          </details>
+          {pendingFilters && (
+            <p role="status" className="text-xs text-warning">
+              Filter edits are not applied yet. Choose Apply filters or a quick
+              view to update the activity below.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setDraft(emptyFilters)
+                setActive(emptyFilters)
+                setPage(1)
+              }}
+            >
+              Clear filters
+            </Button>
+          </div>
+        </div>
+        {!filtersOpen && pendingFilters && (
           <p role="status" className="text-xs text-warning">
-            Filter edits are not applied yet. Choose Apply filters or an
-            investigation preset to update the activity below.
+            You have unapplied filter edits. Choose Apply filters or a quick
+            view to update activity.
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={loading}>
-            Apply filters
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setDraft(emptyFilters)
-              setActive(emptyFilters)
-              setPage(1)
-            }}
-          >
-            Clear filters
-          </Button>
-        </div>
       </form>
 
       {error && (
@@ -726,14 +859,25 @@ function AccountAuditLog() {
         aria-label="Audit events"
         aria-busy={loading}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-4">
-          <h2 className="text-base font-semibold">Activity</h2>
-          <p className="text-xs text-muted-foreground" role="status">
-            {loading
-              ? 'Loading activity…'
-              : error
-                ? 'Activity unavailable'
-                : `${(result?.total ?? 0).toLocaleString()} matching events · newest first`}
+        <div className="space-y-1 border-b px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Activity</h2>
+            <p className="text-xs text-muted-foreground" role="status">
+              {loading
+                ? 'Loading activity…'
+                : error
+                  ? 'Activity unavailable'
+                  : `${(result?.total ?? 0).toLocaleString()} matching events · newest first`}
+            </p>
+          </div>
+          <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+            <span>
+              Event scope:{' '}
+              {active.view === 'changes' ? 'Changes' : 'All activity'}
+            </span>
+            <span>
+              {activeCount} active {activeCount === 1 ? 'filter' : 'filters'}
+            </span>
           </p>
         </div>
         {activeCriteria.length > 0 && (
@@ -742,11 +886,20 @@ function AccountAuditLog() {
             className="flex flex-wrap gap-2 border-b px-6 py-3 text-xs text-muted-foreground"
           >
             {activeCriteria.map((criterion) => (
-              <li
-                key={String(criterion)}
-                className="max-w-full break-words rounded-md bg-muted px-2 py-1 [overflow-wrap:anywhere]"
-              >
-                {criterion}
+              <li key={criterion.key} className="max-w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto min-h-11 max-w-full whitespace-normal rounded-lg bg-muted px-2.5 py-1 text-left text-xs sm:min-h-8"
+                  aria-label={`Remove ${criterion.label} filter`}
+                  onClick={() => removeConstraint(criterion.key)}
+                >
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                    {criterion.label}
+                  </span>
+                  <X className="h-3 w-3 shrink-0" aria-hidden="true" />
+                </Button>
               </li>
             ))}
           </ul>
@@ -763,8 +916,26 @@ function AccountAuditLog() {
             />
             <p className="font-medium">No activity matches these filters</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Try a wider time range or clear the filters.
+              {hasTimeConstraint
+                ? 'Try a wider time range, remove a filter, or reset all filters.'
+                : activeCount > 0
+                  ? 'Remove a filter or reset all filters to broaden the results.'
+                  : active.view === 'changes'
+                    ? 'Choose All activity to include Requests and successful reads.'
+                    : 'No recorded activity is available yet.'}
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5"
+              onClick={() => {
+                setDraft(emptyFilters)
+                setActive(emptyFilters)
+                setPage(1)
+              }}
+            >
+              Reset filters
+            </Button>
           </div>
         )}
         {!error && result && result.total > 0 && (

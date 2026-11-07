@@ -9,6 +9,8 @@ import { FileType } from '@/types/components/file'
 import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
+  ChevronDown,
+  ChevronUp,
   Clock,
   Download,
   Eye,
@@ -29,6 +31,15 @@ import {
   type FileActionId,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
+import {
+  fileCardActivityClassName,
+  fileCardDetailsClassName,
+  fileCardFilenameParts,
+  fileCardGenericPreviewClassName,
+  fileCardLabelsClassName,
+  fileCardNameRowClassName,
+  fileCardPreviewClassName,
+} from '@/components/dashboard/file-card/layout'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
@@ -60,19 +71,20 @@ import { filePasswordHint } from '@/lib/files/password-policy'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
+import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useOcr } from '@/hooks/use-ocr'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 import { useToast } from '@/hooks/use-toast'
 
-// Folder and tag labels share one fixed-height line with the activity counts,
-// so every card in the grid keeps the same height. Each name is capped so a
-// long label cannot crowd out a short one in narrow cards, and counts from
-// 1,000 are abbreviated (1.4K) so large numbers leave room for the labels.
+// Labels wrap intrinsically as enlarged text outgrows a shared row.
 const labelClassName =
-  'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
+  'inline-flex min-h-6 min-w-0 flex-1 basis-[6rem] items-center gap-1 rounded-md border border-border/60 bg-muted/70 px-1.5 text-xs leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
+const previewActions = CARD_BUTTONS.filter(
+  (id) => id === 'copyLink' || id === 'download'
+)
 
 const TRY_AGAIN = 'Please try again.'
 const failure = (error: unknown) =>
@@ -97,6 +109,11 @@ interface FileCardProps {
  * One file in the library. It shows the file it is given; each action ends
  * by asking the library to reload, which brings the changed file.
  */
+// A palette band on each side of the configured ring keeps focus readable
+// against uploaded pixels, like the expanded image control.
+const previewFocusClassName =
+  'focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_4px_hsl(var(--ring)),0_0_0_6px_hsl(var(--foreground))]'
+
 export function FileCard({
   file,
   onDelete,
@@ -327,13 +344,21 @@ export function FileCard({
   }
   const offered = (id: FileActionId) =>
     permitted(id) ? handlers[id] : undefined
+  const hasImagePreview = isImage && !previewFailed
+  const {
+    start: nameStart,
+    tail: nameTail,
+    extension: nameExtension,
+  } = fileCardFilenameParts(file.name)
   // The tag count opens the editor only where the menu offers it.
   const editTags = offered('editTags')
 
   return (
     <Card
+      data-file-card=""
+      data-file-kind={hasImagePreview ? 'image' : 'generic'}
       className={cn(
-        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-panel shadow-sm transition-colors',
+        'group relative flex h-auto min-w-0 self-start flex-col overflow-hidden rounded-xl border-border/60 bg-panel shadow-sm transition-colors [container-type:inline-size]',
         // Selected cards keep a 2px edge inside the column: the border plus a
         // ring drawn above the thumbnail and the hover veil, so it looks the
         // same on every card and while hovered. The ring sits inside the
@@ -343,8 +368,55 @@ export function FileCard({
           : 'hover:border-primary/30'
       )}
     >
+      <div data-file-heading="" className={fileCardNameRowClassName}>
+        <Link
+          prefetch={false}
+          href={urls.page}
+          title={file.name}
+          aria-label={file.name}
+          tabIndex={-1}
+          data-file-name=""
+          className="min-w-0 truncate rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:whitespace-normal"
+        >
+          <span
+            aria-hidden="true"
+            className="flex min-w-0 [@media(pointer:coarse)]:block"
+          >
+            <span
+              className={cn(
+                'min-w-0 truncate',
+                nameTail
+                  ? '[@media(pointer:coarse)]:block'
+                  : '[@media(pointer:coarse)]:inline [@media(pointer:coarse)]:overflow-visible [@media(pointer:coarse)]:break-words [@media(pointer:coarse)]:whitespace-normal [@media(pointer:coarse)]:text-clip'
+              )}
+            >
+              {nameStart}
+            </span>
+            <span
+              data-file-name-tail=""
+              className={cn(
+                'flex max-w-full shrink-0',
+                nameTail
+                  ? '[@media(pointer:coarse)]:w-full'
+                  : '[@media(pointer:coarse)]:inline'
+              )}
+            >
+              <span className="min-w-0 truncate [direction:rtl]">
+                <bdi dir="ltr">{nameTail}</bdi>
+              </span>
+              <span className="max-w-full shrink-0 truncate">
+                {nameExtension}
+              </span>
+            </span>
+          </span>
+        </Link>
+        <span className="shrink-0 text-xs text-muted-foreground [@media(pointer:coarse)]:hidden">
+          {formatFileSize(file.size)}
+        </span>
+      </div>
       <div className="relative">
         <Link
+          data-file-preview=""
           prefetch={false}
           href={urls.page}
           aria-label={`Open ${file.name}`}
@@ -364,9 +436,14 @@ export function FileCard({
               else onPreview?.(file)
             }
           }}
-          className="relative block aspect-[4/3] overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
+          className={cn(
+            'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
+            hasImagePreview
+              ? fileCardPreviewClassName
+              : fileCardGenericPreviewClassName
+          )}
         >
-          {isImage && !previewFailed ? (
+          {hasImagePreview ? (
             <Image
               src={urls.thumbnail}
               alt={file.name}
@@ -380,12 +457,12 @@ export function FileCard({
           ) : (
             // The icon steps aside for the hover and focus controls, so it
             // doesn't show through between them.
-            <div className="flex h-full flex-col items-center justify-center gap-3 transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
+            <div className="flex h-full items-center gap-[8px] pl-[12px] pr-[60px] transition-opacity group-has-[:focus-visible]:opacity-0 group-has-[[data-preview-actions]_:focus]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
               <FileTypeIcon
                 file={file}
-                className="h-12 w-12 text-muted-foreground"
+                className="h-[28px] w-[28px] shrink-0 text-muted-foreground"
               />
-              <span className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
+              <span className="min-w-0 break-words rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
                 {file.name.includes('.')
                   ? file.name.split('.').pop()?.toUpperCase().slice(0, 12)
                   : fileTypeLabel(file.mimeType)}
@@ -393,58 +470,94 @@ export function FileCard({
             </div>
           )}
         </Link>
-        {/* Hover and keyboard focus veil the preview halfway toward the page
-            colour, in both themes, with solid buttons on top. Only keyboard
-            focus counts, so a tap on a phone doesn't leave the card veiled. */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/50 opacity-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
+        {/* These pointer shortcuts repeat the primary link and menu actions,
+            so Tab goes from the primary link to Manage file, then the filters.
+            Keyboard focus still exposes the shortcuts and their full labels. */}
+        <div
+          data-preview-actions=""
+          className={cn(
+            'pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-background/50 pt-6 pb-2 opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
+            !hasImagePreview &&
+              'bottom-auto right-[52px] h-[52px] gap-[8px] pt-0 pb-0'
+          )}
+        >
           {browseArchive ? (
             <Button
+              tabIndex={-1}
               variant="outline"
-              size="sm"
-              className="bg-background"
+              size={hasImagePreview ? 'sm' : 'icon'}
+              aria-label="Browse archive"
+              title="Browse archive"
+              className={cn('bg-background', previewFocusClassName)}
               onClick={browseArchive}
             >
-              Browse archive
+              {hasImagePreview ? (
+                'Browse archive'
+              ) : (
+                <Folder className="h-4 w-4" />
+              )}
             </Button>
           ) : isImage && onPreview ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-background"
-              onClick={() => onPreview(file)}
-            >
-              View image
-            </Button>
+            <>
+              <Button
+                data-preview-text-shortcut={hasImagePreview ? '' : undefined}
+                tabIndex={-1}
+                variant="outline"
+                size={hasImagePreview ? 'sm' : 'icon'}
+                aria-label="View image"
+                title="View image"
+                className={cn('bg-background', previewFocusClassName)}
+                onClick={() => onPreview(file)}
+              >
+                {hasImagePreview ? 'View image' : <Eye className="h-4 w-4" />}
+              </Button>
+              {hasImagePreview && (
+                <Button
+                  data-preview-icon-shortcut=""
+                  tabIndex={-1}
+                  variant="outline"
+                  size="icon"
+                  aria-label="View image"
+                  title="View image"
+                  className={cn('hidden bg-background', previewFocusClassName)}
+                  onClick={() => onPreview(file)}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              )}
+            </>
           ) : (
             <Button
               variant="outline"
               size="sm"
-              className="bg-background"
+              className={cn(
+                'h-auto bg-background px-[8px] [&[data-flare-control]]:min-h-[44px] [&[data-flare-control]]:min-w-[44px]',
+                previewFocusClassName
+              )}
               asChild
             >
-              <Link prefetch={false} href={urls.page}>
+              <Link prefetch={false} href={urls.page} tabIndex={-1}>
                 View
               </Link>
             </Button>
           )}
-          <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
-            {CARD_BUTTONS.map((id) => {
+          <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-[4px]">
+            {previewActions.map((id) => {
               const handler = offered(id)
               if (!handler) return null
               const { icon: Icon, button } = FILE_ACTIONS[id]
               const className =
-                id === 'delete'
-                  ? 'h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive'
-                  : 'h-8 w-8 bg-background'
+                'h-[32px] w-[32px] bg-background px-0 [&_svg]:size-[16px]'
               return handler.href ? (
                 <Button
                   key={id}
                   variant="outline"
                   size="icon"
-                  className={className}
+                  className={cn(className, previewFocusClassName)}
                   asChild
                 >
                   <a
+                    tabIndex={-1}
                     href={handler.href}
                     download={handler.download}
                     aria-label={button.label(file.name)}
@@ -456,9 +569,10 @@ export function FileCard({
               ) : (
                 <Button
                   key={id}
+                  tabIndex={-1}
                   variant="outline"
                   size="icon"
-                  className={className}
+                  className={cn(className, previewFocusClassName)}
                   disabled={handler.disabled}
                   onClick={handler.run}
                   aria-label={button.label(file.name)}
@@ -471,83 +585,146 @@ export function FileCard({
           </div>
         </div>
         {onSelect && (
-          <label className="absolute left-2 top-2 z-10 flex cursor-pointer items-center rounded-lg border border-border/50 bg-background/95 p-2 shadow-sm">
+          <label className="absolute left-[8px] top-[8px] z-10 flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-lg border border-border/50 bg-background/95 shadow-sm">
             <input
               type="checkbox"
               checked={!!selected}
               onChange={onSelect}
               aria-label={`Select ${file.name}`}
-              className="h-4 w-4 cursor-pointer accent-primary"
+              className="h-[16px] w-[16px] cursor-pointer accent-primary"
             />
           </label>
         )}
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-[8px] top-[8px]">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent"
+                className={cn(
+                  'h-[32px] w-[32px] rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent [&_svg]:size-[16px]',
+                  previewFocusClassName
+                )}
                 aria-label={`Manage ${file.name}`}
                 title="Manage file"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Manage file</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {CARD_MENU.map((group, index) => (
-                <Fragment key={index}>
-                  {index > 0 && <DropdownMenuSeparator />}
-                  {group.map((id) => {
-                    const handler = offered(id)
-                    if (!handler) return null
-                    const { icon: Icon, menu } = FILE_ACTIONS[id]
-                    const content = (
-                      <>
-                        <Icon />
-                        {typeof menu === 'function'
-                          ? menu({
-                              hasPassword: file.hasPassword,
-                              busy: ocr.loading,
-                            })
-                          : menu}
-                      </>
-                    )
-                    return (
-                      <DropdownMenuItem
-                        key={id}
-                        asChild={!!handler.href}
-                        disabled={handler.disabled}
-                        onSelect={handler.run}
-                        className={
-                          id === 'delete'
-                            ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
-                            : undefined
-                        }
-                      >
-                        {!handler.href ? (
-                          content
-                        ) : handler.download ? (
-                          <a href={handler.href} download={handler.download}>
-                            {content}
-                          </a>
-                        ) : (
-                          <Link prefetch={false} href={handler.href}>
-                            {content}
-                          </Link>
-                        )}
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </Fragment>
-              ))}
+            <DropdownMenuContent
+              align="end"
+              data-file-menu=""
+              className="group/file-menu flex w-56 min-w-0 max-w-[calc(100vw-32px)] flex-col overflow-hidden"
+            >
+              <DropdownMenuLabel className="shrink-0">
+                Manage file
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="shrink-0" />
+              {/* Direction cues sit outside the scrolling items, so they
+                  never mask focused actions or the menu's border. */}
+              <div
+                aria-hidden="true"
+                className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-above]]/file-menu:flex"
+              >
+                <span
+                  data-file-menu-scroll-cue="above"
+                  className="flex items-center gap-1"
+                >
+                  <ChevronUp className="h-3 w-3" />
+                  More actions above
+                </span>
+              </div>
+              <div
+                ref={scrollFadeRef}
+                data-file-menu-scroll=""
+                tabIndex={-1}
+                onFocus={(event) => {
+                  if (event.target === event.currentTarget)
+                    event.currentTarget
+                      .closest<HTMLElement>('[role="menu"]')
+                      ?.focus()
+                }}
+                className="min-h-0 overflow-y-auto overscroll-contain outline-none [scroll-padding-block:0.25rem]"
+              >
+                <DropdownMenuLabel
+                  data-file-menu-filename=""
+                  className="break-all text-xs font-normal leading-relaxed text-muted-foreground"
+                >
+                  {nameStart}
+                  {nameTail}
+                  <span className="whitespace-nowrap">{nameExtension}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {CARD_MENU.map((group, index) => (
+                  <Fragment key={index}>
+                    {index > 0 && <DropdownMenuSeparator />}
+                    {group.map((id) => {
+                      const handler = offered(id)
+                      if (!handler) return null
+                      const { icon: Icon, menu } = FILE_ACTIONS[id]
+                      const content = (
+                        <>
+                          <Icon />
+                          {typeof menu === 'function'
+                            ? menu({
+                                hasPassword: file.hasPassword,
+                                busy: ocr.loading,
+                              })
+                            : menu}
+                        </>
+                      )
+                      return (
+                        <DropdownMenuItem
+                          key={id}
+                          asChild={!!handler.href}
+                          disabled={handler.disabled}
+                          onSelect={handler.run}
+                          className={
+                            id === 'delete'
+                              ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
+                              : undefined
+                          }
+                        >
+                          {!handler.href ? (
+                            content
+                          ) : handler.download ? (
+                            <a href={handler.href} download={handler.download}>
+                              {content}
+                            </a>
+                          ) : (
+                            <Link prefetch={false} href={handler.href}>
+                              {content}
+                            </Link>
+                          )}
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </Fragment>
+                ))}
+              </div>
+              <div
+                aria-hidden="true"
+                className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-below]]/file-menu:flex"
+              >
+                <span
+                  data-file-menu-scroll-cue="below"
+                  className="flex items-center gap-1"
+                >
+                  More actions below
+                  <ChevronDown className="h-3 w-3" />
+                </span>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="pointer-events-none absolute bottom-2 inset-x-2 flex items-end justify-between gap-2 text-xs">
-          <span className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm">
+        <div
+          data-preview-badges=""
+          className={cn(
+            'pointer-events-none absolute bottom-2 inset-x-2 flex flex-wrap items-end justify-between gap-2 text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:px-[8px] [@container(max-width:12rem)]:py-[4px]',
+            !hasImagePreview && 'static px-[8px] py-[4px]'
+          )}
+        >
+          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0">
             {file.hasPassword ? (
               <KeyRound className="h-3 w-3" />
             ) : (
@@ -556,7 +733,7 @@ export function FileCard({
             {file.hasPassword ? 'Protected' : visibilityLabel}
           </span>
           <span
-            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm"
+            className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
             title={format(new Date(file.uploadedAt), 'PPP p')}
           >
             <Clock className="h-3 w-3" />
@@ -566,12 +743,19 @@ export function FileCard({
         {file.expiresAt && !onSelect && permitted('expiration') && (
           <button
             type="button"
+            tabIndex={-1}
+            data-flare-control=""
+            data-flare-wrap=""
             onClick={() => setIsExpiryModalOpen(true)}
             title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
-            className="absolute left-2 top-2 inline-flex h-8 max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px]',
+              !hasImagePreview && 'static mx-[8px] mb-[8px]',
+              previewFocusClassName
+            )}
           >
             <Timer className="h-3 w-3 shrink-0 text-primary" />
-            <span className="truncate">
+            <span className="min-w-0 break-words whitespace-normal">
               {formatDistanceToNow(new Date(file.expiresAt), {
                 addSuffix: true,
               })}
@@ -588,22 +772,9 @@ export function FileCard({
           </div>
         )}
       </div>
-      <div className="border-t border-border/40 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            prefetch={false}
-            href={urls.page}
-            title={file.name}
-            className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {file.name}
-          </Link>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {formatFileSize(file.size)}
-          </span>
-        </div>
-        <div className="mt-1 flex h-5 items-center gap-3 text-xs text-muted-foreground">
-          <div className="flex min-w-0 items-center gap-1.5">
+      <div className={fileCardDetailsClassName}>
+        {(hasImagePreview || folder || tags.length > 0) && (
+          <div className={fileCardLabelsClassName}>
             {folder && (
               <button
                 type="button"
@@ -611,10 +782,14 @@ export function FileCard({
                 disabled={!onFolderSelect}
                 title={folder.name}
                 aria-label={`Open folder ${folder.name}`}
+                data-flare-control=""
+                data-file-label=""
                 className={labelClassName}
               >
-                <Folder className="h-2.5 w-2.5 shrink-0" />
-                <span className="max-w-20 truncate">{folder.name}</span>
+                <Folder className="h-3 w-3 shrink-0" />
+                <span className="min-w-0 break-words whitespace-normal">
+                  {folder.name}
+                </span>
               </button>
             )}
             {visibleTags.map((tag) => (
@@ -625,47 +800,64 @@ export function FileCard({
                 disabled={!onTagSelect}
                 title={tag.name}
                 aria-label={`Show files tagged ${tag.name}`}
+                data-flare-control=""
+                data-file-label=""
                 className={labelClassName}
               >
-                <Tag className="h-2.5 w-2.5 shrink-0" />
-                <span className="max-w-20 truncate">{tag.name}</span>
+                <Tag className="h-3 w-3 shrink-0" />
+                <span className="min-w-0 break-words whitespace-normal">
+                  {tag.name}
+                </span>
               </button>
             ))}
             {tags.length > visibleTags.length &&
               (editTags ? (
                 <button
                   type="button"
+                  tabIndex={-1}
                   onClick={editTags.run}
-                  aria-label={`View all ${tags.length} tags`}
-                  className="shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-flare-control=""
+                  aria-label={`+${tags.length - visibleTags.length}: view all ${tags.length} tags`}
+                  className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   +{tags.length - visibleTags.length}
                 </button>
               ) : (
                 <span
                   title={`${tags.length} tags`}
-                  className="shrink-0 px-1 text-[11px] text-muted-foreground"
+                  className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center px-1 text-xs text-muted-foreground [@media(pointer:coarse)]:min-w-11"
                 >
                   +{tags.length - visibleTags.length}
                 </span>
               ))}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-3">
+        )}
+        <div data-file-activity="" className={fileCardActivityClassName}>
+          <span className="mr-auto hidden [@media(pointer:coarse)]:inline">
+            {formatFileSize(file.size)}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-x-3">
             <span
               className="inline-flex items-center gap-1"
-              aria-label={`${file.views} views`}
               title={`${file.views.toLocaleString()} views`}
             >
-              <Eye className="h-3 w-3" />
-              {compactCount.format(file.views)}
+              <Eye className="h-3 w-3" aria-hidden="true" />
+              <span aria-hidden="true">{compactCount.format(file.views)}</span>
+              <span className="sr-only">
+                {file.views.toLocaleString()} views
+              </span>
             </span>
             <span
               className="inline-flex items-center gap-1"
-              aria-label={`${file.downloads} downloads`}
               title={`${file.downloads.toLocaleString()} downloads`}
             >
-              <Download className="h-3 w-3" />
-              {compactCount.format(file.downloads)}
+              <Download className="h-3 w-3" aria-hidden="true" />
+              <span aria-hidden="true">
+                {compactCount.format(file.downloads)}
+              </span>
+              <span className="sr-only">
+                {file.downloads.toLocaleString()} downloads
+              </span>
             </span>
           </div>
         </div>

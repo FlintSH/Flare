@@ -46,21 +46,22 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
+          size="icon"
           aria-label="Account menu"
           aria-current={onProfile ? 'true' : undefined}
           className={cn(
-            'relative h-9 w-9 rounded-full p-0 ring-offset-2 ring-offset-background',
+            'relative h-[36px] w-[36px] rounded-full p-0 ring-offset-2 ring-offset-background focus-visible:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring',
             // Profile has no place in the bar, so the avatar marks it instead,
-            // thinner than the focus ring so focus still shows.
+            // separate from the outer keyboard outline so focus stays distinct.
             onProfile
               ? 'ring-1 ring-foreground/40'
               : 'data-[state=open]:ring-2 data-[state=open]:ring-border'
           )}
         >
-          <Avatar className="h-9 w-9">
+          <Avatar className="h-[36px] w-[36px]">
             <AvatarImage src={user?.image || undefined} alt="" />
             {/* The edge keeps light initials from melting into a light bar. */}
-            <AvatarFallback className="border border-border">
+            <AvatarFallback className="border border-border text-[14px]">
               {initials || 'F'}
             </AvatarFallback>
           </Avatar>

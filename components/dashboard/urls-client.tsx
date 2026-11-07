@@ -8,7 +8,13 @@ import { PermissionGate } from '@/components/roles/permission-gate'
 
 import { shortLinkUrl } from '@/lib/links/schema'
 
+import { SessionScoped } from '@/hooks/use-account-query'
+
 export function URLsClient() {
+  return <SessionScoped>{() => <SessionURLsClient />}</SessionScoped>
+}
+
+function SessionURLsClient() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [created, setCreated] = useState<{
     shortCode: string

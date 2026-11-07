@@ -109,7 +109,12 @@ export function AppearancePreview({
         </div>
       </div>
       <div
-        className="rounded-2xl border shadow-xl shadow-black/10 overflow-hidden"
+        className={cn(
+          mode,
+          'rounded-2xl border text-foreground shadow-xl shadow-black/10 overflow-hidden'
+        )}
+        // Resolve derived text and surface roles against this draft palette,
+        // rather than inheriting the surrounding workspace's theme roles.
         style={variables}
       >
         <div className="bg-muted text-muted-foreground border-b px-4 py-3 flex items-center gap-2">

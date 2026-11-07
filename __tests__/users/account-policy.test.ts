@@ -6,6 +6,7 @@ import { newFilePasswordSchema } from '@/lib/files/password-policy'
 import { setupAdminSchema } from '@/lib/setup/schema'
 import {
   accountNameSchema,
+  accountPasswordHint,
   accountPasswordSchema,
   fitsPasswordHash,
 } from '@/lib/users/account-policy'
@@ -96,6 +97,33 @@ describe('account passwords', () => {
     expect(fitsPasswordHash('🔒'.repeat(19))).toBe(false)
     expect(newFilePasswordSchema.safeParse('🔒'.repeat(19)).success).toBe(false)
   })
+
+  it('preserves the existing code-point minimum, including composed emoji', () => {
+    expect(accountPasswordSchema.safeParse('🔒'.repeat(3)).success).toBe(false)
+    expect(accountPasswordSchema.safeParse('🔒'.repeat(4)).success).toBe(false)
+    expect(accountPasswordSchema.safeParse('🔒'.repeat(8)).success).toBe(true)
+    expect(accountPasswordSchema.safeParse('👩‍💻'.repeat(2)).success).toBe(false)
+    expect(accountPasswordHint('👩‍💻'.repeat(3))).toBeNull()
+  })
+
+  it.each([
+    ['a'.repeat(7), false],
+    ['a'.repeat(8), true],
+    ['a'.repeat(72), true],
+    ['a'.repeat(73), false],
+    ['🔒'.repeat(18), true],
+    ['🔒'.repeat(19), false],
+    ['é'.repeat(36), true],
+    ['é'.repeat(36) + 'a', false],
+    ['a'.repeat(70) + 'é', true],
+    ['a'.repeat(71) + 'é', false],
+  ])(
+    'keeps client feedback consistent with the authoritative rule for %j',
+    (password, valid) => {
+      expect(accountPasswordSchema.safeParse(password).success).toBe(valid)
+      expect(accountPasswordHint(password) === null).toBe(valid)
+    }
+  )
 })
 
 describe('URL IDs', () => {

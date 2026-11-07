@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, memo, useId, useState } from 'react'
+import { Fragment, type ReactNode, memo, useId, useRef, useState } from 'react'
 
 import { format } from 'date-fns'
 import {
@@ -9,7 +9,6 @@ import {
   Globe,
   KeyRound,
   Lock,
-  SlidersHorizontal,
 } from 'lucide-react'
 import { DateRange } from 'react-day-picker'
 
@@ -25,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
@@ -38,6 +38,7 @@ import {
 
 import { fileTypeGroup, fileTypeLabel } from '@/lib/files/file-kind'
 import {
+  DEFAULT_SORT,
   type FileGrouping,
   GROUP_OPTIONS,
   SORT_OPTIONS,
@@ -95,9 +96,36 @@ export const FileFilters = memo(function FileFilters({
 }: FileFiltersProps) {
   // The chosen days are named in the reader's time zone, which the server lacks.
   const hydrated = useHydrated()
+  const selectedDateLabel =
+    date?.from && hydrated
+      ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
+      : null
+  const groupingLabel = groupBy === 'none' ? null : `Grouped by ${groupBy}`
+  const dateAndGroupingLabel = [
+    selectedDateLabel,
+    selectedDateLabel && groupingLabel ? groupBy : groupingLabel,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const [expanded, setExpanded] = useState(false)
   const controlsId = useId()
+  const dateTrigger = useRef<HTMLButtonElement>(null)
+  const dateAnchor = useRef({
+    getBoundingClientRect() {
+      const rect = dateTrigger.current?.getBoundingClientRect()
+      if (!rect) return new DOMRect()
+      // A phone toolbar splits the viewport into two short spaces. Position
+      // its picker near the top so a full month can use the available height.
+      return window.matchMedia('(max-width: 639px)').matches
+        ? new DOMRect(rect.x, 16, rect.width, 0)
+        : rect
+    },
+    get contextElement() {
+      return dateTrigger.current ?? undefined
+    },
+  })
   const activeCount =
+    Number(sortBy !== DEFAULT_SORT) +
     Number(hasTagFilter) +
     selectedTypes.length +
     visibility.length +
@@ -114,39 +142,17 @@ export const FileFilters = memo(function FileFilters({
     )
   // Every trigger shows the same fill while its menu is open.
   const filterClass =
-    'relative h-10 min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:w-auto sm:justify-between'
+    'relative min-h-11 h-auto min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:min-h-10 sm:w-auto sm:justify-between [&>span]:whitespace-normal [&>span]:overflow-visible [&>span]:text-clip [&>span]:break-words'
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Select value={sortBy} onValueChange={onSortChange}>
-        {/* On narrow phones a long choice ends in an ellipsis instead of
-            being cut off mid-letter. */}
-        <SelectTrigger
-          aria-label="Sort files"
-          className="h-10 min-w-0 flex-1 gap-1 rounded-lg bg-background/70 px-2 text-sm font-medium data-[state=open]:bg-accent sm:w-[172px] sm:flex-none sm:px-3 [&>span]:block [&>span]:truncate"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORT_OPTIONS.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              className={sortItemClassName}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="contents sm:flex sm:flex-wrap sm:gap-2">
       <Button
         variant="outline"
         aria-expanded={expanded}
         aria-controls={controlsId}
         onClick={() => setExpanded((value) => !value)}
-        className="h-10 gap-2 rounded-lg bg-background/70 px-3 sm:hidden"
+        className="h-11 shrink-0 gap-1.5 rounded-lg bg-background/70 px-2 sm:hidden"
       >
-        <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
         Filters
         {activeCount > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs tabular-nums text-primary-foreground">
@@ -163,10 +169,31 @@ export const FileFilters = memo(function FileFilters({
       <div
         id={controlsId}
         className={cn(
-          'w-full grid-cols-2 gap-2 sm:contents',
+          'col-span-2 w-full grid-cols-[repeat(auto-fit,minmax(min(100%,7.5rem),1fr))] gap-2 [&>button]:min-h-11 [&>button]:h-auto sm:contents sm:[&>button]:min-h-10',
           expanded ? 'grid' : 'hidden'
         )}
       >
+        <Select value={sortBy} onValueChange={onSortChange}>
+          {/* The phone disclosure shares a row with search when space allows. Its
+            sort choices wrap instead of losing their distinguishing words. */}
+          <SelectTrigger
+            aria-label="Sort files"
+            className="min-h-11 h-auto min-w-0 flex-1 gap-1 rounded-lg bg-background/70 px-2 py-1 text-left text-sm font-medium data-[state=open]:bg-accent sm:min-h-10 sm:w-[172px] sm:flex-none sm:px-3 [&>span]:line-clamp-none [&>span]:whitespace-normal [&>span]:leading-4 [&>svg]:shrink-0"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                className={sortItemClassName}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {tagFilter}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -286,21 +313,26 @@ export const FileFilters = memo(function FileFilters({
           </DropdownMenuContent>
         </DropdownMenu>
         <Popover>
+          <PopoverAnchor virtualRef={dateAnchor} />
           <PopoverTrigger asChild>
             <Button
+              ref={dateTrigger}
               variant="outline"
-              aria-label="Upload date"
+              aria-label={
+                dateAndGroupingLabel
+                  ? `Date and grouping: ${dateAndGroupingLabel}`
+                  : 'Date and grouping'
+              }
               className={cn(
                 filterClass,
+                'py-1',
                 (date?.from || groupBy !== 'none') &&
                   'border-primary bg-primary/10 [&_svg]:text-foreground'
               )}
             >
               <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">
-                {date?.from && hydrated
-                  ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
-                  : 'Upload date'}
+              <span className="min-w-0 whitespace-normal text-left leading-4 sm:whitespace-nowrap">
+                {dateAndGroupingLabel || 'Date and grouping'}
               </span>
             </Button>
           </PopoverTrigger>

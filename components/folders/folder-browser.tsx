@@ -39,6 +39,9 @@ import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
 
+const folderNavigationButtonClassName =
+  'h-11 max-w-full shrink-0 flex-wrap gap-1 whitespace-normal px-2 text-xs max-sm:h-auto max-sm:!min-h-[44px] max-sm:!min-w-[44px] max-sm:gap-[4px] max-sm:px-[8px] max-sm:py-[6px] sm:h-8 sm:gap-1.5 sm:px-3 sm:text-sm'
+
 export function FolderBrowser({
   folders,
   value,
@@ -89,7 +92,7 @@ export function FolderBrowser({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0 data-[state=open]:bg-accent"
+          className="h-11 w-11 shrink-0 data-[state=open]:bg-accent sm:h-8 sm:w-8"
           aria-label={`Manage folder ${folder.name}`}
         >
           <MoreHorizontal className="h-4 w-4" />
@@ -139,18 +142,23 @@ export function FolderBrowser({
     </DropdownMenu>
   )
   return (
-    <div className="mt-4 border-t border-border/50 pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div
+      className={cn(
+        'mt-2 border-t border-border/50 pt-2 sm:mt-4 sm:pt-4',
+        !folders.length && !value && !canManage && !error && 'hidden sm:block'
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 sm:gap-3">
         {folders.length || value ? (
           <nav
             aria-label="File library"
-            className="flex min-w-0 flex-wrap items-center gap-1"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-1"
           >
             <Button
               variant={value === null ? 'secondary' : 'ghost'}
               size="sm"
               className={cn(
-                'text-sm',
+                folderNavigationButtonClassName,
                 value !== null && 'text-muted-foreground'
               )}
               aria-current={value === null ? 'page' : undefined}
@@ -162,7 +170,7 @@ export function FolderBrowser({
               variant={value === UNFILED ? 'secondary' : 'ghost'}
               size="sm"
               className={cn(
-                'text-sm',
+                folderNavigationButtonClassName,
                 value !== UNFILED && 'text-muted-foreground'
               )}
               aria-current={value === UNFILED ? 'page' : undefined}
@@ -177,9 +185,15 @@ export function FolderBrowser({
                 aria-expanded={expanded}
                 aria-controls={foldersId}
                 onClick={toggleExpanded}
-                className="gap-1.5 text-sm text-muted-foreground"
+                className={cn(
+                  folderNavigationButtonClassName,
+                  'text-muted-foreground'
+                )}
               >
-                <Folder className="h-4 w-4" aria-hidden="true" />
+                <Folder
+                  className="hidden h-4 w-4 sm:block"
+                  aria-hidden="true"
+                />
                 {current ? 'Subfolders' : 'Folders'}
                 <span className="tabular-nums">{children.length}</span>
                 <ChevronDown
@@ -193,16 +207,24 @@ export function FolderBrowser({
             )}
           </nav>
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <p className="hidden text-sm text-muted-foreground sm:block">
             A place for everything, when you need it.
           </p>
         )}
-        <div className="flex items-center gap-1">
+        <div
+          className={cn(
+            'flex min-w-0 max-w-full flex-wrap items-center gap-1',
+            !current &&
+              value !== UNFILED &&
+              children.length > 0 &&
+              'hidden sm:flex'
+          )}
+        >
           {current && canShare && (
             <Button
               variant="ghost"
               size="sm"
-              className="gap-2"
+              className={cn(folderNavigationButtonClassName, 'text-sm')}
               onClick={() => setAction({ kind: 'share', folder: current })}
             >
               <Share2 className="h-4 w-4" />
@@ -214,7 +236,8 @@ export function FolderBrowser({
               variant="outline"
               size="sm"
               className={cn(
-                'gap-2 px-2 sm:px-3',
+                folderNavigationButtonClassName,
+                'text-sm',
                 value !== UNFILED &&
                   children.length > 0 &&
                   'hidden sm:inline-flex'
@@ -264,19 +287,21 @@ export function FolderBrowser({
         </p>
       ) : (
         <>
-          {/* One line at every width: long folder names truncate rather than
-              wrap, so a separator never starts a line. The trail's text and
-              the Upload here button's ink sit on the content edges. */}
+          {/* Narrow trails wrap whole separator/name groups. Wider layouts
+              keep a single line and truncate long names. */}
           {current && (
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <nav aria-label="Folder breadcrumbs" className="min-w-0 flex-1">
-                <ol className="-ml-1 flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 sm:mt-4 sm:flex-nowrap">
+              <nav
+                aria-label="Folder breadcrumbs"
+                className="min-w-0 max-w-full flex-1 basis-[min(100%,12rem)] sm:basis-0"
+              >
+                <ol className="flex min-w-0 max-w-full flex-wrap items-center gap-1 text-sm text-muted-foreground sm:-ml-1 sm:flex-nowrap">
                   <li className="shrink-0">
                     <button
                       data-flare-control
                       type="button"
                       onClick={() => onChange(null)}
-                      className="rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background max-sm:!min-h-[44px] max-sm:!min-w-[44px] max-sm:px-[4px] max-sm:py-[6px]"
                     >
                       Folders
                     </button>
@@ -284,7 +309,7 @@ export function FolderBrowser({
                   {trail.map((folder, index) => (
                     <li
                       key={folder.id}
-                      className="flex min-w-0 shrink items-center gap-1"
+                      className="flex min-w-0 max-w-full shrink items-center gap-1"
                     >
                       <ChevronRight
                         aria-hidden="true"
@@ -299,7 +324,7 @@ export function FolderBrowser({
                         }
                         title={folder.name}
                         className={cn(
-                          'max-w-56 truncate rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                          'min-w-0 max-w-full flex-1 whitespace-normal rounded px-1 [overflow-wrap:anywhere] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background max-sm:!min-h-[44px] max-sm:!min-w-[44px] max-sm:px-[4px] max-sm:py-[6px] sm:max-w-56 sm:flex-none sm:truncate',
                           index === trail.length - 1 &&
                             'font-medium text-foreground'
                         )}
@@ -314,7 +339,7 @@ export function FolderBrowser({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="-mr-3 shrink-0 gap-2"
+                  className="-mr-3 shrink-0 gap-2 max-sm:ml-auto max-sm:mr-0 max-sm:h-auto max-sm:!min-h-[44px] max-sm:max-w-full max-sm:flex-wrap max-sm:gap-[4px] max-sm:whitespace-normal max-sm:px-[8px] max-sm:py-[6px]"
                   asChild
                 >
                   <Link href={uploadHref(current.id)}>

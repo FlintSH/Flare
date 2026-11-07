@@ -34,6 +34,8 @@ Selecting a role that includes **Administrator** shows a warning: anyone who use
 
 ## What the invited person sees
 
+The password field keeps the account requirements visible while the person types: at least eight characters and at most 72 bytes, with an explanation of emoji and accented letters. Some combined emoji count as several characters toward the minimum. Invalid new passwords and mismatched confirmations show errors beside the affected field after blur or an attempted submission. Correct them before the registration request is sent.
+
 Opening an active link shows **You’re invited** with the name of the person who created the link. If the link grants roles, they appear under **You’ll join with these roles**. The person chooses a **Username**, **Email address**, and **Password**, then chooses **Create account**.
 
 <Screenshot src="/screenshots/invites/register-invite.webp" alt="You're invited page: Alex Morgan invited you to join Flare, with the Moderator role listed above username, email, and password fields" caption="The invite page names the inviter and any roles the link grants." />

@@ -21,7 +21,7 @@ const features = [
   [
     'Share',
     'Rich previews',
-    'Images with zoom, video, audio, PDFs, CSV tables, plain text, and syntax-highlighted code.',
+    'Images with zoom, video, audio, PDFs, CSV tables, and read-only text or code with optional line wrapping.',
     '/guide/sharing',
   ],
   [
@@ -39,7 +39,7 @@ const features = [
   [
     'Share',
     'Short links',
-    'Create a compact URL on your domain and follow its click count.',
+    'Create compact URLs, find destinations, short codes or copied links, and sort your links by date or clicks.',
     '/guide/short-links',
   ],
   [
@@ -135,7 +135,7 @@ const features = [
   [
     'Host & administer',
     'Instance audit log',
-    'Investigate file activity, background processing, access failures, role changes, and settings with searchable audit events.',
+    'Focus on changes and access alerts, or investigate recorded successful reads and request telemetry.',
     '/admin/audit',
   ],
   [

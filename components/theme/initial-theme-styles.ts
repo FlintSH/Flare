@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG, type FlareConfig } from '@/lib/config'
 import { legacyColors } from '@/lib/customization/legacy-appearance'
+import { placeholderText } from '@/lib/customization/placeholder'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 import { themeStyles } from '@/lib/customization/theme'
 
@@ -30,6 +31,7 @@ export function initialThemeStyles(
 
   return `:root {
     ${cssVariables}
+    --placeholder-text: ${placeholderText(customColors)};
     --radius: 0.75rem;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;

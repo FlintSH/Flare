@@ -44,6 +44,12 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
   const [savedName, setSavedName] = useState(user.name || '')
   const [nameChanged, setNameChanged] = useState(false)
   const [proofNotice, setProofNotice] = useState<string | null>(null)
+  const initials = user.name
+    ?.split(' ')
+    .map((name) => name[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   const nameRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -177,24 +183,22 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row gap-6">
-        <div className="flex flex-col items-center">
-          <Avatar className="h-24 w-24">
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+        <div className="flex flex-wrap items-center gap-4 sm:flex-col sm:gap-0">
+          <Avatar className="h-14 w-14 shrink-0 sm:h-24 sm:w-24">
             <AvatarImage
               src={user.image || undefined}
               alt={user.name || 'User avatar'}
               className="object-cover"
             />
-            <AvatarFallback>
-              {user.name?.[0]?.toUpperCase() || 'U'}
-            </AvatarFallback>
+            <AvatarFallback>{initials || 'F'}</AvatarFallback>
           </Avatar>
           <Button
             type="button"
             variant="outline"
             onClick={triggerAvatarUpload}
             disabled={isLoading}
-            className="mt-4 w-full"
+            className="h-auto min-h-11 max-w-full whitespace-normal sm:mt-4 sm:w-full"
           >
             {isLoading ? 'Uploading…' : 'Change avatar'}
           </Button>

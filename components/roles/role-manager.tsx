@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 
 import { apiRequest } from '@/lib/client/request'
@@ -336,7 +337,36 @@ export function RoleManager() {
       ) : (
         <div className="grid min-w-0 gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-9">
           <aside className="min-w-0 space-y-5">
-            <nav aria-label="Roles" className="space-y-1">
+            <div className="space-y-2 lg:hidden">
+              <Label htmlFor="role-picker">Role to edit</Label>
+              <NativeSelect
+                id="role-picker"
+                className="h-11"
+                value={selectedId || '__new'}
+                disabled={busy}
+                onChange={(event) => {
+                  const role = roles.find(
+                    (role) => role.id === event.target.value
+                  )
+                  if (role) requestSelection(role)
+                }}
+              >
+                {!selectedId && (
+                  <option value="__new">
+                    {draft?.name.trim() || 'New role'} · Unsaved
+                  </option>
+                )}
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                    {isEveryoneRole(role)
+                      ? ' · Every account'
+                      : ` · ${role.memberCount} ${role.memberCount === 1 ? 'member' : 'members'}`}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            <nav aria-label="Roles" className="hidden space-y-1 lg:block">
               {draft && !selectedId && (
                 <div className="flex w-full items-center gap-3 rounded-xl border border-dashed border-border bg-card px-3 py-3">
                   <span
@@ -390,8 +420,7 @@ export function RoleManager() {
                 </button>
               ))}
             </nav>
-            {/* The same unboxed aside note as Settings and Profile. */}
-            <div className="border-t border-border/60 px-3.5 pt-6 text-xs leading-relaxed text-muted-foreground">
+            <div className="hidden border-t border-border/60 px-3.5 pt-6 text-xs leading-relaxed text-muted-foreground lg:block">
               <ShieldCheck className="mb-3 h-5 w-5" aria-hidden="true" />
               <p>
                 Everyone is the baseline. Other roles add permissions; switching
@@ -402,6 +431,30 @@ export function RoleManager() {
                 grant access beyond their own permissions.
               </p>
             </div>
+            <details className="group text-xs leading-relaxed text-muted-foreground lg:hidden">
+              <summary
+                data-flare-control=""
+                className="flex min-h-11 list-none [&::-webkit-details-marker]:hidden cursor-pointer items-center gap-2 rounded-md font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                How role permissions combine
+                <ChevronDown
+                  className="h-4 w-4 group-open:rotate-180"
+                  aria-hidden="true"
+                />
+              </summary>
+              <div className="pt-3">
+                <ShieldCheck className="mb-3 h-5 w-5" aria-hidden="true" />
+                <p>
+                  Everyone is the baseline. Other roles add permissions;
+                  switching a permission off never removes access granted by
+                  another role.
+                </p>
+                <p className="mt-3">
+                  Higher positions can manage lower roles. Only administrators
+                  can grant access beyond their own permissions.
+                </p>
+              </div>
+            </details>
           </aside>
           <div className="min-w-0 space-y-5">
             {error && (

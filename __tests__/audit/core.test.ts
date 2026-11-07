@@ -237,18 +237,22 @@ describe('safe durable audit events', () => {
   })
 
   it('keeps concurrent actors isolated and correlates model events with request results', async () => {
+    // Explicitly interleave the actors; loaded event loops can reverse timer order.
+    let releaseAlex!: () => void
+    const morganRecorded = new Promise<void>((resolve) => {
+      releaseAlex = resolve
+    })
     const handler = withAuditRoute(
       async (request: Request) => {
         const name = request.headers.get('fixture-actor')!
         setAuditActor({ id: name, name })
-        await new Promise((resolve) =>
-          setTimeout(resolve, name === 'Alex' ? 5 : 1)
-        )
+        if (name === 'Alex') await morganRecorded
         await recordAudit({
           action: 'file.create',
           category: 'files',
           targetName: `${name}.pdf`,
         })
+        if (name === 'Morgan') releaseAlex()
         return new Response(null, { status: 201 })
       },
       { route: '/api/files' }
@@ -321,7 +325,11 @@ describe('safe durable audit events', () => {
 
 describe('audit filters and authorization contract', () => {
   it('defaults to 50 events and grants access only through explicit audit permission or Administrator', () => {
-    expect(auditQuerySchema.parse({})).toEqual({ page: 1, limit: 50 })
+    expect(auditQuerySchema.parse({})).toEqual({
+      view: 'all',
+      page: 1,
+      limit: 50,
+    })
     expect(DEFAULT_PERMISSIONS).not.toContain('audit.read')
     expect(
       hasPermission(
@@ -343,12 +351,121 @@ describe('audit filters and authorization contract', () => {
     { limit: 101 },
     { limit: 'x' },
     { q: 'a'.repeat(201) },
+    { view: 'unknown' },
+    { view: '' },
+    { view: ['all', 'changes'] },
+    { excludeCategory: 'requests' },
     { outcome: 'unknown' },
     { from: '2026-10-01' },
     { from: '2026-10-02T00:00:00Z', to: '2026-10-01T00:00:00Z' },
     { unexpected: 'field' },
   ])('rejects invalid or unbounded filters: %j', (query) => {
     expect(auditQuerySchema.safeParse(query).success).toBe(false)
+  })
+  it('keeps omitted and explicit all views comprehensive', () => {
+    expect(auditWhere(auditQuerySchema.parse({}))).toEqual({})
+    expect(auditWhere(auditQuerySchema.parse({ view: 'all' }))).toEqual({})
+  })
+  it('hides request telemetry and only known successful access actions in Changes', () => {
+    expect(auditWhere(auditQuerySchema.parse({ view: 'changes' }))).toEqual({
+      NOT: [
+        { category: 'requests' },
+        {
+          AND: [
+            { outcome: 'success' },
+            {
+              action: {
+                in: [
+                  'file.thumbnail',
+                  'file.view',
+                  'file.read',
+                  'file.download',
+                  'archive.browse',
+                  'archive.entry.read',
+                  'archive.member.read',
+                  'archive.source.read',
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+  })
+  it.each(['failure', 'denied'])(
+    'retains %s access alerts outside Requests and combines the search, exact IDs, and date constraints',
+    (outcome) => {
+      const where = auditWhere(
+        auditQuerySchema.parse({
+          view: 'changes',
+          q: 'invoice',
+          category: 'files',
+          action: 'file.thumbnail',
+          outcome,
+          actorId: 'actor-1',
+          targetId: 'file-1',
+          requestId: 'request-1',
+          from: '2026-10-01T00:00:00Z',
+        })
+      )
+      expect(where).toMatchObject({
+        category: 'files',
+        action: 'file.thumbnail',
+        outcome,
+        actorId: 'actor-1',
+        targetId: 'file-1',
+        requestId: 'request-1',
+        createdAt: { gte: new Date('2026-10-01T00:00:00Z') },
+      })
+      expect(where.NOT).toEqual([
+        { category: 'requests' },
+        {
+          AND: [
+            { outcome: 'success' },
+            {
+              action: {
+                in: expect.arrayContaining(['file.thumbnail', 'file.read']),
+              },
+            },
+          ],
+        },
+      ])
+      expect(where.OR).toContainEqual({
+        targetName: { contains: 'invoice', mode: 'insensitive' },
+      })
+    }
+  )
+  it('keeps an explicitly conflicting request category and Changes view conjunctive', () => {
+    const where = auditWhere(
+      auditQuerySchema.parse({ category: 'requests', view: 'changes' })
+    )
+    expect(where.category).toBe('requests')
+    expect(where.NOT).toContainEqual({ category: 'requests' })
+  })
+  it('keeps successful mutations eligible in Changes and failed requests eligible in All activity', () => {
+    const mutation = auditWhere(
+      auditQuerySchema.parse({
+        view: 'changes',
+        action: 'file.delete',
+        outcome: 'success',
+      })
+    )
+    expect(mutation).toMatchObject({
+      action: 'file.delete',
+      outcome: 'success',
+    })
+    expect(mutation.NOT).toEqual([
+      { category: 'requests' },
+      {
+        AND: [
+          { outcome: 'success' },
+          { action: { in: expect.not.arrayContaining(['file.delete']) } },
+        ],
+      },
+    ])
+    expect(
+      auditWhere(auditQuerySchema.parse({ view: 'all', outcome: 'failure' }))
+    ).toEqual({ outcome: 'failure' })
   })
   it('combines filters with inclusive timestamps and a case-insensitive name/action search', () => {
     const where = auditWhere(

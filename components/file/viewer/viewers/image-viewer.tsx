@@ -27,31 +27,39 @@ export function ImageViewer({
   const [failedUrl, setFailedUrl] = useState<string>()
   const [expanded, setExpanded] = useState(false)
   const [loaded, setLoaded] = useState<{
+    url: string
     portrait: boolean
     /** Smaller than the stage both ways, so it gets a margin on the stage. */
     small: boolean
     tone: CheckerTone
   }>()
 
-  if (!src) return <LoadingState message="Loading image…" />
-  if (failedUrl === src) {
+  if (src && failedUrl === src) {
     return (
       <ErrorState error="This image couldn’t be displayed in your browser." />
     )
   }
 
   const cover = sharing.imageFit === 'cover'
+  const ready = !!src && loaded?.url === src
 
   return (
     // A stage between hairlines: narrow images sit on it instead of the
     // card, and light screenshots keep their edges. The expand button sits
     // on the stage's corner, beside a narrow image rather than over it.
     <div
+      aria-busy={!ready}
       className={cn(
         'relative flex w-full items-center justify-center border-y border-border/60 bg-muted/60 dark:bg-muted/30',
-        loaded?.small && !cover && 'py-6'
+        !ready && 'min-h-48',
+        ready && loaded.small && !cover && 'py-6'
       )}
     >
+      {!ready && (
+        <div className="absolute inset-0 flex items-center">
+          <LoadingState message="Loading image…" />
+        </div>
+      )}
       <div className={cover ? 'w-full' : 'max-w-full'}>
         <img
           src={src}
@@ -61,6 +69,7 @@ export function ImageViewer({
             // Before the first paint at the new size.
             flushSync(() =>
               setLoaded({
+                url: src || '',
                 portrait: image.naturalHeight > image.naturalWidth,
                 small:
                   !!stage &&
@@ -74,6 +83,7 @@ export function ImageViewer({
           className={cn(
             checkerClassName(loaded?.tone ?? null),
             'block',
+            !ready && 'invisible',
             cover
               ? 'h-[60vh] w-full object-cover'
               : // Portrait images may use the height that keeps the card,
@@ -92,9 +102,9 @@ export function ImageViewer({
           )}
         />
         {/* Shown once the image has a size, so it sits on its corner. */}
-        {loaded && <ExpandImageButton onClick={() => setExpanded(true)} />}
+        {ready && <ExpandImageButton onClick={() => setExpanded(true)} />}
       </div>
-      {expanded && (
+      {expanded && src && (
         <ImageLightbox
           images={[{ id: file.id, name: file.name, src }]}
           index={0}

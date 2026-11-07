@@ -14,6 +14,9 @@ if (new URL(origin).hostname !== 'localhost')
   throw new Error('Use a disposable localhost instance.')
 const screenshots = process.env.FLARE_AUDIT_SCREENSHOTS
 const videos = process.env.FLARE_AUDIT_VIDEOS
+const flow = process.env.FLARE_AUDIT_TEST_FLOW || 'all'
+if (!['all', 'audit', 'sessions'].includes(flow))
+  throw new Error('FLARE_AUDIT_TEST_FLOW must be all, audit, or sessions.')
 const password = 'Audit-demo-only-2026!'
 const results = []
 
@@ -87,7 +90,7 @@ async function context(browser, recorded = false, mobile = false) {
 }
 async function shot(page, name, locator) {
   if (!screenshots) {
-    if (videos) await page.waitForTimeout(1400)
+    if (videos) await page.waitForTimeout(2600)
     return
   }
   await mkdir(screenshots, { recursive: true })
@@ -360,6 +363,16 @@ async function auditFlow(browser) {
   await expect(
     page.getByRole('region', { name: 'Audit events' })
   ).toHaveAttribute('aria-busy', 'false')
+  await expect(
+    page.getByRole('button', { name: 'More filters', exact: true })
+  ).toHaveAttribute('aria-expanded', 'false')
+  await expect(
+    page.getByRole('group', { name: 'Quick views' }).getByRole('button', {
+      name: 'Changes',
+      exact: true,
+    })
+  ).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel('Event scope', { exact: true })).toBeHidden()
   await shot(page, 'audit-desktop')
   await page
     .getByLabel('Search activity', { exact: true })
@@ -371,16 +384,28 @@ async function auditFlow(browser) {
   await expect(
     page.getByRole('region', { name: 'Audit events' })
   ).toContainText('quarterly-report.txt')
+  await expect(
+    page
+      .locator(
+        'section[aria-label="Audit events"] details[data-audit-action="file.download"]'
+      )
+      .filter({
+        has: page.locator('summary').filter({ hasText: 'Success' }),
+      })
+  ).toHaveCount(0)
   await shot(page, 'audit-filtered')
-  const deleted = page
-    .locator('section[aria-label="Audit events"] details')
-    .filter({ has: page.locator('summary', { hasText: 'file delete' }) })
-    .first()
+  const deleted = page.locator(
+    `section[aria-label="Audit events"] details[data-audit-action="file.delete"][data-audit-target-id="${report.id}"]`
+  )
+  await expect(deleted).toHaveCount(1)
   await deleted.locator('summary').click()
   await expect(deleted).toContainText('Recorded details')
   await deleted.scrollIntoViewIfNeeded()
   await shot(page, 'audit-details', deleted)
+  await page.getByRole('button', { name: 'More filters', exact: true }).click()
+  await expect(page.getByLabel('Event scope', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
+  await page.getByLabel('Event scope', { exact: true }).selectOption('all')
   await page.getByLabel('Outcome', { exact: true }).selectOption('denied')
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click()
   await expect(
@@ -389,7 +414,11 @@ async function auditFlow(browser) {
   await expect(
     page.getByRole('region', { name: 'Audit events' })
   ).toContainText(/denied/i)
-  if (videos) await page.waitForTimeout(1400)
+  await expect(page.getByLabel('Event scope', { exact: true })).toHaveValue(
+    'all'
+  )
+  await page.getByRole('button', { name: 'Hide filters', exact: true }).click()
+  if (videos) await page.waitForTimeout(2400)
   await page
     .getByLabel('Search activity', { exact: true })
     .fill('missing-demo-filename')
@@ -397,11 +426,23 @@ async function auditFlow(browser) {
   await expect(
     page.getByText('No activity matches these filters', { exact: true })
   ).toBeVisible()
-  if (videos) await page.waitForTimeout(1400)
+  await page
+    .getByText('No activity matches these filters', { exact: true })
+    .scrollIntoViewIfNeeded()
+  if (videos) await page.waitForTimeout(2400)
+  await page.getByRole('button', { name: 'More filters', exact: true }).click()
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click()
   await expect(
     page.getByRole('region', { name: 'Audit events' })
   ).toHaveAttribute('aria-busy', 'false')
+  await page
+    .getByRole('group', { name: 'Quick views' })
+    .getByRole('button', { name: 'Changes', exact: true })
+    .click()
+  await expect(
+    page.getByRole('region', { name: 'Audit events' })
+  ).toHaveAttribute('aria-busy', 'false')
+  await page.getByRole('button', { name: 'Hide filters', exact: true }).click()
   if (screenshots || !videos) {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.evaluate(() => scrollTo(0, 0))
@@ -409,10 +450,10 @@ async function auditFlow(browser) {
     await shot(page, 'audit-mobile')
   } else {
     await page.evaluate(() => scrollTo(0, 0))
-    await page.waitForTimeout(1400)
+    await page.waitForTimeout(2400)
   }
   results.push(
-    'Actual upload/share/download/denied/OCR-invalid/delete activity, role assignment/settings, snapshot preservation and secret exclusion, admin/bearer boundaries, filters/details/empty state on desktop/mobile'
+    `Actual upload/share/download/denied/real OCR/OCR-invalid/delete activity, role assignment/settings, snapshot preservation and secret exclusion, admin/bearer boundaries, default Changes/collapsed filters, explicit All activity denied investigation, filters/details/empty state on ${screenshots || !videos ? 'desktop/mobile' : 'desktop recording'}`
   )
   await finish(admin, page, 'audit-investigation')
   await member.close()
@@ -424,8 +465,8 @@ async function main() {
     slowMo: videos ? 100 : 0,
   })
   try {
-    await sessionFlow(browser)
-    await auditFlow(browser)
+    if (flow !== 'audit') await sessionFlow(browser)
+    if (flow !== 'sessions') await auditFlow(browser)
     for (const result of results) console.log(`PASS: ${result}`)
   } finally {
     await browser.close()

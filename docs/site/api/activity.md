@@ -91,12 +91,19 @@ location.assign('/auth/login')
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `q`                                                      | Optional text, at most 200 characters; case-insensitive substring search across actor name, action, target name/ID, and request ID.                                                                                                          |
 | `category`, `action`, `actorId`, `targetId`, `requestId` | Optional exact-match strings, at most 200 characters each.                                                                                                                                                                                   |
+| `view`                                                   | `all` or `changes`; default `all`. `all` includes routine successful access and requests. `changes` applies the fixed activity scope below. Empty, unknown, or repeated values return `400`.                                                 |
 | `outcome`                                                | Optional `success`, `failure`, or `denied`; omit for all outcomes.                                                                                                                                                                           |
 | `from`, `to`                                             | Optional ISO timestamps bounding event time. Timezone offsets from `-23:59` to `+23:59` are accepted with or without a colon (`+02:00` or `+0200`); `from` must not be later than `to`. Use UTC timestamps with a `Z` suffix in API clients. |
 | `page`                                                   | Integer 1–100,000; default `1`.                                                                                                                                                                                                              |
 | `limit`                                                  | Integer 1–100; default `50`.                                                                                                                                                                                                                 |
 
-The result has `{ events, total, page, limit, pages, filters }`. `filters` supplies global category and action choices as `{ categories: string[], actions: string[] }`, capped at 100 categories and 500 actions. The default query covers all time, and `pages` is at least `1` even with zero matches. Results are ordered by descending `createdAt`, then descending `id`; page navigation reflects a live dataset, so new events can shift later pages. Batched events can share timestamps, and the ID tie-breaker does not establish causal order across events. Keep the same filters across page requests. Dates are serialized as ISO strings.
+The result has `{ events, total, page, limit, pages, filters }`. `filters` supplies global category and action choices as `{ categories: string[], actions: string[] }`, capped at 100 categories and 500 actions. The API default still covers all categories and all time; the browser starts in **Changes** by explicitly sending `view=changes`. Existing API callers need no changes to retain comprehensive results.
+
+`view=changes` omits category `requests` at every outcome, and omits **only successful** events for these exact actions: `file.thumbnail`, `file.view`, `file.read`, `file.download`, `archive.browse`, `archive.entry.read`, `archive.member.read`, and `archive.source.read`. Failed and denied access outside `requests` remains included, as do mutations and other activity. Folder API reads already use category `requests`; there is no separate folder-read action. `view=all` includes the retained access and request events, subject to the other supplied filters.
+
+The view combines with every other filter, including `category`: `category=requests&view=changes` matches nothing; the API does not silently switch the caller's requested view. The browser instead changes **Event scope** to **All activity** when a person selects **Category → requests**. The view affects both `events` and the matching `total`/`pages`, but does not narrow the global filter choices. It does not delete events or change recording, retention, or authorization.
+
+`pages` is at least `1` even with zero matches. Results are ordered by descending `createdAt`, then descending `id`; page navigation reflects a live dataset, so new events can shift later pages. Batched events can share timestamps, and the ID tie-breaker does not establish causal order across events. Keep the same filters across page requests. Dates are serialized as ISO strings.
 
 Each event exposes `id`, `createdAt`, `action`, `category`, `outcome`, `actorId`, `actorName`, `targetType`, `targetId`, `targetName`, `requestId`, `method`, `route`, `status`, and `details`. Fields without available context can be null. Only request events, such as `http.post` or `audit.read`, have a `status`; events recorded while handling that request share its `requestId`, `method`, and `route`. Database change events have the action `<targetType>.<operation>`, such as `file.update` or `file_tag.deleteMany`; the [audit log guide](/admin/audit#what-is-recorded) lists the record types. `details` contains selected safe metadata, not a stable snapshot of an entire account/file/settings record. File snapshot `details.before.size` and `details.after.size` are database file sizes in MiB (1,048,576 bytes), not upload-request byte counts.
 
@@ -107,6 +114,7 @@ For example, from a signed-in disposable administrator's console, after defining
 ```js
 const query = new URLSearchParams({
   q: 'quarterly-report.txt',
+  view: 'changes',
   from: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   to: new Date().toISOString(),
   page: '1',
@@ -117,7 +125,7 @@ console.table(result.events)
 console.log(result.total, result.filters)
 ```
 
-Upload and change visibility/delete a disposable file with that name before running the query, or substitute a real demonstration filename. For failures, remove `q`, set `outcome=failure`, and compare with application logs. Do not print real instance audit records into public issue reports.
+Upload and change visibility/delete a disposable file with that name before running the query, or substitute a real demonstration filename. This example uses **Changes** to leave out request telemetry and routine successful access. For failures across every category, remove `q`, set `view=all` and `outcome=failure`, and compare with application logs. To inspect generic request telemetry alone, use `view=all` and `category=requests`. Use `view=all` without a category restriction to recover routine successful access events. Do not print real instance audit records into public issue reports.
 
 ## Errors and compatibility
 

@@ -323,7 +323,7 @@ export function LoginForm({
                 autoComplete="current-password"
                 data-sensitive="true"
               />
-              {recoveryEnabled && (
+              {recoveryEnabled ? (
                 <p className="text-right text-sm">
                   <Link
                     href="/auth/forgot-password"
@@ -331,6 +331,11 @@ export function LoginForm({
                   >
                     Forgot your password?
                   </Link>
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  For password help, contact the person who provided or manages
+                  your account.
                 </p>
               )}
             </div>

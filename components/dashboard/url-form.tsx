@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 import { z } from 'zod'
@@ -25,7 +25,14 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const active = useRef(true)
   const { toast } = useToast()
+  useEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+    }
+  }, [])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -39,6 +46,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
         body: { url: validatedData.url },
         fallback: 'Could not create a short link. Please try again.',
       })
+      if (!active.current) return
       setCopied(false)
       setUrl('')
       toast({
@@ -47,6 +55,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
       })
       onUrlAdded(created.shortCode)
     } catch (failure) {
+      if (!active.current) return
       setError(
         failure instanceof z.ZodError
           ? failure.issues[0].message
@@ -55,16 +64,18 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
             : 'Could not create a short link. Please try again.'
       )
     } finally {
-      setIsLoading(false)
+      if (active.current) setIsLoading(false)
     }
   }
 
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(createdUrl)
+      if (!active.current) return
       setCopied(true)
       toast({ title: 'Link copied' })
     } catch {
+      if (!active.current) return
       toast({
         title: 'Could not copy link',
         description: 'Select the link above and copy it manually.',
@@ -81,7 +92,7 @@ export function URLForm({ createdUrl, onUrlAdded }: URLFormProps) {
           <Input
             id="url"
             type="url"
-            placeholder="https://example.com"
+            placeholder="Enter a URL"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             required
