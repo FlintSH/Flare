@@ -27,11 +27,11 @@ needs is PostgreSQL and a container host.
 ## What you get
 
 - **Uploads from your screenshot tool.** Import a ready-made config for ShareX or
-  iTake, or download a capture script for Flameshot, Spectacle or Bash. Your upload
-  token is already filled in.
+  iTake, download a capture script for Flameshot or Spectacle, or get a Bash
+  uploader. Your upload token is already filled in.
 - **Links that preview.** Image and video links unfurl in Discord, Slack and other
-  apps that read Open Graph tags. In the browser, images, video, audio, PDFs,
-  spreadsheets and code open in a clean viewer.
+  apps that read Open Graph tags. In the browser, images, video, audio, PDFs, CSV
+  files and code open in a clean viewer.
 - **Pastes and short links.** Share code with syntax highlighting, and shorten URLs
   under your own domain with click counts.
 - **A library that stays usable.** Folders, tags, search that includes text found in
