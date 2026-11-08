@@ -1348,26 +1348,42 @@ async function main() {
           await expect
             .poll(() => page.evaluate(() => scrollY))
             .toBeGreaterThan(0)
-          const index = await triggers.evaluateAll((elements) =>
-            elements.findIndex((element) => {
-              const box = element.getBoundingClientRect()
-              const hit = document.elementFromPoint(
-                box.x + box.width / 2,
-                box.y + box.height / 2
+          let index = -1
+          await expect
+            .poll(async () => {
+              index = await triggers.evaluateAll((elements) =>
+                elements.findIndex((element) => {
+                  const box = element.getBoundingClientRect()
+                  const hit = document.elementFromPoint(
+                    box.x + box.width / 2,
+                    box.y + box.height / 2
+                  )
+                  return (
+                    box.top >= 80 &&
+                    box.bottom <= innerHeight - 16 &&
+                    (hit === element || element.contains(hit))
+                  )
+                })
               )
-              return (
-                box.top >= 80 &&
-                box.bottom <= innerHeight - 16 &&
-                (hit === element || element.contains(hit))
-              )
+              return index
             })
-          )
-          assert.ok(
-            index >= 0,
-            'A visible menu trigger is required after scrolling'
-          )
+            .toBeGreaterThanOrEqual(0)
           trigger = triggers.nth(index)
         }
+        // Virtualized rows can change which button is first during native
+        // scrolling. Keep this case attached to the file that opens the menu.
+        const opener = await trigger.evaluate((element) => ({
+          fileIndex: element
+            .closest('[data-file-index]')
+            ?.getAttribute('data-file-index'),
+          name: element.getAttribute('aria-label'),
+        }))
+        assert.match(opener.fileIndex || '', /^\d+$/)
+        assert.ok(opener.name)
+        trigger = page
+          .getByRole('list', { name: 'Your files', exact: true })
+          .locator(`[data-file-index="${opener.fileIndex}"]`)
+          .getByRole('button', { name: opener.name, exact: true })
         await trigger.click()
         if (scrolledCase)
           assert.ok(
@@ -1454,7 +1470,7 @@ async function main() {
         await expect(trigger).toBeFocused()
         check(
           `Complete file menu bounds, directional scroll cues and keyboard End/Home at ${width}×${height}`,
-          { initialBounds: bounds, end, home }
+          { opener, initialBounds: bounds, end, home }
         )
       }
       await goto('/dashboard?search=release-checklist.md')
