@@ -1338,21 +1338,25 @@ async function main() {
       for (const height of [568, 740, 844]) {
         await page.setViewportSize({ width, height })
         await goto('/dashboard')
-        const triggers = page
-          .getByRole('list', { name: 'Your files', exact: true })
-          .locator('button[aria-haspopup="menu"]')
+        const library = page.getByRole('list', {
+          name: 'Your files',
+          exact: true,
+        })
+        const triggers = library.locator('button[aria-haspopup="menu"]')
         const scrolledCase = width === 390 && height === 844
-        let trigger = triggers.first()
+        let opener
         if (scrolledCase) {
+          // Scroll the ready library, rather than its initial loading placeholders.
+          await expect(library).toHaveAttribute('aria-busy', 'false')
+          await library.locator('[data-file-card]').first().waitFor()
+          await page.evaluate(() => document.fonts.ready)
           await page.evaluate(() => window.scrollTo(0, 1000))
-          await expect
-            .poll(() => page.evaluate(() => scrollY))
-            .toBeGreaterThan(0)
-          let index = -1
+          let previous
           await expect
             .poll(async () => {
-              index = await triggers.evaluateAll((elements) =>
-                elements.findIndex((element) => {
+              opener = await triggers.evaluateAll((elements) => {
+                if (scrollY <= 0) return null
+                const element = elements.find((element) => {
                   const box = element.getBoundingClientRect()
                   const hit = document.elementFromPoint(
                     box.x + box.width / 2,
@@ -1364,24 +1368,36 @@ async function main() {
                     (hit === element || element.contains(hit))
                   )
                 })
-              )
-              return index
+                if (!element) return null
+                return {
+                  fileIndex: element
+                    .closest('[data-file-index]')
+                    ?.getAttribute('data-file-index'),
+                  name: element.getAttribute('aria-label'),
+                  windowScrollY: scrollY,
+                  bounds: element.getBoundingClientRect().toJSON(),
+                }
+              })
+              const signature = JSON.stringify(opener)
+              const stable = opener !== null && signature === previous
+              previous = signature
+              return stable
             })
-            .toBeGreaterThanOrEqual(0)
-          trigger = triggers.nth(index)
+            .toBe(true)
+        } else {
+          opener = await triggers.first().evaluate((element) => ({
+            fileIndex: element
+              .closest('[data-file-index]')
+              ?.getAttribute('data-file-index'),
+            name: element.getAttribute('aria-label'),
+            windowScrollY: scrollY,
+          }))
         }
-        // Virtualized rows can change which button is first during native
-        // scrolling. Keep this case attached to the file that opens the menu.
-        const opener = await trigger.evaluate((element) => ({
-          fileIndex: element
-            .closest('[data-file-index]')
-            ?.getAttribute('data-file-index'),
-          name: element.getAttribute('aria-label'),
-        }))
-        assert.match(opener.fileIndex || '', /^\d+$/)
+        // Pin the actual visible file in the same DOM read that selects it;
+        // virtualized DOM positions can change before the next browser call.
+        assert.match(opener?.fileIndex || '', /^\d+$/)
         assert.ok(opener.name)
-        trigger = page
-          .getByRole('list', { name: 'Your files', exact: true })
+        const trigger = library
           .locator(`[data-file-index="${opener.fileIndex}"]`)
           .getByRole('button', { name: opener.name, exact: true })
         await trigger.click()
