@@ -18,10 +18,13 @@ needs is PostgreSQL and a container host.
 
 <p align="center">
   <a href="https://flintsh.github.io/Flare/demos.html">
-    <img src="./.github/assets/readme/demo.webp" width="100%" alt="Recording of Flare: a screenshot is dropped onto the file library, uploads with a progress bar, its link is copied, and its share page opens." />
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/demo-light.webp" />
+      <img src="./.github/assets/readme/demo-dark.webp" width="100%" alt="Recording of Flare: a screenshot is dropped onto the file library and uploads, the new file is opened, and Copy link on its share page confirms the link was copied." />
+    </picture>
   </a>
   <br />
-  <sub>Drop a file, copy the link, open it. Recorded in a real Flare instance with demo data.</sub>
+  <sub>Drop a file, open it, copy the link. Recorded in a real Flare instance with demo data.</sub>
 </p>
 
 ## What you get
@@ -135,27 +138,17 @@ then run `docker compose pull flare && docker compose up -d flare`.
 
 ## A closer look
 
-<table>
-  <tr>
-    <td colspan="2">
-      <picture>
-        <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/library-light.webp" />
-        <img src="./.github/assets/readme/library-dark.webp" alt="Flare's file library with folders, filters and a grid of image previews" />
-      </picture>
-      <p align="center"><sub><b>Your library.</b> Search, filter and organize everything you upload.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./.github/assets/readme/share.webp" alt="A shared image page with Download, Copy link, Extract text and Open original buttons" />
-      <p align="center"><sub><b>Share pages.</b> What people see when they open your link.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="./.github/assets/readme/code.webp" alt="A shared Python file, thumbnails.py, shown with line numbers, syntax highlighting and a Copy text button" />
-      <p align="center"><sub><b>Code and pastes.</b> Highlighted by file extension.</sub></p>
-    </td>
-  </tr>
-</table>
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/library-light.webp" />
+  <img src="./.github/assets/readme/library-dark.webp" alt="Flare's file library with folders, filters and a grid of screenshots and images" />
+</picture>
+<p align="center"><sub><b>Your library.</b> Search, filter and organize everything you upload.</sub></p>
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/screenshot-tools-light.webp" />
+  <img src="./.github/assets/readme/screenshot-tools-dark.webp" alt="The Screenshot tools and scripts card in Profile, with downloads for ShareX, iTake, Flameshot, Spectacle and a Bash uploader" />
+</picture>
+<p align="center"><sub><b>Screenshot tools.</b> Download a config or script with your instance and upload token filled in.</sub></p>
 
 More screens and recorded walkthroughs are in the [interactive demos](https://flintsh.github.io/Flare/demos.html).
 
