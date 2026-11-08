@@ -1247,18 +1247,31 @@ async function main() {
               const bounds = parent.getBoundingClientRect()
               const clipsX = /auto|scroll|hidden|clip/.test(style.overflowX)
               const clipsY = /auto|scroll|hidden|clip/.test(style.overflowY)
+              // Root overflow clips the viewport. Its document rectangle
+              // moves with scrollY, while clientHeight remains viewport-sized.
+              const viewportRoot = parent === document.documentElement
               if (clipsX) {
-                clip.left = Math.max(clip.left, bounds.left + parent.clientLeft)
+                clip.left = Math.max(
+                  clip.left,
+                  viewportRoot ? 0 : bounds.left + parent.clientLeft
+                )
                 clip.right = Math.min(
                   clip.right,
-                  bounds.left + parent.clientLeft + parent.clientWidth
+                  viewportRoot
+                    ? parent.clientWidth
+                    : bounds.left + parent.clientLeft + parent.clientWidth
                 )
               }
               if (clipsY) {
-                clip.top = Math.max(clip.top, bounds.top + parent.clientTop)
+                clip.top = Math.max(
+                  clip.top,
+                  viewportRoot ? 0 : bounds.top + parent.clientTop
+                )
                 clip.bottom = Math.min(
                   clip.bottom,
-                  bounds.top + parent.clientTop + parent.clientHeight
+                  viewportRoot
+                    ? parent.clientHeight
+                    : bounds.top + parent.clientTop + parent.clientHeight
                 )
               }
               if (clipsX || clipsY)
@@ -1268,6 +1281,7 @@ async function main() {
                   bounds: bounds.toJSON(),
                   clipsX,
                   clipsY,
+                  viewportRoot,
                 })
             }
             const hits = [0.1, 0.5, 0.9].map((fraction) => {
@@ -1291,6 +1305,7 @@ async function main() {
               ancestors,
               hits,
               focused: document.activeElement === element,
+              windowScrollY: scrollY,
             }
           })
           const { target: box, menu, scroll, clip, hits } = measurement
@@ -1323,11 +1338,42 @@ async function main() {
       for (const height of [568, 740, 844]) {
         await page.setViewportSize({ width, height })
         await goto('/dashboard')
-        const trigger = page
+        const triggers = page
           .getByRole('list', { name: 'Your files', exact: true })
           .locator('button[aria-haspopup="menu"]')
-          .first()
+        const scrolledCase = width === 390 && height === 844
+        let trigger = triggers.first()
+        if (scrolledCase) {
+          await page.evaluate(() => window.scrollTo(0, 1000))
+          await expect
+            .poll(() => page.evaluate(() => scrollY))
+            .toBeGreaterThan(0)
+          const index = await triggers.evaluateAll((elements) =>
+            elements.findIndex((element) => {
+              const box = element.getBoundingClientRect()
+              const hit = document.elementFromPoint(
+                box.x + box.width / 2,
+                box.y + box.height / 2
+              )
+              return (
+                box.top >= 80 &&
+                box.bottom <= innerHeight - 16 &&
+                (hit === element || element.contains(hit))
+              )
+            })
+          )
+          assert.ok(
+            index >= 0,
+            'A visible menu trigger is required after scrolling'
+          )
+          trigger = triggers.nth(index)
+        }
         await trigger.click()
+        if (scrolledCase)
+          assert.ok(
+            await page.evaluate(() => scrollY > 0),
+            'Opening the visible menu retains native page scroll'
+          )
         const menu = page.getByRole('menu')
         await expect(menu).toBeVisible()
         await expect
@@ -1399,6 +1445,11 @@ async function main() {
         await expect(aboveCue).toBeHidden()
         if (overflowing) await expect(belowCue).toBeVisible()
         const home = await settledMenuTarget(items.first(), width, height)
+        if (scrolledCase)
+          assert.ok(
+            end.windowScrollY > 0 && home.windowScrollY > 0,
+            'End and Home retain a nonzero native page scroll while menu clipping is checked'
+          )
         await page.keyboard.press('Escape')
         await expect(trigger).toBeFocused()
         check(
