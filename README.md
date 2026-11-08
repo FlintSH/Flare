@@ -50,12 +50,16 @@ of these with a guide.
 
 ## Quick start
 
-**Railway:** start from the template, check the [Railway guide](https://flintsh.github.io/Flare/hosting/railway.html)
-for storage and domain settings, then open `/setup`.
+**Railway**
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/JVT41u?referralCode=R5s8WT)
 
-**Docker Compose:**
+Start from the template, check the [Railway guide](https://flintsh.github.io/Flare/hosting/railway.html)
+for storage and domain settings, then open `/setup`.
+
+**Docker Compose**
+
+You need Docker with the Compose plugin and OpenSSL.
 
 1. In an empty directory, create a `.env` with two fresh secrets:
 
@@ -66,8 +70,15 @@ for storage and domain settings, then open `/setup`.
    ```
 
 2. Expand **compose.yaml** below and save it in the same directory.
-3. Run `docker compose up -d`, open `http://localhost:3000/setup` and create your
-   account. The first account is the administrator.
+3. Start Flare:
+
+   ```sh
+   docker compose up -d
+   ```
+
+4. Open `http://localhost:3000/setup` and create your account. The first account
+   is the administrator. If Docker runs on another machine, first run
+   `ssh -L 3000:127.0.0.1:3000 you@your-server` on your computer and keep it open.
 
 <details>
 <summary><b>compose.yaml</b></summary>
@@ -118,6 +129,9 @@ behind [a reverse proxy with HTTPS](https://flintsh.github.io/Flare/hosting/reve
 and set `NEXTAUTH_URL` to your public address. The [Docker guide](https://flintsh.github.io/Flare/hosting/docker.html)
 covers pinning a version, existing databases and remote servers. Images are
 published as `flintsh/flare` and `ghcr.io/flintsh/flare` for AMD64 and ARM64.
+
+To update, [take a backup](https://flintsh.github.io/Flare/hosting/maintenance.html#upgrade-flare),
+then run `docker compose pull flare && docker compose up -d flare`.
 
 ## A closer look
 
