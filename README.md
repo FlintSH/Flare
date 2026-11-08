@@ -8,28 +8,30 @@
 [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
 [![MIT license](https://img.shields.io/github/license/FlintSH/Flare?style=flat-square)](LICENSE)
 
-[**Documentation**](https://flintsh.github.io/Flare/) · [Install](#quick-start) · [Demos](https://flintsh.github.io/Flare/demos.html) · [API](https://flintsh.github.io/Flare/api/) · [Discord](https://discord.gg/mwVAjKwPus)
+[**Documentation**](https://flintsh.github.io/Flare/) · [Install](#quick-start) · [Demos](https://flintsh.github.io/Flare/demos.html) · [API](https://flintsh.github.io/Flare/api/)
 
 </div>
 
 Flare runs on your server and your domain. Upload from the browser or straight from
-ShareX, Flameshot, Spectacle, iTake or a shell script, and get a link that previews
-properly wherever you paste it. All it needs is PostgreSQL and a container host.
+ShareX, Flameshot, Spectacle, iTake or a shell script, and share the link. All it
+needs is PostgreSQL and a container host.
 
 <p align="center">
   <a href="https://flintsh.github.io/Flare/demos.html">
-    <img src="./.github/assets/readme/demo.webp" width="100%" alt="Recording of Flare: a screenshot is dropped onto the file library, uploads with a progress bar, its link is copied, its share page opens, and then a Python paste is created and shown with syntax highlighting." />
+    <img src="./.github/assets/readme/demo.webp" width="100%" alt="Recording of Flare: a screenshot is dropped onto the file library, uploads with a progress bar, its link is copied, and its share page opens." />
   </a>
   <br />
-  <sub>Drop a file, copy the link, share it. Recorded in a real Flare instance with demo data.</sub>
+  <sub>Drop a file, copy the link, open it. Recorded in a real Flare instance with demo data.</sub>
 </p>
 
 ## What you get
 
-- **Uploads from your screenshot tool.** Download a ready-made config for ShareX,
-  Flameshot, Spectacle or iTake, or a Bash uploader. No API key to copy around.
-- **Share pages that look good.** Images, video, audio, PDFs, spreadsheets and code
-  open in a clean viewer and embed with rich previews in chat apps.
+- **Uploads from your screenshot tool.** Import a ready-made config for ShareX or
+  iTake, or download a capture script for Flameshot, Spectacle or Bash. Your upload
+  token is already filled in.
+- **Links that preview.** Image and video links unfurl in Discord, Slack and other
+  apps that read Open Graph tags. In the browser, images, video, audio, PDFs,
+  spreadsheets and code open in a clean viewer.
 - **Pastes and short links.** Share code with syntax highlighting, and shorten URLs
   under your own domain with click counts.
 - **A library that stays usable.** Folders, tags, search that includes text found in
@@ -46,42 +48,6 @@ properly wherever you paste it. All it needs is PostgreSQL and a container host.
 The [feature explorer](https://flintsh.github.io/Flare/features.html) covers each
 of these with a guide.
 
-## A closer look
-
-<table>
-  <tr>
-    <td colspan="2">
-      <picture>
-        <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/library-light.webp" />
-        <img src="./.github/assets/readme/library-dark.webp" alt="Flare's file library with folders, filters and a grid of image previews" />
-      </picture>
-      <p align="center"><sub><b>Your library.</b> Search, filter and organize everything you upload.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./.github/assets/readme/share.webp" alt="A shared image page with download, copy link, extract text and open original buttons" />
-      <p align="center"><sub><b>Share pages.</b> What people see when they open your link.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="./.github/assets/readme/code.webp" alt="A shared TypeScript file shown with line numbers and syntax highlighting" />
-      <p align="center"><sub><b>Code and pastes.</b> Highlighted by file extension.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="./.github/assets/readme/screenshot-tools.webp" alt="The screenshot tools card in Profile, with downloads for ShareX, iTake, Flameshot, Spectacle and a Bash script" />
-      <p align="center"><sub><b>Screenshot tools.</b> One download sets up your capture app.</sub></p>
-    </td>
-    <td width="50%">
-      <img src="./.github/assets/readme/roles.webp" alt="The Roles page listing Admin, Moderator, Creator, Guest and Everyone with member counts" />
-      <p align="center"><sub><b>Roles.</b> Decide who can upload, share, moderate or manage.</sub></p>
-    </td>
-  </tr>
-</table>
-
-More walkthroughs and recordings are in the [interactive demos](https://flintsh.github.io/Flare/demos.html).
-
 ## Quick start
 
 **Railway:** start from the template, check the [Railway guide](https://flintsh.github.io/Flare/hosting/railway.html)
@@ -89,19 +55,22 @@ for storage and domain settings, then open `/setup`.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/JVT41u?referralCode=R5s8WT)
 
-**Docker Compose:** in an empty directory, create a `.env` with two fresh secrets:
+**Docker Compose:**
 
-```sh
-umask 077
-printf 'POSTGRES_PASSWORD=%s\nNEXTAUTH_SECRET=%s\nNEXTAUTH_URL=http://localhost:3000\n' \
-  "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
-```
+1. In an empty directory, create a `.env` with two fresh secrets:
 
-Save the `compose.yaml` below next to it, run `docker compose up -d`, and open
-`http://localhost:3000/setup`. The first account you create is the administrator.
+   ```sh
+   umask 077
+   printf 'POSTGRES_PASSWORD=%s\nNEXTAUTH_SECRET=%s\nNEXTAUTH_URL=http://localhost:3000\n' \
+     "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+   ```
+
+2. Expand **compose.yaml** below and save it in the same directory.
+3. Run `docker compose up -d`, open `http://localhost:3000/setup` and create your
+   account. The first account is the administrator.
 
 <details>
-<summary><code>compose.yaml</code></summary>
+<summary><b>compose.yaml</b></summary>
 
 ```yaml
 name: flare
@@ -150,19 +119,45 @@ and set `NEXTAUTH_URL` to your public address. The [Docker guide](https://flints
 covers pinning a version, existing databases and remote servers. Images are
 published as `flintsh/flare` and `ghcr.io/flintsh/flare` for AMD64 and ARM64.
 
+## A closer look
+
+<table>
+  <tr>
+    <td colspan="2">
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/library-light.webp" />
+        <img src="./.github/assets/readme/library-dark.webp" alt="Flare's file library with folders, filters and a grid of image previews" />
+      </picture>
+      <p align="center"><sub><b>Your library.</b> Search, filter and organize everything you upload.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./.github/assets/readme/share.webp" alt="A shared image page with Download, Copy link, Extract text and Open original buttons" />
+      <p align="center"><sub><b>Share pages.</b> What people see when they open your link.</sub></p>
+    </td>
+    <td width="50%">
+      <img src="./.github/assets/readme/code.webp" alt="A shared TypeScript file shown with line numbers and syntax highlighting" />
+      <p align="center"><sub><b>Code and pastes.</b> Highlighted by file extension.</sub></p>
+    </td>
+  </tr>
+</table>
+
+More screens and recorded walkthroughs are in the [interactive demos](https://flintsh.github.io/Flare/demos.html).
+
 ## Documentation
 
-The [Flare handbook](https://flintsh.github.io/Flare/) has screenshots, recorded
-demos, and docs archived for every stable release.
+The [Flare handbook](https://flintsh.github.io/Flare/) covers using, running and
+extending Flare, with docs archived for every stable release.
 
-| I want to…                  | Read                                                                                                                                                                                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Install and run Flare       | [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html) |
-| Set up my screenshot tool   | [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html) · [Upload profiles](https://flintsh.github.io/Flare/guide/upload-profiles.html)                                                                                                                                  |
-| Share and organize files    | [Uploading](https://flintsh.github.io/Flare/guide/uploading.html) · [Sharing and privacy](https://flintsh.github.io/Flare/guide/sharing.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html)                                                                                    |
-| Run an instance for a group | [First-run setup](https://flintsh.github.io/Flare/admin/setup.html) · [Roles](https://flintsh.github.io/Flare/admin/roles.html) · [Single sign-on](https://flintsh.github.io/Flare/admin/sso.html) · [Email](https://flintsh.github.io/Flare/admin/email.html)                                   |
-| Build an integration        | [API](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html) · [OpenAPI](https://flintsh.github.io/Flare/openapi.json)                                                                                                                            |
-| Fix a problem               | [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html) · [Discord](https://discord.gg/mwVAjKwPus)                                                                                                                                                                       |
+| I want to…               | Start with                                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Run Flare                | [Deployment](https://flintsh.github.io/Flare/hosting/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html) |
+| Set up my screenshot app | [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)                                                           |
+| Share and organize files | [Sharing and privacy](https://flintsh.github.io/Flare/guide/sharing.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) |
+| Run it for a group       | [First-run setup](https://flintsh.github.io/Flare/admin/setup.html) · [Roles](https://flintsh.github.io/Flare/admin/roles.html)           |
+| Build an integration     | [API](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html)                               |
+| Fix a problem            | [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)                                                           |
 
 ## Community
 
