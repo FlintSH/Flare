@@ -1,134 +1,180 @@
 <div align="center">
-  <img src="./public/banner.png" alt="Flare Banner" width="600px" />
-  <p><small><i>Icon designed by <a href="https://ko-fi.com/xnefas/">xNefas</a></i></small></p>
+  <img src="./public/icon.svg" alt="" width="88" height="88" />
+  <h1>Flare</h1>
+  <p><strong>Your own file host for screenshots, files, pastes and short links.</strong></p>
 
-### A modern, lightning-fast file sharing platform built for self-hosting
-
-[![Version](https://img.shields.io/github/v/release/FlintSH/flare?include_prereleases&style=flat-square&logo=github)](https://github.com/FlintSH/flare/releases)
-[![Last Commit](https://img.shields.io/github/last-commit/FlintSH/flare?style=flat-square&logo=git)](https://github.com/FlintSH/flare/commits/main)
-[![Stars](https://img.shields.io/github/stars/FlintSH/flare?style=flat-square&logo=github)](https://github.com/FlintSH/flare/stargazers)
+[![Release](https://img.shields.io/github/v/release/FlintSH/Flare?style=flat-square&logo=github&label=release)](https://github.com/FlintSH/Flare/releases)
+[![Docker pulls](https://img.shields.io/docker/pulls/flintsh/flare?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/r/flintsh/flare)
 [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
+[![MIT license](https://img.shields.io/github/license/FlintSH/Flare?style=flat-square)](LICENSE)
+
+[**Documentation**](https://flintsh.github.io/Flare/) · [Install](#quick-start) · [Demos](https://flintsh.github.io/Flare/demos.html) · [API](https://flintsh.github.io/Flare/api/)
 
 </div>
-Flare is a modern, self-hostable file sharing platform designed to work seamlessly with popular screenshot and sharing tools like ShareX, Flameshot, and KDE Spectacle. Built with Next.js and designed with simplicity in mind, it offers a complete solution for all your file sharing needs with a strong focus on performance, customizability, and user experience.
 
-## 📖 Documentation
+Flare runs on your server and your domain. Upload from the browser or straight from
+ShareX, Flameshot, Spectacle, iTake or a shell script, and share the link. All it
+needs is PostgreSQL and a container host.
 
-The [Flare documentation](https://flintsh.github.io/Flare/) covers everyday workflows,
-self-hosting, administration, the API, and webhooks. Find what you need with
-search, explore interactive examples, and follow real screenshots and recorded
-app demos.
+<p align="center">
+  <a href="https://flintsh.github.io/Flare/demos.html">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/demo-light.webp" />
+      <img src="./.github/assets/readme/demo-dark.webp" width="100%" alt="Recording of Flare: a screenshot is dropped onto the file library and uploads, the new file is opened, and Copy link on its share page confirms the link was copied." />
+    </picture>
+  </a>
+  <br />
+  <sub>Drop a file, open it, copy the link. Recorded in a real Flare instance with demo data.</sub>
+</p>
 
-The deployed handbook follows the **current stable release**. [Documentation
-versions and changes](https://flintsh.github.io/Flare/versions.html) lists dated
-archives for every stable release and lets you compare the original documentation
-between releases. Releases before the handbook retain their original README and
-any guides available at the time. The versions page also offers **Open rolling
-docs (unreleased)** for the current published rolling build. Rolling docs require
-that explicit choice or a direct `/Flare/rolling/` URL; the homepage continues to
-open stable docs.
+## What you get
 
-- **Get started:** [Docker](https://flintsh.github.io/Flare/hosting/docker.html) · [Railway](https://flintsh.github.io/Flare/hosting/railway.html) · [First-run setup](https://flintsh.github.io/Flare/admin/setup.html)
-- **Use Flare:** [Upload and share](https://flintsh.github.io/Flare/guide/uploading.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) · [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)
-- **Run your instance:** [Roles and permissions (development)](docs/site/admin/roles.md) · [Configuration](https://flintsh.github.io/Flare/hosting/configuration.html) · [Administration](https://flintsh.github.io/Flare/admin/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html)
-- **Build integrations:** [API reference](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html) · [OpenAPI](https://flintsh.github.io/Flare/openapi.json)
-- **Explore:** [Feature guide](https://flintsh.github.io/Flare/features.html) · [Demos](https://flintsh.github.io/Flare/demos.html) · [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)
+- **Uploads from your screenshot tool.** Import a ready-made config for ShareX or
+  iTake, download a capture script for Flameshot or Spectacle, or get a Bash
+  uploader. Your upload token is already filled in.
+- **Links that preview.** Image and video links unfurl in Discord, Slack and other
+  apps that read Open Graph tags. In the browser, images, video, audio, PDFs, CSV
+  files and code open in a clean viewer.
+- **Pastes and short links.** Share code with syntax highlighting, and shorten URLs
+  under your own domain with click counts.
+- **A library that stays usable.** Folders, tags, search that includes text found in
+  images (OCR), and smooth scrolling with a date rail for large libraries.
+- **Control over every link.** Public, private or password-protected files, expiry
+  dates, and shareable folders.
+- **Room for other people.** Invite links, roles and permissions, storage quotas,
+  single sign-on (OIDC), two-factor and passkeys, and an audit log.
+- **Your look, your storage.** Brand the instance and its share pages, and keep
+  files on local disk or any S3-compatible bucket.
+- **Built to integrate.** Scoped API tokens, an OpenAPI description and signed
+  webhooks.
 
-Preview the full site with `npm ci --prefix docs/site` then
-`npm run dev --prefix docs/site`. See [building and publishing the docs](docs/site/contributing.md).
+The [feature explorer](https://flintsh.github.io/Flare/features.html) covers each
+of these with a guide.
 
-## ✨ Features
+## Quick start
 
-- 🚀 **Universal Screenshot Integration**
-  - ShareX, Flameshot, KDE Spectacle, and Bash Script upload support
-  - One-click configuration/script downloads
-- 🔒 **Secure & Private** - Role-based permissions, private files, and password protection
-- 🔑 **[Two-factor authentication and passkeys](docs/site/guide/security.md)** - Authenticator-app codes, single-use recovery codes, and device-verified passwordless sign-in
-- 💾 **Flexible Storage** - Local filesystem and S3-compatible storage support
-- 🖼️ **Universal Preview** - Preview images, videos, PDFs, and code with syntax highlighting
-- 🔍 **Smart Search** - Search by filename, OCR content, and date with filters
-- 📁 **[Folders](https://flintsh.github.io/Flare/guide/folders.html)** - Organize files and subfolders, move files in bulk, and share a folder with one link
-- 📱 **Modern UI** - Clean, responsive interface built with shadcn/ui - easily customizable
-- ⚙️ **Configurable**
-  - User storage quotas, registration controls, and instance settings
-  - [Invite links](https://flintsh.github.io/Flare/guide/invites.html): let people join a private instance with single- or multi-use links, optional roles, and member limits
-  - [Unified setup](https://flintsh.github.io/Flare/admin/setup.html): account, storage, access, optional personalization and email in one guided flow
-  - [Appearance studio](https://flintsh.github.io/Flare/admin/appearance.html): branding, paired palettes, share layouts, previews and portable packs
-  - [Upload profiles](https://flintsh.github.io/Flare/guide/upload-profiles.html): reusable defaults and recipes across browser and screenshot tools
-  - [Integrations](https://flintsh.github.io/Flare/api/): scoped tokens and signed file-ready webhooks
-  - Personal light/dark/system preferences, CSS variables and custom colors
-  - Advanced settings for custom CSS and HTML injection
-- 📊 **Admin Dashboard** - Usage metrics, user management, and system configuration
-- 👥 **User Management** - Role assignment, storage quotas, and content moderation
-- 🔗 **URL Shortener** - Compact generated URLs under your domain with click tracking
-- 📝 **Pastebin** - Code and text sharing with syntax highlighting
-- 🤖 **OCR Processing** - Automatic text extraction from images uploaded
-- 🔌 **Rich Embeds** - Content embeds naturally on all your social media platforms.
-
-## 🚀 Quick Start
-
-Flare is quick to deploy—you only need a PostgreSQL server and Docker. Choose one of these options:
-
-### Railway (One-Click)
-
-Click the button below to deploy Flare on Railway. Once deployed, just set your authentication secret and create your admin account.
+**Railway**
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/JVT41u?referralCode=R5s8WT)
 
-### Docker Deployment (Self-Hosted)
+Start from the template, check the [Railway guide](https://flintsh.github.io/Flare/hosting/railway.html)
+for storage and domain settings, then open `/setup`.
 
-Follow the [Docker Compose guide](https://flintsh.github.io/Flare/hosting/docker.html) for a complete
-configuration with PostgreSQL, persistent storage, generated secrets, health
-checks, and a first-upload check. Then add a
-[domain and HTTPS](https://flintsh.github.io/Flare/hosting/reverse-proxy.html) and set up
-[backups](https://flintsh.github.io/Flare/hosting/maintenance.html).
+**Docker Compose**
 
-The official image is available as `flintsh/flare` on Docker Hub and
-`ghcr.io/flintsh/flare` on GitHub Container Registry. The `rolling` tag tracks
-pre-releases; use a tested release tag or digest for repeatable deployments.
-See [release channels and updates](https://flintsh.github.io/Flare/hosting/maintenance.html).
+You need Docker with the Compose plugin and OpenSSL.
 
-## 💬 Support
+1. In an empty directory, create a `.env` with two fresh secrets:
 
-Need help with your instance? Join my [Discord](https://discord.gg/mwVAjKwPus) for support, discussions, and updates!
+   ```sh
+   umask 077
+   printf 'POSTGRES_PASSWORD=%s\nNEXTAUTH_SECRET=%s\nNEXTAUTH_URL=http://localhost:3000\n' \
+     "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > .env
+   ```
 
-## 📝 Configuration
+2. Expand **compose.yaml** below and save it in the same directory.
+3. Start Flare:
 
-Instance-wide controls live in **Settings** (`/dashboard/settings`), with granular grants managed in **Roles** (`/dashboard/roles`). Personal appearance, upload defaults and recipes, integrations, and account controls live in **Profile** (`/dashboard/profile`). Both pages follow the same design as first-run setup.
+   ```sh
+   docker compose up -d
+   ```
 
-In Settings, accounts with the corresponding role permissions can configure:
+4. Open `http://localhost:3000/setup` and create your account. The first account
+   is the administrator. If Docker runs on another machine, first run
+   `ssh -L 3000:127.0.0.1:3000 you@your-server` on your computer and keep it open.
 
-- Setting a shared storage quota (roles can grant a quota exemption) and a maximum file size
-- Choosing storage and optional OCR processing
-- Configuring registration options, who can create invite links, and sign-in policy
-- Customizing the site's appearance and branding
-- Managing advanced settings like custom CSS and HTML
+<details>
+<summary><b>compose.yaml</b></summary>
 
-### Account email
+```yaml
+name: flare
 
-Optional SMTP email supports password recovery, address verification, and confirmed
-email changes. Configure it during first-time setup or in **Settings → Email**.
-Delivery, recovery, and verification requirements are independent; upgrades leave
-email disabled and preserve existing account access. See [account email setup,
-environment overrides, and recovery](https://flintsh.github.io/Flare/admin/email.html).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flare
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: flare
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flare -d flare']
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
-### Single Sign-On (OIDC)
+  flare:
+    image: ${FLARE_IMAGE:-flintsh/flare:latest}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      DATABASE_URL: postgresql://flare:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/flare?schema=public
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?Set NEXTAUTH_URL in .env}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
 
-Configure your identity provider in **Settings → Access** (`/dashboard/settings?section=access`), with
-`https://your-flare-host/api/auth/callback/oidc` as its redirect URI. Keep a local
-administrator login available; `/auth/login?local=1` bypasses OIDC auto-login.
+volumes:
+  postgres_data:
+  uploads:
+```
 
-SSO sign-in identifies accounts by the provider's issuer and subject, not email.
-New identities can create accounts when auto-provisioning is enabled and their
-email is unused. A matching email never links or replaces an existing account:
-local users must use password sign-in, and already linked users must use their
-original SSO identity. With auto-provisioning disabled, only already linked SSO
-identities can sign in; precreating a local account with the same email does not
-enable SSO. An explicit account-linking flow is not yet available.
+</details>
 
-Older development configurations containing `allowLinking` are accepted, but
-that setting is ignored. Existing SSO links and local credentials are preserved.
+Flare listens on `127.0.0.1:3000` only. To use it from other devices, put it
+behind [a reverse proxy with HTTPS](https://flintsh.github.io/Flare/hosting/reverse-proxy.html)
+and set `NEXTAUTH_URL` to your public address. The [Docker guide](https://flintsh.github.io/Flare/hosting/docker.html)
+covers pinning a version, existing databases and remote servers. Images are
+published as `flintsh/flare` and `ghcr.io/flintsh/flare` for AMD64 and ARM64.
 
-## 📜 License
+To update, [take a backup](https://flintsh.github.io/Flare/hosting/maintenance.html#upgrade-flare),
+then run `docker compose pull flare && docker compose up -d flare`.
 
-Flare is licensed under the MIT License.
+## A closer look
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/library-light.webp" />
+  <img src="./.github/assets/readme/library-dark.webp" alt="Flare's file library with folders, filters and a grid of screenshots and images" />
+</picture>
+<p align="center"><sub><b>Your library.</b> Search, filter and organize everything you upload.</sub></p>
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/readme/screenshot-tools-light.webp" />
+  <img src="./.github/assets/readme/screenshot-tools-dark.webp" alt="The Screenshot tools and scripts card in Profile, with downloads for ShareX, iTake, Flameshot, Spectacle and a Bash uploader" />
+</picture>
+<p align="center"><sub><b>Screenshot tools.</b> Download a config or script with your instance and upload token filled in.</sub></p>
+
+More screens and recorded walkthroughs are in the [interactive demos](https://flintsh.github.io/Flare/demos.html).
+
+## Documentation
+
+The [Flare handbook](https://flintsh.github.io/Flare/) covers using, running and
+extending Flare, with docs archived for every stable release.
+
+| I want to…               | Start with                                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Run Flare                | [Deployment](https://flintsh.github.io/Flare/hosting/) · [Backups and upgrades](https://flintsh.github.io/Flare/hosting/maintenance.html) |
+| Set up my screenshot app | [Screenshot tools](https://flintsh.github.io/Flare/guide/screenshot-tools.html)                                                           |
+| Share and organize files | [Sharing and privacy](https://flintsh.github.io/Flare/guide/sharing.html) · [Folders](https://flintsh.github.io/Flare/guide/folders.html) |
+| Run it for a group       | [First-run setup](https://flintsh.github.io/Flare/admin/setup.html) · [Roles](https://flintsh.github.io/Flare/admin/roles.html)           |
+| Build an integration     | [API](https://flintsh.github.io/Flare/api/) · [Webhooks](https://flintsh.github.io/Flare/api/webhooks.html)                               |
+| Fix a problem            | [Troubleshooting](https://flintsh.github.io/Flare/hosting/troubleshooting.html)                                                           |
+
+## Community
+
+- **Help and updates:** join the [Discord](https://discord.gg/mwVAjKwPus).
+- **Bugs and ideas:** open an [issue](https://github.com/FlintSH/Flare/issues).
+- **Contributing:** read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+  [docs contribution guide](docs/site/contributing.md).
+- **Security reports:** follow [SECURITY.md](SECURITY.md).
+
+## License
+
+Flare is MIT licensed and made by [FlintSH](https://fl1nt.dev). Icon designed by
+[xNefas](https://ko-fi.com/xnefas/).
