@@ -137,7 +137,7 @@ published as `flintsh/flare` and `ghcr.io/flintsh/flare` for AMD64 and ARM64.
       <p align="center"><sub><b>Share pages.</b> What people see when they open your link.</sub></p>
     </td>
     <td width="50%">
-      <img src="./.github/assets/readme/code.webp" alt="A shared TypeScript file shown with line numbers and syntax highlighting" />
+      <img src="./.github/assets/readme/code.webp" alt="A shared Python file, thumbnails.py, shown with line numbers, syntax highlighting and a Copy text button" />
       <p align="center"><sub><b>Code and pastes.</b> Highlighted by file extension.</sub></p>
     </td>
   </tr>
