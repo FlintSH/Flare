@@ -1,42 +1,39 @@
-# UI refinement validation
+# Validation
 
-The settings save-bar follow-up has a separate [native phone frame](settings-savebar-phone.png) and [component/capture proof](settings-savebar-proof.json). Twelve current compiled cases verify that Discard and Save are initially visible and hittable, with no inner scrolling, at the selected phone sizes and root16/32 text simulations. Keyboard and touch Discard restore the draft without a save request. The Save success/failure responses are explicit client simulations, not backend persistence tests. The capture build includes other pending library work; its two settings component hashes match this change.
+Filenames now use natural wrapping, compact previews leave more files visible on phones, and measured row heights keep date jumps and scrolling aligned. Phone dialogs place Cancel or Keep before the confirmation action. Password hints are shorter, and placeholder contrast follows the configured palette without rewriting saved colors.
 
-The complete app-wide validation below belongs to the first follow-up commit, `e8de98de`. Further refinement remains in progress.
+## Comparisons
 
-That frozen production candidate uses 675 source inputs (673 readable) and 245 QA inputs, Build `fYbB7toFZWMXaMRVps15p`. Source SHA is `7f4ff9e079f5dfb70006bd4725fe551d6f15da811249d8144991877cb5c7bfe6`; complete locked-dependency runtime SHA is `33ddda56a07983249f877a2d79579be9064a4b84d8fc24362a0439f44e2c8bb0`. Typecheck, lint, production build and packaging passed. Unit results: 2,346 passed, 0 failed and 312 database-dependent tests skipped.
+| Area                   | Baseline and current capture |
+| ---------------------- | ---------------------------- |
+| Files on a phone       | [View](library-phone.webp)   |
+| Profile on a phone     | [View](profile-phone.webp)   |
+| Audit on a phone       | [View](audit-phone.webp)     |
+| Public text preview    | [View](text-phone.webp)      |
+| Paste on a phone       | [View](paste-phone.webp)     |
+| Short links on a phone | [View](links-phone.webp)     |
+| Settings on desktop    | [View](dark-settings.webp)   |
 
-Actual maintained suites passed Polish 27, Core 38, Refinement 35, Library 38, Timeline 17 and coarse continuity 2. Mixed continuity passed four cases/28 drags, recording 5,204 animation-frame samples, 0 maximum adjacent gap and 0 maximum pixel error across eight seam checks. Exact fixture restoration was followed by unchanged Timeline 17/coarse 2 passes. Compiled menu/settings/save-bar/geometry/text/name probes and restricted/setup/no-read/HTTP/loading/preview cases have separate current receipts. Root16/32 text enlargement, monospace substitution, delayed-response loading and CDP touch retain their simulation boundaries.
+[The two initial direction prototypes](directions.webp) retain their historical labels. Their pixels are not current application captures.
 
-The six capture groups completed 212 distinct native frames with exact source/runtime/path/byte/hash proofs. Deliberately missing routes account for 16 retained raw HTTP/console records; no unexpected capture error is reported. AX completed 80 ready scans with 0 violations and 0 operational issues, but retains 80 contrast incompletes/1,104 node occurrences. This is not a universal accessibility certification.
+## Verification
 
-Bounded contrast sampling measured 2,324 samples in 20 route/theme/viewport combinations/four summaries: 2,312 nonexempt and 12 disabled. No measured nonexempt threshold failure was reported; 3,248 covered and 30 offscreen candidates remain unmeasured. Desktop focus traversal preserves its raw weak Role position flag at 1.92. Ten direct focused/plain pairs retain 104 points, including 38 below 3; their strongest sampled bands meet the selected-probe threshold with minimum 4.76. These probes do not certify every perimeter or erase that raw flag.
+The current application is compiled V15, Build `F67hmVCP6dIstDv04AqQ7`, from frozen source 675/SHA `70928462…f773f32`, readable 673 and QA 245. Its full locked-dependency runtime closure is 62,219 files/SHA `6b9a5f44…ab2f490`. Source, compiled bundle, owned processes/config/environment and declared fixture state are checked by the relevant before/after receipts.
 
-Original Polish, Navigation and metrics wrapper failures remain preserved. Only fresh isolated strict Polish 27 and current-heading Navigation 8 aliases fulfill their logical contracts. The eight metric commands exited 0; a schema-aware companion validates unchanged results without relabeling the failed wrapper.
+Type checking, lint, production build and packaging passed. Unit tests:2,355 passed,0 failed,312 skipped. The 30 coordinated jobs completed with actual child exits 0; retained failed attempts remain separate. Maintained Core (38), Refinement (35), Library (38) and Polish (27) passed, alongside compiled Select (8)/settings (12)/SaveBar (12)/gallery (16)/preview (12) and the current navigation/font/filename/state checks. Strict coarse (2), mixed (4) and Timeline (17) passed; mixed continuity includes 28 native drags and 4,994 animation-frame observations, followed by original Timeline/coarse checks after exact fixture restoration. In the reverse-wheel cases, a retained focused file below the viewport displaced 56px on fine-pointer layouts and 49px on coarse layouts as intervening intrinsic rows acquired their measured heights. The reference and residual calculations both report 0px and share those observations; they are coupled checks. The raw displacement remains in the receipt.
 
-The current API example passes 27 assertions from five read-only session GETs. Real OCR recognized 489 characters at confidence 85 in 985 ms; its original 37-file fixture/OCR fields were restored with exact source/full-runtime guards. The already-provisioned language cache and complete worker dependencies were used; uncached/network/hardware coverage is not claimed.
+The six capture groups contain 212 native frames, with 16 expected missing-page 404 diagnostics and 0 unexpected errors. Settings (11)/Audit (4) have their own read-only capture proofs and source/runtime brackets. All 227 capture/staging originals decode and match their native hashes. Separate real disposable upload/link cleanup, GET-only API (27) and actual OCR receipts retain their operation boundaries. OCR recognized 489 characters/confidence 85 with the preprovisioned English model and restored the original 37-file/OCR state; no uncached or network-isolated OCR claim follows.
 
-The live canonical inventory contains 51 published targets: 49 actual current assets and two literal older V4 audit/session operation movies. Per-asset safe source/copy receipts preserve their exact boundaries. The older movies do not establish current appearance and retain their original cache-guard limitations.
+Current canonical media contains 49 fresh V15 assets plus two explicitly older V4 audit/session movies. The older recordings establish their original operations only. Current desktop media preserves 529 raw/encoded frames/21.16 seconds. Phone media preserves 655 raw frames/26.2 seconds and a continuous 561-frame/22.44-second excerpt. Full decode/hash proofs passed; loading transitions remain. Wall-clock markers are not video-PTS calibrated, and full human frame-by-frame playback is not claimed.
 
-The current desktop recording is the whole 523-frame, 20.92-second recording. Its seven genuine blank startup frames at 0.00–0.24 seconds remain present; the 0.28-second frame shows the app loading skeleton. Later real seek/search loading transitions are retained. The current phone recording is a continuous 556-frame, 22.24-second excerpt from the retained 644-frame, 25.76-second raw recording, with no internal cuts, speed changes, masks or repainting. It records 96 native CDP touch inputs. Both live seeks record loaded and placeholder frames with 0 missing-content frames; the low-variance flags identify real loading skeleton transitions. H264 encoding is lossy; the lossless still's separate pixel-identity proof is not a claim that movie pixels equal the raw source. The requested excerpt boundaries are recorded, but wall-clock/raw-PTS calibration is not claimed.
+Axe:80 ready scans,0 violations/operational issues, with 80 contrast incompletes/1,104 node occurrences retained. Contrast:5,654 candidates;2,312 measured, including 2,300 nonexempt/12 disabled;0 measured nonexempt threshold failures; sampled minimum 6.2 dark/5.41 light. The 3,342 unmeasured candidates remain explicit. Focus:272 desktop stops with one raw weak flag;104 direct sample points include 38 off-band points below 3 and minimum strongest edge-band 4.76. The 21 inspected native focus crops are bounded evidence, not every-stop or whole-perimeter certification.
 
-One visible filename limitation remains in the native phone frame: `Northern lights 00004.webp` displays `Norther` on its first line and `n lights 00004.webp` on its second. The stem/tail block split can force a break inside a word. Every glyph remains present; no clipping or missing-glyph finding is claimed.
+The seven current before/after panels use recorded exact-d01 development-rendered inputs and current production-rendered captures; desktop inputs use 960×600 contain fitting and phones retain 390×844 native pixels. One additional directions panel remains historical prototype evidence. Capture dates/method differences remain literal. The separate paired numeric file has 424 matched keys/212 per theme but an unbound historical source at capture; it is not a fresh d01 performance or contrast-improvement claim.
 
-Final handbook verification passed at both `/` and `/flare/`: 50 HTML pages, 36 script tests and 17 browser checks per base. Coverage checks passed for 100 API routes, 13 named-token operations, 60 environment options, 40 role permissions and the canonical webhook schema. All 51 canonical source hashes, optimized public/dist asset copies, automatic version/commit/dirty provenance and actual hydrated404 creator/button88×31/xNefas/license checks matched. Source and the full four-service runtime were exact before/after; all four browser-run records closed and port4175 closed. No physical-device, assistive-technology or cross-engine result is inferred from these headless Chromium checks.
+Three retained pipeline attempts are disclosed separately: the initial missing Main80 dependency before upload creation, the offline projection's missing final output directory, and the interrupted desktop attempt. Current successful receipts and explicit recovery do not change those original statuses.
 
-No Meticulous replay, physical-device/assistive-technology, cross-engine or useful JavaScript-disabled workflow is claimed.
+Handbook verification passed at `/` and `/flare/`:50 HTML pages/49 content stamps,36 script tests and 17 browser checks per base; coverage 100 API/13 named-token/60 environment/40 permission entries plus webhook schema. Source hashes for 51 canonical assets and 174 generated-to-dist asset copies per base matched. Optimized images are not claimed identical to source pixels. Hydrated 404, automatic version/commit/dirty provenance, official 88×31 creator button, xNefas credit and license checks passed; preview browsers/listeners closed. The documentation-change gate passed against exact d01f150 for the implementation and verification commits, with no pre-policy commits skipped.
 
-## Before and after
+Primary receipts are under `.agent-artifacts/refinement/evidence/`: `final29-unit/results.json`, the maintained groups' `run.json`, `final29-mixed/run.json`, `final29-accessibility/results.json`, `final29-metrics-stage/completion-companion.json`, `final29-api-example/results.json`, `final29-ocr-worker/results.json`, the seven current canonical-copy groups, `final29-supporting-operation-media/results.json`, and `final29-docs/results.json`.
 
-These comparisons use the fresh `d01f150` development baseline and the current production capture. Relative dates and activity counts reflect their actual capture times. The panels fit original images side by side; they are comparison artifacts, not native application screenshots.
-
-- [Library on a phone](library-phone.webp)
-- [Account on a phone](profile-phone.webp)
-- [Audit on a phone](audit-phone.webp)
-- [Short links on a phone](links-phone.webp)
-- [Paste on a phone](paste-phone.webp)
-- [Sign in on a phone](login-phone.webp)
-- [General settings](dark-settings.webp)
-- [Appearance](appearance-desktop.webp)
-
-[Initial real-page direction prototypes](directions.webp) retain their original prototype boundary.
+These are JavaScript-enabled headless Linux Chromium checks. Segmenter fallback has unit coverage only; Firefox 111, physical devices, native OS zoom, physical assistive technology, other engines, Meticulous replay and hosted testing were not run.
