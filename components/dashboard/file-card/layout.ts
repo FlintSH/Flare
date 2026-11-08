@@ -1,3 +1,5 @@
+import type { LibraryView } from '@/lib/library/view'
+
 // Image stages and initial placeholders share conservative default estimates.
 // Generic cards are shorter; the virtualizer measures actual row content.
 export const fileCardPreviewClassName =
@@ -10,6 +12,15 @@ export const fileCardLabelsClassName =
   'flex min-h-6 min-w-0 flex-wrap items-center gap-1.5'
 export const fileCardActivityClassName =
   'mt-auto flex min-h-4 flex-wrap items-center gap-x-3 text-xs text-muted-foreground'
+
+/** Password protection supplements visibility; it never replaces that fact. */
+export function fileVisibilityText(
+  visibility: 'PUBLIC' | 'PRIVATE',
+  hasPassword: boolean
+) {
+  const label = visibility === 'PUBLIC' ? 'Public' : 'Private'
+  return hasPassword ? `${label} · password protected` : label
+}
 
 const filenameGraphemes =
   typeof Intl.Segmenter === 'function'
@@ -52,9 +63,42 @@ export function fileCardFilenameParts(name: string) {
   }
 }
 
-export function fileCardHeight(compact: boolean, coarse: boolean, scale = 1) {
+export type FileMenuSide = 'bottom' | 'left'
+
+export function fileCardMenuSide(
+  viewportWidth: number,
+  rootFontSize: number
+): FileMenuSide {
+  // w-56 is 14rem; leave 4px offset plus 16px collision padding.
+  // A 44px trigger at mid-screen has the least room on either side.
+  return viewportWidth >= 640 &&
+    14 * rootFontSize + 20 <= (viewportWidth - 44) / 2
+    ? 'left'
+    : 'bottom'
+}
+
+export function fileCardHeight(
+  compact: boolean,
+  coarse: boolean,
+  scale = 1,
+  view: LibraryView = 'gallery'
+) {
+  // An initial estimate only: the existing row observer supplies actual sizes.
+  if (view === 'list') return Math.max(80, (coarse ? 128 : 80) * scale)
   // Preview stages stay fixed while text and label rows can grow. The
   // virtualizer measures the final content after these initial estimates.
   const previewHeight = coarse && !compact ? 128 : 112
   return previewHeight + (coarse ? 116 : 80) * scale + 4
 }
+
+// Empty label cells retain the same desktop columns across every List item.
+export const fileListClassName =
+  'grid grid-cols-[64px_minmax(0,1fr)_44px] items-start gap-x-2 gap-y-1 p-2 lg:grid-cols-[64px_minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_44px] lg:gap-x-3'
+export const fileListNameClassName =
+  'col-start-2 row-start-1 flex min-h-[44px] min-w-0 items-center'
+export const fileListFactsClassName =
+  'col-span-full row-start-2 min-w-0 lg:col-span-1 lg:col-start-3 lg:row-start-1'
+export const fileListLabelsClassName =
+  'col-span-full row-start-3 flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1 lg:col-span-1 lg:col-start-4 lg:row-start-1'
+export const fileListManageClassName =
+  'col-start-3 row-start-1 w-[44px] min-w-[44px] lg:col-start-5'

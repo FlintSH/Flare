@@ -57,9 +57,24 @@ vi.mock('@/hooks/use-upload-queue', () => ({
     upload: queue.upload,
   }),
 }))
-vi.mock('@/components/upload-profiles/profile-picker', () => ({
-  ProfilePicker: () => null,
-}))
+vi.mock(
+  '@/components/upload-profiles/upload-selection',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/components/upload-profiles/upload-selection')
+    >()),
+    useUploadSelection: () => ({
+      status: 'automatic',
+      value: undefined,
+      selectedValue: 'default',
+      canManageProfiles: false,
+      profiles: [],
+      defaultProfileName: undefined,
+      effective: null,
+      summary: 'Private. Saved defaults apply automatically.',
+    }),
+  })
+)
 vi.mock('@/components/shared/expiry-modal', () => ({
   ExpiryModal: () => null,
 }))
@@ -194,8 +209,14 @@ describe('upload queue presentation', () => {
     expect(queue.primaryProps!.disabled).toBe(true)
     expect(html).toContain('Another upload is running.')
     expect(html).toContain('Your files stay queued; start this')
-    const hint = queue.primaryProps!['aria-describedby']!
-    expect(html).toContain(`id="${hint}" role="status"`)
+    const descriptions = queue.primaryProps!['aria-describedby']!.split(/\s+/)
+    expect(descriptions).toHaveLength(2)
+    expect(html).toContain(
+      `id="${descriptions.find((id) => id.endsWith('-waiting'))}" role="status"`
+    )
+    expect(html).toContain(
+      `id="${descriptions.find((id) => id.endsWith('-summary'))}" aria-live="polite"`
+    )
     await queue.primaryProps!.onClick?.({} as never)
     expect(queue.upload).not.toHaveBeenCalled()
     expect(queue.files).toBe(selected)
@@ -219,5 +240,28 @@ describe('upload queue presentation', () => {
     await onClick({} as never)
     expect(queue.upload).not.toHaveBeenCalled()
     expect(queue.files).toHaveLength(4)
+  })
+})
+
+describe('upload final-action description', () => {
+  it('associates one complete summary without changing the inherited request options', async () => {
+    queue.files = selectedFiles()
+    const html = render()
+    const description = queue.primaryProps!['aria-describedby']!
+    expect(description).toMatch(/-summary$/)
+    expect(html).toContain(`id="${description}" aria-live="polite"`)
+    expect(
+      html.match(/Private\. Saved defaults apply automatically\./g)
+    ).toHaveLength(1)
+    await queue.primaryProps!.onClick?.({} as never)
+    await vi.waitFor(() => expect(queue.upload).toHaveBeenCalledOnce())
+    expect(queue.upload).toHaveBeenCalledWith({
+      profileId: undefined,
+      folderId: null,
+      visibility: undefined,
+      password: '',
+      expiresAt: undefined,
+      expiryAction: undefined,
+    })
   })
 })

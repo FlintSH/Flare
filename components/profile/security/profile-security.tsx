@@ -51,16 +51,23 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
     confirmationId: 'confirm-password',
   })
 
-  const changeFailed = (error: unknown, mutationStarted: boolean) => {
+  const changeFailed = (
+    error: unknown,
+    mutationStarted: boolean,
+    message?: string
+  ) => {
     if (mutationStarted) void refreshSecurity()
     toast({
       title: 'Error',
       description:
-        error instanceof Error ? error.message : 'Failed to update password',
+        message ??
+        (error instanceof Error ? error.message : 'Failed to update password'),
       variant: 'destructive',
     })
   }
-  const signOut = useSignOut({ onError: (error) => changeFailed(error, true) })
+  const signOut = useSignOut({
+    onError: (error, message) => changeFailed(error, true, message),
+  })
 
   const handlePasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

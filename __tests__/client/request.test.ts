@@ -5,7 +5,9 @@ import { fetchEmailCapabilities } from '@/components/email/api'
 import { updateProfile } from '@/lib/client/profile'
 import {
   RefusedRequest,
+  TransportFailure,
   apiRequest,
+  readAnswer,
   refusal,
   retryable,
   sendRequest,
@@ -147,11 +149,95 @@ describe('apiRequest', () => {
     ).rejects.toMatchObject({ name: 'AbortError' })
   })
 
-  it('passes network failures through unchanged', async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    const failed = apiRequest('/api/profile/upload-token')
-    await expect(failed).rejects.toThrow('Failed to fetch')
+  it('gives an unconfirmed transport a human message, keeps its cause and never retries', async () => {
+    const cause = new TypeError('Failed to fetch')
+    fetchMock.mockRejectedValueOnce(cause)
+    const failed = apiRequest('/api/profile', { method: 'DELETE' })
+    await expect(failed).rejects.toBeInstanceOf(TransportFailure)
+    await expect(failed).rejects.toMatchObject({ cause })
+    await expect(failed).rejects.toThrow(
+      'Connection problem. Check the result before trying again.'
+    )
     await expect(failed).rejects.not.toBeInstanceOf(RefusedRequest)
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('reports an interrupted successful body without presenting a partial answer or retrying', async () => {
+    const cause = new TypeError('terminated while reading the body')
+    let stream!: ReadableStreamDefaultController<Uint8Array>
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            stream = controller
+            controller.enqueue(new TextEncoder().encode('{"data":'))
+          },
+        })
+      )
+    )
+    const failed = apiRequest('/api/profile', { method: 'PUT', body: {} })
+    const rejected = expect(failed).rejects.toMatchObject({
+      name: 'TransportFailure',
+      cause,
+    })
+    stream.error(cause)
+    await rejected
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('preserves native cancellation identity instead of calling it a connection failure', async () => {
+    const abort = new DOMException('The operation was aborted.', 'AbortError')
+    fetchMock.mockRejectedValueOnce(abort)
+    await expect(apiRequest('/api/profile')).rejects.toBe(abort)
+  })
+
+  it('preserves an explicit aborted signal reason even when fetch reports a different failure', async () => {
+    const controller = new AbortController()
+    const reason = { abandonedAccount: true }
+    fetchMock.mockImplementationOnce(async () => {
+      controller.abort(reason)
+      throw new TypeError('Failed to fetch')
+    })
+    await expect(
+      apiRequest('/api/profile', { signal: controller.signal })
+    ).rejects.toBe(reason)
+  })
+
+  it('does not send an already abandoned request', async () => {
+    const controller = new AbortController()
+    const reason = new Error('This read belongs to the old account')
+    controller.abort(reason)
+    await expect(
+      apiRequest('/api/profile', { signal: controller.signal })
+    ).rejects.toBe(reason)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps a cancellation that arrives while the successful body is being read', async () => {
+    const controller = new AbortController()
+    const reason = new Error('Observer left')
+    const response = Response.json({ data: {} })
+    vi.spyOn(response, 'text').mockImplementationOnce(async () => {
+      controller.abort(reason)
+      throw new TypeError('The response stream stopped')
+    })
+    await expect(
+      readAnswer(response, { signal: controller.signal })
+    ).rejects.toBe(reason)
+  })
+
+  it('does not turn caller serialization errors into transport failures or send them', async () => {
+    const cause = new TypeError('Caller serialization bug')
+    await expect(
+      apiRequest('/api/profile', {
+        body: {
+          toJSON() {
+            throw cause
+          },
+        },
+      })
+    ).rejects.toBe(cause)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('rejects a successful answer that is not JSON, such as a proxy’s sign-in page', async () => {
@@ -218,6 +304,32 @@ describe('refusal', () => {
       code: null,
       retryAfter: null,
     })
+  })
+
+  it('retains a known HTTP refusal and wait if its body is interrupted', async () => {
+    const cause = new TypeError('Failed to fetch')
+    const response = new Response(null, {
+      status: 503,
+      headers: { 'Retry-After': '12' },
+    })
+    vi.spyOn(response, 'text').mockRejectedValueOnce(cause)
+    const refused = await refusal(response, 'Changes could not be saved.')
+    expect(refused).toBeInstanceOf(RefusedRequest)
+    expect(refused).toMatchObject({
+      message: 'Changes could not be saved.',
+      status: 503,
+      code: null,
+      retryAfter: 12,
+      cause,
+    })
+    expect(retryable(refused)).toBe(true)
+  })
+
+  it('never swallows cancellation while reading a refusal body', async () => {
+    const abort = new DOMException('Abandoned', 'AbortError')
+    const response = new Response(null, { status: 403 })
+    vi.spyOn(response, 'text').mockRejectedValueOnce(abort)
+    await expect(refusal(response)).rejects.toBe(abort)
   })
 })
 

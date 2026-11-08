@@ -41,8 +41,7 @@ export function ProfileDeleteAccount() {
     fallback = 'Unable to delete your account.'
   ) => setError(cause instanceof Error ? cause.message : fallback)
   const signOut = useSignOut({
-    onError: (cause) =>
-      failed(cause, 'Unable to finish signing out. Try again.'),
+    onError: (_cause, message) => setError(message),
   })
 
   useEffect(() => {

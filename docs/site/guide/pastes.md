@@ -16,7 +16,7 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 1. Open **Paste** in the navigation.
 2. Enter your text or code in **Content**. The editor keeps a 300px minimum height on phones as well as desktop; touch-sized controls do not collapse it. You can scroll within longer content. The character count groups thousands with commas, such as `12,345`, in every browser language.
 3. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
-4. If your role has `uploadProfiles.manage`, review **Upload profile** or keep the current default. Its summary shows the effective visibility, password status, expiration action, and filename behavior. Without that permission, your saved upload defaults apply automatically and the profile picker is hidden.
+4. If your role has `uploadProfiles.manage`, review **Upload profile** or keep the current default. Review the summary beside **Create paste** for effective visibility, password status, expiration and its action, and filename behavior after one-time overrides. Without that permission, your saved upload defaults apply automatically and the profile picker is hidden; the action explains that the full summary is unavailable for your role.
 5. Open **Sharing options** to override visibility or add a password, if your role can share. Leave it closed to use the saved defaults.
 6. Choose **Create paste**.
 
@@ -25,6 +25,10 @@ Whitespace-only content cannot be submitted. While the request is running, the c
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/refinement/paste-mobile.png" alt="Phone Paste form with a 300px Content editor, optional filename, Account default upload profile, and collapsed Sharing options" caption="Write your text in the phone editor, then review the upload defaults and sharing options before creating the paste." />
 </div>
+
+The action summary stays visible while **Sharing options** is closed. **Create paste** keeps a target at least 44px high, with text that can wrap as text size grows. Loading, failed reads, or a profile that is no longer available are stated directly; Flare does not guess public visibility or no expiration. A missing profile must be replaced or bypassed with **Account settings only**. The summary does not add a creation confirmation or change the submitted settings.
+
+<Screenshot src="/screenshots/refinement/paste-sharing-summary-mobile.png" alt="Phone paste form with closed Sharing options and a private, password-protected summary immediately above Create paste" caption="Review the effective sharing settings before creating a paste. This local draft has not been submitted." />
 
 After creation, use **Copy link**, **Open paste**, or **Create another paste**. The displayed share link can also be selected and copied manually. Creating another paste clears its content, filename, and password; review the retained profile and visibility before submitting your next one.
 

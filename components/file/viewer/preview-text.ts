@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { readPreviewBytes } from '@/lib/client/preview-bytes'
+import { readTransport } from '@/lib/client/request'
 
 /** The most text, code or CSV a share page loads to preview a file. */
 export const PREVIEW_TEXT_BYTES = 1024 * 1024
@@ -23,7 +24,7 @@ export async function loadPreviewText(
   failed: (status?: number) => string,
   signal?: AbortSignal
 ) {
-  const response = await fetch(url, { signal })
+  const response = await readTransport(fetch(url, { signal }), signal)
   if (!response.ok) throw new Error(failed(response.status))
   if (Number(response.headers.get('content-length')) > PREVIEW_TEXT_BYTES) {
     void response.body?.cancel()
@@ -31,7 +32,8 @@ export async function loadPreviewText(
   }
   const { bytes, truncated } = await readPreviewBytes(
     response,
-    PREVIEW_TEXT_BYTES
+    PREVIEW_TEXT_BYTES,
+    signal
   )
   if (truncated) throw new Error(TOO_LARGE)
   return new TextDecoder().decode(bytes)

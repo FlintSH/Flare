@@ -65,6 +65,8 @@ Back and Forward protection works only when the browser lets Flare cancel a hist
 
 When a save fails, its message gives Flare's reason. If something between your browser and Flare, such as a reverse proxy or a sign-in gateway, answers with its own page instead, the screen shows its usual failure message, for example **Appearance could not be saved.** in the appearance studio, **Could not save this role.** in **Roles**, or **Failed to update user** in **Users**. Earlier versions showed a script error such as `Unexpected token '<'` on those screens.
 
+An interrupted shared API response shows **Connection problem. Check the result before trying again.** instead of raw browser network text. It does not establish whether the save reached Flare. Restore your connection and inspect the saved settings before repeating a change; the request helper does not retry it automatically. A response that explicitly refuses the save still gives Flare's reason.
+
 Environment-managed email controls are read-only in the dashboard. Adjust the deployment override or remove it to restore the saved fallback. [Configuration precedence](/hosting/configuration#how-changes-take-effect) explains the distinction.
 
 ## A good first-day checklist

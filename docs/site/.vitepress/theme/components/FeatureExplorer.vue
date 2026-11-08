@@ -74,8 +74,8 @@ const features = [
   ],
   [
     'Organize',
-    'Image gallery',
-    'Browse images by month, open the lightbox, and navigate with keyboard arrows or touch.',
+    'Gallery & List views',
+    'Keep Gallery previews or scan compact List rows with full filenames, metadata, and the same file actions. Open images in the lightbox.',
     '/guide/library',
   ],
   [

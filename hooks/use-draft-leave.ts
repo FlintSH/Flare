@@ -21,15 +21,15 @@ export function useGuardedSignOut() {
   const releaseExit = useRef<(() => void) | null>(null)
   const pending = useRef(false)
   const signOut = useSignOut({
-    onError(error) {
+    onError(error, message) {
       releaseExit.current?.()
       releaseExit.current = null
       pending.current = false
-      // Keep useSignOut's existing failure feedback for this user-only wrapper.
+      // Keep the original diagnostic and the shared sign-out recovery message.
       console.error('Logout error:', error)
       toast({
-        title: 'Error',
-        description: 'Failed to logout',
+        title: 'Sign-out not confirmed',
+        description: message,
         variant: 'destructive',
       })
     },

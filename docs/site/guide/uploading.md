@@ -16,11 +16,11 @@ Use **Upload** when you want to review settings before sending files. For quick 
 1. Open **Upload**.
 2. Select **Choose files** to open your device's file picker, or drag files into the selection area with a mouse. With a keyboard, focus **Choose files** and press Enter or Space to open the same picker. You can select several files and add more to the queue before starting.
 3. Review filenames and sizes. The queue initially shows two files; for a larger batch, choose **Show all N files** to review and remove any file. **Show fewer files** returns to the compact summary. **Clear all** removes the entire waiting queue.
-4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. The line under it shows the effective visibility, password protection, expiration action, and filename behavior for this batch. Without that permission, your saved defaults apply automatically.
+4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. Review the summary beside **Upload N file(s)** before starting. It shows effective visibility, password status, expiration and its action, and filename behavior after one-time overrides. Without that permission, your saved defaults still apply; the action explains that their full summary is unavailable for your role.
 5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Open **Upload options** for one-time visibility, password, or expiration overrides. You can leave it closed to use your saved defaults.
 6. Start the upload. Wait for the completion links before closing the tab.
 
-When no upload is running, the waiting batch's count, total size, and **Upload N files** action stay at the bottom of the window. The form scrolls above that bar. Expanding the queue shows its files in the page without adding a separate scrolling list. This limits the initial display, not the number of files you can select. While an upload is running, the action returns to the form and leaves space for its progress card.
+When no upload is running, the waiting batch's count, total size, effective-settings summary, and **Upload N files** action stay at the bottom of the window. The form scrolls above that bar. Expanding the queue shows its files in the page without adding a separate scrolling list. This limits the initial display, not the number of files you can select. While an upload is running, the action returns to the form and leaves space for its progress card.
 
 If another upload is running in this tab, the upload action waits and explains that your selected files stay queued. You can review or remove them while you wait. Start the batch when the current upload finishes; it does not start automatically.
 
@@ -31,6 +31,10 @@ The same selected options apply to the queued files. To give different files dif
 Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not automatically extract or publish its members. Open **Browse archive** from its library menu to inspect it, or [extract into a new folder](./archives#extract-into-your-library). Archive browsing supports archives of any size, but an upload succeeding does not mean every entry can be previewed or the archive extracted; extraction has its own limits.
 
 Anyone who can access a supported archive's [share page](./archives#browse-an-archive-shared-with-you) can browse and download its entries under the file's visibility/password rules. This does not create separate library files. Review the archive's contents before making it public.
+
+The summary stays beside the final action, including in the bottom batch bar, and wraps instead of hiding access or expiry information. While the bar is visible, focusing or scrolling to a setting leaves room above and below it for the navigation and upload bar, including with larger text. Loading or failed profile reads are labeled instead of showing guessed defaults. If a selected profile is no longer available, choose another profile or **Account settings only**. These notices do not save settings or add a confirmation step.
+
+<Screenshot src="/screenshots/refinement/upload-sharing-summary-mobile.png" alt="Phone upload queue with a private, password-protected summary beside Upload 1 file while Upload options is closed" caption="An unsent local draft shows its effective sharing settings beside the upload action; no upload has started." />
 
 <Screenshot src="/screenshots/workspace/upload-queue.png" alt="Selected files and the upload batch action" caption="Review the waiting queue before uploading; expand a larger batch to inspect every file." />
 

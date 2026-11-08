@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
 import { readPreviewBytes } from '@/lib/client/preview-bytes'
-import { refusal, retryable } from '@/lib/client/request'
+import { readTransport, refusal, retryable } from '@/lib/client/request'
 import { formatBytes } from '@/lib/utils'
 
 import {
@@ -170,19 +170,27 @@ function TextPreview({ src, size }: { src: string; size: number }) {
         return
       }
       try {
-        const response = await fetch(src, {
-          cache: 'no-store',
-          signal: current.signal,
-          headers: {
-            Range: `bytes=${offset}-${offset + TEXT_PREVIEW_BYTES - 1}`,
-          },
-        })
+        const response = await readTransport(
+          fetch(src, {
+            cache: 'no-store',
+            signal: current.signal,
+            headers: {
+              Range: `bytes=${offset}-${offset + TEXT_PREVIEW_BYTES - 1}`,
+            },
+          }),
+          current.signal
+        )
         if (!response.ok)
           throw await refusal(
             response,
-            'This entry could not be loaded. Please try again.'
+            'This entry could not be loaded. Please try again.',
+            current.signal
           )
-        const { bytes } = await readPreviewBytes(response, TEXT_PREVIEW_BYTES)
+        const { bytes } = await readPreviewBytes(
+          response,
+          TEXT_PREVIEW_BYTES,
+          current.signal
+        )
         if (current.signal.aborted) return
         if (!offset && bytes.subarray(0, 8000).includes(0)) {
           setState('binary')

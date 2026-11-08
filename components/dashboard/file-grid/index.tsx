@@ -54,6 +54,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -88,6 +90,7 @@ import { useFolders } from '@/hooks/use-folders'
 import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useImageGallery } from '@/hooks/use-image-gallery'
+import { useLibraryView } from '@/hooks/use-library-view'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   RequestLifetimeProvider,
@@ -162,6 +165,10 @@ function FileLibrary({ scope }: { scope: string }) {
   const { user } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const selectionBar = useRef<HTMLDivElement>(null)
+  const viewChangeRef = useRef<(() => void) | null>(null)
+  const { view, setView } = useLibraryView(user?.id ?? null, () =>
+    viewChangeRef.current?.()
+  )
   const [files, setFiles] = useState<FileType[]>([])
   const [selectedFiles, setSelectedFiles] = useState<FileType[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
@@ -384,24 +391,69 @@ function FileLibrary({ scope }: { scope: string }) {
     >
       <section
         aria-label="Find and filter files"
-        className={cn(pagePanelClassName, 'p-[8px] sm:p-6')}
+        className={cn(pagePanelClassName, 'p-[8px] sm:p-[12px]')}
       >
         <PageHeader
-          className="mb-[8px] border-0 pb-0 sm:mb-4 [&>div]:gap-x-2 sm:[&>div]:gap-x-5 [&_h1]:text-xl sm:[&_h1]:text-2xl"
+          className="mb-[8px] border-0 pb-0 sm:mb-2 [&>div]:gap-x-2 sm:[&>div]:gap-x-5 [&_h1]:text-xl sm:[&_h1]:text-2xl"
           actionsBesideTitle
           headingRef={libraryHeading}
           title="Your files"
-          description={
-            <>
-              <span className="sm:hidden">{fileCount}</span>
-              <span className="hidden sm:inline">
-                View and manage your uploaded files.
-              </span>
-            </>
-          }
-          descriptionClassName="mt-0 text-xs leading-4 sm:mt-2 sm:text-sm sm:leading-relaxed"
+          description={<span className="sm:hidden">{fileCount}</span>}
+          descriptionClassName="mt-0 text-xs leading-4 sm:hidden"
           actions={
-            <div className="flex items-center gap-1 sm:contents">
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-1 sm:contents">
+              <div
+                role="group"
+                aria-label="File view"
+                className="hidden max-w-full shrink-0 items-center rounded-lg border border-border/60 p-[2px] sm:flex"
+              >
+                {(['gallery', 'list'] as const).map((option) => (
+                  <Button
+                    key={option}
+                    type="button"
+                    variant={view === option ? 'secondary' : 'ghost'}
+                    size="sm"
+                    aria-pressed={view === option}
+                    onClick={() => setView(option)}
+                    className="h-auto min-h-[44px] px-[8px] py-[6px] text-xs sm:min-h-8 [@media(pointer:coarse)]:!min-h-[44px]"
+                  >
+                    {option === 'gallery' ? 'Gallery' : 'List'}
+                  </Button>
+                ))}
+              </div>
+              <div className="sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`File view: ${view === 'gallery' ? 'Gallery' : 'List'}`}
+                      title={view === 'gallery' ? 'Gallery view' : 'List view'}
+                      className="h-auto !min-h-[44px] !min-w-[44px] gap-1 px-[8px] py-[6px]"
+                    >
+                      View
+                      <ChevronDown className="h-[14px] w-[14px] shrink-0" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuRadioGroup
+                      value={view}
+                      onValueChange={(value) => {
+                        if (value === 'gallery' || value === 'list')
+                          setView(value)
+                      }}
+                    >
+                      <DropdownMenuRadioItem value="gallery">
+                        Gallery
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="list">
+                        List
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -688,13 +740,15 @@ function FileLibrary({ scope }: { scope: string }) {
           aria-busy="true"
           aria-label="Loading files"
           className={cn(
-            'grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+            'grid items-start gap-4',
+            view === 'gallery' &&
+              'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
             isDateOrder(librarySort(filters.sortBy)) &&
               'mr-[28px] min-[1360px]:mr-0'
           )}
         >
           {Array.from({ length: 8 }, (_, index) => (
-            <FileCardSkeleton key={index} />
+            <FileCardSkeleton key={index} view={view} />
           ))}
         </div>
       ) : error && !gallery ? (
@@ -776,15 +830,19 @@ function FileLibrary({ scope }: { scope: string }) {
         timeline && (
           <VirtualFiles
             library={library}
+            view={view}
+            viewChangeRef={viewChangeRef}
             selectionBarRef={selectionBar}
             initialIndex={anchorIndex.current}
             chronological={isDateOrder(librarySort(filters.sortBy))}
             onVisibleFiles={onVisibleFiles}
             onRefresh={refreshFiles}
-            renderFile={(file) => (
+            renderFile={(file, menuSide) => (
               <FileCard
                 key={`${file.id}:${refreshKey}`}
                 file={file}
+                view={view}
+                menuSide={menuSide}
                 onDelete={(id) => {
                   setSelectedFiles((current) =>
                     current.filter((entry) => entry.id !== id)

@@ -384,6 +384,32 @@ describe('chunked uploads', () => {
   })
 })
 
+describe('profile selection request identity', () => {
+  it.each([
+    [undefined, undefined],
+    [null, 'none'],
+    ['profile-1', 'profile-1'],
+  ] as const)(
+    'preserves %s without serializing inherited settings into either creation request',
+    async (profileId, header) => {
+      await uploadFile(small(), { profileId })
+      await uploadPaste(new File(['hi'], 'paste.txt', { type: 'text/plain' }), {
+        profileId,
+      })
+      const [upload, paste] = FakeRequest.sent
+      expect(upload.headers).toEqual(
+        header === undefined ? {} : { 'X-Upload-Profile': header }
+      )
+      expect(paste.headers).toEqual({
+        'X-Flare-Paste': 'true',
+        ...(header === undefined ? {} : { 'X-Upload-Profile': header }),
+      })
+      expect(fields(upload)).toEqual([['file', 'file:note.txt']])
+      expect(fields(paste)).toEqual([['file', 'file:paste.txt']])
+    }
+  )
+})
+
 describe('pastes', () => {
   const paste = () => new File(['hi'], 'paste.txt', { type: 'text/plain' })
 

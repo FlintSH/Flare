@@ -109,16 +109,23 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
     }
   }
 
-  const saveFailed = (error: unknown, mutationStarted: boolean) => {
+  const saveFailed = (
+    error: unknown,
+    mutationStarted: boolean,
+    message?: string
+  ) => {
     if (mutationStarted) void refreshSecurity()
     toast({
       title: 'Error',
       description:
-        error instanceof Error ? error.message : 'Failed to update profile',
+        message ??
+        (error instanceof Error ? error.message : 'Failed to update profile'),
       variant: 'destructive',
     })
   }
-  const signOut = useSignOut({ onError: (error) => saveFailed(error, true) })
+  const signOut = useSignOut({
+    onError: (error, message) => saveFailed(error, true, message),
+  })
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()

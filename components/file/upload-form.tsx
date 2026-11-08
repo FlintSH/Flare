@@ -47,7 +47,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
+import {
+  UploadActionSummary,
+  UploadProfileSelect,
+  useUploadSelection,
+} from '@/components/upload-profiles/upload-selection'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { folderPath } from '@/lib/folders/navigation'
@@ -94,6 +98,7 @@ export function UploadForm({
   const pickerHintId = `${pickerId}-hint`
   const queueListId = `${pickerId}-queue`
   const waitingHintId = `${pickerId}-waiting`
+  const summaryId = `${pickerId}-summary`
   const anyUploadInProgress = useSyncExternalStore(
     uploadActivity.subscribe,
     uploadingSnapshot,
@@ -122,6 +127,17 @@ export function UploadForm({
   const [expiresAt, setExpiresAt] = useState<Date | null>()
   const [expiryAction, setExpiryAction] = useState<'DELETE' | 'SET_PRIVATE'>()
   const [profileId, setProfileId] = useState<string | null>()
+  const selection = useUploadSelection({
+    value: profileId,
+    onChange: setProfileId,
+    overrides: {
+      visibility,
+      expiresAt,
+      expiryAction,
+      password: Boolean(password),
+      passwordInvalid: Boolean(password && filePasswordHint(password)),
+    },
+  })
   const [folderId, setFolderId] = useState(initialFolder)
   useEffect(() => {
     setFolderId(initialFolder)
@@ -157,14 +173,68 @@ export function UploadForm({
       setSubmitBarHeight(0)
       return
     }
-    const measure = () =>
-      setSubmitBarHeight(
-        Math.ceil(submitBarElement.getBoundingClientRect().height)
+    const style = document.documentElement.style
+    const header = document
+      .querySelector('[data-dashboard-bar]')
+      ?.closest<HTMLElement>('header')
+    const padding = ['scroll-padding-top', 'scroll-padding-bottom'].map(
+      (name) => ({
+        name,
+        value: style.getPropertyValue(name),
+        priority: style.getPropertyPriority(name),
+        appliedValue: null as string | null,
+        appliedPriority: '',
+        superseded: false,
+      })
+    )
+    let active = true
+    const setPadding = (index: number, value: string) => {
+      const property = padding[index]
+      if (
+        property.appliedValue !== null &&
+        (style.getPropertyValue(property.name) !== property.appliedValue ||
+          style.getPropertyPriority(property.name) !== property.appliedPriority)
       )
+        property.superseded = true
+      if (property.superseded) return
+      style.setProperty(property.name, value, property.priority)
+      property.appliedValue = style.getPropertyValue(property.name)
+      property.appliedPriority = style.getPropertyPriority(property.name)
+    }
+    const measure = () => {
+      if (!active) return
+      const height = Math.ceil(submitBarElement.getBoundingClientRect().height)
+      setSubmitBarHeight(height)
+      // Native focus/scroll must leave room for both fixed controls. Padding
+      // changes the scroll destination, never the field, layout or focus.
+      setPadding(
+        0,
+        `${Math.max(0, header?.getBoundingClientRect().bottom ?? 0) + 8}px`
+      )
+      setPadding(1, `${height + 32}px`)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(submitBarElement)
-    return () => observer.disconnect()
+    if (header) observer.observe(header)
+    window.addEventListener('resize', measure)
+    return () => {
+      active = false
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      for (const property of padding) {
+        if (
+          !property.superseded &&
+          property.appliedValue !== null &&
+          style.getPropertyValue(property.name) === property.appliedValue &&
+          style.getPropertyPriority(property.name) === property.appliedPriority
+        ) {
+          if (property.value)
+            style.setProperty(property.name, property.value, property.priority)
+          else style.removeProperty(property.name)
+        }
+      }
+    }
   }, [submitBarElement, floatingSubmit])
 
   const uploadQueued = async () => {
@@ -195,7 +265,9 @@ export function UploadForm({
     <Button
       type="button"
       data-upload-primary=""
-      aria-describedby={waitingForUpload ? waitingHintId : undefined}
+      aria-describedby={[summaryId, waitingForUpload ? waitingHintId : null]
+        .filter(Boolean)
+        .join(' ')}
       className="min-h-[44px] w-full whitespace-normal"
       onClick={() => {
         setUploadError('')
@@ -221,6 +293,17 @@ export function UploadForm({
           ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
           : 'Upload files'}
     </Button>
+  )
+
+  const uploadAction = (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+      <UploadActionSummary
+        id={summaryId}
+        selection={selection}
+        className="min-w-0 flex-[2_1_20rem]"
+      />
+      <div className="min-w-0 flex-[1_1_12rem]">{uploadButton}</div>
+    </div>
   )
 
   return (
@@ -402,17 +485,10 @@ export function UploadForm({
       )}
 
       <div className="space-y-4">
-        <ProfilePicker
-          value={profileId}
+        <UploadProfileSelect
+          selection={selection}
           onChange={setProfileId}
           disabled={isUploading}
-          overrides={{
-            visibility,
-            expiresAt,
-            expiryAction,
-            password: Boolean(password),
-            passwordInvalid: Boolean(password && filePasswordHint(password)),
-          }}
         />
         {showFolders && (
           <div className="min-w-0 space-y-2">
@@ -593,16 +669,16 @@ export function UploadForm({
                 data-upload-submit-bar=""
                 className="fixed inset-x-[16px] bottom-[16px] z-40 mx-auto flex max-w-4xl flex-wrap items-center gap-[8px] rounded-xl border border-border bg-overlay p-[10px] shadow-xl shadow-black/20"
               >
-                <p className="min-w-0 flex-[1_1_10rem] text-sm text-muted-foreground">
+                <p className="min-w-0 flex-[1_1_10rem] text-xs text-muted-foreground">
                   {files.length} selected · {formatBytes(totalSize)}
                 </p>
-                <div className="min-w-0 flex-[1_1_12rem]">{uploadButton}</div>
+                <div className="min-w-0 flex-[3_1_32rem]">{uploadAction}</div>
               </div>,
               document.body
             )}
           </>
         ) : (
-          uploadButton
+          uploadAction
         )}
       </div>
 

@@ -23,6 +23,8 @@ These short, silent recordings capture actual browser interactions with Flare an
 
 The audit, authenticator, passkey-enrollment, invitation, role, and session recordings retain an earlier visual revision. Their recorded actions and server operations are unchanged. Current guide screenshots show the password guidance, visibility controls, and administrator recovery hint now present in those forms. The passkey-required response recording below shows the current refusal screen.
 
+The desktop and phone library recordings also retain the earlier Gallery card layout. The current screenshots and [view guide](./guide/library#choose-a-view) show the filename-first Gallery and compact List controls; the recordings demonstrate the scrolling and selection workflows described below.
+
 ### Browse a large library
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>

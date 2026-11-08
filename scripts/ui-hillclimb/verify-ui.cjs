@@ -669,7 +669,7 @@ async function main() {
       if (mobile)
         await expect(
           page.getByRole('combobox', { name: 'Jump to account setting' })
-        ).toContainText('Setting')
+        ).toContainText('Choose setting')
       await page.goForward()
       await expect
         .poll(() => new URL(page.url()).hash)

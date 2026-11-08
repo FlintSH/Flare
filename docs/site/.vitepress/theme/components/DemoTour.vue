@@ -8,7 +8,7 @@ const steps = [
     title: 'A home for every file',
     label: 'Browse',
     src: '/screenshots/timeline/library-desktop.webp',
-    text: 'Scroll through every matching file without changing pages. The slim date rail lets you jump into your upload history; search, folders, and filters keep the view focused.',
+    text: 'Choose Gallery previews or a compact List, then scroll through every matching file without changing pages. The date rail, search, folders, and filters keep the view focused.',
     link: '/guide/library',
   },
   {

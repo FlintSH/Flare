@@ -373,7 +373,7 @@ export function ProfileClient({
                     placeholder={
                       selectedAccountShortcut?.mobileTitle ||
                       selectedAccountShortcut?.title ||
-                      'Setting'
+                      'Choose setting'
                     }
                   />
                 </SelectTrigger>

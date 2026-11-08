@@ -62,6 +62,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 
+import { readTransport, refusal } from '@/lib/client/request'
 import {
   SETUP_STEPS,
   type SetupResumeStep,
@@ -282,16 +283,20 @@ export function SetupWizard({
     setBusy(true)
     let accountCreated = false
     try {
-      const response = await fetch('/api/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result.data),
-      })
-      const body = await response.json().catch(() => ({}))
+      const response = await readTransport(
+        fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(result.data),
+        })
+      )
       if (!response.ok)
-        throw new Error(
-          body.error || 'We couldn’t create your instance. Please try again.'
+        throw await refusal(
+          response,
+          'We couldn’t create your instance. Please try again.'
         )
+      // The HTTP acknowledgement confirms creation. Its body is unused; do
+      // not turn a later body interruption into another account-creation try.
       accountCreated = true
       setCreated(true)
       setPasswordConfirmation('')

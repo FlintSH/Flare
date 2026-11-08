@@ -59,7 +59,7 @@ The browser's profile picker offers three approaches:
 - **Account settings only:** bypass the saved default profile.
 - **A named profile:** use that profile for this upload.
 
-The summary beneath the picker shows effective visibility, expiration, and filename behavior. The upload or paste form's visibility control can then override that upload's visibility.
+On Upload and Paste, the summary beside the final action shows effective visibility, password status, expiration and its action, and filename behavior, including one-time overrides. It wraps with the action rather than depending on the profile picker being onscreen. If your role cannot read profiles, saved defaults still apply automatically, but the form cannot display their full settings. Loading or unavailable settings are labeled instead of inferred from base defaults.
 
 [Creating or extracting an archive](./archives#choose-an-upload-profile-deliberately) has a separate default: **Private (no profile)** creates private files without expiration and bypasses your account's saved default profile. You can explicitly select an owned profile in either archive dialog. Its normal settings and permissions then apply to the new outputs, while **Save to** independently chooses the destination. Review a public profile carefully: it can expose extracted files or the contents of a newly packaged archive even when the source files were private.
 
@@ -129,4 +129,4 @@ Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger f
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.
 
-On **Upload** and **Paste**, the summary under **Upload profile** describes the effective settings, including one-time overrides and the action taken at expiry. **Upload options** on Upload and **Sharing options** on Paste start closed; open the relevant disclosure to change the batch, then review the summary. Closing the disclosure does not reset an override or change profile precedence.
+On **Upload** and **Paste**, the summary beside **Upload N file(s)** or **Create paste** describes the effective settings, including one-time overrides and the action taken at expiry. **Upload options** on Upload and **Sharing options** on Paste start closed; open the relevant disclosure to change the batch, then review the summary. Closing the disclosure does not reset an override or change profile precedence.

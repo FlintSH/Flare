@@ -83,6 +83,10 @@ Earlier builds also showed **Preview not available** for video, audio, and text 
 
 Text, code, and CSV previews load at most 1 MiB of a file. A larger file shows **Preview unavailable** with a note that it's too large to preview; **Download** and **Copy text** still give you the whole file. Earlier builds capped only CSV files and loaded text and code of any size into the page.
 
+If a text preview or archive entry loses its connection, a connection-recovery message replaces raw browser network text. An interrupted stream is not presented as a complete preview. Restore your connection and reload the preview, use **Try again** when the archive offers it, or download the file. Size limits and specific server refusals still keep their own explanations; a failed preview does not change the stored file.
+
+On phones, the error keeps readable space as text grows. File actions use up to two columns, switching to one when the available width or enlarged text needs more room; labels wrap instead of overlapping another action. With an odd number of actions, **Download** spans the row.
+
 Before a video plays, the page asks Flare where to play it from. If that fails, for example because the file was deleted or the connection dropped, the page shows **Preview unavailable** with **This video couldn’t be loaded.**, or Flare's own message when it sends one. Earlier builds showed the request's status instead, such as **Failed to fetch direct URL: 404**.
 
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />

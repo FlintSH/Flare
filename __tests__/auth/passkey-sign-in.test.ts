@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
 
+import { RefusedRequest, TransportFailure } from '@/lib/client/request'
+
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   authenticate: vi.fn(),
@@ -77,9 +79,31 @@ describe('browser passkey confirmation', () => {
   })
 
   it('stops before the device ceremony when challenge creation fails', async () => {
-    mocks.fetch.mockRejectedValue(new Error('Challenge unavailable'))
-    await expect(signInWithPasskey()).rejects.toThrow('Challenge unavailable')
+    const cause = new Error('Challenge unavailable')
+    mocks.fetch.mockRejectedValueOnce(cause)
+    const pending = signInWithPasskey()
+    await expect(pending).rejects.toBeInstanceOf(TransportFailure)
+    const failure = await pending.catch((error) => error)
+    expect(failure.cause).toBe(cause)
+    expect(failure.message).toBe(
+      'Connection problem. Check the result before trying again.'
+    )
     expect(mocks.authenticate).not.toHaveBeenCalled()
     expect(mocks.signIn).not.toHaveBeenCalled()
+    expect(mocks.fetch).toHaveBeenCalledOnce()
+
+    // The same words in a real HTTP refusal remain the server's human reason.
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json({ error: 'Challenge unavailable' }, { status: 503 })
+    )
+    const refused = signInWithPasskey()
+    await expect(refused).rejects.toBeInstanceOf(RefusedRequest)
+    await expect(refused).rejects.toMatchObject({
+      message: 'Challenge unavailable',
+      status: 503,
+    })
+    expect(mocks.authenticate).not.toHaveBeenCalled()
+    expect(mocks.signIn).not.toHaveBeenCalled()
+    expect(mocks.fetch).toHaveBeenCalledTimes(2)
   })
 })

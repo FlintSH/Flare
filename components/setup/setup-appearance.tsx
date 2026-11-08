@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup } from '@/components/ui/radio-group'
 
+import { readAnswer, readTransport } from '@/lib/client/request'
 import {
   type CustomizationState,
   DARK_PALETTE,
@@ -69,14 +70,15 @@ export function SetupAppearance({
     setLoading(true)
     setError('')
     try {
-      const response = await fetch('/api/customization', {
-        cache: 'no-store',
+      const response = await readTransport(
+        fetch('/api/customization', { cache: 'no-store', signal }),
+        signal
+      )
+      const body = await readAnswer(response, {
         signal,
+        fallback: 'Unable to load your appearance.',
       })
-      const body = await response.json()
-      if (!response.ok)
-        throw new Error(body.error || 'Unable to load your appearance.')
-      const current = customizationSchema.parse(body.data)
+      const current = customizationSchema.parse(body)
       if (signal?.aborted) return
       setSettings(current)
       setName(current.published.brand.name)
@@ -116,25 +118,27 @@ export function SetupAppearance({
     setSaving(true)
     setError('')
     try {
-      const response = await fetch('/api/customization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'publish',
-          revision: settings.revision,
-          document: parsed.data,
-        }),
-      })
-      const body = await response.json()
+      const response = await readTransport(
+        fetch('/api/customization', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'publish',
+            revision: settings.revision,
+            document: parsed.data,
+          }),
+        })
+      )
       if (response.status === 409) {
         setConflict(true)
         throw new Error(
           'Appearance changed in another tab. Reload the latest appearance, then review your choices before saving.'
         )
       }
-      if (!response.ok)
-        throw new Error(body.error || 'Unable to save your appearance.')
-      setSettings(customizationSchema.parse(body.data))
+      const body = await readAnswer(response, {
+        fallback: 'Unable to save your appearance.',
+      })
+      setSettings(customizationSchema.parse(body))
       onComplete()
     } catch (cause) {
       setError(

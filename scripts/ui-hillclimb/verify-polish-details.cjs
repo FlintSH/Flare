@@ -326,7 +326,7 @@ async function main() {
             exact: true,
           })
           await expect(jump).toHaveAttribute('data-placeholder', '')
-          await expect(jump).toContainText('Setting')
+          await expect(jump).toContainText('Choose setting')
           assert.equal(
             await jump.evaluate((el) => getComputedStyle(el).fontStyle),
             'italic'

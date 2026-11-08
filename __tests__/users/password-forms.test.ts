@@ -350,6 +350,46 @@ function setupPasswordFields(password: string, confirmation = password) {
 }
 
 describe('setup account password', () => {
+  it('keeps setup unconfirmed after a connection failure without signing in or retrying', async () => {
+    const password = 'valid-password'
+    await submit(setupAccount(password), {}, setupPasswordFields(password).form)
+    await submit(render(setup))
+    harness.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await submit(render(setup))
+    await vi.waitFor(() =>
+      expect(
+        find(
+          render(setup),
+          (element) =>
+            element.props.children ===
+            'Connection problem. Check the result before trying again.'
+        )
+      ).toBeDefined()
+    )
+    expect(harness.fetch).toHaveBeenCalledOnce()
+    expect(harness.signIn).not.toHaveBeenCalled()
+  })
+
+  it('keeps a setup HTTP refusal distinct from a connection failure', async () => {
+    const password = 'valid-password'
+    await submit(setupAccount(password), {}, setupPasswordFields(password).form)
+    await submit(render(setup))
+    harness.fetch.mockResolvedValueOnce(
+      Response.json({ error: 'Setup already completed' }, { status: 400 })
+    )
+    await submit(render(setup))
+    await vi.waitFor(() =>
+      expect(
+        find(
+          render(setup),
+          (element) => element.props.children === 'Setup already completed'
+        )
+      ).toBeDefined()
+    )
+    expect(harness.fetch).toHaveBeenCalledOnce()
+    expect(harness.signIn).not.toHaveBeenCalled()
+  })
+
   it.each(invalidPasswords)(
     'rejects %s without advancing or POST',
     async (_, password) => {

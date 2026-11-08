@@ -3,6 +3,7 @@
 import { signOut } from 'next-auth/react'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
+import { RefusedRequest } from '@/lib/client/request'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -12,7 +13,7 @@ import { useToast } from '@/hooks/use-toast'
  */
 export function useSignOut({
   onError,
-}: { onError?: (error: unknown) => void } = {}) {
+}: { onError?: (error: unknown, message: string) => void } = {}) {
   const { toast } = useToast()
   return async () => {
     try {
@@ -21,11 +22,17 @@ export function useSignOut({
       // once they deleted their account, can provision a new one.
       await signOut({ callbackUrl: LOCAL_SIGN_IN_PATH })
     } catch (error) {
-      if (onError) return onError(error)
+      const message =
+        error instanceof RefusedRequest
+          ? error.message
+          : 'Unable to finish signing out. Check your connection and try again.'
+      // NextAuth owns its fetch/parsing. Keep the original diagnostic rather
+      // than labeling every possible library error as a transport failure.
+      if (onError) return onError(error, message)
       console.error('Logout error:', error)
       toast({
-        title: 'Error',
-        description: 'Failed to logout',
+        title: 'Sign-out not confirmed',
+        description: message,
         variant: 'destructive',
       })
     }

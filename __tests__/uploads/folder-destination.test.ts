@@ -40,9 +40,6 @@ vi.mock('@/hooks/use-folders', () => ({
     error: false,
   }),
 }))
-vi.mock('@/components/upload-profiles/profile-picker', () => ({
-  ProfilePicker: () => null,
-}))
 
 const renderForm = () =>
   renderToStaticMarkup(

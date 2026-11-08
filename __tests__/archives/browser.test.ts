@@ -16,7 +16,7 @@ import {
 
 import type { ArchiveEntry } from '@/lib/archives/shared'
 import { readPreviewBytes } from '@/lib/client/preview-bytes'
-import { sendRequest } from '@/lib/client/request'
+import { TransportFailure, sendRequest } from '@/lib/client/request'
 
 const entries: ArchiveEntry[] = [
   { path: 'project/docs/Read me.txt', type: 'file', size: 17 },
@@ -334,13 +334,36 @@ describe('safe bounded archive previews', () => {
   })
 
   it('propagates a body read failure rather than showing a complete-looking partial preview', async () => {
+    const cause = new Error('Interrupted download')
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.error(new Error('Interrupted download'))
+        controller.error(cause)
       },
     })
-    await expect(readPreviewBytes(new Response(body), 10)).rejects.toThrow(
-      'Interrupted download'
+    const pending = readPreviewBytes(new Response(body), 10)
+    await expect(pending).rejects.toBeInstanceOf(TransportFailure)
+    const error = await pending.catch((error) => error)
+    expect(error.cause).toBe(cause)
+    expect(error.message).toBe(
+      'Connection problem. Check the result before trying again.'
+    )
+    expect(body.locked).toBe(false)
+  })
+
+  it('keeps an aborted preview read cancellation identity and releases its reader', async () => {
+    const reason = new DOMException('Entry changed', 'AbortError')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(reason)
+      },
+    })
+    await expect(readPreviewBytes(new Response(body), 10)).rejects.toBe(reason)
+    expect(body.locked).toBe(false)
+  })
+
+  it('keeps the known empty-content failure distinct from transport', async () => {
+    await expect(readPreviewBytes(new Response(null), 10)).rejects.toThrow(
+      'This entry has no content to preview.'
     )
   })
 })

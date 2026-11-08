@@ -167,7 +167,7 @@ Changing filters, folders, sorting, or grouping clears the selection, as does cl
 
 You can include up to **100 files** from your account. The result is one new library file; the selected originals keep their locations, links, permissions, and contents. Creating an archive does not reclaim storage or create an instance backup.
 
-<Screenshot src="/screenshots/timeline/library-archive.webp" alt="Create archive dialog listing two selected files after their cards have scrolled out of the library view, with ZIP and Private no profile defaults" caption="The archive dialog keeps the full selection, including files whose cards are no longer visible." />
+<Screenshot src="/screenshots/timeline/library-archive.webp" alt="Create archive dialog with a collapsed Selected files (2) disclosure, ZIP format, and Private (no profile) defaults" caption="The archive dialog keeps the full selection, including files whose cards are no longer visible." />
 
 Selected files are placed at the archive's root rather than recreating their library folders. Names are normalized for portable archive paths: path-like names are flattened and unsafe separators or punctuation are cleaned. Conflicting filenames receive a suffix such as `report (2).pdf` so each selected file remains represented. The output receives the chosen `.zip` or `.tar.gz` extension.
 

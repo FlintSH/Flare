@@ -32,12 +32,19 @@ import {
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
 import {
+  type FileMenuSide,
   fileCardActivityClassName,
   fileCardDetailsClassName,
   fileCardFilenameParts,
   fileCardLabelsClassName,
   fileCardNameRowClassName,
   fileCardPreviewClassName,
+  fileListClassName,
+  fileListFactsClassName,
+  fileListLabelsClassName,
+  fileListManageClassName,
+  fileListNameClassName,
+  fileVisibilityText,
 } from '@/components/dashboard/file-card/layout'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
@@ -69,6 +76,7 @@ import { fileTypeLabel } from '@/lib/files/file-kind'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
+import type { LibraryView } from '@/lib/library/view'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -90,6 +98,8 @@ const failure = (error: unknown) =>
   error instanceof RefusedRequest ? error.message : TRY_AGAIN
 
 interface FileCardProps {
+  view?: LibraryView
+  menuSide?: FileMenuSide
   file: FileType
   onDelete?: (id: string) => void
   onUpdate?: () => void
@@ -114,6 +124,8 @@ const previewFocusClassName =
   'focus-visible:ring-0 focus-visible:shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_4px_hsl(var(--ring)),0_0_0_6px_hsl(var(--foreground))]'
 
 export function FileCard({
+  view = 'gallery',
+  menuSide = 'bottom',
   file,
   onDelete,
   onUpdate,
@@ -127,6 +139,7 @@ export function FileCard({
   selected,
   onSelect,
 }: FileCardProps) {
+  const isList = view === 'list'
   const { user } = usePermissions()
   const { toast } = useToast()
   const lifetime = useRequestLifetime()
@@ -309,7 +322,6 @@ export function FileCard({
   }
 
   const isImage = file.mimeType.startsWith('image/')
-  const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const tags = file.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
@@ -384,7 +396,7 @@ export function FileCard({
           size="icon"
           className={cn(
             'rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent [&_svg]:size-[16px]',
-            hasImagePreview
+            hasImagePreview && !isList
               ? 'h-[32px] w-[32px]'
               : 'h-[44px] w-[44px] shrink-0',
             previewFocusClassName
@@ -396,7 +408,8 @@ export function FileCard({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="end"
+        side={menuSide}
+        align={menuSide === 'left' ? 'start' : 'end'}
         data-file-menu=""
         className="group/file-menu flex w-56 min-w-0 max-w-[calc(100vw-32px)] flex-col overflow-hidden"
       >
@@ -510,7 +523,7 @@ export function FileCard({
     <label
       className={cn(
         'flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border/50 bg-background/95 shadow-sm',
-        hasImagePreview && 'absolute left-[8px] top-[8px] z-10'
+        hasImagePreview && !isList && 'absolute left-[8px] top-[8px] z-10'
       )}
     >
       <input
@@ -526,18 +539,18 @@ export function FileCard({
     <>
       <span
         data-file-visibility=""
-        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
+        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words text-muted-foreground [&>svg]:size-[12px] [&>svg]:shrink-0"
       >
         {file.hasPassword ? (
           <KeyRound className="h-3 w-3" />
         ) : (
           <VisibilityIcon className="h-3 w-3" />
         )}
-        {file.hasPassword ? 'Protected' : visibilityLabel}
+        {fileVisibilityText(file.visibility, file.hasPassword)}
       </span>
       <span
         data-file-uploaded=""
-        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
+        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words text-muted-foreground [&>svg]:size-[12px] [&>svg]:shrink-0"
         title={format(new Date(file.uploadedAt), 'PPP p')}
       >
         <Clock className="h-3 w-3" />
@@ -557,7 +570,9 @@ export function FileCard({
         title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
         className={cn(
           'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px] [@container(max-width:12rem)]:max-w-[calc(100%-16px)] [@media(pointer:coarse)]:!min-h-[44px]',
-          !hasImagePreview && 'static mx-0 mb-1 max-w-full self-start',
+          (!hasImagePreview || isList) &&
+            'static mx-0 mb-1 max-w-full self-start',
+          isList && 'mb-0 flex-none',
           previewFocusClassName
         )}
       >
@@ -571,12 +586,156 @@ export function FileCard({
       </button>
     )
 
+  const filenameLink = (
+    <Link
+      prefetch={false}
+      href={urls.page}
+      title={file.name}
+      aria-label={file.name}
+      aria-haspopup={
+        (!hasImagePreview || isList) &&
+        (browseArchive || (isImage && onPreview))
+          ? 'dialog'
+          : undefined
+      }
+      onClick={hasImagePreview && !isList ? undefined : openPrimary}
+      tabIndex={hasImagePreview && !isList ? -1 : undefined}
+      data-file-name=""
+      data-file-primary={hasImagePreview && !isList ? undefined : ''}
+      className={cn(
+        'min-w-0 flex-1 whitespace-pre-wrap rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]',
+        (!hasImagePreview || isList) && 'flex min-h-[44px] items-center'
+      )}
+    >
+      {file.name}
+    </Link>
+  )
+  const fileLabels = (
+    <>
+      {(folder || tags.length > 0) && (
+        <div
+          data-file-labels=""
+          className={cn(fileCardLabelsClassName, isList && 'contents')}
+        >
+          {folder && (
+            <button
+              type="button"
+              onClick={() => onFolderSelect?.(folder.id)}
+              disabled={!onFolderSelect}
+              title={folder.name}
+              aria-label={`Open folder ${folder.name}`}
+              data-flare-control=""
+              data-file-label=""
+              className={cn(
+                labelClassName,
+                isList && 'flex-none basis-auto max-w-full'
+              )}
+            >
+              <Folder className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 break-words whitespace-normal">
+                {folder.name}
+              </span>
+            </button>
+          )}
+          {visibleTags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => onTagSelect?.(tag.id)}
+              disabled={!onTagSelect}
+              title={tag.name}
+              aria-label={`Show files tagged ${tag.name}`}
+              data-flare-control=""
+              data-file-label=""
+              className={cn(
+                labelClassName,
+                isList && 'flex-none basis-auto max-w-full'
+              )}
+            >
+              <Tag className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 break-words whitespace-normal">
+                {tag.name}
+              </span>
+            </button>
+          ))}
+          {tags.length > visibleTags.length &&
+            (editTags ? (
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={editTags.run}
+                data-flare-control=""
+                aria-label={`+${tags.length - visibleTags.length}: view all ${tags.length} tags`}
+                className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                +{tags.length - visibleTags.length}
+              </button>
+            ) : (
+              <span
+                title={`${tags.length} tags`}
+                className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center px-1 text-xs text-muted-foreground [@media(pointer:coarse)]:min-w-11"
+              >
+                +{tags.length - visibleTags.length}
+              </span>
+            ))}
+        </div>
+      )}
+    </>
+  )
+  const fileActivity = (
+    <div
+      data-file-activity=""
+      className={cn(
+        fileCardActivityClassName,
+        (!hasImagePreview || isList) && 'gap-x-1.5 gap-y-1',
+        isList &&
+          'm-0 items-start justify-start gap-x-2.5 gap-y-1 [&>span]:mr-0 [&>div]:ml-0'
+      )}
+    >
+      {(!hasImagePreview || isList) && (
+        <>
+          <span
+            data-file-type=""
+            className="min-w-0 max-w-full break-words font-medium [overflow-wrap:anywhere]"
+          >
+            {fileTypeLabel(file.mimeType)}
+          </span>
+          {statusBadges}
+        </>
+      )}
+      <span className="mr-auto">{formatFileSize(file.size)}</span>
+      <div className="ml-auto flex flex-wrap items-center gap-x-3">
+        <span
+          className="inline-flex items-center gap-1"
+          title={`${file.views.toLocaleString()} views`}
+        >
+          <Eye className="h-3 w-3" aria-hidden="true" />
+          <span aria-hidden="true">{compactCount.format(file.views)}</span>
+          <span className="sr-only">{file.views.toLocaleString()} views</span>
+        </span>
+        <span
+          className="inline-flex items-center gap-1"
+          title={`${file.downloads.toLocaleString()} downloads`}
+        >
+          <Download className="h-3 w-3" aria-hidden="true" />
+          <span aria-hidden="true">{compactCount.format(file.downloads)}</span>
+          <span className="sr-only">
+            {file.downloads.toLocaleString()} downloads
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+  const hasListLabels = Boolean(folder || tags.length || expirationBadge)
+
   return (
     <Card
       data-file-card=""
+      data-file-view={view}
       data-file-kind={hasImagePreview ? 'image' : 'generic'}
       className={cn(
         'group relative flex h-auto min-w-0 self-start flex-col overflow-hidden rounded-xl border-border/60 bg-panel shadow-sm transition-colors [container-type:inline-size]',
+        isList && fileListClassName,
         // Selected cards keep a 2px edge inside the column: the border plus a
         // ring drawn above the thumbnail and the hover veil, so it looks the
         // same on every card and while hovered. The ring sits inside the
@@ -586,321 +745,262 @@ export function FileCard({
           : 'hover:border-primary/30'
       )}
     >
-      <div
-        data-file-heading=""
-        className={cn(
-          fileCardNameRowClassName,
-          !hasImagePreview && 'items-start'
-        )}
-      >
-        {!hasImagePreview &&
-          (onSelect ? (
-            selectionControl
-          ) : (
-            <FileTypeIcon
-              file={file}
-              className="mt-[12px] h-[20px] w-[20px] shrink-0 text-muted-foreground"
-            />
-          ))}
-        <Link
-          prefetch={false}
-          href={urls.page}
-          title={file.name}
-          aria-label={file.name}
-          aria-haspopup={
-            !hasImagePreview && (browseArchive || (isImage && onPreview))
-              ? 'dialog'
-              : undefined
-          }
-          onClick={hasImagePreview ? undefined : openPrimary}
-          tabIndex={hasImagePreview ? -1 : undefined}
-          data-file-name=""
-          data-file-primary={hasImagePreview ? undefined : ''}
-          className={cn(
-            'min-w-0 flex-1 whitespace-pre-wrap rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]',
-            !hasImagePreview && 'flex min-h-[44px] items-center'
-          )}
-        >
-          {file.name}
-        </Link>
-        {!hasImagePreview && manageMenu}
-      </div>
-      {hasImagePreview && (
-        <div className="relative">
-          <Link
-            data-file-preview=""
-            data-file-primary=""
-            prefetch={false}
-            href={urls.page}
-            aria-label={`Open ${file.name}`}
-            aria-haspopup={
-              browseArchive || (isImage && onPreview) ? 'dialog' : undefined
-            }
-            onClick={openPrimary}
-            className={cn(
-              'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
-              imagePreviewClassName
-            )}
-          >
-            <Image
-              src={urls.thumbnail}
-              alt={file.name}
-              fill
-              className="object-cover"
-              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-              loading="lazy"
-              onError={() => setPreviewFailed(true)}
-              unoptimized={!canOptimizeThumbnail(file)}
-            />
-          </Link>
-          {/* These pointer shortcuts repeat the primary link and menu actions,
-            so Tab goes from the primary link to Manage file, then the filters.
-            Keyboard focus still exposes the shortcuts and their full labels. */}
-          <div
-            data-preview-actions=""
-            className={cn(
-              'pointer-events-none absolute inset-0 bottom-auto flex items-center justify-center gap-2 bg-background/50 pt-[18px] pb-[8px] opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
-              imagePreviewClassName,
-              '[@media(pointer:coarse)]:!pt-[28px] [@media(pointer:coarse)]:!pb-[8px]',
-              onSelect && 'hidden'
-            )}
-          >
-            {browseArchive ? (
-              <Button
+      {isList ? (
+        <>
+          <div className="col-start-1 row-start-1 flex min-h-[44px] w-[64px] items-center justify-center">
+            {onSelect ? (
+              selectionControl
+            ) : hasImagePreview ? (
+              <Link
+                data-file-preview=""
+                prefetch={false}
+                href={urls.page}
+                aria-label={`Open ${file.name}`}
+                aria-haspopup={onPreview ? 'dialog' : undefined}
                 tabIndex={-1}
-                variant="outline"
-                size={hasImagePreview ? 'sm' : 'icon'}
-                aria-label="Browse archive"
-                title="Browse archive"
-                className={cn('bg-background', previewFocusClassName)}
-                onClick={browseArchive}
-              >
-                {hasImagePreview ? (
-                  'Browse archive'
-                ) : (
-                  <Folder className="h-4 w-4" />
-                )}
-              </Button>
-            ) : isImage && onPreview ? (
-              <>
-                <Button
-                  data-preview-text-shortcut={hasImagePreview ? '' : undefined}
-                  tabIndex={-1}
-                  variant="outline"
-                  size={hasImagePreview ? 'sm' : 'icon'}
-                  aria-label="View image"
-                  title="View image"
-                  className={cn('bg-background', previewFocusClassName)}
-                  onClick={() => onPreview(file)}
-                >
-                  {hasImagePreview ? 'View image' : <Eye className="h-4 w-4" />}
-                </Button>
-                {hasImagePreview && (
-                  <Button
-                    data-preview-icon-shortcut=""
-                    tabIndex={-1}
-                    variant="outline"
-                    size="icon"
-                    aria-label="View image"
-                    title="View image"
-                    className={cn(
-                      'hidden bg-background',
-                      previewFocusClassName
-                    )}
-                    onClick={() => onPreview(file)}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
+                onClick={openPrimary}
                 className={cn(
-                  'h-auto bg-background px-[8px] [&[data-flare-control]]:min-h-[44px] [&[data-flare-control]]:min-w-[44px]',
+                  'relative block h-[64px] w-[64px] shrink-0 overflow-hidden rounded-md bg-muted/50',
                   previewFocusClassName
                 )}
-                asChild
               >
-                <Link prefetch={false} href={urls.page} tabIndex={-1}>
-                  View
-                </Link>
-              </Button>
+                <Image
+                  src={urls.thumbnail}
+                  alt={file.name}
+                  fill
+                  className="object-cover"
+                  sizes="64px"
+                  loading="lazy"
+                  onError={() => setPreviewFailed(true)}
+                  unoptimized={!canOptimizeThumbnail(file)}
+                />
+              </Link>
+            ) : (
+              <FileTypeIcon
+                file={file}
+                className="h-[20px] w-[20px] shrink-0 text-muted-foreground"
+              />
             )}
-            <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-[4px]">
-              {previewActions.map((id) => {
-                const handler = offered(id)
-                if (!handler) return null
-                const { icon: Icon, button } = FILE_ACTIONS[id]
-                const className =
-                  'h-[32px] w-[32px] bg-background px-0 [&_svg]:size-[16px]'
-                return handler.href ? (
+          </div>
+          <div data-file-heading="" className={fileListNameClassName}>
+            {filenameLink}
+          </div>
+          <div className={fileListManageClassName}>{manageMenu}</div>
+          <div className={fileListFactsClassName}>{fileActivity}</div>
+          <div
+            className={cn(
+              fileListLabelsClassName,
+              !hasListLabels && 'hidden lg:block'
+            )}
+          >
+            {fileLabels}
+            {expirationBadge}
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            data-file-heading=""
+            className={cn(
+              fileCardNameRowClassName,
+              !hasImagePreview && 'items-start'
+            )}
+          >
+            {!hasImagePreview &&
+              (onSelect ? (
+                selectionControl
+              ) : (
+                <FileTypeIcon
+                  file={file}
+                  className="mt-[12px] h-[20px] w-[20px] shrink-0 text-muted-foreground"
+                />
+              ))}
+            {filenameLink}
+            {!hasImagePreview && manageMenu}
+          </div>
+          {hasImagePreview && (
+            <div className="relative">
+              <Link
+                data-file-preview=""
+                data-file-primary=""
+                prefetch={false}
+                href={urls.page}
+                aria-label={`Open ${file.name}`}
+                aria-haspopup={
+                  browseArchive || (isImage && onPreview) ? 'dialog' : undefined
+                }
+                onClick={openPrimary}
+                className={cn(
+                  'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
+                  imagePreviewClassName
+                )}
+              >
+                <Image
+                  src={urls.thumbnail}
+                  alt={file.name}
+                  fill
+                  className="object-cover"
+                  sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                  loading="lazy"
+                  onError={() => setPreviewFailed(true)}
+                  unoptimized={!canOptimizeThumbnail(file)}
+                />
+              </Link>
+              {/* These pointer shortcuts repeat the primary link and menu actions,
+            so Tab goes from the primary link to Manage file, then the filters.
+            Keyboard focus still exposes the shortcuts and their full labels. */}
+              <div
+                data-preview-actions=""
+                className={cn(
+                  'pointer-events-none absolute inset-0 bottom-auto flex items-center justify-center gap-2 bg-background/50 pt-[18px] pb-[8px] opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
+                  imagePreviewClassName,
+                  '[@media(pointer:coarse)]:!pt-[28px] [@media(pointer:coarse)]:!pb-[8px]',
+                  onSelect && 'hidden'
+                )}
+              >
+                {browseArchive ? (
                   <Button
-                    key={id}
-                    variant="outline"
-                    size="icon"
-                    className={cn(className, previewFocusClassName)}
-                    asChild
-                  >
-                    <a
-                      tabIndex={-1}
-                      href={handler.href}
-                      download={handler.download}
-                      aria-label={button.label(file.name)}
-                      title={button.title}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </a>
-                  </Button>
-                ) : (
-                  <Button
-                    key={id}
                     tabIndex={-1}
                     variant="outline"
-                    size="icon"
-                    className={cn(className, previewFocusClassName)}
-                    disabled={handler.disabled}
-                    onClick={handler.run}
-                    aria-label={button.label(file.name)}
-                    title={button.title}
+                    size={hasImagePreview ? 'sm' : 'icon'}
+                    aria-label="Browse archive"
+                    title="Browse archive"
+                    className={cn('bg-background', previewFocusClassName)}
+                    onClick={browseArchive}
                   >
-                    <Icon className="h-4 w-4" />
+                    {hasImagePreview ? (
+                      'Browse archive'
+                    ) : (
+                      <Folder className="h-4 w-4" />
+                    )}
                   </Button>
-                )
-              })}
-            </div>
-          </div>
-          {selectionControl}
-          <div className="absolute right-[8px] top-[8px] flex">
-            {manageMenu}
-          </div>
-          <div
-            data-preview-badges=""
-            className="pointer-events-none absolute bottom-2 inset-x-2 flex flex-wrap items-end justify-between gap-2 text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:px-[8px] [@container(max-width:12rem)]:py-[4px]"
-          >
-            {statusBadges}
-          </div>
-          {expirationBadge}
-          {ocr.loading && (
-            <div
-              role="status"
-              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
-            >
-              <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              <span className="text-sm font-medium">Extracting text…</span>
+                ) : isImage && onPreview ? (
+                  <>
+                    <Button
+                      data-preview-text-shortcut={
+                        hasImagePreview ? '' : undefined
+                      }
+                      tabIndex={-1}
+                      variant="outline"
+                      size={hasImagePreview ? 'sm' : 'icon'}
+                      aria-label="View image"
+                      title="View image"
+                      className={cn('bg-background', previewFocusClassName)}
+                      onClick={() => onPreview(file)}
+                    >
+                      {hasImagePreview ? (
+                        'View image'
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                    {hasImagePreview && (
+                      <Button
+                        data-preview-icon-shortcut=""
+                        tabIndex={-1}
+                        variant="outline"
+                        size="icon"
+                        aria-label="View image"
+                        title="View image"
+                        className={cn(
+                          'hidden bg-background',
+                          previewFocusClassName
+                        )}
+                        onClick={() => onPreview(file)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-auto bg-background px-[8px] [&[data-flare-control]]:min-h-[44px] [&[data-flare-control]]:min-w-[44px]',
+                      previewFocusClassName
+                    )}
+                    asChild
+                  >
+                    <Link prefetch={false} href={urls.page} tabIndex={-1}>
+                      View
+                    </Link>
+                  </Button>
+                )}
+                <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-[4px]">
+                  {previewActions.map((id) => {
+                    const handler = offered(id)
+                    if (!handler) return null
+                    const { icon: Icon, button } = FILE_ACTIONS[id]
+                    const className =
+                      'h-[32px] w-[32px] bg-background px-0 [&_svg]:size-[16px]'
+                    return handler.href ? (
+                      <Button
+                        key={id}
+                        variant="outline"
+                        size="icon"
+                        className={cn(className, previewFocusClassName)}
+                        asChild
+                      >
+                        <a
+                          tabIndex={-1}
+                          href={handler.href}
+                          download={handler.download}
+                          aria-label={button.label(file.name)}
+                          title={button.title}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button
+                        key={id}
+                        tabIndex={-1}
+                        variant="outline"
+                        size="icon"
+                        className={cn(className, previewFocusClassName)}
+                        disabled={handler.disabled}
+                        onClick={handler.run}
+                        aria-label={button.label(file.name)}
+                        title={button.title}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+              {selectionControl}
+              <div className="absolute right-[8px] top-[8px] flex">
+                {manageMenu}
+              </div>
+              <div
+                data-preview-badges=""
+                className="pointer-events-none absolute bottom-2 inset-x-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/40 bg-background px-[8px] py-[4px] text-xs [@container(max-width:12rem)]:static"
+              >
+                {statusBadges}
+              </div>
+              {expirationBadge}
+              {ocr.loading && (
+                <div
+                  role="status"
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
+                >
+                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                  <span className="text-sm font-medium">Extracting text…</span>
+                </div>
+              )}
             </div>
           )}
-        </div>
+          <div className={fileCardDetailsClassName}>
+            {!hasImagePreview && expirationBadge}
+            {fileLabels}
+            {fileActivity}
+          </div>
+        </>
       )}
-      <div className={fileCardDetailsClassName}>
-        {!hasImagePreview && expirationBadge}
-        {(folder || tags.length > 0) && (
-          <div data-file-labels="" className={fileCardLabelsClassName}>
-            {folder && (
-              <button
-                type="button"
-                onClick={() => onFolderSelect?.(folder.id)}
-                disabled={!onFolderSelect}
-                title={folder.name}
-                aria-label={`Open folder ${folder.name}`}
-                data-flare-control=""
-                data-file-label=""
-                className={labelClassName}
-              >
-                <Folder className="h-3 w-3 shrink-0" />
-                <span className="min-w-0 break-words whitespace-normal">
-                  {folder.name}
-                </span>
-              </button>
-            )}
-            {visibleTags.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => onTagSelect?.(tag.id)}
-                disabled={!onTagSelect}
-                title={tag.name}
-                aria-label={`Show files tagged ${tag.name}`}
-                data-flare-control=""
-                data-file-label=""
-                className={labelClassName}
-              >
-                <Tag className="h-3 w-3 shrink-0" />
-                <span className="min-w-0 break-words whitespace-normal">
-                  {tag.name}
-                </span>
-              </button>
-            ))}
-            {tags.length > visibleTags.length &&
-              (editTags ? (
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={editTags.run}
-                  data-flare-control=""
-                  aria-label={`+${tags.length - visibleTags.length}: view all ${tags.length} tags`}
-                  className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  +{tags.length - visibleTags.length}
-                </button>
-              ) : (
-                <span
-                  title={`${tags.length} tags`}
-                  className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center px-1 text-xs text-muted-foreground [@media(pointer:coarse)]:min-w-11"
-                >
-                  +{tags.length - visibleTags.length}
-                </span>
-              ))}
-          </div>
-        )}
-        <div
-          data-file-activity=""
-          className={cn(
-            fileCardActivityClassName,
-            !hasImagePreview && 'gap-x-1.5 gap-y-1'
-          )}
-        >
-          {!hasImagePreview && (
-            <>
-              <span
-                data-file-type=""
-                className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-md border border-border bg-muted/50 px-1 py-0.5 font-medium"
-              >
-                {fileTypeLabel(file.mimeType)}
-              </span>
-              {statusBadges}
-            </>
-          )}
-          <span className="mr-auto">{formatFileSize(file.size)}</span>
-          <div className="ml-auto flex flex-wrap items-center gap-x-3">
-            <span
-              className="inline-flex items-center gap-1"
-              title={`${file.views.toLocaleString()} views`}
-            >
-              <Eye className="h-3 w-3" aria-hidden="true" />
-              <span aria-hidden="true">{compactCount.format(file.views)}</span>
-              <span className="sr-only">
-                {file.views.toLocaleString()} views
-              </span>
-            </span>
-            <span
-              className="inline-flex items-center gap-1"
-              title={`${file.downloads.toLocaleString()} downloads`}
-            >
-              <Download className="h-3 w-3" aria-hidden="true" />
-              <span aria-hidden="true">
-                {compactCount.format(file.downloads)}
-              </span>
-              <span className="sr-only">
-                {file.downloads.toLocaleString()} downloads
-              </span>
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {!hasImagePreview && ocr.loading && (
+      {(!hasImagePreview || isList) && ocr.loading && (
         <div
           role="status"
           className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"

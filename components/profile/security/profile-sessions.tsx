@@ -148,11 +148,13 @@ function AccountSessions({ scope }: { scope: SessionScope }) {
     getNextPageParam: (last) => last.nextCursor || undefined,
   })
   const attempts = history.data?.pages.flatMap((page) => page.attempts) || []
-  const revokeFailed = (error: unknown) => {
+  const revokeFailed = (error: unknown, message?: string) => {
     if (lifetime.current.signal.aborted) return
     toast({
-      title: 'Unable to revoke session',
-      description: error instanceof Error ? error.message : 'Please try again.',
+      title: message ? 'Sign-out not confirmed' : 'Unable to revoke session',
+      description:
+        message ??
+        (error instanceof Error ? error.message : 'Please try again.'),
       variant: 'destructive',
     })
     void sessions.refetch()

@@ -1,6 +1,8 @@
 import type { FileType } from '@/types/components/file'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { TransportFailure } from '@/lib/client/request'
+
 import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 
 const harness = vi.hoisted(() => ({
@@ -147,8 +149,15 @@ describe('fresh retained file selections', () => {
     complete(0, undefined, 500)
     await expect(pending).rejects.toThrow('Couldn’t refresh selected files')
     pending = render().refresh()
-    requests[1].reject(new Error('offline'))
-    await expect(pending).rejects.toThrow('offline')
+    const cause = new Error('offline')
+    requests[1].reject(cause)
+    await expect(pending).rejects.toBeInstanceOf(TransportFailure)
+    const failure = await pending.catch((error) => error)
+    expect(failure.cause).toBe(cause)
+    expect(failure.message).toBe(
+      'Connection problem. Check the result before trying again.'
+    )
+    expect(requests).toHaveLength(2)
     expect(render().loading).toBe(false)
   })
   it('rejects duplicate or unrelated records even if the response count matches', async () => {

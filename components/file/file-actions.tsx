@@ -109,16 +109,20 @@ export function FileActions({
     }
   }
 
-  // Phones get an even two-column grid; an odd count gives Download a row.
-  // The grid asks for the screen's width so a card sized to its content
-  // still spans the phone.
+  // Keep at most two columns, with room for the icon, label and padding.
+  // Narrow widths or enlarged text collapse the grid without cutting labels.
   const actionCount = 3 + Number(isTextBased) + Number(showOcr)
   // The app's one button shape; taller touch targets on phones.
-  const buttonClassName = 'h-9 w-full sm:h-8 sm:w-auto'
+  const buttonClassName =
+    'h-auto min-h-[44px] w-full whitespace-normal sm:h-8 sm:min-h-0 sm:w-auto'
 
   return (
     <div
-      className="grid w-screen max-w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-center"
+      className="grid w-screen max-w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-center"
+      style={{
+        gridTemplateColumns:
+          'repeat(auto-fit, minmax(min(100%, max(7.5rem, calc((100% - 0.5rem) / 2))), 1fr))',
+      }}
       role="group"
       aria-label="File actions"
     >
@@ -126,7 +130,10 @@ export function FileActions({
         size="sm"
         onClick={download}
         disabled={!urls}
-        className={cn(buttonClassName, actionCount % 2 === 1 && 'col-span-2')}
+        className={cn(
+          buttonClassName,
+          actionCount % 2 === 1 && 'col-span-full'
+        )}
       >
         <Download className="h-4 w-4" aria-hidden="true" />
         Download

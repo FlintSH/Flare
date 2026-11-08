@@ -19,7 +19,11 @@ import {
 } from '@tanstack/react-virtual'
 import { createPortal, flushSync } from 'react-dom'
 
-import { fileCardHeight } from '@/components/dashboard/file-card/layout'
+import {
+  type FileMenuSide,
+  fileCardHeight,
+  fileCardMenuSide,
+} from '@/components/dashboard/file-card/layout'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -29,6 +33,7 @@ import {
   timelineLayout,
   timelineWindowStart,
 } from '@/lib/library/timeline-layout'
+import { type LibraryView, libraryColumns } from '@/lib/library/view'
 
 import type { useFileTimeline } from '@/hooks/use-file-timeline'
 
@@ -39,9 +44,11 @@ type Library = ReturnType<typeof useFileTimeline>
 
 interface VirtualFilesProps {
   library: Library
+  view: LibraryView
+  viewChangeRef: RefObject<(() => void) | null>
   initialIndex: number
   chronological: boolean
-  renderFile: (file: FileType) => ReactNode
+  renderFile: (file: FileType, menuSide: FileMenuSide) => ReactNode
   onVisibleFiles: (files: FileType[], firstIndex: number) => void
   onRefresh: () => void
   selectionBarRef: RefObject<HTMLDivElement | null>
@@ -49,6 +56,8 @@ interface VirtualFilesProps {
 
 export function VirtualFiles({
   library,
+  view,
+  viewChangeRef,
   initialIndex,
   chronological,
   renderFile,
@@ -68,9 +77,12 @@ export function VirtualFiles({
     columns: 1,
     top: 0,
     scale: 1,
-    cardHeight: fileCardHeight(true, false),
+    cardHeight: fileCardHeight(true, false, 1, view),
+    view,
+    compact: true,
+    menuSide: 'bottom' as FileMenuSide,
   })
-  const [focusedRow, setFocusedRow] = useState<number | null>(null)
+  const [focusedFile, setFocusedFile] = useState<number | null>(null)
   const initialized = useRef(false)
   const restoreIndex = useRef(initialIndex)
   const [windowOffset, setWindowStart] = useState(0)
@@ -80,11 +92,12 @@ export function VirtualFiles({
     width: number
     columns: number
     cardHeight: number
+    view: LibraryView
     rows: Map<number, number>
   } | null>(null)
   const seekDestination = useRef<number | null>(null)
   const position = useRef(initialIndex)
-  const previousSize = useRef({ width: 0, columns: 1, cardHeight: 0 })
+  const previousSize = useRef({ width: 0, columns: 1, cardHeight: 0, view })
   const observeOffset = useRef<
     ((offset: number, isScrolling: boolean) => void) | null
   >(null)
@@ -186,6 +199,7 @@ export function VirtualFiles({
       ),
     [timeline, dimensions.columns]
   )
+  const focusedRow = focusedFile === null ? null : layout.rowAt(focusedFile)
   const windowStart = Math.min(
     windowOffset,
     Math.max(0, layout.rowCount - TIMELINE_WINDOW_ROWS)
@@ -196,7 +210,8 @@ export function VirtualFiles({
       const knownSize =
         remembered?.width === dimensions.width &&
         remembered.columns === dimensions.columns &&
-        remembered.cardHeight === dimensions.cardHeight
+        remembered.cardHeight === dimensions.cardHeight &&
+        remembered.view === view
           ? remembered.rows.get(index + windowStart)
           : undefined
       // Use image-card estimates before a row is measured. Generic rows can
@@ -208,7 +223,7 @@ export function VirtualFiles({
           : dimensions.cardHeight + 16 * dimensions.scale)
       )
     },
-    [layout, dimensions, windowStart]
+    [layout, dimensions, windowStart, view]
   )
   const navigation =
     typeof document === 'undefined'
@@ -317,29 +332,28 @@ export function VirtualFiles({
     const pointer = window.matchMedia('(pointer: coarse)')
     const measure = () => {
       const width = element.getBoundingClientRect().width
-      const columns =
-        window.innerWidth >= 1280
-          ? 4
-          : window.innerWidth >= 1024
-            ? 3
-            : window.innerWidth >= 640
-              ? 2
-              : 1
+      const columns = libraryColumns(view, window.innerWidth)
+      const compact = window.innerWidth < 640
       const top = element.getBoundingClientRect().top + window.scrollY
       const scale =
         parseFloat(getComputedStyle(document.documentElement).fontSize) / 16
+      const menuSide = fileCardMenuSide(window.innerWidth, scale * 16)
       const cardHeight = fileCardHeight(
         window.innerWidth < 640,
         pointer.matches,
-        scale
+        scale,
+        view
       )
       setDimensions((old) =>
         old.width === width &&
         old.columns === columns &&
         old.cardHeight === cardHeight &&
+        old.view === view &&
+        old.compact === compact &&
+        old.menuSide === menuSide &&
         Math.abs(old.top - top) < 1
           ? old
-          : { width, columns, top, cardHeight, scale }
+          : { width, columns, top, cardHeight, scale, view, compact, menuSide }
       )
     }
     measure()
@@ -353,7 +367,7 @@ export function VirtualFiles({
       window.removeEventListener('resize', measure)
       pointer.removeEventListener('change', measure)
     }
-  }, [])
+  }, [view])
 
   useLayoutEffect(() => {
     virtualizer.measure()
@@ -370,6 +384,7 @@ export function VirtualFiles({
     dimensions.width,
     dimensions.columns,
     dimensions.cardHeight,
+    dimensions.view,
     windowStart,
     virtualizer,
     measureRow,
@@ -392,7 +407,7 @@ export function VirtualFiles({
     (row: number) => {
       seekDestination.current = row
       pendingScrollDelta.current = null
-      setFocusedRow(null)
+      setFocusedFile(null)
       const nextStart = timelineWindowStart(row, layout.rowCount)
       if (row < windowStart || row >= windowStart + TIMELINE_WINDOW_ROWS) {
         pendingSeek.current = row
@@ -451,9 +466,13 @@ export function VirtualFiles({
     } else if (
       previousSize.current.columns !== dimensions.columns ||
       previousSize.current.width !== dimensions.width ||
-      previousSize.current.cardHeight !== dimensions.cardHeight
+      previousSize.current.cardHeight !== dimensions.cardHeight ||
+      previousSize.current.view !== dimensions.view
     ) {
       previousSize.current = dimensions
+      // At the page top, keep the toolbar in view instead of aligning file zero
+      // beneath navigation after a layout change.
+      if (window.scrollY === 0 && position.current === 0) return
       const target = layout.rowAt(
         Math.min(timeline!.total - 1, position.current)
       )
@@ -511,6 +530,15 @@ export function VirtualFiles({
   useEffect(() => {
     position.current = firstIndex
   }, [firstIndex])
+  useLayoutEffect(() => {
+    const prepare = () => {
+      position.current = firstIndex
+    }
+    viewChangeRef.current = prepare
+    return () => {
+      if (viewChangeRef.current === prepare) viewChangeRef.current = null
+    }
+  }, [firstIndex, viewChangeRef])
   // Recenter before either end of a large native-scroll window. The date rail
   // always addresses the full account; wheel/touch scrolling continues naturally.
   useEffect(() => {
@@ -561,6 +589,7 @@ export function VirtualFiles({
         width: dimensions.width,
         columns: dimensions.columns,
         cardHeight: dimensions.cardHeight,
+        view,
         rows: new Map(
           currentRows.map((row) => [row.index + windowStart, row.size])
         ),
@@ -581,6 +610,7 @@ export function VirtualFiles({
     dimensions.width,
     dimensions.columns,
     dimensions.cardHeight,
+    view,
     topInset,
     virtualizer,
   ])
@@ -624,10 +654,10 @@ export function VirtualFiles({
         }
         style={{ height: virtualizer.getTotalSize(), overflowAnchor: 'none' }}
         onFocusCapture={(event) => {
-          const row = (event.target as HTMLElement).closest<HTMLElement>(
-            '[data-row]'
+          const item = (event.target as HTMLElement).closest<HTMLElement>(
+            '[data-file-index]'
           )
-          if (row) setFocusedRow(Number(row.dataset.row))
+          if (item) setFocusedFile(Number(item.dataset.fileIndex))
         }}
       >
         {rows.map((row) => {
@@ -669,7 +699,11 @@ export function VirtualFiles({
                         aria-setsize={timeline!.total}
                         data-file-index={index}
                       >
-                        {file ? renderFile(file) : <FileCardSkeleton />}
+                        {file ? (
+                          renderFile(file, dimensions.menuSide)
+                        ) : (
+                          <FileCardSkeleton view={view} />
+                        )}
                       </div>
                     )
                   })}
@@ -714,7 +748,7 @@ export function VirtualFiles({
           contentTop={dimensions.top - (virtualizer.scrollOffset ?? 0)}
           rootFontSize={dimensions.scale * 16}
           navigationBottom={navigationBottom}
-          compact={dimensions.columns === 1}
+          compact={dimensions.compact}
           viewportHeight={virtualizer.scrollRect?.height ?? 0}
           onSeek={seekFromControl}
         />

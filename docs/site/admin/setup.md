@@ -40,6 +40,8 @@ Allow registration for an open community instance, or close registration and cre
 
 You can go back and edit the first three steps before creating the instance. Creation saves the administrator and core configuration together. After it succeeds, these choices are managed in Settings and Users rather than rerunning account creation.
 
+If the creation request loses its connection before Flare confirms a response, the page shows a connection-recovery message. The server may already have completed setup: restore your connection and check whether setup is complete before sending another creation request. Flare does not automatically repeat it. A confirmed successful response continues to sign-in and the optional steps; if that sign-in fails, use the offered local sign-in continuation rather than creating the administrator again.
+
 ## 4. Make it yours, or keep the defaults
 
 Choose an instance name, tagline, and starting look. The preview is local until **Save and continue** publishes it. **Set up appearance later** keeps the published design unchanged. Choosing the Flare default retains the original theme. The other looks match the studio's Orbit, Tide, and Ember presets described in [Appearance](./appearance#theme).
@@ -47,6 +49,8 @@ Choose an instance name, tagline, and starting look. The preview is local until 
 <Screenshot src="/screenshots/documentation-links/setup-appearance.webp" alt="Setup appearance step showing the Flare default starting look and the Setup guide link" caption="Keep the Flare default or preview a starting look before publishing it." />
 
 For paired palettes, typography, backgrounds, logos, share-page layouts, and portable packs, open the [full appearance studio](/admin/appearance) after setup. Resuming onboarding begins from the published appearance, preserves fields the simple editor does not expose, and keeps an existing studio draft intact. If another administrator changes appearance while you are editing, reload and review the latest state before saving.
+
+An appearance connection error keeps the editor available and does not automatically retry publishing. Restore the connection and reload to inspect the published result before trying the change again. If Flare explicitly reports that another tab changed the appearance, use **Reload latest appearance**, then review your choices; this conflict guidance also remains available when the refusal body cannot be read. Specific server refusals keep their own reason.
 
 ## 5. Add account email, optionally
 

@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { Fragment, createElement } from 'react'
 
 import {
   QueryClient,
@@ -12,16 +12,28 @@ import {
   ProfilePicker,
   useUploadProfiles,
 } from '@/components/upload-profiles/profile-picker'
+import {
+  UploadActionSummary,
+  UploadProfileSelect,
+  useUploadSelection,
+} from '@/components/upload-profiles/upload-selection'
 
-const session = vi.hoisted(() => ({ permissions: ['uploadProfiles.manage'] }))
+import { RefusedRequest, TransportFailure } from '@/lib/client/request'
+import { UPLOAD_DEFAULTS } from '@/lib/uploads/schema'
+
+const session = vi.hoisted(() => ({
+  permissions: ['uploadProfiles.manage'],
+  userId: 'alice',
+  browserId: 'alice-browser',
+}))
 
 vi.mock('next-auth/react', () => ({
   useSession: () => ({
     status: 'authenticated',
     data: {
       user: {
-        id: 'alice',
-        sessionId: 'alice-browser',
+        id: session.userId,
+        sessionId: session.browserId,
         permissions: session.permissions,
       },
     },
@@ -32,14 +44,27 @@ const fetchMock = vi.fn<typeof fetch>()
 let client: QueryClient
 let seen: ReturnType<typeof useUploadProfiles>
 
-function Probe() {
-  seen = useUploadProfiles()
+function Probe({
+  observe,
+}: {
+  observe: (value: ReturnType<typeof useUploadProfiles>) => void
+}) {
+  const value = useUploadProfiles()
+  observe(value)
   return null
 }
 
 function render() {
   renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(Probe))
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(Probe, {
+        observe: (value) => {
+          seen = value
+        },
+      })
+    )
   )
   return seen
 }
@@ -66,6 +91,8 @@ async function load() {
 
 beforeEach(() => {
   session.permissions = ['uploadProfiles.manage']
+  session.userId = 'alice'
+  session.browserId = 'alice-browser'
   // Each render here mounts the picker anew, which would ask again after a
   // failure; a picker that stays mounted keeps showing the error instead.
   client = new QueryClient({
@@ -153,16 +180,135 @@ describe('loading upload profiles', () => {
     )
   })
 
-  it('keeps its own message for a refusal and passes network failures through', async () => {
+  it('keeps its refusal message and shows friendly transport recovery with the cause retained', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ error: 'Permission denied' }, { status: 403 })
     )
     expect((await load()).error).toBe('Could not load upload profiles.')
+    const refused = client.getQueryCache().getAll()[0].state.error
+    expect(refused).toBeInstanceOf(RefusedRequest)
+    expect(refused).toMatchObject({ message: 'Permission denied', status: 403 })
 
     client.clear()
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    expect((await load()).error).toBe('Failed to fetch')
+    const cause = new TypeError('Failed to fetch')
+    fetchMock.mockRejectedValueOnce(cause)
+    expect((await load()).error).toBe(
+      'Connection problem. Check the result before trying again.'
+    )
+    const failure = client.getQueryCache().getAll()[0].state.error
+    expect(failure).toBeInstanceOf(TransportFailure)
+    expect(failure?.cause).toBe(cause)
     // A failed read is not asked again on its own.
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+let selected: ReturnType<typeof useUploadSelection>
+function SelectionProbe({
+  observe,
+}: {
+  observe: (value: ReturnType<typeof useUploadSelection>) => void
+}) {
+  const selection = useUploadSelection({ onChange: () => {} })
+  observe(selection)
+  return createElement(
+    Fragment,
+    null,
+    createElement(UploadProfileSelect, {
+      selection,
+      onChange: () => {},
+    }),
+    createElement(UploadActionSummary, {
+      id: 'action-summary',
+      selection,
+    })
+  )
+}
+function renderSelection() {
+  return renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SelectionProbe, {
+        observe: (value) => {
+          selected = value
+        },
+      })
+    )
+  )
+}
+async function loadSelection() {
+  renderSelection()
+  const query = client
+    .getQueryCache()
+    .getAll()
+    .find(
+      (entry) =>
+        entry.queryKey[0] === 'upload-profiles' &&
+        entry.queryKey[1] === session.userId &&
+        entry.queryKey[2] === session.browserId
+    )!
+  const observer = new QueryObserver(client, {
+    ...query.options,
+    queryKey: query.queryKey,
+  })
+  const unsubscribe = observer.subscribe(() => {})
+  await vi.waitFor(() =>
+    expect(observer.getCurrentResult().fetchStatus).toBe('idle')
+  )
+  const html = renderSelection()
+  unsubscribe()
+  return html
+}
+const answer = (expiration: 'DAY' | 'WEEK') => ({
+  profiles: [],
+  defaultProfileId: null,
+  accountOptions: {},
+  effective: { ...UPLOAD_DEFAULTS, expiration },
+  canShare: true,
+})
+
+describe('shared ordinary picker and final-action description', () => {
+  it('uses one account query and one announcement for both pure views', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ data: answer('DAY') }))
+    const html = await loadSelection()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(
+      client
+        .getQueryCache()
+        .getAll()
+        .filter((q) => q.queryKey[0] === 'upload-profiles')
+    ).toHaveLength(1)
+    expect(html.match(/aria-live="polite"/g)).toHaveLength(1)
+    expect(html).toContain('1 day, then permanently delete')
+    expect(selected.status).toBe('ready')
+  })
+
+  it('does not show another account or browser session’s effective settings', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ data: answer('DAY') }))
+    await loadSelection()
+    expect(selected.summary).toContain('1 day')
+    session.userId = 'bob'
+    session.browserId = 'bob-browser'
+    const loading = renderSelection()
+    expect(selected.status).toBe('loading')
+    expect(loading).not.toContain('1 day')
+    fetchMock.mockResolvedValueOnce(Response.json({ data: answer('WEEK') }))
+    await loadSelection()
+    expect(selected.summary).toContain('1 week')
+    session.browserId = 'bob-second-browser'
+    renderSelection()
+    expect(selected.status).toBe('loading')
+    expect(selected.summary).not.toContain('1 week')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not query or invent a full summary for a limited role', () => {
+    session.permissions = ['files.upload']
+    const html = renderSelection()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(html).not.toContain('combobox')
+    expect(html).toContain('full settings are unavailable for this role')
+    expect(html).not.toContain('no expiry')
   })
 })

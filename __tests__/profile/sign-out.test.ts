@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+import { RefusedRequest } from '@/lib/client/request'
 import type { AccountEmailStatus } from '@/lib/email/eligibility'
 
 import { useSignOut } from '@/hooks/use-sign-out'
@@ -63,6 +64,8 @@ vi.mock('@/hooks/use-toast', () => ({
 
 const fetchMock = vi.fn<typeof fetch>()
 const localSignIn = { callbackUrl: '/auth/login?local=1' }
+const signOutMessage =
+  'Unable to finish signing out. Check your connection and try again.'
 
 beforeEach(() => {
   harness.slots = []
@@ -89,8 +92,8 @@ describe('useSignOut', () => {
     vi.spyOn(console, 'error').mockImplementationOnce(() => {})
     await useSignOut()()
     expect(harness.toast).toHaveBeenCalledWith({
-      title: 'Error',
-      description: 'Failed to logout',
+      title: 'Sign-out not confirmed',
+      description: signOutMessage,
       variant: 'destructive',
     })
   })
@@ -100,7 +103,32 @@ describe('useSignOut', () => {
     const onError = vi.fn()
     vi.mocked(signOut).mockRejectedValueOnce(failure)
     await useSignOut({ onError })()
-    expect(onError).toHaveBeenCalledWith(failure)
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure, signOutMessage)
+    expect(harness.toast).not.toHaveBeenCalled()
+  })
+
+  it('keeps a library error unwrapped while providing safe presentation text', async () => {
+    const failure = new TypeError('Unexpected library programming failure')
+    const onError = vi.fn()
+    vi.mocked(signOut).mockRejectedValueOnce(failure)
+    await useSignOut({ onError })()
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure, signOutMessage)
+    expect(signOut).toHaveBeenCalledOnce()
+  })
+
+  it('keeps an explicit refusal reason and original metadata for the caller', async () => {
+    const refused = new RefusedRequest(
+      'Please wait before trying again.',
+      429,
+      null,
+      15
+    )
+    const onError = vi.fn()
+    vi.mocked(signOut).mockRejectedValueOnce(refused)
+    await useSignOut({ onError })()
+    expect(onError).toHaveBeenCalledExactlyOnceWith(refused, refused.message)
+    expect(refused.status).toBe(429)
+    expect(refused.retryAfter).toBe(15)
     expect(harness.toast).not.toHaveBeenCalled()
   })
 })
@@ -153,6 +181,23 @@ const shownError = () =>
   find(render(), (element) => element.props.role === 'alert')?.props.children
 
 describe('deleting your account', () => {
+  it('does not claim deletion succeeded or retry when the response was lost', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await deleteAccount()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(signOut).not.toHaveBeenCalled()
+    expect(shownError()).toBe(
+      'Connection problem. Check the result before trying again.'
+    )
+    expect(
+      find(render(), (element) => element.type === AlertDialogTitle)!.props
+        .children
+    ).toBe('Delete your account?')
+    expect(find(render(), (element) => element.type === Input)).toBeDefined()
+    expect(confirmButton().props.children).toContain(
+      'Delete account permanently'
+    )
+  })
   it('requires the exact typed intent before any deletion request, including a direct handler call', async () => {
     for (const value of ['', 'delete', 'DELETE ', ' DELETE', 'DELET']) {
       typeIntent(value)
@@ -246,7 +291,7 @@ describe('deleting your account', () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
     vi.mocked(signOut).mockRejectedValueOnce(new TypeError('Failed to fetch'))
     await deleteAccount()
-    expect(shownError()).toBe('Failed to fetch')
+    expect(shownError()).toBe(signOutMessage)
     expect(
       find(render(), (element) => element.type === AlertDialogTitle)!.props
         .children
@@ -304,7 +349,7 @@ describe('deleting your account', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(3)
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(signOut).toHaveBeenCalledTimes(2)
-    expect(shownError()).toBe('Failed to fetch')
+    expect(shownError()).toBe(signOutMessage)
   })
 
   it('prevents Escape while deleting, without moving focus to the disabled action', async () => {
@@ -373,7 +418,7 @@ describe('deleting your account', () => {
     await deleteAccount()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(signOut).toHaveBeenCalledTimes(1)
-    expect(shownError()).toBe('Failed to fetch')
+    expect(shownError()).toBe(signOutMessage)
     ;(dialog().props.onOpenChange as (open: boolean) => void)(false)
     expect(dialog().props.open).toBe(true)
     ;(

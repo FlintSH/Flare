@@ -12,8 +12,9 @@ export function ErrorState({
   fallbackMessage = 'You can still try downloading the original file below.',
 }: ErrorStateProps) {
   return (
-    <div className="w-full px-6">
+    <div className="w-full px-[16px] sm:px-6">
       <PreviewPlaceholder
+        className="px-[16px] sm:px-6"
         role="alert"
         icon={FileWarning}
         title="Preview unavailable"

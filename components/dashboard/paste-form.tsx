@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -23,7 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
+import {
+  UploadActionSummary,
+  UploadProfileSelect,
+  UploadSelection,
+} from '@/components/upload-profiles/upload-selection'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { allows } from '@/lib/permissions/actions'
@@ -41,6 +45,7 @@ export function PasteForm() {
     undefined
   )
   const [password, setPassword] = useState('')
+  const summaryId = `${useId()}-summary`
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState<{
@@ -168,132 +173,153 @@ export function PasteForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Label htmlFor="content">Content</Label>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {/* One locale, so the server's markup matches the browser's. */}
-            {content.length.toLocaleString('en-US')} characters
-          </span>
-        </div>
-        <Textarea
-          id="content"
-          placeholder="Enter your text or code…"
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          className="min-h-[300px] resize-y font-mono text-sm leading-6"
-          spellCheck={false}
-          required
-          disabled={isSubmitting}
-          aria-describedby={error ? 'paste-error' : undefined}
-        />
-      </div>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="filename">
-            Filename{' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <Input
-            id="filename"
-            placeholder="paste.txt"
-            value={filename}
-            onChange={(event) => setFilename(event.target.value)}
-            disabled={isSubmitting}
-            aria-describedby="filename-help"
-          />
-          <p
-            id="filename-help"
-            className="text-pretty text-xs text-muted-foreground"
-          >
-            Add an extension such as .js, .py, or .md for syntax highlighting.
-          </p>
-        </div>
-      </div>
-      <ProfilePicker
-        value={profileId}
-        onChange={setProfileId}
-        disabled={isSubmitting}
-        overrides={{
-          visibility:
-            visibility === 'inherit'
-              ? undefined
-              : (visibility as 'PUBLIC' | 'PRIVATE'),
-          password: Boolean(password),
-          passwordInvalid: Boolean(password && filePasswordHint(password)),
-        }}
-      />
-      {canShare && (
-        <CreationOptions
-          error={password ? filePasswordHint(password) : null}
-          passwordField="paste-password"
-          customized={Boolean(visibility !== 'inherit' || password)}
-        >
-          {canShare && (
-            <div className="space-y-2">
-              <Label htmlFor="paste-visibility">Visibility</Label>
-              <Select
-                value={visibility}
-                onValueChange={setVisibility}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="paste-visibility">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="inherit">From upload profile</SelectItem>
-                  <SelectItem value="PUBLIC">
-                    Public (anyone with the link)
-                  </SelectItem>
-                  <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-                </SelectContent>
-              </Select>
+    <UploadSelection
+      value={profileId}
+      onChange={setProfileId}
+      overrides={{
+        visibility:
+          visibility === 'inherit'
+            ? undefined
+            : (visibility as 'PUBLIC' | 'PRIVATE'),
+        password: Boolean(password),
+        passwordInvalid: Boolean(password && filePasswordHint(password)),
+      }}
+    >
+      {(selection) => (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="content">Content</Label>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {/* One locale, so the server's markup matches the browser's. */}
+                {content.length.toLocaleString('en-US')} characters
+              </span>
             </div>
-          )}
-          {canShare && (
+            <Textarea
+              id="content"
+              placeholder="Enter your text or code…"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              className="min-h-[300px] resize-y font-mono text-sm leading-6"
+              spellCheck={false}
+              required
+              disabled={isSubmitting}
+              aria-describedby={error ? 'paste-error' : undefined}
+            />
+          </div>
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="paste-password">
-                Password protection{' '}
+              <Label htmlFor="filename">
+                Filename{' '}
                 <span className="font-normal text-muted-foreground">
                   (optional)
                 </span>
               </Label>
               <Input
-                id="paste-password"
-                type="password"
-                autoComplete="new-password"
-                placeholder="Leave empty for no password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                id="filename"
+                placeholder="paste.txt"
+                value={filename}
+                onChange={(event) => setFilename(event.target.value)}
                 disabled={isSubmitting}
-                {...filePasswordFieldProps('paste-password-hint', password)}
+                aria-describedby="filename-help"
               />
-              <FilePasswordHint id="paste-password-hint" password={password} />
+              <p
+                id="filename-help"
+                className="text-pretty text-xs text-muted-foreground"
+              >
+                Add an extension such as .js, .py, or .md for syntax
+                highlighting.
+              </p>
             </div>
+          </div>
+          <UploadProfileSelect
+            selection={selection}
+            onChange={setProfileId}
+            disabled={isSubmitting}
+          />
+          {canShare && (
+            <CreationOptions
+              error={password ? filePasswordHint(password) : null}
+              passwordField="paste-password"
+              customized={Boolean(visibility !== 'inherit' || password)}
+            >
+              {canShare && (
+                <div className="space-y-2">
+                  <Label htmlFor="paste-visibility">Visibility</Label>
+                  <Select
+                    value={visibility}
+                    onValueChange={setVisibility}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger id="paste-visibility">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        From upload profile
+                      </SelectItem>
+                      <SelectItem value="PUBLIC">
+                        Public (anyone with the link)
+                      </SelectItem>
+                      <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {canShare && (
+                <div className="space-y-2">
+                  <Label htmlFor="paste-password">
+                    Password protection{' '}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="paste-password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Leave empty for no password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    disabled={isSubmitting}
+                    {...filePasswordFieldProps('paste-password-hint', password)}
+                  />
+                  <FilePasswordHint
+                    id="paste-password-hint"
+                    password={password}
+                  />
+                </div>
+              )}
+            </CreationOptions>
           )}
-        </CreationOptions>
+          {error && (
+            <Alert id="paste-error" variant="destructive">
+              <AlertCircle aria-hidden="true" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+            <UploadActionSummary
+              id={summaryId}
+              selection={selection}
+              className="min-w-0 flex-[2_1_20rem]"
+            />
+            <Button
+              type="submit"
+              className="min-h-[44px] w-full flex-[1_1_12rem] whitespace-normal"
+              aria-describedby={summaryId}
+              disabled={
+                isSubmitting ||
+                !content.trim() ||
+                Boolean(password && filePasswordHint(password))
+              }
+            >
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Creating paste…' : 'Create paste'}
+            </Button>
+          </div>
+        </form>
       )}
-      {error && (
-        <Alert id="paste-error" variant="destructive">
-          <AlertCircle aria-hidden="true" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={
-          isSubmitting ||
-          !content.trim() ||
-          Boolean(password && filePasswordHint(password))
-        }
-      >
-        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        {isSubmitting ? 'Creating paste…' : 'Create paste'}
-      </Button>
-    </form>
+    </UploadSelection>
   )
 }

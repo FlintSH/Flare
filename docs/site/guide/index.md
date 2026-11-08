@@ -124,6 +124,8 @@ In a confirmation dialog’s bottom button group, **Cancel**, **Keep account**, 
 
 **Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.**; earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Ask the operator if such messages keep appearing.
 
+If the shared API request cannot receive or finish reading a response, it shows **Connection problem. Check the result before trying again.** rather than browser text such as `Failed to fetch`. Check your connection. Before repeating a save, creation, or deletion, check whether it already completed; a lost response does not mean the server rejected the change. This request helper does not automatically repeat the action. A server refusal still keeps its own explanation.
+
 ## Where to go next
 
 - [Browse, search, and preview your library](./library)
