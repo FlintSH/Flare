@@ -32,7 +32,7 @@ export const accountPasswordSchema = z
   )
 
 /** Persistent guidance for choosing a new account password. */
-export const ACCOUNT_PASSWORD_HELP = `Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters and at most ${PASSWORD_MAX_BYTES} bytes. Some emoji count as more than one toward the minimum. Plain English letters use one byte each; emoji and accented letters can use more.`
+export const ACCOUNT_PASSWORD_HELP = `Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters, up to ${PASSWORD_MAX_BYTES} bytes. Emoji and accents use more bytes; some emoji count as several characters.`
 
 /** Browser-safe feedback using the same rule that the account APIs enforce. */
 export function accountPasswordHint(password: string): string | null {

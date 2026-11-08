@@ -29,23 +29,37 @@ describe('placeholder color roles', () => {
         const hint = paletteVariables(palette)['--placeholder-text']
         expect(hint).toMatch(/^#[a-f\d]{6}$/)
         expect(hint).not.toBe(palette.foreground)
-        expect(hint).not.toBe(palette.mutedForeground)
         for (const surface of [
           palette.background,
           palette.card,
           palette.popover,
         ])
-          expect(contrast(hint, surface)).toBeGreaterThanOrEqual(4.5)
+          expect(contrast(hint, surface)).toBeGreaterThanOrEqual(7)
         expect(palette).toEqual(before)
       }
     }
   )
 
-  it('backs off a quieter mix when a custom muted color is already at the text threshold', () => {
+  it.each([
+    { mode: 'dark', palette: DARK_PALETTE },
+    { mode: 'light', palette: LIGHT_PALETTE },
+  ])('keeps default $mode hints at the stronger text target', ({ palette }) => {
+    const hint = paletteVariables(palette)['--placeholder-text']
+    for (const surface of [palette.background, palette.card, palette.popover])
+      expect(contrast(hint, surface)).toBeGreaterThanOrEqual(7)
+  })
+
+  it('can use full muted text when its quieter mix cannot reach the stronger target', () => {
+    const hint = paletteVariables(DARK_PALETTE)['--placeholder-text']
+    expect(hint).toBe(DARK_PALETTE.mutedForeground)
+    expect(contrast(hint, DARK_PALETTE.background)).toBeGreaterThanOrEqual(7)
+  })
+
+  it('moves toward foreground when custom muted text only reaches the basic text threshold', () => {
     const palette = { ...LIGHT_PALETTE, mutedForeground: '#767676' }
     const hint = paletteVariables(palette)['--placeholder-text']
-    expect(contrast(hint, palette.background)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(hint, palette.card)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(hint, palette.background)).toBeGreaterThanOrEqual(7)
+    expect(contrast(hint, palette.card)).toBeGreaterThanOrEqual(7)
     expect(luminance(hint)).toBeLessThanOrEqual(
       luminance(palette.mutedForeground)
     )
@@ -57,9 +71,23 @@ describe('placeholder color roles', () => {
       4.5
     )
     const hint = paletteVariables(palette)['--placeholder-text']
-    expect(contrast(hint, palette.background)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(hint, palette.background)).toBeGreaterThanOrEqual(7)
     expect(hint).not.toBe(palette.mutedForeground)
     expect(palette.mutedForeground).toBe('#334155')
+  })
+
+  it('retains readable configured text when the palette cannot reach the stronger target', () => {
+    const palette = {
+      ...LIGHT_PALETTE,
+      mutedForeground: '#6c6c6c',
+      foreground: '#6c6c6c',
+    }
+    const before = structuredClone(palette)
+    const hint = paletteVariables(palette)['--placeholder-text']
+    for (const surface of [palette.background, palette.card, palette.popover])
+      expect(contrast(hint, surface)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(hint, palette.background)).toBeLessThan(7)
+    expect(palette).toEqual(before)
   })
 
   it('keeps output safe and the saved palette intact when custom surfaces conflict', () => {
@@ -103,7 +131,7 @@ describe('placeholder color roles', () => {
       mutedForeground: '#527a52',
     })['--placeholder-text']
     expect(role).toBe(expected)
-    expect(contrast(role!, DARK_PALETTE.background)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(role!, DARK_PALETTE.background)).toBeGreaterThanOrEqual(7)
     expect(config).toEqual(before)
   })
 })

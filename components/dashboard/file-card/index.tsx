@@ -80,7 +80,7 @@ import { useToast } from '@/hooks/use-toast'
 
 // Labels wrap intrinsically as enlarged text outgrows a shared row.
 const labelClassName =
-  'inline-flex min-h-6 min-w-0 flex-1 basis-[6rem] items-center gap-1 rounded-md border border-border/60 bg-muted/70 px-1.5 text-xs leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
+  'inline-flex min-h-6 min-w-0 flex-1 basis-[6rem] items-center gap-1 rounded-md border border-border/60 bg-muted/70 px-1.5 text-xs leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none [@media(pointer:coarse)]:!min-h-[44px]'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
 const previewActions = CARD_BUTTONS.filter(
   (id) => id === 'copyLink' || id === 'download'
@@ -345,8 +345,14 @@ export function FileCard({
   const offered = (id: FileActionId) =>
     permitted(id) ? handlers[id] : undefined
   const hasImagePreview = isImage && !previewFailed
+  const imagePreviewClassName = cn(
+    fileCardPreviewClassName,
+    !onSelect &&
+      '[@media(pointer:coarse)]:group-has-[:focus-visible]:h-[136px] [@media(pointer:coarse)]:group-has-[[data-preview-actions]_:focus]:h-[136px]'
+  )
   const {
     start: nameStart,
+    separator: nameSeparator,
     tail: nameTail,
     extension: nameExtension,
   } = fileCardFilenameParts(file.name)
@@ -376,29 +382,35 @@ export function FileCard({
           aria-label={file.name}
           tabIndex={-1}
           data-file-name=""
-          className="min-w-0 truncate rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:whitespace-normal"
+          className="min-w-0 truncate rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:whitespace-normal [@container(max-width:16rem)]:whitespace-normal"
         >
           <span
             aria-hidden="true"
-            className="flex min-w-0 [@media(pointer:coarse)]:block"
+            className="flex min-w-0 [@media(pointer:coarse)]:block [@media(pointer:coarse)]:whitespace-pre-wrap [@container(max-width:16rem)]:block [@container(max-width:16rem)]:whitespace-pre-wrap"
           >
             <span
               className={cn(
                 'min-w-0 truncate',
                 nameTail
-                  ? '[@media(pointer:coarse)]:block'
-                  : '[@media(pointer:coarse)]:inline [@media(pointer:coarse)]:overflow-visible [@media(pointer:coarse)]:break-words [@media(pointer:coarse)]:whitespace-normal [@media(pointer:coarse)]:text-clip'
+                  ? '[@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:max-w-full [@media(pointer:coarse)]:align-top [@container(max-width:16rem)]:inline-block [@container(max-width:16rem)]:max-w-full [@container(max-width:16rem)]:align-top'
+                  : '[@media(pointer:coarse)]:inline [@media(pointer:coarse)]:overflow-visible [@media(pointer:coarse)]:break-words [@media(pointer:coarse)]:whitespace-normal [@media(pointer:coarse)]:text-clip [@container(max-width:16rem)]:inline [@container(max-width:16rem)]:overflow-visible [@container(max-width:16rem)]:break-words [@container(max-width:16rem)]:whitespace-normal [@container(max-width:16rem)]:text-clip'
               )}
             >
               {nameStart}
             </span>
             <span
+              data-file-name-separator=""
+              data-separator={nameSeparator}
+              className="min-w-0 overflow-hidden before:whitespace-pre before:content-[attr(data-separator)] [@media(pointer:coarse)]:hidden [@container(max-width:16rem)]:hidden"
+            />
+            {nameSeparator}
+            <span
               data-file-name-tail=""
               className={cn(
                 'flex max-w-full shrink-0',
                 nameTail
-                  ? '[@media(pointer:coarse)]:w-full'
-                  : '[@media(pointer:coarse)]:inline'
+                  ? '[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:align-top [@container(max-width:16rem)]:inline-flex [@container(max-width:16rem)]:align-top'
+                  : '[@media(pointer:coarse)]:inline [@container(max-width:16rem)]:inline'
               )}
             >
               <span className="min-w-0 truncate [direction:rtl]">
@@ -410,7 +422,7 @@ export function FileCard({
             </span>
           </span>
         </Link>
-        <span className="shrink-0 text-xs text-muted-foreground [@media(pointer:coarse)]:hidden">
+        <span className="shrink-0 text-xs text-muted-foreground [@media(pointer:coarse)]:hidden [@container(max-width:16rem)]:hidden">
           {formatFileSize(file.size)}
         </span>
       </div>
@@ -439,7 +451,7 @@ export function FileCard({
           className={cn(
             'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
             hasImagePreview
-              ? fileCardPreviewClassName
+              ? imagePreviewClassName
               : fileCardGenericPreviewClassName
           )}
         >
@@ -457,11 +469,20 @@ export function FileCard({
           ) : (
             // The icon steps aside for the hover and focus controls, so it
             // doesn't show through between them.
-            <div className="flex h-full items-center gap-[8px] pl-[12px] pr-[60px] transition-opacity group-has-[:focus-visible]:opacity-0 group-has-[[data-preview-actions]_:focus]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
-              <FileTypeIcon
-                file={file}
-                className="h-[28px] w-[28px] shrink-0 text-muted-foreground"
-              />
+            <div
+              className={cn(
+                'flex min-h-[52px] items-center gap-[8px] pl-[12px] pr-[60px] transition-opacity',
+                !onSelect &&
+                  'group-has-[:focus-visible]:opacity-0 group-has-[[data-preview-actions]_:focus]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0',
+                onSelect && 'pl-[64px]'
+              )}
+            >
+              {!onSelect && (
+                <FileTypeIcon
+                  file={file}
+                  className="h-[28px] w-[28px] shrink-0 text-muted-foreground"
+                />
+              )}
               <span className="min-w-0 break-words rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
                 {file.name.includes('.')
                   ? file.name.split('.').pop()?.toUpperCase().slice(0, 12)
@@ -476,9 +497,15 @@ export function FileCard({
         <div
           data-preview-actions=""
           className={cn(
-            'pointer-events-none absolute inset-0 flex items-center justify-center gap-2 bg-background/50 pt-6 pb-2 opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
+            'pointer-events-none absolute inset-0 bottom-auto flex items-center justify-center gap-2 bg-background/50 pt-[18px] pb-[8px] opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
+            hasImagePreview &&
+              cn(
+                imagePreviewClassName,
+                '[@media(pointer:coarse)]:!pt-[28px] [@media(pointer:coarse)]:!pb-[8px]'
+              ),
             !hasImagePreview &&
-              'bottom-auto right-[52px] h-[52px] gap-[8px] pt-0 pb-0'
+              'bottom-auto right-[52px] h-[52px] gap-[8px] pt-0 pb-0',
+            onSelect && 'hidden'
           )}
         >
           {browseArchive ? (
@@ -595,7 +622,7 @@ export function FileCard({
             />
           </label>
         )}
-        <div className="absolute right-[8px] top-[8px]">
+        <div className="absolute right-[8px] top-[8px] flex">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -648,9 +675,10 @@ export function FileCard({
               >
                 <DropdownMenuLabel
                   data-file-menu-filename=""
-                  className="break-all text-xs font-normal leading-relaxed text-muted-foreground"
+                  className="break-words text-xs font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
                 >
                   {nameStart}
+                  {nameSeparator}
                   {nameTail}
                   <span className="whitespace-nowrap">{nameExtension}</span>
                 </DropdownMenuLabel>
@@ -749,7 +777,7 @@ export function FileCard({
             onClick={() => setIsExpiryModalOpen(true)}
             title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
             className={cn(
-              'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px]',
+              'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px] [@container(max-width:12rem)]:max-w-[calc(100%-16px)] [@media(pointer:coarse)]:!min-h-[44px]',
               !hasImagePreview && 'static mx-[8px] mb-[8px]',
               previewFocusClassName
             )}
@@ -773,7 +801,7 @@ export function FileCard({
         )}
       </div>
       <div className={fileCardDetailsClassName}>
-        {(hasImagePreview || folder || tags.length > 0) && (
+        {(folder || tags.length > 0) && (
           <div className={fileCardLabelsClassName}>
             {folder && (
               <button
@@ -833,7 +861,7 @@ export function FileCard({
           </div>
         )}
         <div data-file-activity="" className={fileCardActivityClassName}>
-          <span className="mr-auto hidden [@media(pointer:coarse)]:inline">
+          <span className="mr-auto hidden [@media(pointer:coarse)]:inline [@container(max-width:16rem)]:inline">
             {formatFileSize(file.size)}
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-x-3">

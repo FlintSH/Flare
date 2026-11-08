@@ -460,6 +460,15 @@ async function enlargedLibrary(page, mode, width) {
         bodyWidth: document.documentElement.scrollWidth,
         viewportWidth: innerWidth,
         placeholder,
+        searchControl: rect(search),
+        filtersControl: rect(
+          [...document.querySelectorAll('button[aria-controls]')].find(
+            (button) => button.textContent.trim().startsWith('Filters')
+          )
+        ),
+        selectionControl: rect(
+          document.querySelector('button[aria-label="Select files"]')
+        ),
         header: rect(document.querySelector('[data-dashboard-header]')),
         brand: fullText(
           document.querySelector('[data-flare-brand] .flare-text')
@@ -524,6 +533,17 @@ async function enlargedLibrary(page, mode, width) {
         filename.title
       )
     assert.equal(sample.rootFont, size)
+    for (const control of [sample.searchControl, sample.filtersControl]) {
+      assert.ok(
+        control.height >= 44 && control.height < 88,
+        'Phone search and Filters keep44px minimum targets and grow for text without a doubled88px floor'
+      )
+    }
+    assert.ok(
+      Math.abs(sample.selectionControl.height - 44) <= 0.5 &&
+        sample.selectionControl.width >= 44,
+      'The icon-only phone selection control keeps its physical44px target'
+    )
     if (size === 16 && width === 320)
       assert.ok(
         sample.placeholder.width <= sample.placeholder.available + 1,
@@ -630,7 +650,7 @@ async function enlargedLibrary(page, mode, width) {
       }
       const badges = [
         ...card.querySelectorAll(
-          '[data-preview-badges]>span,[data-flare-wrap]'
+          '[data-preview-badges]>span,[data-flare-wrap],button[title="Manage file"]'
         ),
       ].map(box)
       const buttons = [
@@ -668,7 +688,7 @@ async function enlargedLibrary(page, mode, width) {
       shortcuts.every(
         (s) => s.width >= 44 && s.height >= 44 && s.hit && s.clearOfBadges
       ),
-      'Every enlarged pointer shortcut has a clear44px hit target and does not cover metadata'
+      'Every enlarged pointer shortcut has a clear44px hit target and does not cover metadata or Manage file'
     )
     const view = imageCard.getByRole('button', {
       name: 'View image',
@@ -1058,10 +1078,14 @@ async function main() {
         .getByRole('list', { name: 'Your files', exact: true })
         .getByRole('listitem')
       await expect(
-        densityCards.nth(1).locator('a[aria-label^="Open "]').first()
+        densityCards.nth(2).locator('a[aria-label^="Open "]').first()
       ).toBeVisible()
       const geometry = []
-      for (const card of [densityCards.nth(0), densityCards.nth(1)]) {
+      for (const card of [
+        densityCards.nth(0),
+        densityCards.nth(1),
+        densityCards.nth(2),
+      ]) {
         const preview = await card
           .locator('a[aria-label^="Open "]')
           .first()
@@ -1073,33 +1097,40 @@ async function main() {
               ((await card
                 .locator('[data-file-kind]')
                 .getAttribute('data-file-kind')) === 'image'
-                ? 144
+                ? 112
                 : 52)
           ) <= 1,
-          'Touch phone images retain144px previews and generic stages use52px'
+          'Touch phone images use112px previews and generic stages use52px'
         )
         assert.ok(
           (await card
             .locator('[data-file-kind]')
             .getAttribute('data-file-kind')) === 'image'
-            ? Math.abs(bounds.height - 264) <= 1
+            ? bounds.height <= 228
             : bounds.height <= 175,
-          'Image metadata keeps its reserved rows while ordinary generic cards use at most175px'
+          'Image cards use at most228px without empty metadata rows; ordinary generic cards use at most175px'
         )
         assert.ok(
           bounds.y + bounds.height <= 844,
-          'Two complete phone cards fit without scrolling at 390×844'
+          'Three complete mixed phone cards fit without scrolling at 390×844'
         )
         assert.ok(
           await visibleFilenameEnd(card.locator('[data-file-name]')),
-          'Both demonstration filenames include their complete suffix'
+          'Each demonstration filename includes its complete suffix'
         )
         geometry.push(bounds)
       }
-      assert.ok(
-        Math.abs(geometry[1].y - geometry[0].y - geometry[0].height - 16) <= 1,
-        'Phone rows have one 16px gap'
-      )
+      for (let index = 1; index < geometry.length; index++) {
+        assert.ok(
+          Math.abs(
+            geometry[index].y -
+              geometry[index - 1].y -
+              geometry[index - 1].height -
+              16
+          ) <= 1,
+          'Every phone row has one 16px gap'
+        )
+      }
       const keyboard = await galleryKeyboard(
         page,
         densityCards.first(),
@@ -1110,7 +1141,7 @@ async function main() {
       })
       check(
         mode +
-          ' two complete phone cards and primary/menu/filter keyboard order',
+          ' three complete phone cards and primary/menu/filter keyboard order',
         { geometry, ...keyboard }
       )
       const generic = await genericDensity(page, true)

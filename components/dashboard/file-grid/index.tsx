@@ -333,7 +333,7 @@ function FileLibrary({ scope }: { scope: string }) {
 
   return (
     <div
-      className="space-y-4 sm:space-y-6"
+      className="space-y-[12px] sm:space-y-6"
       onFocusCapture={(event) => {
         if (!selecting) return
         const target = event.target as HTMLElement
@@ -352,10 +352,10 @@ function FileLibrary({ scope }: { scope: string }) {
     >
       <section
         aria-label="Find and filter files"
-        className={cn(pagePanelClassName, 'p-3 sm:p-6')}
+        className={cn(pagePanelClassName, 'p-[8px] sm:p-6')}
       >
         <PageHeader
-          className="mb-3 border-0 pb-0 sm:mb-4 [&>div]:gap-x-2 sm:[&>div]:gap-x-5 [&_h1]:text-xl sm:[&_h1]:text-2xl"
+          className="mb-[8px] border-0 pb-0 sm:mb-4 [&>div]:gap-x-2 sm:[&>div]:gap-x-5 [&_h1]:text-xl sm:[&_h1]:text-2xl"
           actionsBesideTitle
           headingRef={libraryHeading}
           title="Your files"
@@ -366,7 +366,7 @@ function FileLibrary({ scope }: { scope: string }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-11 min-w-11 gap-1.5 px-2 sm:h-8 sm:min-w-0"
+                className="h-[44px] min-w-[44px] gap-1.5 px-2 max-sm:!min-h-[44px] max-sm:!min-w-[44px] sm:h-8 sm:min-w-0"
                 disabled={
                   (!selecting && !files.length) ||
                   !BATCH_ACTIONS.some((action) =>
@@ -419,7 +419,7 @@ function FileLibrary({ scope }: { scope: string }) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-11 w-11 sm:h-8 sm:w-8"
+                className="h-[44px] w-[44px] sm:h-8 sm:w-8"
                 aria-label="Refresh files"
                 disabled={isLoading}
                 onClick={refreshFiles}
@@ -431,7 +431,7 @@ function FileLibrary({ scope }: { scope: string }) {
             </div>
           }
         />
-        <div className="flex flex-wrap gap-2 sm:flex-col lg:flex-row lg:gap-3 [&_input[type=search]]:h-11 sm:[&_input[type=search]]:h-10">
+        <div className="flex flex-wrap gap-[8px] sm:flex-col sm:gap-2 lg:flex-row lg:gap-3 [&_input[type=search]]:h-auto max-sm:[&_input[type=search]]:!min-h-[44px] sm:[&_input[type=search]]:h-10">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
             hasTagFilter={Boolean(filters.tag)}

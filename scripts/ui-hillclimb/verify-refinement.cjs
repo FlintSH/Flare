@@ -575,7 +575,7 @@ async function main() {
     const newUser = page.getByRole('dialog', { name: 'New user', exact: true })
     const newPassword = newUser.getByLabel('Password', { exact: true })
     const passwordRequirements =
-      'Use at least 8 characters and at most 72 bytes. Some emoji count as more than one toward the minimum. Plain English letters use one byte each; emoji and accented letters can use more.'
+      'Use at least 8 characters, up to 72 bytes. Emoji and accents use more bytes; some emoji count as several characters.'
     await expect(newPassword).toHaveAccessibleDescription(passwordRequirements)
     await newPassword.fill('Demo-password-8')
     await expect(newPassword).toHaveAccessibleDescription(passwordRequirements)

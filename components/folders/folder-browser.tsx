@@ -144,7 +144,7 @@ export function FolderBrowser({
   return (
     <div
       className={cn(
-        'mt-2 border-t border-border/50 pt-2 sm:mt-4 sm:pt-4',
+        'mt-[4px] border-t border-border/50 pt-[4px] sm:mt-4 sm:pt-4',
         !folders.length && !value && !canManage && !error && 'hidden sm:block'
       )}
     >

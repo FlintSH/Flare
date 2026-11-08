@@ -175,18 +175,20 @@ export function DateRail({
           />
           <div className="absolute bottom-[22px] left-1/2 top-[22px] w-[2px] -translate-x-1/2 bg-border" />
           <span
+            data-date-rail-endpoint="first"
             aria-hidden="true"
             className={cn(
-              'pointer-events-none absolute right-10 top-0 whitespace-nowrap text-[10px] text-muted-foreground transition-opacity motion-reduce:transition-none [@media(pointer:coarse)]:hidden',
+              'pointer-events-none absolute inset-x-0 -top-[16px] whitespace-nowrap text-center text-[10px] leading-[12px] text-muted-foreground transition-opacity motion-reduce:transition-none [@media(pointer:coarse)]:hidden',
               visible ? 'opacity-100' : 'opacity-0'
             )}
           >
             {firstLabel}
           </span>
           <span
+            data-date-rail-endpoint="last"
             aria-hidden="true"
             className={cn(
-              'pointer-events-none absolute bottom-0 right-10 whitespace-nowrap text-[10px] text-muted-foreground transition-opacity motion-reduce:transition-none [@media(pointer:coarse)]:hidden',
+              'pointer-events-none absolute inset-x-0 -bottom-[16px] whitespace-nowrap text-center text-[10px] leading-[12px] text-muted-foreground transition-opacity motion-reduce:transition-none [@media(pointer:coarse)]:hidden',
               visible ? 'opacity-100' : 'opacity-0'
             )}
           >

@@ -61,6 +61,8 @@ export function VirtualFiles({
   // measured sizes/ranges even when its internal scroll subscription rerenders.
   const { timeline, getFile, hasFailed, ensureRange, revision, retry } = library
   const container = useRef<HTMLDivElement>(null)
+  const rowElements = useRef(new Set<HTMLDivElement>())
+  const rowObserver = useRef<ResizeObserver | null>(null)
   const [dimensions, setDimensions] = useState({
     width: 0,
     columns: 1,
@@ -86,13 +88,61 @@ export function VirtualFiles({
   const observeOffset = useRef<
     ((offset: number, isScrolling: boolean) => void) | null
   >(null)
+  const observedLeadingRowKey = useRef<string | null>(null)
+  const [, setVisibleRowRevision] = useState(0)
   const observeScroll = useCallback<typeof observeWindowOffset>(
     (instance, callback) => {
-      observeOffset.current = callback
-      const cleanup = observeWindowOffset(instance, callback)
+      const previousAdjustment =
+        instance.shouldAdjustScrollPositionOnItemSizeChange
+      const adjustForInset: NonNullable<typeof previousAdjustment> = (
+        item,
+        _delta,
+        current
+      ) => {
+        // Fixed controls move the usable viewport fold below the raw offset.
+        // Keep core's first/remeasured distinction at that fold, including
+        // upward motion; a remeasured row spanning the fold is not adjusted.
+        const fold =
+          (current.scrollOffset ?? 0) +
+          current.scrollAdjustments +
+          current.options.scrollPaddingStart
+        return current.itemSizeCache.has(item.key)
+          ? item.end <= fold
+          : item.start < fold
+      }
+      instance.shouldAdjustScrollPositionOnItemSizeChange = adjustForInset
+      const publishOffset = (offset: number, isScrolling: boolean) => {
+        const publish = () => {
+          callback(offset, isScrolling)
+          // TanStack notifies for its raw viewport range. Our visible range starts
+          // below the fixed header, so its leading row can change independently.
+          const currentOffset = instance.scrollOffset ?? offset
+          const top = currentOffset + instance.options.scrollPaddingStart
+          const bottom = currentOffset + (instance.scrollRect?.height ?? 800)
+          const items = instance.getVirtualItems()
+          const first =
+            items.find((row) => row.end > top && row.start < bottom) ?? items[0]
+          const key = first ? String(first.key) : null
+          if (observedLeadingRowKey.current !== key) {
+            observedLeadingRowKey.current = key
+            setVisibleRowRevision((revision) => revision + 1)
+          }
+        }
+        // Native scroll callbacks and the scheduled scroll event run outside
+        // React commits. Immediate programmatic/layout publications use false.
+        if (isScrolling) flushSync(publish)
+        else publish()
+      }
+      observeOffset.current = publishOffset
+      const cleanup = observeWindowOffset(instance, publishOffset)
       return () => {
         observeOffset.current = null
         cleanup?.()
+        if (
+          instance.shouldAdjustScrollPositionOnItemSizeChange === adjustForInset
+        )
+          instance.shouldAdjustScrollPositionOnItemSizeChange =
+            previousAdjustment
       }
     },
     []
@@ -173,6 +223,9 @@ export function VirtualFiles({
     selectionBarRef.current?.getBoundingClientRect().bottom ?? 0
   )
   const virtualizer = useWindowVirtualizer({
+    // Commit-time resizeItem calls must not cause an adapter flushSync inside
+    // React. Native offset and ResizeObserver callbacks flush their own batches.
+    useFlushSync: false,
     scrollToFn: scrollTo,
     observeElementOffset: observeScroll,
     count: Math.min(TIMELINE_WINDOW_ROWS, layout.rowCount - windowStart),
@@ -184,13 +237,6 @@ export function VirtualFiles({
     overscan: 3,
     scrollMargin: dimensions.top,
     scrollPaddingStart: topInset,
-    // Explicit remeasurement must read the DOM, rather than return a cached
-    // size from before text/column changes. TanStack still owns row observation.
-    measureElement: (element, entry) =>
-      Math.round(
-        entry?.borderBoxSize?.[0]?.blockSize ??
-          element.getBoundingClientRect().height
-      ),
     rangeExtractor: useCallback(
       (range: Range) => {
         const indices = defaultRangeExtractor(range)
@@ -207,6 +253,63 @@ export function VirtualFiles({
       [focusedRow, layout.rowCount, windowStart]
     ),
   })
+
+  // A single measurement owner supplies actual row sizes. Core measureElement
+  // intentionally defers native-scroll reads; a content commit must measure its
+  // skeleton-to-card change before paint instead of waiting for the next RO turn.
+  const measureRow = useCallback(
+    (element: HTMLDivElement, entry?: ResizeObserverEntry) => {
+      if (!element.isConnected) return
+      const index = Number(element.dataset.index)
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= virtualizer.options.count
+      )
+        return
+      const height = Math.round(
+        entry?.borderBoxSize?.[0]?.blockSize ??
+          element.getBoundingClientRect().height
+      )
+      // Reading the public item view first incorporates earlier size changes
+      // before resizeItem evaluates the next row's native-anchor correction.
+      const item = virtualizer
+        .getVirtualItems()
+        .find((row) => row.index === index)
+      if (item?.size !== height) virtualizer.resizeItem(index, height)
+    },
+    [virtualizer]
+  )
+  const rowRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element) return
+      rowElements.current.add(element)
+      rowObserver.current?.observe(element, { box: 'border-box' })
+      measureRow(element)
+      return () => {
+        rowObserver.current?.unobserve(element)
+        rowElements.current.delete(element)
+      }
+    },
+    [measureRow]
+  )
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      // ResizeObserver delivery is outside React; update all affected transforms
+      // in the same batch as any native-anchor correction before browser paint.
+      flushSync(() => {
+        for (const entry of entries)
+          measureRow(entry.target as HTMLDivElement, entry)
+      })
+    })
+    rowObserver.current = observer
+    for (const element of rowElements.current)
+      observer.observe(element, { box: 'border-box' })
+    return () => {
+      rowObserver.current = null
+      observer.disconnect()
+    }
+  }, [measureRow])
 
   useLayoutEffect(() => {
     const element = container.current
@@ -254,11 +357,12 @@ export function VirtualFiles({
 
   useLayoutEffect(() => {
     virtualizer.measure()
-    // measure() clears sizes; connected rows need not resize again afterward.
-    // Seed the new cache from the mounted DOM before computing seek offsets.
+    // Rebuild the reset measurement view, then seed it from the connected DOM
+    // before computing seek offsets. Rows need not produce another RO entry.
+    virtualizer.getTotalSize()
     container.current
-      ?.querySelectorAll<HTMLElement>('[data-index]')
-      .forEach(virtualizer.measureElement)
+      ?.querySelectorAll<HTMLDivElement>('[data-index]')
+      .forEach((element) => measureRow(element))
     // getOffsetForIndex reads the measurement cache directly. Rebuild it after
     // resetting sizes, before a pending seek uses the new section's coordinates.
     virtualizer.getTotalSize()
@@ -268,16 +372,16 @@ export function VirtualFiles({
     dimensions.cardHeight,
     windowStart,
     virtualizer,
+    measureRow,
   ])
 
   useLayoutEffect(() => {
-    // Loaded pages can change a retained row from a skeleton to a shorter card.
-    // Measure that commit before paint; TanStack keeps native scrolling deferred
-    // while permitting its idle and programmatic-scroll measurement paths.
+    // A loaded page can shrink a retained skeleton while native scrolling is
+    // active. Publish its actual row size in this commit, before paint.
     container.current
-      ?.querySelectorAll<HTMLElement>('[data-index]')
-      .forEach(virtualizer.measureElement)
-  }, [dimensions, revision, virtualizer, virtualizer.isScrolling])
+      ?.querySelectorAll<HTMLDivElement>('[data-index]')
+      .forEach((element) => measureRow(element))
+  }, [dimensions, revision, virtualizer, virtualizer.isScrolling, measureRow])
 
   useLayoutEffect(() => {
     if (Math.abs((virtualizer.scrollOffset ?? 0) - window.scrollY) > 1)
@@ -394,6 +498,11 @@ export function VirtualFiles({
     (row) => row.end > viewportTop && row.start < viewportBottom
   )
   const firstRow = visibleRows[0] ?? rows[0]
+  const firstRowKey = firstRow ? String(firstRow.key) : null
+  useLayoutEffect(() => {
+    // A normal TanStack render may already have published this leading row.
+    observedLeadingRowKey.current = firstRowKey
+  }, [firstRowKey])
   const firstRowIndex = firstRow?.index
   const lastVisibleRowIndex = visibleRows.at(-1)?.index
   const firstLayout = firstRow ? layout.row(firstRow.index + windowStart) : null
@@ -405,19 +514,35 @@ export function VirtualFiles({
   // Recenter before either end of a large native-scroll window. The date rail
   // always addresses the full account; wheel/touch scrolling continues naturally.
   useEffect(() => {
+    // Layout measurements may have replaced the rows captured by this render.
+    // Carry one fresh size/offset snapshot into the next virtual window.
+    const currentRows = virtualizer.getVirtualItems()
+    const currentOffset = virtualizer.scrollOffset ?? 0
+    const currentTop = currentOffset + topInset
+    const currentBottom =
+      currentOffset + (virtualizer.scrollRect?.height ?? 800)
+    const currentVisible = currentRows.filter(
+      (row) => row.end > currentTop && row.start < currentBottom
+    )
+    const currentFirst = currentVisible[0] ?? currentRows[0]
+    // A superseded effect must not mix a new segment with its old window.
+    if (currentFirst && currentFirst.key !== currentFirst.index + windowStart)
+      return
+    const currentFirstIndex = currentFirst?.index
+    const currentLastIndex = currentVisible.at(-1)?.index
     if (
-      firstRowIndex === undefined ||
+      currentFirstIndex === undefined ||
       pendingSeek.current !== null ||
       layout.rowCount <= TIMELINE_WINDOW_ROWS
     )
       return
-    const globalRow = firstRowIndex + windowStart
+    const globalRow = currentFirstIndex + windowStart
     // A new segment renders once with the previous scroll offset. Wait until
     // the browser observes the requested destination before recentering again.
     if (seekDestination.current !== null) {
       if (
         globalRow <= seekDestination.current &&
-        (lastVisibleRowIndex ?? firstRowIndex) + windowStart >=
+        (currentLastIndex ?? currentFirstIndex) + windowStart >=
           seekDestination.current
       ) {
         seekDestination.current = null
@@ -425,8 +550,8 @@ export function VirtualFiles({
       return
     }
     if (
-      (firstRowIndex < 20 && windowStart > 0) ||
-      (firstRowIndex > TIMELINE_WINDOW_ROWS - 20 &&
+      (currentFirstIndex < 20 && windowStart > 0) ||
+      (currentFirstIndex > TIMELINE_WINDOW_ROWS - 20 &&
         windowStart + TIMELINE_WINDOW_ROWS < layout.rowCount)
     ) {
       // Keep just the mounted rows' measured sizes across the cache reset.
@@ -436,10 +561,12 @@ export function VirtualFiles({
         width: dimensions.width,
         columns: dimensions.columns,
         cardHeight: dimensions.cardHeight,
-        rows: new Map(rows.map((row) => [row.index + windowStart, row.size])),
+        rows: new Map(
+          currentRows.map((row) => [row.index + windowStart, row.size])
+        ),
       }
       pendingSeek.current = globalRow
-      pendingScrollDelta.current = viewportTop - firstRow!.start
+      pendingScrollDelta.current = currentTop - currentFirst!.start
       seekDestination.current = globalRow
       setWindowStart(timelineWindowStart(globalRow, layout.rowCount))
     }
@@ -454,6 +581,8 @@ export function VirtualFiles({
     dimensions.width,
     dimensions.columns,
     dimensions.cardHeight,
+    topInset,
+    virtualizer,
   ])
   const visibleKey = visibleRows
     .flatMap((row) => layout.row(row.index + windowStart).indices)
@@ -510,7 +639,7 @@ export function VirtualFiles({
               key={row.key}
               data-index={row.index}
               data-row={row.index + windowStart}
-              ref={virtualizer.measureElement}
+              ref={rowRef}
               className="absolute left-0 top-0 w-full pb-4"
               style={{
                 transform: `translateY(${row.start - dimensions.top}px)`,

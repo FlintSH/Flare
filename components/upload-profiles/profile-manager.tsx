@@ -618,7 +618,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               recipe belong to this account.
             </p>
             {/* Form actions: the primary at the end on wider screens; full
-                width and on top on phones, like dialog footers. */}
+                width and on top on phones. */}
             <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               {editing && (
                 <div className="flex flex-wrap gap-2">

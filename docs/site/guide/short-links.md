@@ -42,7 +42,7 @@ On phones and touch tablets, the complete destination wraps onto as many lines a
 
 Use the copy action beside the path to copy the complete short URL, including your instance's domain. Open the short path to check the redirect, or open the destination below it directly. If clipboard access fails, right-click or press and hold the short path and use your browser's link menu to copy its address.
 
-To stop a redirect, choose its delete action and confirm. The generated short URL then stops resolving through Flare. If deleting fails, **Could not delete link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link is still available and to try again, which earlier versions said for every failure. Deleting the short link does not remove the original webpage or prevent someone using its full address.
+To stop a redirect, choose its delete action and confirm. On phones, **Keep link** appears above **Delete link** and receives initial focus. The generated short URL then stops resolving through Flare. If deleting fails, **Could not delete link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link is still available and to try again, which earlier versions said for every failure. Deleting the short link does not remove the original webpage or prevent someone using its full address.
 
 There is no destination editor or scheduled expiration in this interface. Create a new short link for a changed destination and remove the old link if it should no longer work.
 

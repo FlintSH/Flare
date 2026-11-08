@@ -87,6 +87,150 @@ async function verifyFixture(prisma, plan) {
   return { originalFiles: originals.length, originalFilesUnchanged: true }
 }
 
+// Reverse-wheel rows newly entering the viewport may have intrinsic heights
+// different from their estimates. Declare the effective-content-viewport
+// reference before input; account for changes independently of the retained
+// offscreen file.
+function checkReverseDeclaration(before, anchor, delta) {
+  const ledger = before.preInputLedger
+  assert.ok(
+    ledger?.captured,
+    'Read-only public measurement ledger is available'
+  )
+  assert.equal(ledger.delta, delta)
+  assert.equal(ledger.anchor, anchor)
+  assert.equal(ledger.nativeY, before.scrollY)
+  assert.ok(
+    Math.abs(ledger.offset - ledger.nativeY) <= 1,
+    'Baseline logical/native offsets agree'
+  )
+  assert.ok(
+    ledger.anchorEntry?.unclamped,
+    'Anchor start alignment is not clamped'
+  )
+  assert.ok(
+    Math.abs(ledger.anchorEntry.start - ledger.nativeY - before.y) <= 1,
+    'Public document-start ledger matches actual anchor DOM'
+  )
+  assert.ok(
+    ledger.reference?.unclamped,
+    'Predeclared viewport reference is not alignment-clamped'
+  )
+  assert.ok(
+    ledger.reference.projectedY >= ledger.padding &&
+      ledger.reference.projectedY < ledger.viewportHeight,
+    'Reference is the first full row in the predicted effective content viewport'
+  )
+  assert.ok(
+    ledger.reference.global <= anchor,
+    'Reverse prefix ends at the retained anchor'
+  )
+  assert.equal(
+    ledger.prefix.length,
+    anchor - ledger.reference.global,
+    'Every intervening row is predeclared'
+  )
+  for (let i = 0; i < ledger.prefix.length; i++) {
+    const row = ledger.prefix[i]
+    assert.equal(row.global, ledger.reference.global + i)
+    assert.ok(
+      row.unclamped && row.nextUnclamped && row.size > 0,
+      'Each pre-input row size comes from unclamped public start offsets'
+    )
+  }
+  return ledger
+}
+
+function accountReverseGeometry(before, after, ledger) {
+  const byRow = new Map(after.rowGeometry.map((row) => [row.global, row]))
+  const reference = byRow.get(ledger.reference.global)
+  assert.ok(
+    reference?.loaded,
+    'The predeclared reference is the real loaded row'
+  )
+  assert.ok(
+    reference.bottom > ledger.headerBottom &&
+      reference.y < ledger.viewportHeight,
+    'Reference intersects the content viewport'
+  )
+  const table = ledger.prefix.map((estimate) => {
+    const actual = byRow.get(estimate.global)
+    assert.ok(
+      actual?.loaded,
+      'Every predeclared prefix row is actually mounted and loaded'
+    )
+    assert.equal(
+      actual.members,
+      1,
+      'This seam contract is the real one-column ungrouped layout'
+    )
+    assert.ok(
+      Math.abs(actual.gridHeight - actual.maxCardHeight) <= 1,
+      'Row grid ends at its tallest intrinsic card'
+    )
+    assert.ok(
+      Math.abs(actual.height - actual.gridHeight - actual.paddingBottom) <= 1,
+      'Row wrapper equals intrinsic content plus actual gap'
+    )
+    assert.ok(
+      Math.abs(actual.paddingBottom - 16) <= 1,
+      'Actual normal-text row gap remains16px'
+    )
+    return {
+      global: estimate.global,
+      estimatedHeight: estimate.size,
+      actualHeight: actual.height,
+      delta: actual.height - estimate.size,
+      actual,
+    }
+  })
+  // Derive the expected shift solely from the pre-input estimate/actual DOM
+  // table. The observed focused-file error is never an input to this sum.
+  const intrinsicShift = table.reduce((sum, row) => sum + row.delta, 0)
+  const actualPrefixHeight = table.reduce(
+    (sum, row) => sum + row.actualHeight,
+    0
+  )
+  for (let i = 0; i < table.length; i++) {
+    const next =
+      i + 1 < table.length ? table[i + 1].actual : byRow.get(ledger.anchor)
+    assert.ok(next, 'No missing row before the retained focus')
+    assert.ok(
+      Math.abs(next.y - table[i].actual.bottom) <= 1,
+      'Actual prefix wrappers are adjacent with no hole or overlap'
+    )
+  }
+  assert.ok(
+    Math.abs(after.y - reference.y - actualPrefixHeight) <= 1,
+    'Actual DOM prefix independently reconstructs the focused-file top'
+  )
+  for (const sample of after.stabilitySamples) {
+    const rows = new Map(sample.rowGeometry.map((row) => [row.global, row]))
+    assert.ok(
+      Math.abs(rows.get(ledger.reference.global)?.y - reference.y) <= 1,
+      'Reference stays stable through late measurement'
+    )
+    for (const row of table)
+      assert.ok(
+        Math.abs(rows.get(row.global)?.height - row.actualHeight) <= 1,
+        'Each actual prefix height stays stable'
+      )
+  }
+  return {
+    reference: ledger.reference,
+    actualReference: reference,
+    prefix: table,
+    intrinsicShift,
+    expectedAfterY: before.y - ledger.delta + intrinsicShift,
+    signedRawError: after.y - before.y + ledger.delta,
+    viewportReferenceError: Math.abs(reference.y - ledger.reference.projectedY),
+    rebaseResidual: Math.abs(
+      after.y - (before.y - ledger.delta + intrinsicShift)
+    ),
+    beforeInputLedgerDeclared: true,
+  }
+}
+
 async function main() {
   const planFile = process.env.FLARE_TIMELINE_MIXED_PLAN
   const output = process.env.FLARE_TIMELINE_MIXED_OUTPUT
@@ -183,30 +327,187 @@ async function main() {
           await page.evaluate(() => document.fonts.ready)
           await page.waitForTimeout(150)
         }
-        const snapshot = (index) =>
-          page.evaluate((index) => {
-            const card = document.querySelector(`[data-file-index="${index}"]`)
-            const row = card?.closest('[data-row]')
-            return {
-              index,
-              y: card?.getBoundingClientRect().y,
-              height: card?.getBoundingClientRect().height,
-              name: card
-                ?.querySelector('a[aria-label^="Open "]')
-                ?.getAttribute('aria-label'),
-              globalRow: Number(row?.dataset.row),
-              localRow: Number(row?.dataset.index),
-              windowStart:
-                Number(row?.dataset.row) - Number(row?.dataset.index),
-              mounted: document.querySelectorAll('[data-file-index]').length,
-              focused: !!card?.contains(document.activeElement),
-              scrollY,
-            }
-          }, index)
-        const settled = async (index) => {
+        const snapshot = (index, delta) =>
+          page.evaluate(
+            ({ index, delta }) => {
+              const card = document.querySelector(
+                `[data-file-index="${index}"]`
+              )
+              const row = card?.closest('[data-row]')
+              const rowGeometry = [
+                ...document.querySelectorAll('[data-row]'),
+              ].map((element) => {
+                const box = element.getBoundingClientRect(),
+                  grid = element.querySelector(':scope > .grid'),
+                  members = [...element.querySelectorAll('[data-file-index]')]
+                return {
+                  global: Number(element.dataset.row),
+                  local: Number(element.dataset.index),
+                  y: box.y,
+                  bottom: box.bottom,
+                  height: box.height,
+                  paddingBottom: parseFloat(
+                    getComputedStyle(element).paddingBottom
+                  ),
+                  gridHeight: grid?.getBoundingClientRect().height ?? null,
+                  maxCardHeight: Math.max(
+                    0,
+                    ...members.map(
+                      (member) =>
+                        member.firstElementChild?.getBoundingClientRect()
+                          .height ?? 0
+                    )
+                  ),
+                  members: members.length,
+                  loaded:
+                    members.length > 0 &&
+                    members.every((member) =>
+                      member.querySelector('[data-file-card]')
+                    ),
+                }
+              })
+              let preInputLedger
+              if (Number.isFinite(delta)) {
+                const list = document.querySelector(
+                    '[role="list"][aria-label="Your files"]'
+                  ),
+                  key =
+                    list &&
+                    Object.keys(list).find((key) =>
+                      key.startsWith('__reactFiber$')
+                    )
+                let fiber = key ? list[key] : null,
+                  v = null
+                for (
+                  let depth = 0;
+                  fiber && depth < 40 && !v;
+                  depth++, fiber = fiber.return
+                ) {
+                  let hook = fiber.memoizedState
+                  for (let i = 0; hook && i < 100; i++, hook = hook.next) {
+                    const value = hook.memoizedState
+                    for (const candidate of [
+                      value,
+                      value?.current,
+                      ...(Array.isArray(value) ? value : []),
+                    ])
+                      if (
+                        candidate &&
+                        typeof candidate === 'object' &&
+                        typeof candidate.getOffsetForIndex === 'function' &&
+                        candidate.options
+                      ) {
+                        v = candidate
+                        break
+                      }
+                    if (v) break
+                  }
+                }
+                if (v && row) {
+                  const local = Number(row.dataset.index),
+                    padding = v.options.scrollPaddingStart,
+                    maxScroll =
+                      document.documentElement.scrollHeight - innerHeight,
+                    windowStart = Number(row.dataset.row) - local,
+                    predictedOffset = scrollY + delta
+                  const startOf = (i) => {
+                    const result = v.getOffsetForIndex(i, 'start')
+                    return result
+                      ? {
+                          offset: result[0],
+                          align: result[1],
+                          start: result[0] + padding,
+                          unclamped:
+                            result[1] === 'start' &&
+                            result[0] > 0 &&
+                            result[0] < maxScroll,
+                        }
+                      : null
+                  }
+                  const entries = []
+                  for (
+                    let i = Math.max(0, local - 64);
+                    i <= Math.min(v.options.count - 2, local + 64);
+                    i++
+                  ) {
+                    const here = startOf(i),
+                      next = startOf(i + 1)
+                    if (here && next)
+                      entries.push({
+                        local: i,
+                        global: Number(v.options.getItemKey(i)),
+                        start: here.start,
+                        size: next.start - here.start,
+                        unclamped: here.unclamped,
+                        nextUnclamped: next.unclamped,
+                      })
+                  }
+                  const found = entries.find(
+                      (entry) =>
+                        entry.unclamped &&
+                        entry.start >= predictedOffset + padding
+                    ),
+                    reference = found
+                      ? { ...found, projectedY: found.start - predictedOffset }
+                      : null
+                  preInputLedger = {
+                    captured: true,
+                    method:
+                      'Read-only installed public getOffsetForIndex/start alignment; numeric React-fiber discovery only, no cache/style/scroll mutation',
+                    anchor: index,
+                    delta,
+                    nativeY: scrollY,
+                    offset: v.scrollOffset,
+                    windowStart,
+                    padding,
+                    predictedOffset,
+                    viewportHeight: innerHeight,
+                    headerBottom:
+                      document
+                        .querySelector('[aria-label="Main navigation"]')
+                        ?.closest('header')
+                        ?.getBoundingClientRect().bottom ?? 0,
+                    anchorEntry: startOf(local),
+                    reference,
+                    prefix: reference
+                      ? entries.filter(
+                          (entry) =>
+                            entry.global >= reference.global &&
+                            entry.global < index
+                        )
+                      : [],
+                    entries,
+                  }
+                } else
+                  preInputLedger = {
+                    captured: false,
+                    error: 'No read-only instance/anchor row available',
+                  }
+              }
+              return {
+                index,
+                y: card?.getBoundingClientRect().y,
+                height: card?.getBoundingClientRect().height,
+                name: card
+                  ?.querySelector('a[aria-label^="Open "]')
+                  ?.getAttribute('aria-label'),
+                globalRow: Number(row?.dataset.row),
+                localRow: Number(row?.dataset.index),
+                windowStart:
+                  Number(row?.dataset.row) - Number(row?.dataset.index),
+                mounted: document.querySelectorAll('[data-file-index]').length,
+                focused: !!card?.contains(document.activeElement),
+                scrollY,
+                rowGeometry,
+                preInputLedger,
+              }
+            },
+            { index, delta }
+          )
+        const settled = async (index, delta) => {
           const samples = []
           for (let count = 0; count < 4; count++) {
-            samples.push(await snapshot(index))
+            samples.push(await snapshot(index, count === 3 ? delta : undefined))
             await page.waitForTimeout(100)
           }
           assert.ok(
@@ -435,7 +736,18 @@ async function main() {
             await expect(primary).toBeVisible()
             await primary.focus()
             await expect(primary).toBeFocused()
-            const before = await settled(anchor)
+            const before = await settled(
+              anchor,
+              direction === 'reverse' ? delta : undefined
+            )
+            const declaration =
+              direction === 'reverse' ? before.preInputLedger : null
+            if (direction === 'reverse') {
+              current.preInputLedgers ||= []
+              current.preInputLedgers.push(declaration ?? null)
+              await save()
+              checkReverseDeclaration(before, anchor, delta)
+            }
             assert.equal(
               before.windowStart,
               direction === 'forward' ? 0 : plan.expectedOwnerTotal - 8000
@@ -465,6 +777,12 @@ async function main() {
               pixelError: Math.abs(after.y - before.y + delta),
             }
             current.seams.push(seam)
+            if (declaration)
+              seam.intrinsicGeometry = accountReverseGeometry(
+                before,
+                after,
+                declaration
+              )
             await page.screenshot({
               path: path.join(
                 output,
@@ -482,10 +800,21 @@ async function main() {
               'Focused generic card remains mounted across native window transition'
             )
             assert.notEqual(after.windowStart, before.windowStart)
-            assert.ok(
-              seam.pixelError <= 5,
-              'Native wheel displacement is preserved within5px'
-            )
+            if (direction === 'forward') {
+              assert.ok(
+                seam.pixelError <= 5,
+                'Native wheel displacement is preserved within5px'
+              )
+            } else {
+              assert.ok(
+                seam.intrinsicGeometry.viewportReferenceError <= 5,
+                'Predeclared viewport reference is preserved within5px'
+              )
+              assert.ok(
+                seam.intrinsicGeometry.rebaseResidual <= 5,
+                'Native rebase residual after independent intrinsic geometry is within5px'
+              )
+            }
             assert.ok(after.mounted <= 100)
             assert.ok(
               seam.requests.filter((r) => r.path === '/api/files').length <= 8

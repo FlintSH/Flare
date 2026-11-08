@@ -106,6 +106,8 @@ Use a profile with public visibility, a relative expiration, and **Make private*
 Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). For a custom application, use a [named API token](../api/authentication) with only the permissions it needs. [Webhooks](../api/webhooks) notify a receiver when a file is ready.
 :::
 
+In a confirmation dialog’s bottom button group, **Cancel**, **Keep account**, or the other keep action appears before the confirming action: above it on phones and to its left when the buttons fit in a row. The action names state what you are confirming, such as **Delete link**, **Revoke**, or **Delete account**.
+
 ## A few things to know early
 
 **An instance is its own service.** Accounts, limits, storage, registration, email, and branding belong to that installation. Ask its administrator about availability and backups.

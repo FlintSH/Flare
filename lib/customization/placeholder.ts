@@ -96,16 +96,16 @@ export function placeholderText(palette: Readonly<Record<string, string>>) {
 
   let best = muted
   // Start slightly quieter than the palette's muted text, without applying
-  // transparency to the field. Back off that mix when it would lose AA text
-  // contrast, then try the configured foreground for a low-contrast palette.
+  // transparency to the field. Move toward muted, then the configured
+  // foreground, to reach stronger text contrast wherever the palette allows.
   for (let amount = 85; amount <= 100; amount++) {
     const candidate = mix(muted, background, amount / 100)
-    if (contrast(candidate) >= 4.5) return hex(candidate)
+    if (contrast(candidate) >= 7) return hex(candidate)
     if (contrast(candidate) > contrast(best)) best = candidate
   }
   for (let amount = 1; amount <= 100; amount++) {
     const candidate = mix(muted, foreground, 1 - amount / 100)
-    if (contrast(candidate) >= 4.5) return hex(candidate)
+    if (contrast(candidate) >= 7) return hex(candidate)
     if (contrast(candidate) > contrast(best)) best = candidate
   }
   // Arbitrarily conflicting custom surfaces may have no single readable

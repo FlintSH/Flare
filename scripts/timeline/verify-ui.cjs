@@ -405,6 +405,83 @@ async function verifyTouchSeekContinuity(browser, storageState) {
             : [{ id: 0, x, y, radiusX: 4, radiusY: 4, force: 1 }],
       })
     const rail = page.getByRole('slider', { name: 'Browse files by date' })
+    // Exercise the inset boundary before another drag warms this context's cache.
+    // Use native CDP touch input and real keys, without a wheel nudge or React internals.
+    trace.keyboardAfterTouch = {
+      method:
+        'Fresh390×844 coarse context: Home, native CDP8-move thumb drag to logical row7979 (35ms per move), release, two ArrowDown/ArrowUp cycles, then Home; no wheel nudge or React internals',
+      observations: [],
+    }
+    const settleKeyboardRow = async (action, expectedRow) => {
+      await ready(page)
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll('[data-file-index] img')].every(
+          (image) => image.complete && image.naturalWidth > 0
+        )
+      )
+      await page.waitForTimeout(300)
+      const observation = {
+        action,
+        expectedRow,
+        row: Number(await rail.getAttribute('aria-valuenow')) - 1,
+        firstVisibleIndex: Number(await firstVisibleIndex(page)),
+        scrollY: await page.evaluate(() => scrollY),
+      }
+      trace.keyboardAfterTouch.observations.push(observation)
+      await persistTimelineDiagnostics()
+      assert.equal(
+        observation.row,
+        expectedRow,
+        `${action}: the date rail reports the actual leading logical row`
+      )
+      assert.equal(
+        observation.firstVisibleIndex,
+        expectedRow,
+        `${action}: the destination is the first visible file`
+      )
+      await expect(
+        page.locator(`[data-file-index="${expectedRow}"]`)
+      ).toBeInViewport()
+    }
+    await rail.press('Home')
+    await settleKeyboardRow('initial Home', 0)
+    const initialHandle = await page
+      .locator('[data-date-rail-handle]')
+      .boundingBox()
+    const initialTrack = await page
+      .locator('[data-date-rail-track]')
+      .boundingBox()
+    assert(initialHandle && initialTrack)
+    const initialX = initialHandle.x + initialHandle.width / 2
+    const initialY = initialHandle.y + initialHandle.height / 2
+    const destinationY =
+      initialTrack.y + 22 + ((initialTrack.height - 44) * 7979) / 11999
+    await touch('touchStart', initialX, initialY)
+    try {
+      await expect(page.locator('[data-date-rail-handle]')).toHaveAttribute(
+        'data-dragging',
+        'true'
+      )
+      for (let step = 1; step <= 8; step++) {
+        await touch(
+          'touchMove',
+          initialX,
+          initialY + ((destinationY - initialY) * step) / 8
+        )
+        await page.waitForTimeout(35)
+      }
+    } finally {
+      await touch('touchEnd')
+    }
+    await settleKeyboardRow('touch release', 7979)
+    for (let cycle = 1; cycle <= 2; cycle++) {
+      await rail.press('ArrowDown')
+      await settleKeyboardRow(`cycle${cycle} ArrowDown`, 7980)
+      await rail.press('ArrowUp')
+      await settleKeyboardRow(`cycle${cycle} ArrowUp`, 7979)
+    }
+    await rail.press('Home')
+    await settleKeyboardRow('restored Home', 0)
     for (const oldest of [true, false]) {
       const name = oldest ? 'first' : 'return'
       const handle = await page.locator('[data-date-rail-handle]').boundingBox()
@@ -526,6 +603,454 @@ async function cardHeights(
   )
 }
 
+// Intrinsic cards may differ; each measured row must still
+// contain its tallest member and preserve actual spacing and content bounds.
+async function naturalRowGeometry(page, stage) {
+  const geometry = await page.evaluate(async () => {
+    const rect = (element) => {
+      if (!element) return null
+      const r = element.getBoundingClientRect()
+      return {
+        x: r.x,
+        y: r.y,
+        right: r.right,
+        bottom: r.bottom,
+        width: r.width,
+        height: r.height,
+      }
+    }
+    let last = '',
+      same = 0,
+      frames = 0
+    const stability = await new Promise((resolve) => {
+      const frame = () => {
+        const key = [...document.querySelectorAll('[data-row]')]
+          .map((row) => {
+            const r = row.getBoundingClientRect()
+            return [
+              row.dataset.row,
+              r.y,
+              r.height,
+              ...[
+                ...row.querySelectorAll('[data-file-index] > :first-child'),
+              ].map((card) => card.getBoundingClientRect().height),
+            ].join(',')
+          })
+          .join(';')
+        same = key === last ? same + 1 : 0
+        last = key
+        if (++frames >= 180 || same >= 8)
+          resolve({ stable: same >= 8, frames, stableFrames: same })
+        else requestAnimationFrame(frame)
+      }
+      requestAnimationFrame(frame)
+    })
+    const rows = [...document.querySelectorAll('[data-row]')].map((row) => {
+      const style = getComputedStyle(row),
+        grid = row.querySelector(':scope > .grid')
+      const content = grid || row.querySelector(':scope > h2')
+      const members = [...row.querySelectorAll('[data-file-index]')].map(
+        (slot) => {
+          const card = slot.firstElementChild,
+            loaded = card?.hasAttribute('data-file-card')
+          const details = loaded
+            ? card.querySelector(':scope > .border-t')
+            : null
+          const detailStyle = details ? getComputedStyle(details) : null
+          const detailChildren = details
+            ? [...details.children].filter(
+                (child) => child.getBoundingClientRect().height > 0
+              )
+            : []
+          const detailHeight = details
+            ? detailChildren.reduce(
+                (sum, child) => sum + child.getBoundingClientRect().height,
+                0
+              ) +
+              Math.max(0, detailChildren.length - 1) *
+                (parseFloat(detailStyle.rowGap) || 0) +
+              parseFloat(detailStyle.paddingTop) +
+              parseFloat(detailStyle.paddingBottom) +
+              parseFloat(detailStyle.borderTopWidth) +
+              parseFloat(detailStyle.borderBottomWidth)
+            : null
+          return {
+            index: Number(slot.dataset.fileIndex),
+            slot: rect(slot),
+            card: rect(card),
+            loaded,
+            heading: rect(card?.querySelector('[data-file-heading]')),
+            filename: rect(card?.querySelector('[data-file-name]')),
+            preview: rect(loaded ? card.children[1] : null),
+            previewLink: rect(card?.querySelector('[data-file-preview]')),
+            previewRegionChildren: loaded
+              ? [...card.children[1].children]
+                  .map(rect)
+                  .filter((r) => r && r.width > 0 && r.height > 0)
+              : [],
+            details: rect(details),
+            detailChildren: detailChildren.map(rect),
+            intrinsicDetailsHeight: detailHeight,
+            activity: rect(card?.querySelector('[data-file-activity]')),
+          }
+        }
+      )
+      return {
+        index: Number(row.dataset.row),
+        row: rect(row),
+        content: rect(content),
+        paddingTop: parseFloat(style.paddingTop),
+        paddingBottom: parseFloat(style.paddingBottom),
+        borderTop: parseFloat(style.borderTopWidth),
+        borderBottom: parseFloat(style.borderBottomWidth),
+        grid: !!grid,
+        members,
+      }
+    })
+    return {
+      stability,
+      viewport: { width: innerWidth, height: innerHeight },
+      scrollY,
+      rootFont: getComputedStyle(document.documentElement).fontSize,
+      listBusy: document
+        .querySelector('[role="list"][aria-label="Your files"]')
+        ?.getAttribute('aria-busy'),
+      date: document
+        .querySelector('[role="slider"]')
+        ?.getAttribute('aria-valuetext'),
+      rows,
+    }
+  })
+  const entry = { stage, ...geometry }
+  evidence.naturalRowGeometry ||= []
+  evidence.naturalRowGeometry.push(entry)
+  await persistTimelineDiagnostics()
+  return geometry
+}
+
+function assertNaturalRows(geometry, stage) {
+  const close = (a, b, message) =>
+    assert.ok(Math.abs(a - b) <= 1, `${stage}: ${message} (${a} vs ${b})`)
+  const inside = (a, b, message) =>
+    assert.ok(
+      a &&
+        b &&
+        a.x >= b.x - 1 &&
+        a.right <= b.right + 1 &&
+        a.y >= b.y - 1 &&
+        a.bottom <= b.bottom + 1,
+      `${stage}: ${message}`
+    )
+  assert.equal(
+    geometry.stability.stable,
+    true,
+    `${stage}: measured rows settle within180RAF`
+  )
+  assert(geometry.rows.length > 0, `${stage}: mounted rows exist`)
+  const rowIndices = geometry.rows.map((row) => row.index)
+  assert.equal(
+    new Set(rowIndices).size,
+    rowIndices.length,
+    `${stage}: unique logical rows`
+  )
+  assert.deepEqual(
+    rowIndices,
+    [...rowIndices].sort((a, b) => a - b),
+    `${stage}: chronological logical row order`
+  )
+  const allFiles = geometry.rows.flatMap((row) =>
+    row.members.map((member) => member.index)
+  )
+  assert.equal(
+    new Set(allFiles).size,
+    allFiles.length,
+    `${stage}: unique mounted file indices`
+  )
+  assert.deepEqual(
+    allFiles,
+    [...allFiles].sort((a, b) => a - b),
+    `${stage}: mounted file index order`
+  )
+  for (const [i, row] of geometry.rows.entries()) {
+    assert(
+      row.row.height > 0 && row.content?.height > 0,
+      `${stage}: positive row and content height`
+    )
+    inside(row.content, row.row, 'row contains its grid or date heading')
+    close(
+      row.content.y,
+      row.row.y + row.paddingTop + row.borderTop,
+      'content starts at its measured row inset'
+    )
+    close(
+      row.row.height,
+      row.content.height +
+        row.paddingTop +
+        row.paddingBottom +
+        row.borderTop +
+        row.borderBottom,
+      'row height equals intrinsic content plus actual padding/borders'
+    )
+    close(
+      row.paddingBottom,
+      16,
+      'normal-text row reserves its source-defined16px gap'
+    )
+    if (row.grid) {
+      assert(row.members.length > 0, `${stage}: file row has members`)
+      close(
+        row.content.bottom,
+        Math.max(...row.members.map((member) => member.card.bottom)),
+        'grid ends at tallest intrinsic member'
+      )
+      for (const member of row.members) {
+        assert(member.card?.height > 0, `${stage}: positive member height`)
+        inside(member.slot, row.content, 'grid contains each member slot')
+        inside(
+          member.card,
+          member.slot,
+          'member slot contains its own intrinsic card'
+        )
+        close(
+          member.card.height,
+          member.slot.height,
+          'member slot ends at its own card rather than stretching to siblings'
+        )
+        close(
+          member.card.y,
+          row.content.y,
+          'row member top aligns with its grid'
+        )
+        if (member.loaded) {
+          for (const [name, region] of Object.entries({
+            heading: member.heading,
+            filename: member.filename,
+            preview: member.preview,
+            details: member.details,
+            activity: member.activity,
+          })) {
+            assert(
+              region?.height > 0 && region.width > 0,
+              `${stage}: ${name} has positive native bounds`
+            )
+            inside(region, member.card, `${name} remains within its own card`)
+          }
+          inside(member.filename, member.heading, 'heading contains filename')
+          inside(
+            member.previewLink,
+            member.preview,
+            'full preview region contains its Link'
+          )
+          for (const regionChild of member.previewRegionChildren)
+            inside(
+              regionChild,
+              member.preview,
+              'preview region contains its Link, badges and controls'
+            )
+          assert(
+            member.heading.bottom <= member.preview.y + 1,
+            `${stage}: filename heading does not overlap preview`
+          )
+          close(
+            member.preview.bottom,
+            member.details.y,
+            'preview and own details meet without a blank body'
+          )
+          close(
+            member.details.height,
+            member.intrinsicDetailsHeight,
+            'details height equals actual child content, gaps and chrome'
+          )
+          for (const child of member.detailChildren)
+            inside(child, member.details, 'detail child remains contained')
+        }
+      }
+    }
+    const next = geometry.rows[i + 1]
+    if (next) {
+      assert(
+        next.row.y >= row.row.bottom - 1,
+        `${stage}: mounted row boxes never overlap`
+      )
+      if (next.index === row.index + 1)
+        close(
+          next.row.y,
+          row.row.bottom,
+          'consecutive logical row wrappers are adjacent with no virtual hole'
+        )
+    }
+  }
+  const visible = geometry.rows.filter(
+    (row) => row.row.bottom > 0 && row.row.y < geometry.viewport.height
+  )
+  for (let i = 1; i < visible.length; i++)
+    assert.equal(
+      visible[i].index,
+      visible[i - 1].index + 1,
+      `${stage}: visible rows have no missing logical row`
+    )
+}
+
+async function predeclareWheelAnchors(page, stage, delta) {
+  const beforeRows = await naturalRowGeometry(page, stage + '-before-input')
+  assertNaturalRows(beforeRows, stage + '-before-input')
+  const focusHandle = await page.evaluateHandle(() => document.activeElement)
+  const record = await page.evaluate(
+    ({ stage, delta }) => {
+      const navigation = document.querySelector(
+        '[aria-label="Main navigation"]'
+      )
+      const headerBottom =
+        navigation?.closest('header')?.getBoundingClientRect().bottom ?? 0
+      const focus = document.activeElement
+      const focusDescription = {
+        tag: focus?.tagName ?? null,
+        id: focus?.id ?? null,
+        role: focus?.getAttribute('role') ?? null,
+        label: focus?.getAttribute('aria-label') ?? null,
+        fileIndex:
+          focus
+            ?.closest('[data-file-index]')
+            ?.getAttribute('data-file-index') ?? null,
+      }
+      const candidates = [
+        ...document.querySelectorAll('[data-file-index]'),
+      ].map((slot) => {
+        const r = slot.getBoundingClientRect(),
+          loaded =
+            slot.firstElementChild?.hasAttribute('data-file-card') === true
+        const predictedY = r.y - delta,
+          predictedBottom = r.bottom - delta
+        return {
+          index: Number(slot.dataset.fileIndex),
+          row: Number(slot.closest('[data-row]').dataset.row),
+          loaded,
+          before: {
+            x: r.x,
+            y: r.y,
+            right: r.right,
+            bottom: r.bottom,
+            width: r.width,
+            height: r.height,
+          },
+          predictedY,
+          predictedBottom,
+          selected:
+            loaded &&
+            r.height > 0 &&
+            r.width > 0 &&
+            predictedBottom > headerBottom &&
+            predictedY < innerHeight,
+        }
+      })
+      const selected = candidates
+        .filter((c) => c.selected)
+        .sort((a, b) => a.index - b.index)
+      return {
+        stage,
+        delta,
+        viewport: { width: innerWidth, height: innerHeight, headerBottom },
+        beforeScrollY: scrollY,
+        beforeFocus: focusDescription,
+        candidates,
+        selected,
+        deterministicRebaseAnchor: selected[0]
+          ? { index: selected[0].index, row: selected[0].row }
+          : null,
+        beforeInputRecorded: true,
+        afterInputRecorded: false,
+      }
+    },
+    { stage, delta }
+  )
+  evidence.nativeWheelContinuity ||= []
+  evidence.nativeWheelContinuity.push(record)
+  await persistTimelineDiagnostics()
+  assert(
+    record.selected.length > 0,
+    `${stage}: loaded mounted cards intersect the predicted post-wheel viewport`
+  )
+  return { record, focusHandle }
+}
+
+async function persistTimelineDiagnostics() {
+  const directory = process.env.FLARE_TIMELINE_RESULTS
+    ? path.dirname(process.env.FLARE_TIMELINE_RESULTS)
+    : screenshots
+  if (!directory) return
+  await mkdir(directory, { recursive: true })
+  await writeFile(
+    path.join(directory, 'timeline-diagnostics.json'),
+    JSON.stringify({ completedChecks: results, ...evidence }, null, 2) + '\n'
+  )
+}
+
+async function measureWheelAnchorsAfter(page, declaration) {
+  const { record, focusHandle } = declaration
+  const afterRows = await naturalRowGeometry(
+    page,
+    record.stage + '-after-input'
+  )
+  record.afterRowsStage = record.stage + '-after-input'
+  record.afterScrollY = afterRows.scrollY
+  record.after = record.selected.map((anchor) => {
+    const member = afterRows.rows
+      .flatMap((row) => row.members)
+      .find((member) => member.index === anchor.index)
+    return {
+      index: anchor.index,
+      row: anchor.row,
+      before: anchor.before,
+      mounted: !!member,
+      actual: member?.slot ?? null,
+      pixelError: member
+        ? Math.abs(member.slot.y - anchor.before.y + record.delta)
+        : null,
+    }
+  })
+  record.focusIdentityUnchanged = await page.evaluate(
+    (before) => document.activeElement === before,
+    focusHandle
+  )
+  record.afterFocus = await page.evaluate(() => {
+    const focus = document.activeElement
+    return {
+      tag: focus?.tagName ?? null,
+      id: focus?.id ?? null,
+      role: focus?.getAttribute('role') ?? null,
+      label: focus?.getAttribute('aria-label') ?? null,
+      fileIndex:
+        focus?.closest('[data-file-index]')?.getAttribute('data-file-index') ??
+        null,
+    }
+  })
+  record.afterInputRecorded = true
+  await persistTimelineDiagnostics()
+  await focusHandle.dispose()
+  assertNaturalRows(afterRows, record.stage + '-after-input')
+  assert.equal(
+    record.focusIdentityUnchanged,
+    true,
+    `${record.stage}: native wheel leaves actual focus unchanged`
+  )
+  for (const anchor of record.after) {
+    assert.equal(
+      anchor.mounted,
+      true,
+      `${record.stage}: predeclared predicted-visible file${anchor.index} stays mounted`
+    )
+    assert(
+      anchor.pixelError <= 5,
+      `${record.stage}: file${anchor.index} preserves its predicted native position (${anchor.pixelError}px error)`
+    )
+  }
+  record.maxPixelError = Math.max(
+    ...record.after.map((anchor) => anchor.pixelError)
+  )
+  await persistTimelineDiagnostics()
+  return record.maxPixelError
+}
+
 async function sample(page, stage) {
   const value = await page.evaluate(() => ({
     mountedFiles: document.querySelectorAll('[data-file-index]').length,
@@ -548,10 +1073,8 @@ async function sample(page, stage) {
     value.mountedFiles <= 100,
     `${stage}: ${value.mountedFiles} mounted cards`
   )
-  assert.ok(
-    value.cardHeights.length <= 1,
-    `${stage}: mounted cards share one height (${value.cardHeights.join(', ')})`
-  )
+  value.naturalRows = await naturalRowGeometry(page, stage)
+  assertNaturalRows(value.naturalRows, stage)
   assert.equal(
     value.horizontalOverflow,
     false,
@@ -974,7 +1497,12 @@ async function main() {
     const seamAnchor = page.locator('[data-file-index="7979"]')
     await expect(seamAnchor).toBeAttached()
     await ready(page)
-    const beforeSeam = await settledBox(seamAnchor)
+    await settledBox(seamAnchor)
+    const forwardWheel = await predeclareWheelAnchors(
+      page,
+      'native-forward-seam',
+      900
+    )
     await page.mouse.move(180, 500)
     await page.mouse.wheel(0, 900)
     await expect
@@ -983,13 +1511,19 @@ async function main() {
     await expect
       .poll(async () =>
         Number(
-          await page.locator('[data-row="7979"]').getAttribute('data-index')
+          await page
+            .locator(
+              `[data-row="${forwardWheel.record.deterministicRebaseAnchor.row}"]`
+            )
+            .getAttribute('data-index')
         )
       )
       .toBeLessThan(7000)
     await ready(page)
-    const afterSeam = await settledBox(seamAnchor)
-    evidence.nativeSeamPixelError = Math.abs(afterSeam.y - beforeSeam.y + 900)
+    evidence.nativeSeamPixelError = await measureWheelAnchorsAfter(
+      page,
+      forwardWheel
+    )
     assert.ok(
       evidence.nativeSeamPixelError <= 5,
       `Native window transition preserves the within-card position (${evidence.nativeSeamPixelError}px error)`
@@ -1004,7 +1538,12 @@ async function main() {
     const reverseAnchor = page.locator('[data-file-index="4022"]')
     await expect(reverseAnchor).toBeAttached()
     await ready(page)
-    const beforeReverse = await settledBox(reverseAnchor)
+    await settledBox(reverseAnchor)
+    const reverseWheel = await predeclareWheelAnchors(
+      page,
+      'native-reverse-seam',
+      -1200
+    )
     await page.mouse.move(180, 500)
     await page.mouse.wheel(0, -1200)
     await expect
@@ -1013,14 +1552,18 @@ async function main() {
     await expect
       .poll(async () =>
         Number(
-          await page.locator('[data-row="4022"]').getAttribute('data-index')
+          await page
+            .locator(
+              `[data-row="${reverseWheel.record.deterministicRebaseAnchor.row}"]`
+            )
+            .getAttribute('data-index')
         )
       )
       .toBeGreaterThan(1000)
     await ready(page)
-    const afterReverse = await settledBox(reverseAnchor)
-    evidence.reverseSeamPixelError = Math.abs(
-      afterReverse.y - beforeReverse.y - 1200
+    evidence.reverseSeamPixelError = await measureWheelAnchorsAfter(
+      page,
+      reverseWheel
     )
     assert.ok(
       evidence.reverseSeamPixelError <= 5,
@@ -1367,10 +1910,25 @@ async function main() {
     await expect(
       page.locator('[data-file-index="11999"] a[aria-label^="Open "]')
     ).toBeAttached()
-    assert.deepEqual(
-      await cardHeights(page),
-      placeholders,
-      'Loaded cards replace their placeholders without changing height'
+    const retryGeometry = await naturalRowGeometry(
+      page,
+      'historical-retry-loaded'
+    )
+    assertNaturalRows(retryGeometry, 'historical-retry-loaded')
+    assert.equal(
+      retryGeometry.date,
+      'July 2018',
+      'Retry retains the exact historical month'
+    )
+    const retryTarget = await page
+      .locator('[data-file-index="11999"]')
+      .boundingBox()
+    assert.ok(
+      retryTarget &&
+        retryTarget.height > 0 &&
+        retryTarget.y < retryGeometry.viewport.height &&
+        retryTarget.y + retryTarget.height > 0,
+      'Retry retains the actual oldest target in the viewport after intrinsic row remeasurement'
     )
     await page.unroute('**/api/files?**')
     assert.equal(failedOnce, true)
@@ -1492,6 +2050,7 @@ async function main() {
       await saveRecording(mobileVideo, 'timeline-mobile')
     }
     assert.deepEqual(errors, [], 'No browser JavaScript errors')
+    await persistTimelineDiagnostics()
     if (process.env.FLARE_TIMELINE_RESULTS) {
       await writeFile(
         process.env.FLARE_TIMELINE_RESULTS,
@@ -1522,9 +2081,34 @@ async function main() {
           }))
           .catch(() => null)
       )
-      await page
-        .screenshot({ path: '/tmp/flare-timeline-browser-failure.png' })
-        .catch(() => {})
+      try {
+        const directory =
+          screenshots ||
+          (await mkdtemp(
+            path.join(tmpdir(), 'flare-timeline-browser-failure-')
+          ))
+        await mkdir(directory, { recursive: true })
+        const frame = path.join(directory, 'timeline-browser-failure.png')
+        await page.screenshot({ path: frame })
+        await writeFile(
+          path.join(directory, 'timeline-browser-failure.json'),
+          JSON.stringify(
+            {
+              error: { message: error.message, stack: error.stack },
+              completedChecks: results,
+              ...evidence,
+            },
+            null,
+            2
+          ) + '\n'
+        )
+        console.error('Browser failure artifacts:', directory)
+      } catch (artifactError) {
+        console.error(
+          'Could not save browser failure artifacts:',
+          artifactError.message
+        )
+      }
     }
     throw error
   } finally {

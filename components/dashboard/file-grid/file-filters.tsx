@@ -151,7 +151,7 @@ export const FileFilters = memo(function FileFilters({
         aria-expanded={expanded}
         aria-controls={controlsId}
         onClick={() => setExpanded((value) => !value)}
-        className="h-11 shrink-0 gap-1.5 rounded-lg bg-background/70 px-2 sm:hidden"
+        className="h-auto !min-h-[44px] !min-w-[44px] shrink-0 gap-[6px] rounded-lg bg-background/70 px-[8px] py-[8px] sm:hidden"
       >
         Filters
         {activeCount > 0 && (
@@ -161,7 +161,7 @@ export const FileFilters = memo(function FileFilters({
         )}
         <ChevronDown
           className={cn(
-            'h-3.5 w-3.5 transition-transform motion-reduce:transition-none',
+            'h-[14px] w-[14px] shrink-0 transition-transform motion-reduce:transition-none',
             expanded && 'rotate-180'
           )}
         />

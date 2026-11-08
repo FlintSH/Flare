@@ -259,7 +259,7 @@ export function FileTagsDialog({
           {announcement}
         </p>
         <DialogFooter>
-          <span className="order-1 flex flex-1 items-center text-xs text-muted-foreground sm:order-none">
+          <span className="flex flex-1 items-center text-xs text-muted-foreground">
             {busy ? (
               <>
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />
