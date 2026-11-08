@@ -1,6 +1,12 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -20,6 +26,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useDropzone } from 'react-dropzone'
 
 import {
@@ -47,6 +54,7 @@ import { folderPath } from '@/lib/folders/navigation'
 import { UNFILED, folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { UploadResponse } from '@/lib/uploads/client'
+import { uploadActivity } from '@/lib/uploads/queue'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
@@ -57,6 +65,7 @@ import { copyUploadLinks, useUploadQueue } from '@/hooks/use-upload-queue'
 // picker's "Manage profiles" link.
 const textActionClassName =
   'min-h-8 rounded-sm text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50'
+const uploadingSnapshot = () => uploadActivity.get().uploading
 
 interface UploadFormProps {
   maxSize: number
@@ -76,9 +85,20 @@ export function UploadForm({
   const [completed, setCompleted] = useState<UploadResponse[]>([])
   const [uploadError, setUploadError] = useState('')
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const [queueExpanded, setQueueExpanded] = useState(false)
+  const [submitBarElement, setSubmitBarElement] =
+    useState<HTMLDivElement | null>(null)
+  const [submitBarHeight, setSubmitBarHeight] = useState(0)
   const pickerId = useId()
   const pickerTitleId = `${pickerId}-title`
   const pickerHintId = `${pickerId}-hint`
+  const queueListId = `${pickerId}-queue`
+  const waitingHintId = `${pickerId}-waiting`
+  const anyUploadInProgress = useSyncExternalStore(
+    uploadActivity.subscribe,
+    uploadingSnapshot,
+    uploadingSnapshot
+  )
   const { user: sessionUser } = usePermissions()
   const canShare = allows(sessionUser, 'shareFiles')
   // Until the session loads, keep a requested folder. The server refuses
@@ -112,6 +132,7 @@ export function UploadForm({
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop: (acceptedFiles) => {
+      if (files.length === 0) setQueueExpanded(false)
       const tooLarge = add(acceptedFiles, maxSize)
       setUploadError(
         tooLarge.length
@@ -125,8 +146,30 @@ export function UploadForm({
     noKeyboard: true,
   })
   const totalSize = files.reduce((total, { file }) => total + file.size, 0)
+  const floatingSubmit =
+    files.length > 0 && !isUploading && !anyUploadInProgress
+  const shownFiles = queueExpanded || isUploading ? files : files.slice(0, 2)
+  const waitingForUpload =
+    files.length > 0 && anyUploadInProgress && !isUploading
+
+  useLayoutEffect(() => {
+    if (!submitBarElement || !floatingSubmit) {
+      setSubmitBarHeight(0)
+      return
+    }
+    const measure = () =>
+      setSubmitBarHeight(
+        Math.ceil(submitBarElement.getBoundingClientRect().height)
+      )
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(submitBarElement)
+    return () => observer.disconnect()
+  }, [submitBarElement, floatingSubmit])
 
   const uploadQueued = async () => {
+    // The shared activity can change after this button was rendered.
+    if (uploadActivity.get().uploading) return
     const batch = await upload({
       profileId,
       folderId,
@@ -136,6 +179,7 @@ export function UploadForm({
       expiryAction,
     })
     if (!batch) return
+    if (!batch.failure) setQueueExpanded(false)
     if (batch.uploaded.length) {
       setCompleted((previous) => [...batch.uploaded, ...previous])
       setUploadError('')
@@ -146,6 +190,38 @@ export function UploadForm({
   const copyLinks = async (value: string) => {
     if (await copyUploadLinks(value)) setCopiedLink(value)
   }
+
+  const uploadButton = (
+    <Button
+      type="button"
+      data-upload-primary=""
+      aria-describedby={waitingForUpload ? waitingHintId : undefined}
+      className="min-h-[44px] w-full whitespace-normal"
+      onClick={() => {
+        setUploadError('')
+        void uploadQueued()
+      }}
+      disabled={
+        files.length === 0 ||
+        isUploading ||
+        anyUploadInProgress ||
+        unavailableFolder ||
+        (!!folderId && foldersLoading) ||
+        Boolean(password && filePasswordHint(password))
+      }
+    >
+      {isUploading ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : (
+        <Upload className="hidden h-4 w-4 sm:block" aria-hidden="true" />
+      )}
+      {isUploading
+        ? 'Uploading…'
+        : files.length
+          ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
+          : 'Upload files'}
+    </Button>
+  )
 
   return (
     <div className="space-y-6">
@@ -227,14 +303,27 @@ export function UploadForm({
               type="button"
               data-flare-control="button"
               className={textActionClassName}
-              onClick={clear}
+              onClick={() => {
+                clear()
+                setQueueExpanded(false)
+              }}
               disabled={isUploading}
             >
               Clear all
             </button>
           </div>
-          <ul className="divide-y rounded-xl border">
-            {files.map(({ key, file, preview, uploaded, progress }) => (
+          {waitingForUpload && (
+            <p
+              id={waitingHintId}
+              role="status"
+              className="text-sm text-muted-foreground"
+            >
+              Another upload is running. Your files stay queued; start this
+              batch when it finishes.
+            </p>
+          )}
+          <ul id={queueListId} className="divide-y rounded-xl border">
+            {shownFiles.map(({ key, file, preview, uploaded, progress }) => (
               <li key={key} className="flex items-center gap-3 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                   {preview ? (
@@ -279,7 +368,10 @@ export function UploadForm({
                     variant="ghost"
                     size="icon"
                     aria-label={`Remove ${file.name}`}
-                    onClick={() => remove(key)}
+                    onClick={() => {
+                      remove(key)
+                      if (files.length === 1) setQueueExpanded(false)
+                    }}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -287,6 +379,25 @@ export function UploadForm({
               </li>
             ))}
           </ul>
+          {files.length > 2 && !isUploading && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {shownFiles.length} of {files.length} files
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-[44px] whitespace-normal"
+                aria-controls={queueListId}
+                aria-expanded={queueExpanded}
+                onClick={() => setQueueExpanded((expanded) => !expanded)}
+              >
+                {queueExpanded
+                  ? 'Show fewer files'
+                  : `Show all ${files.length} files`}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -471,31 +582,28 @@ export function UploadForm({
             )}
           </div>
         </CreationOptions>
-        <Button
-          className="w-full"
-          onClick={() => {
-            setUploadError('')
-            void uploadQueued()
-          }}
-          disabled={
-            files.length === 0 ||
-            isUploading ||
-            unavailableFolder ||
-            (!!folderId && foldersLoading) ||
-            Boolean(password && filePasswordHint(password))
-          }
-        >
-          {isUploading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4" />
-          )}
-          {isUploading
-            ? 'Uploading…'
-            : files.length
-              ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
-              : 'Upload files'}
-        </Button>
+        {floatingSubmit && typeof document !== 'undefined' ? (
+          <>
+            <div aria-hidden="true" style={{ height: submitBarHeight + 32 }} />
+            {createPortal(
+              <div
+                ref={setSubmitBarElement}
+                role="region"
+                aria-label="Upload batch"
+                data-upload-submit-bar=""
+                className="fixed inset-x-[16px] bottom-[16px] z-40 mx-auto flex max-w-4xl flex-wrap items-center gap-[8px] rounded-xl border border-border bg-overlay p-[10px] shadow-xl shadow-black/20"
+              >
+                <p className="min-w-0 flex-[1_1_10rem] text-sm text-muted-foreground">
+                  {files.length} selected · {formatBytes(totalSize)}
+                </p>
+                <div className="min-w-0 flex-[1_1_12rem]">{uploadButton}</div>
+              </div>,
+              document.body
+            )}
+          </>
+        ) : (
+          uploadButton
+        )}
       </div>
 
       {completed.length > 0 && (

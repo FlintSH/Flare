@@ -327,6 +327,23 @@ async function main() {
           await page.evaluate(() => document.fonts.ready)
           await page.waitForTimeout(150)
         }
+        // Fixtures are independently checked against their owner/rank records.
+        // Generic primaries expose the full filename rather than an Open prefix.
+        const fixturePrimary = async (card, expected) => {
+          const component = card.locator('[data-file-card]')
+          await expect(component).toHaveCount(1)
+          await expect(component).toHaveAttribute('data-file-kind', 'generic')
+          const heading = component.locator('[data-file-name]')
+          await expect(heading).toHaveCount(1)
+          await expect(heading).toHaveAttribute('title', expected.name)
+          await expect(heading).toHaveText(expected.name)
+          const primary = component.locator('a[data-file-primary]')
+          await expect(primary).toHaveCount(1)
+          await expect(primary).toHaveAccessibleName(expected.name)
+          await expect(primary).toHaveAttribute('href', expected.urlPath)
+          await expect(primary).toBeVisible()
+          return primary
+        }
         const snapshot = (index, delta) =>
           page.evaluate(
             ({ index, delta }) => {
@@ -489,7 +506,7 @@ async function main() {
                 y: card?.getBoundingClientRect().y,
                 height: card?.getBoundingClientRect().height,
                 name: card
-                  ?.querySelector('a[aria-label^="Open "]')
+                  ?.querySelector('[data-file-card] a[data-file-primary]')
                   ?.getAttribute('aria-label'),
                 globalRow: Number(row?.dataset.row),
                 localRow: Number(row?.dataset.index),
@@ -686,7 +703,37 @@ async function main() {
                 ]
                 const visible = mounted.flatMap((el) => {
                   const child = el.firstElementChild,
-                    b = child?.getBoundingClientRect()
+                    b = child?.getBoundingClientRect(),
+                    component = child?.matches('[data-file-card]')
+                      ? child
+                      : null,
+                    kind = component?.dataset.fileKind,
+                    primaries = component
+                      ? [...component.querySelectorAll('a[data-file-primary]')]
+                      : [],
+                    primary = primaries.length === 1 ? primaries[0] : null,
+                    primaryBox = primary?.getBoundingClientRect(),
+                    primaryHref = primary?.getAttribute('href'),
+                    fileName = component
+                      ?.querySelector('[data-file-name]')
+                      ?.getAttribute('title'),
+                    primaryName = primary?.getAttribute('aria-label'),
+                    loaded =
+                      !!component &&
+                      ['image', 'generic'].includes(kind) &&
+                      !component.hidden &&
+                      component.getAttribute('aria-hidden') !== 'true' &&
+                      getComputedStyle(component).visibility === 'visible' &&
+                      !!primaryBox &&
+                      primaryBox.width > 0 &&
+                      primaryBox.height > 0 &&
+                      getComputedStyle(primary).visibility === 'visible' &&
+                      !!primaryHref?.startsWith('/') &&
+                      !primaryHref.startsWith('//') &&
+                      primary.origin === location.origin &&
+                      !!fileName &&
+                      primaryName ===
+                        (kind === 'image' ? 'Open ' + fileName : fileName)
                   return b &&
                     b.height > 0 &&
                     b.bottom > top &&
@@ -696,7 +743,11 @@ async function main() {
                           index: Number(el.dataset.fileIndex),
                           top: b.top,
                           bottom: b.bottom,
-                          loaded: !!el.querySelector('a[aria-label^="Open "]'),
+                          loaded,
+                          kind: kind ?? null,
+                          primaryCount: primaries.length,
+                          primaryHref: primaryHref ?? null,
+                          primaryName: primaryName ?? null,
                           skeleton:
                             !!child?.matches('[aria-hidden="true"]') &&
                             !!child.querySelector('.animate-pulse'),
@@ -729,11 +780,7 @@ async function main() {
               'Native-wheel anchor is an actual mixed fixture'
             )
             const card = page.locator(`[data-file-index="${anchor}"]`)
-            const primary = card.getByRole('link', {
-              name: 'Open ' + expected.name,
-              exact: true,
-            })
-            await expect(primary).toBeVisible()
+            const primary = await fixturePrimary(card, expected)
             await primary.focus()
             await expect(primary).toBeFocused()
             const before = await settled(
@@ -766,6 +813,9 @@ async function main() {
               .not.toBe(before.windowStart)
             await ready()
             const after = await settled(anchor)
+            await fixturePrimary(card, expected)
+            assert.equal(before.name, expected.name)
+            assert.equal(after.name, expected.name)
             const seam = {
               direction,
               fileId: expected.id,
@@ -868,9 +918,7 @@ async function main() {
             await expect(heading).toContainText(label)
             await seek(targetRow, 'month-file-' + rank)
             const card = page.locator(`[data-file-index="${rank}"]`)
-            await expect(
-              card.getByRole('link', { name: 'Open ' + file.name, exact: true })
-            ).toBeVisible()
+            await fixturePrimary(card, file)
             assert.equal(
               await card.evaluate((el) =>
                 Number(el.closest('[data-row]').dataset.row)
@@ -905,12 +953,10 @@ async function main() {
             String(plan.expectedOwnerTotal)
           )
           await seek(4030, 'none-return')
-          await expect(
-            page.locator('[data-file-index="4030"]').getByRole('link', {
-              name: 'Open ' + plan.files.find((f) => f.rank === 4030).name,
-              exact: true,
-            })
-          ).toBeVisible()
+          await fixturePrimary(
+            page.locator('[data-file-index="4030"]'),
+            plan.files.find((f) => f.rank === 4030)
+          )
           assert.deepEqual(current.errors, [])
           assert.deepEqual(current.httpErrors, [])
           current.passed = true

@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { signIn } from 'next-auth/react'
 
+import { PasswordInput } from '@/components/auth/password-input'
 import {
   type SecurityStatus,
   hasRecentSecurityProof,
@@ -104,10 +105,10 @@ export function SecurityProof({
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="proof-password">Current password</Label>
-        <Input
+        <PasswordInput
           id="proof-password"
           name="proof-password"
-          type="password"
+          visibilityLabel="current password"
           placeholder="Enter your current password"
           autoComplete="current-password"
           data-sensitive="true"

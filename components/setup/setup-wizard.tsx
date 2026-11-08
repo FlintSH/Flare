@@ -2,6 +2,7 @@
 
 import {
   type CSSProperties,
+  type ComponentProps,
   type FormEvent,
   useEffect,
   useRef,
@@ -37,6 +38,7 @@ import {
   PasswordFieldError,
   usePasswordFields,
 } from '@/components/auth/password-field'
+import { PasswordInput } from '@/components/auth/password-input'
 import { EmailSettings } from '@/components/email/email-settings'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Icons } from '@/components/shared/icons'
@@ -192,6 +194,8 @@ export function SetupWizard({
   const markSetupComplete = useMarkSetupComplete()
   const [step, setStep] = useState<SetupStep>(resumeStep ?? 'account')
   const [data, setData] = useState<SetupData>(initialData)
+  // Confirmation never enters SetupData, browser storage or the setup request.
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [created, setCreated] = useState(resumeStep !== undefined)
   const [busy, setBusy] = useState(false)
   const [needsSignIn, setNeedsSignIn] = useState(false)
@@ -199,6 +203,7 @@ export function SetupWizard({
   const password = usePasswordFields({
     passwordId: 'setup-admin.password',
     helpId: 'setup-admin.password-hint',
+    confirmationId: 'setup-admin.passwordConfirmation',
   })
   const [emailEnabled, setEmailEnabled] = useState(initialEmailEnabled)
   const [emailRecoveryEnabled, setEmailRecoveryEnabled] = useState(
@@ -237,11 +242,22 @@ export function SetupWizard({
       if (!result.success) {
         const issue = result.error.issues[0]
         if (issue.path[0] === 'password')
-          password.validate(data.admin.password, undefined, event.currentTarget)
+          password.validate(
+            data.admin.password,
+            passwordConfirmation,
+            event.currentTarget
+          )
         else showValidation(issue.message, `admin.${issue.path.join('.')}`)
         return
       }
-      password.validate(data.admin.password, undefined, event.currentTarget)
+      if (
+        !password.validate(
+          data.admin.password,
+          passwordConfirmation,
+          event.currentTarget
+        )
+      )
+        return
       setData((previous) => ({ ...previous, admin: result.data }))
       go('storage')
       return
@@ -278,6 +294,8 @@ export function SetupWizard({
         )
       accountCreated = true
       setCreated(true)
+      setPasswordConfirmation('')
+      password.reset()
       markSetupComplete()
       setData((previous) => ({
         ...previous,
@@ -325,62 +343,82 @@ export function SetupWizard({
       autoComplete?: string
       optional?: boolean
     } = {}
-  ) => (
-    <div className="space-y-2">
-      <Label htmlFor={`setup-${path}`}>
-        {label}
-        {options.optional && (
-          <>
-            {' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </>
+  ) => {
+    const primary = path === 'admin.password'
+    const confirmation = path === 'admin.passwordConfirmation'
+    const accountPassword = primary || confirmation
+    const validation = primary
+      ? password.passwordProps
+      : confirmation
+        ? password.confirmationProps
+        : undefined
+    const inputProps: ComponentProps<typeof Input> = {
+      id: `setup-${path}`,
+      value,
+      onChange: (event) => onChange(event.target.value),
+      minLength: accountPassword ? ACCOUNT_PASSWORD_MIN_LENGTH : undefined,
+      required: confirmation || undefined,
+      placeholder: options.placeholder,
+      autoComplete: options.autoComplete,
+      disabled: busy,
+      ...validation,
+      'aria-invalid':
+        error?.field === path ? true : validation?.['aria-invalid'],
+      'aria-describedby': accountPassword
+        ? validation?.['aria-describedby']
+        : options.hint
+          ? `setup-${path}-hint`
+          : undefined,
+    }
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={`setup-${path}`}>
+          {label}
+          {options.optional && (
+            <>
+              {' '}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </>
+          )}
+        </Label>
+        {accountPassword ? (
+          <PasswordInput
+            {...inputProps}
+            visibilityLabel={
+              confirmation
+                ? 'administrator password confirmation'
+                : 'administrator password'
+            }
+          />
+        ) : (
+          <Input {...inputProps} type={options.type || 'text'} />
         )}
-      </Label>
-      <Input
-        id={`setup-${path}`}
-        type={options.type || 'text'}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        minLength={
-          path === 'admin.password' ? ACCOUNT_PASSWORD_MIN_LENGTH : undefined
-        }
-        placeholder={options.placeholder}
-        autoComplete={options.autoComplete}
-        disabled={busy}
-        {...(path === 'admin.password' ? password.passwordProps : {})}
-        aria-invalid={
-          error?.field === path
-            ? true
-            : path === 'admin.password'
-              ? password.passwordProps['aria-invalid']
-              : undefined
-        }
-        aria-describedby={
-          path === 'admin.password'
-            ? password.passwordProps['aria-describedby']
-            : options.hint
-              ? `setup-${path}-hint`
-              : undefined
-        }
-      />
-      {options.hint && (
-        <p
-          id={`setup-${path}-hint`}
-          className="text-pretty text-xs text-muted-foreground"
-        >
-          {options.hint}
-        </p>
-      )}
-      {path === 'admin.password' && (
-        <PasswordFieldError
-          id="setup-admin.password-error"
-          message={password.errors.password}
-        />
-      )}
-    </div>
-  )
+        {options.hint && (
+          <p
+            id={`setup-${path}-hint`}
+            className={cn(
+              'text-pretty text-muted-foreground',
+              accountPassword ? 'text-sm' : 'text-xs'
+            )}
+          >
+            {options.hint}
+          </p>
+        )}
+        {accountPassword && (
+          <PasswordFieldError
+            id={`setup-${path}-error`}
+            message={
+              confirmation
+                ? password.errors.confirmation
+                : password.errors.password
+            }
+          />
+        )}
+      </div>
+    )
+  }
 
   const updateAdmin = (key: keyof SetupData['admin'], value: string) =>
     setData((previous) => ({
@@ -701,6 +739,17 @@ export function SetupWizard({
                           placeholder: 'Choose a strong password',
                           autoComplete: 'new-password',
                           hint: ACCOUNT_PASSWORD_HELP,
+                        }
+                      )}
+                      {field(
+                        'admin.passwordConfirmation',
+                        'Confirm password',
+                        passwordConfirmation,
+                        setPasswordConfirmation,
+                        {
+                          type: 'password',
+                          placeholder: 'Confirm your administrator password',
+                          autoComplete: 'new-password',
                         }
                       )}
                     </CardContent>

@@ -2,12 +2,12 @@
 
 import { useId } from 'react'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { LogOut } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
+import { GuardedLink } from '@/components/navigation/guarded-link'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,7 +21,7 @@ import {
 
 import { cn } from '@/lib/utils'
 
-import { useSignOut } from '@/hooks/use-sign-out'
+import { useGuardedSignOut } from '@/hooks/use-draft-leave'
 
 import { barMenuItemClassName, barMenuProps } from './nav'
 import { PROFILE_ITEM, isCurrentPage } from './navigation'
@@ -30,7 +30,7 @@ import { PROFILE_ITEM, isCurrentPage } from './navigation'
 export function UserNav() {
   const { data: session } = useSession()
   const pathname = usePathname()
-  const signOut = useSignOut()
+  const signOut = useGuardedSignOut()
   const user = session?.user
   const initials = user?.name
     ?.split(' ')
@@ -88,7 +88,7 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="-mx-1.5" />
         <DropdownMenuItem asChild className={barMenuItemClassName}>
-          <Link
+          <GuardedLink
             href={PROFILE_ITEM.href}
             aria-current={onProfile ? 'page' : undefined}
           >
@@ -100,7 +100,7 @@ export function UserNav() {
               aria-hidden="true"
             />
             {PROFILE_ITEM.label}
-          </Link>
+          </GuardedLink>
         </DropdownMenuItem>
         <DropdownMenuSeparator className="-mx-1.5" />
         <DropdownMenuItem onSelect={signOut} className={barMenuItemClassName}>

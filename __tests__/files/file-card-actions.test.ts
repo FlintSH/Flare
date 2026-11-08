@@ -16,8 +16,20 @@ vi.mock('next-auth/react', () => ({
 }))
 // Menus render their items as if open.
 vi.mock('@/components/ui/dropdown-menu', () => {
-  const part = ({ children }: { children?: React.ReactNode }) =>
-    React.createElement('div', null, children)
+  const part = ({
+    children,
+    ...props
+  }: {
+    children?: React.ReactNode
+    [key: string]: unknown
+  }) =>
+    React.createElement(
+      'div',
+      Object.fromEntries(
+        Object.entries(props).filter(([key]) => key.startsWith('data-'))
+      ),
+      children
+    )
   return {
     DropdownMenu: part,
     DropdownMenuTrigger: part,
@@ -73,11 +85,58 @@ describe('file card actions', () => {
 
     expect(card('files.read')).toContain('Browse archive')
     const sharing = card('files.share')
-    expect(sharing).toContain('aria-label="Copy link to bundle.zip"')
+    expect(sharing).toContain('Copy link')
+    expect(sharing).not.toContain('aria-label="Copy link to bundle.zip"')
     expect(sharing).toContain('Change visibility')
     expect(sharing).toContain('Add password')
     expect(card('files.update')).toContain('Manage expiration')
     expect(card('files.delete')).toContain('Delete file')
+  })
+
+  it('uses the complete generic filename as its only primary link and keeps actions in Manage', () => {
+    session.permissions = ['files.read', 'files.share']
+    const name =
+      'Screenshot 2026-11-01 at 14.32.07 - onboarding flow redesign with updated empty states and mobile navigation.md'
+    const html = renderToStaticMarkup(
+      React.createElement(FileCard, {
+        file: { ...file, name, mimeType: 'text/markdown' },
+      })
+    )
+    const heading = html.match(
+      /<a\b[^>]*data-file-name=""[^>]*>([\s\S]*?)<\/a>/
+    )
+    expect(heading?.[1]).toBe(name)
+    expect(html.match(/data-file-primary=""/g)).toHaveLength(1)
+    expect(html).not.toContain('data-file-preview=')
+    expect(html).toContain(`aria-label="${name}"`)
+    expect(html).toContain('Markdown')
+    expect(html).toContain('Copy link')
+    expect(html).toContain('Download file')
+  })
+
+  it('keeps permitted Delete after scrolling actions and hides its footer without permission', () => {
+    const html = card('files.delete')
+    const footer = html.indexOf('data-file-menu-delete=""')
+    const belowCue = html.indexOf('data-file-menu-scroll-cue="below"')
+    expect(footer).toBeGreaterThan(belowCue)
+    expect(
+      html.slice(html.indexOf('data-file-menu-scroll=""'), belowCue)
+    ).not.toContain('Delete file')
+    expect(html).toContain('Delete file')
+    expect(card()).not.toContain('data-file-menu-delete=')
+  })
+
+  it('names a scheduled expiration explicitly where the role can manage it', () => {
+    const render = (permissions: string[]) => {
+      session.permissions = permissions
+      return renderToStaticMarkup(
+        React.createElement(FileCard, {
+          file: { ...file, expiresAt: '2099-11-01T00:00:00.000Z' },
+        })
+      )
+    }
+    expect(render(['files.update'])).toContain('Expires ')
+    expect(render([])).not.toContain('Expires ')
   })
 
   it('needs file editing as well as tags or folders to organize a file', () => {

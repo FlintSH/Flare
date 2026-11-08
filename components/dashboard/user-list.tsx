@@ -30,6 +30,7 @@ import {
   PasswordFieldError,
   usePasswordFields,
 } from '@/components/auth/password-field'
+import { PasswordInput } from '@/components/auth/password-input'
 import { UserEmailControls } from '@/components/email/user-email-controls'
 import {
   FilePasswordHint,
@@ -1254,9 +1255,9 @@ export function UserList() {
                 {!editingUser && (
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input
+                    <PasswordInput
                       id="password"
-                      type="password"
+                      visibilityLabel="new account password"
                       value={formData.password}
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
@@ -1269,7 +1270,7 @@ export function UserList() {
                     />
                     <p
                       id="password-help"
-                      className="text-xs text-muted-foreground"
+                      className="text-sm text-muted-foreground"
                     >
                       {ACCOUNT_PASSWORD_HELP}
                     </p>
@@ -1287,10 +1288,10 @@ export function UserList() {
                         (optional)
                       </span>
                     </Label>
-                    <Input
+                    <PasswordInput
                       id="newPassword"
                       disabled={!!editingUser && !can('users.update')}
-                      type="password"
+                      visibilityLabel="replacement account password"
                       value={formData.password}
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
@@ -1302,7 +1303,7 @@ export function UserList() {
                     />
                     <p
                       id="newPassword-help"
-                      className="text-xs text-muted-foreground"
+                      className="text-sm text-muted-foreground"
                     >
                       {ACCOUNT_PASSWORD_HELP} Leave empty to keep the current
                       password.

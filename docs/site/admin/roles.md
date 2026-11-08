@@ -12,6 +12,8 @@ Every account receives **Everyone**, the instance's shared starting permissions.
 
 On a phone or tablet, use **Role to edit** to choose an existing role. Each option shows its member count, using **1 member** for a single account; Everyone shows **Every account** because it applies automatically. The editor follows the picker; changing roles with unsaved edits still asks whether to discard them. Expand **How role permissions combine** for the access rules. Wider screens keep the role list and explanation beside the editor.
 
+Leaving **Roles** through dashboard navigation or manually signing out also asks for confirmation while this editor has unsaved changes or a request in progress. **Cancel** keeps the edits; accepting does not save them. Saving or discarding clears the warning when no edits remain. This is separate from the existing role-selection confirmation and follows the [browser limits for local Settings drafts](./index#save-changes-deliberately).
+
 ## Your first roles
 
 A new instance creates two roles automatically:

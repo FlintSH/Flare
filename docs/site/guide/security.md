@@ -21,13 +21,15 @@ For example, if recent recovery proof expires while **Add a passkey** is open, i
 
 <Screenshot src="/screenshots/security/security-overview.webp" alt="Sign-in security with authenticator setup and passkey registration controls, before either method is enabled" caption="Start in Profile → Account → Sign-in security. These screens use an isolated demonstration account." />
 
-[Watch the complete authenticator and recovery walkthrough](/demos#enable-use-and-recover-two-factor-authentication) or [the passkey walkthrough](/demos#create-use-and-remove-a-passkey). Both use the real application with disposable data; the passkey device is explicitly simulated.
+[Watch the complete authenticator and recovery walkthrough](/demos#enable-use-and-recover-two-factor-authentication) or [the passkey walkthrough](/demos#create-use-and-remove-a-passkey). Both retain earlier visual revisions and use the real application with disposable data; the passkey device is explicitly simulated.
 
 ## Check where your account is signed in
 
 Choose **Active sessions** in the **Profile → Account** shortcuts to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
 
 ## Choose your sign-in method
+
+Password fields start concealed. Use **Show password** to check the login entry and the same button to hide it. Moving outside that field and its button conceals it again; a disabled password field is also concealed. Security-confirmation forms use the corresponding **Show current password** control.
 
 | Method                                 | What you need                                                                    | When to use it                                                                                                  |
 | -------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -117,7 +119,7 @@ Passkeys are tied to the instance's hostname. Use the same canonical address whe
 
 ## Require a passkey for sign-in
 
-[Watch activation, blocked password sign-in, emergency recovery, and explicit disable](/demos#require-a-passkey-and-recover-access) in the real application walkthrough.
+[Watch the current passkey-required response](/demos#when-a-passkey-is-required): a correct password is refused, and focus moves to **Passkey required**, which offers the permitted sign-in choices. This short recording stops before choosing another method; follow the instructions below for activation, emergency recovery, and turning the requirement off.
 
 **Require passkey to sign in** is an optional account setting for both local-password and SSO-only accounts. Turning it on blocks all password sign-in, including authenticator and recovery-code combinations, and SSO. It retains those saved credentials and bindings; they become eligible again only after you explicitly turn the requirement off, subject to their normal security checks.
 
@@ -137,7 +139,9 @@ Each dedicated recovery code can grant **full account sign-in using only your em
 
 Email verification and role permissions still apply after passkey or emergency recovery sign-in. API tokens and upload-tool credentials keep working under their existing permissions; this setting protects browser sign-in and does not revoke integrations.
 
-<Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Login rejects the account password and directs the user to a registered passkey or dedicated passkey recovery code" caption="A correct password cannot bypass the requirement. Resetting it does not restore password or SSO sign-in." />
+After a password is refused for this reason, **Passkey required** brings **Sign in with a passkey** forward, with **Use a passkey recovery code** next to it in the same response. The password and SSO controls are no longer offered for that attempt. Canceling the device prompt keeps these choices available and explains the actual error; choose the passkey action again when ready. If this browser or address cannot use passkeys, dedicated recovery remains available. **Change account** returns to the ordinary sign-in form without changing any account security setting. A refused SSO sign-in opens the same required-method choices on the local login page.
+
+<Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Passkey required response shows the permitted passkey action first, dedicated recovery nearby and Change account below" caption="A correct password cannot bypass the requirement. Resetting it does not restore password or SSO sign-in." />
 
 ### Turn off the requirement or replace its codes
 
@@ -149,7 +153,7 @@ Flare refuses to turn it off if it cannot find a configured fallback: a local pa
 
 ## Recover when required passkeys are unavailable
 
-On the login page, choose **Use a passkey recovery code**. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. This recovery option matches the email address without regard to capitalization. These codes also support SSO-only accounts. They do not require access to the email inbox, a password, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
+On the login page, choose **Use a passkey recovery code**. If you came from **Passkey required**, your entered email is filled in for you and remains editable; **Back to passkey sign-in** returns to those choices. Otherwise, **Back to sign in** returns to the ordinary form. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. This recovery option matches the email address without regard to capitalization. These codes also support SSO-only accounts. They do not require access to the email inbox, a password, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
 
 If older accounts have addresses that differ only by capitalization, dedicated recovery refuses the ambiguous address without consuming the code. The sign-in error stays generic. Ask the operator to [resolve the address collision](/admin/users#account-sign-in-security), or use a registered passkey while that is investigated. Do not share your recovery code with the operator.
 

@@ -10,6 +10,7 @@ import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { signInWithPasskey } from '@/components/auth/passkey-sign-in'
+import { PasswordInput } from '@/components/auth/password-input'
 import { passkeyError } from '@/components/auth/security-api'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -33,6 +34,8 @@ import { getSetupResumePathAfterSignIn } from '@/lib/setup/navigation'
 import { cn } from '@/lib/utils'
 
 const disabledLink = 'disabled:cursor-not-allowed disabled:opacity-50'
+const passkeyRequiredMessage =
+  'This account requires a passkey. Sign in with a registered passkey or use a dedicated passkey recovery code. Password and SSO sign-in are blocked.'
 
 interface LoginFormProps {
   registrationsEnabled: boolean
@@ -60,6 +63,11 @@ export function LoginForm({
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [useRecoveryCode, setUseRecoveryCode] = useState(false)
   const [passkeyRecovery, setPasskeyRecovery] = useState(false)
+  const [passkeyRequirement, setPasskeyRequirement] = useState<{
+    email?: string
+  } | null>(null)
+  const requiredHeading = useRef<HTMLHeadingElement>(null)
+  const oidcErrorCode = searchParams.get('error')
   // Credentials stay in memory only while completing the second factor.
   const pendingCredentials = useRef<{ email: string; password: string } | null>(
     null
@@ -74,9 +82,44 @@ export function LoginForm({
   }, [])
 
   useEffect(() => {
-    const errorCode = searchParams.get('error')
-    if (errorCode) setError(getOidcErrorMessage(errorCode))
-  }, [searchParams])
+    if (oidcErrorCode === 'OidcPasskeyRequired') {
+      pendingCredentials.current = null
+      setTwoFactorRequired(false)
+      setUseRecoveryCode(false)
+      setPasskeyRecovery(false)
+      setPasskeyRequirement({})
+      setError(null)
+    } else {
+      setPasskeyRequirement(null)
+      if (oidcErrorCode) setError(getOidcErrorMessage(oidcErrorCode))
+    }
+  }, [oidcErrorCode])
+
+  useEffect(() => {
+    if (passkeyRequirement && !passkeyRecovery) requiredHeading.current?.focus()
+  }, [passkeyRequirement, passkeyRecovery])
+
+  function changeAccount() {
+    pendingCredentials.current = null
+    setTwoFactorRequired(false)
+    setUseRecoveryCode(false)
+    setPasskeyRecovery(false)
+    setPasskeyRequirement(null)
+    setError(null)
+    // Next integrates native history with useSearchParams without reloading.
+    // Remove only the old error: local sign-in and setup callbacks stay intact.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('error')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  }
+
+  function openPasskeyRecovery() {
+    pendingCredentials.current = null
+    setTwoFactorRequired(false)
+    setUseRecoveryCode(false)
+    setPasskeyRecovery(true)
+    setError(null)
+  }
 
   function finishSignIn() {
     pendingCredentials.current = null
@@ -97,6 +140,7 @@ export function LoginForm({
   }
 
   async function onPasskeySignIn() {
+    if (busy) return
     setLoading('passkey')
     setError(null)
     try {
@@ -111,7 +155,7 @@ export function LoginForm({
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy) return
+    if (busy || (passkeyRequirement && !passkeyRecovery)) return
     setLoading('password')
     setError(null)
     const data = new FormData(event.currentTarget)
@@ -166,9 +210,10 @@ export function LoginForm({
       if (result?.error === SignInError.PasskeyRequired) {
         pendingCredentials.current = null
         setTwoFactorRequired(false)
-        setError(
-          'This account requires a passkey. Sign in with a registered passkey or use a dedicated passkey recovery code. Password and SSO sign-in are blocked.'
-        )
+        setUseRecoveryCode(false)
+        // This email is display context only. Passkey login keeps account discovery.
+        setPasskeyRequirement({ email: credentials.email })
+        setError(null)
         return
       }
       if (!result || result.error) {
@@ -188,6 +233,28 @@ export function LoginForm({
       setLoading(null)
     }
   }
+
+  const passkeyButton = passkeysSupported ? (
+    <Button
+      type="button"
+      variant={passkeyRequirement ? 'default' : 'outline'}
+      className="h-auto min-h-[44px] w-full whitespace-normal"
+      disabled={busy}
+      onClick={onPasskeySignIn}
+    >
+      {loading === 'passkey' ? (
+        <>
+          <Icons.spinner className="animate-spin" aria-hidden="true" />
+          Waiting for your passkey…
+        </>
+      ) : (
+        <>
+          <Fingerprint aria-hidden="true" />
+          Sign in with a passkey
+        </>
+      )}
+    </Button>
+  ) : null
 
   return (
     <form onSubmit={onSubmit} aria-busy={busy}>
@@ -209,6 +276,7 @@ export function LoginForm({
                 name="email"
                 type="email"
                 autoComplete="email"
+                defaultValue={passkeyRequirement?.email ?? ''}
                 required
                 disabled={busy}
                 className="h-11"
@@ -234,6 +302,32 @@ export function LoginForm({
               />
             </div>
           </>
+        ) : passkeyRequirement ? (
+          <div className="space-y-4">
+            <h2 ref={requiredHeading} tabIndex={-1} className="font-medium">
+              Passkey required
+            </h2>
+            {passkeyRequirement.email && (
+              <p className="break-words text-sm text-muted-foreground">
+                Password sign-in was refused for{' '}
+                <span className="font-medium text-foreground">
+                  {passkeyRequirement.email}
+                </span>
+                .
+              </p>
+            )}
+            <Alert variant="destructive" data-passkey-required="">
+              <AlertCircle aria-hidden="true" />
+              <AlertDescription>{passkeyRequiredMessage}</AlertDescription>
+            </Alert>
+            {!passkeysSupported && (
+              <p className="text-sm text-muted-foreground">
+                Passkeys are unavailable in this browser or address. Use a
+                supported browser at your instance’s usual HTTPS address, or use
+                a dedicated passkey recovery code below.
+              </p>
+            )}
+          </div>
         ) : twoFactorRequired ? (
           <>
             <div className="space-y-2 rounded-xl border bg-muted/30 p-4">
@@ -312,10 +406,10 @@ export function LoginForm({
               <Label className="text-sm font-medium" htmlFor="password">
                 Password
               </Label>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
+                visibilityLabel="password"
                 placeholder="Enter your password"
                 required
                 disabled={busy}
@@ -348,22 +442,46 @@ export function LoginForm({
           </Alert>
         )}
       </div>
-      <div className="pt-6">
-        <Button type="submit" className="h-11 w-full" disabled={busy}>
-          {loading === 'password' ? (
-            <>
-              <Icons.spinner className="animate-spin" aria-hidden="true" />
-              Signing in…
-            </>
-          ) : passkeyRecovery ? (
-            'Sign in with recovery code'
-          ) : twoFactorRequired ? (
-            'Verify and sign in'
-          ) : (
-            'Sign in'
-          )}
-        </Button>
-      </div>
+      {passkeyRequirement && !passkeyRecovery ? (
+        <div className="space-y-3 pt-6">
+          {passkeyButton}
+          <Button
+            type="button"
+            variant={passkeysSupported ? 'outline' : 'default'}
+            className="h-auto min-h-[44px] w-full whitespace-normal"
+            disabled={busy}
+            onClick={openPasskeyRecovery}
+          >
+            Use a passkey recovery code
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto min-h-[44px] w-full whitespace-normal"
+            disabled={busy}
+            onClick={changeAccount}
+          >
+            Change account
+          </Button>
+        </div>
+      ) : (
+        <div className="pt-6">
+          <Button type="submit" className="h-11 w-full" disabled={busy}>
+            {loading === 'password' ? (
+              <>
+                <Icons.spinner className="animate-spin" aria-hidden="true" />
+                Signing in…
+              </>
+            ) : passkeyRecovery ? (
+              'Sign in with recovery code'
+            ) : twoFactorRequired ? (
+              'Verify and sign in'
+            ) : (
+              'Sign in'
+            )}
+          </Button>
+        </div>
+      )}
       {(twoFactorRequired || passkeyRecovery) && (
         <Button
           type="button"
@@ -379,11 +497,14 @@ export function LoginForm({
           }}
         >
           <ArrowLeft aria-hidden="true" />
-          Back to sign in
+          {passkeyRecovery && passkeyRequirement
+            ? 'Back to passkey sign-in'
+            : 'Back to sign in'}
         </Button>
       )}
       {!twoFactorRequired &&
         !passkeyRecovery &&
+        !passkeyRequirement &&
         (passkeysSupported || oidcEnabled) && (
           <div className="space-y-3 pt-5">
             {/* The rules sit on the card itself, so the label needs no fill. */}
@@ -392,30 +513,7 @@ export function LoginForm({
               Or
               <span className="h-px flex-1 bg-border" aria-hidden="true" />
             </div>
-            {passkeysSupported && (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 w-full"
-                disabled={busy}
-                onClick={onPasskeySignIn}
-              >
-                {loading === 'passkey' ? (
-                  <>
-                    <Icons.spinner
-                      className="animate-spin"
-                      aria-hidden="true"
-                    />
-                    Waiting for your passkey…
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint aria-hidden="true" />
-                    Sign in with a passkey
-                  </>
-                )}
-              </Button>
-            )}
+            {passkeyButton}
             {oidcEnabled && (
               <Button
                 type="button"
@@ -439,7 +537,7 @@ export function LoginForm({
             )}
           </div>
         )}
-      {!passkeyRecovery && (
+      {!passkeyRecovery && !passkeyRequirement && (
         // The link keeps a full-size touch target.
         <p className="mt-2 text-center text-sm">
           <button
@@ -450,13 +548,7 @@ export function LoginForm({
               'inline-flex min-h-10 items-center'
             )}
             disabled={busy}
-            onClick={() => {
-              pendingCredentials.current = null
-              setTwoFactorRequired(false)
-              setUseRecoveryCode(false)
-              setPasskeyRecovery(true)
-              setError(null)
-            }}
+            onClick={openPasskeyRecovery}
           >
             Use a passkey recovery code
           </button>

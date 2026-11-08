@@ -8,6 +8,7 @@ import {
   PasswordFieldError,
   usePasswordFields,
 } from '@/components/auth/password-field'
+import { PasswordInput } from '@/components/auth/password-input'
 import {
   hasRecentSecurityProof,
   recentSecurityProofName,
@@ -140,9 +141,9 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="current-password">Current password</Label>
-            <Input
+            <PasswordInput
               id="current-password"
-              type="password"
+              visibilityLabel="current password"
               ref={currentPasswordRef}
               placeholder="Enter your current password"
               autoComplete="current-password"
@@ -153,9 +154,9 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
 
           <div className="space-y-2">
             <Label htmlFor="new-password">New password</Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
+              visibilityLabel="new password"
               ref={newPasswordRef}
               placeholder="Enter your new password"
               autoComplete="new-password"
@@ -166,7 +167,7 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
             />
             <p
               id="profile-password-help"
-              className="text-xs text-muted-foreground"
+              className="text-sm text-muted-foreground"
             >
               {ACCOUNT_PASSWORD_HELP}
             </p>
@@ -178,9 +179,9 @@ export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
 
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
+              visibilityLabel="new password confirmation"
               ref={confirmPasswordRef}
               placeholder="Confirm your new password"
               autoComplete="new-password"

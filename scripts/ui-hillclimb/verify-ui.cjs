@@ -158,7 +158,11 @@ async function verifyWorkspaceRecoveryAndColumns(browser, page) {
       .getByRole('link', { name: 'Go to your files', exact: true })
       .click()
     await page.waitForURL(origin + '/dashboard')
-    await expect(page.locator('a[aria-label^="Open "]').first()).toBeVisible()
+    await expect(
+      page
+        .locator('[data-file-index] [data-file-card] a[data-file-primary]')
+        .first()
+    ).toBeVisible()
     pass(
       `Missing workspace pages retain navigation and recovery at ${size.width}`,
       { responses }

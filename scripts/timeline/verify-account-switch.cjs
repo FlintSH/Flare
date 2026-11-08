@@ -153,7 +153,9 @@ async function ready(page) {
     page.getByRole('list', { name: 'Your files', exact: true })
   ).toHaveAttribute('aria-busy', 'false')
   await expect(
-    page.locator('[data-file-index] a[aria-label^="Open "]').first()
+    page
+      .locator('[data-file-index] [data-file-card] a[data-file-primary]')
+      .first()
   ).toBeAttached()
 }
 

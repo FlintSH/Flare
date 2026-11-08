@@ -2,13 +2,13 @@
 
 import { useId, useState } from 'react'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { ChevronDown, LogOut, Menu, Wrench } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { InstanceBrand } from '@/components/customization/instance-brand'
+import { GuardedLink } from '@/components/navigation/guarded-link'
 import { useAppearance } from '@/components/providers/appearance-context'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,7 +27,7 @@ import {
 
 import { cn } from '@/lib/utils'
 
-import { useSignOut } from '@/hooks/use-sign-out'
+import { useGuardedSignOut } from '@/hooks/use-draft-leave'
 
 import {
   type AdminNavigationItem,
@@ -83,13 +83,16 @@ function NavPill({
       className={cn(pillClassName, isActive && activePillClassName)}
       asChild
     >
-      <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
+      <GuardedLink
+        href={item.href}
+        aria-current={isActive ? 'page' : undefined}
+      >
         <item.icon
           className={cn('h-4 w-4', isActive && 'text-primary')}
           aria-hidden="true"
         />
         {item.label}
-      </Link>
+      </GuardedLink>
     </Button>
   )
 }
@@ -143,7 +146,7 @@ function AdminMenu({
             >
               {/* The label names the item; the hint is read as its
                   description rather than as part of the name. */}
-              <Link
+              <GuardedLink
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 aria-describedby={`${hintId}-${index}`}
@@ -170,7 +173,7 @@ function AdminMenu({
                     {item.hint}
                   </span>
                 </span>
-              </Link>
+              </GuardedLink>
             </DropdownMenuItem>
           )
         })}
@@ -200,7 +203,7 @@ function SheetLinks({
           isActive && 'border-border/60 bg-accent text-accent-foreground'
         )}
       >
-        <Link
+        <GuardedLink
           href={item.href}
           onClick={onNavigate}
           aria-current={isActive ? 'page' : undefined}
@@ -210,7 +213,7 @@ function SheetLinks({
             aria-hidden="true"
           />
           {item.label}
-        </Link>
+        </GuardedLink>
       </Button>
     )
   })
@@ -221,7 +224,7 @@ export function DashboardNav() {
   const { brand } = useAppearance()
   const [open, setOpen] = useState(false)
   const { data: session, status } = useSession()
-  const signOut = useSignOut()
+  const signOut = useGuardedSignOut()
   const { workspace, admin } = dashboardNavigation(session?.user)
   const close = () => setOpen(false)
   const headingId = useId()
@@ -238,13 +241,13 @@ export function DashboardNav() {
       aria-label="Main navigation"
       className="flex min-w-0 flex-1 items-center gap-[12px] sm:gap-4"
     >
-      <Link
+      <GuardedLink
         href={dashboardHome(session?.user)}
         aria-label={`${brand.name} home`}
         className="flex min-w-0 max-w-[180px] shrink items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_[data-flare-brand]]:gap-[8px] sm:[&_[data-flare-brand]]:gap-[10px] xl:max-w-[220px]"
       >
         <InstanceBrand iconClassName="h-[24px] w-[24px] text-primary" />
-      </Link>
+      </GuardedLink>
 
       {showMenuButton && (
         <div

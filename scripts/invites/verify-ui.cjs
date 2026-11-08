@@ -457,6 +457,11 @@ async function managementViews(browser) {
   await shot(page, 'roles-invitations')
 
   await page.goto(origin + '/dashboard/audit')
+  await page.getByRole('button', { name: 'More filters', exact: true }).click()
+  await expect(
+    page.getByRole('button', { name: 'Hide filters', exact: true })
+  ).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.getByLabel('Category', { exact: true })).toBeVisible()
   await page.getByLabel('Category', { exact: true }).selectOption('invites')
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click()
   const events = page.getByRole('region', { name: 'Audit events' })

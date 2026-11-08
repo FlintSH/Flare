@@ -4,8 +4,36 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { UploadForm } from '@/components/file/upload-form'
+import type { ButtonProps } from '@/components/ui/button'
 
-const queue = vi.hoisted(() => ({ uploading: false }))
+import type { QueuedFile } from '@/lib/uploads/queue'
+
+const queue = vi.hoisted(() => ({
+  uploading: false,
+  files: [] as QueuedFile[],
+  activityUploading: false,
+  upload: vi.fn(),
+  primaryProps: null as (ButtonProps & { 'aria-describedby'?: string }) | null,
+}))
+
+vi.mock('@/components/ui/button', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@/components/ui/button')>()
+  return {
+    ...original,
+    Button: (props: ButtonProps & { 'data-upload-primary'?: string }) => {
+      if (props['data-upload-primary'] !== undefined) queue.primaryProps = props
+      return createElement(original.Button, props)
+    },
+  }
+})
+vi.mock('@/lib/uploads/queue', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/uploads/queue')>()),
+  uploadActivity: {
+    get: () => ({ file: null, uploading: queue.activityUploading }),
+    subscribe: () => () => {},
+  },
+}))
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -21,12 +49,12 @@ vi.mock('@/hooks/use-folders', () => ({
 vi.mock('@/hooks/use-upload-queue', () => ({
   copyUploadLinks: vi.fn(),
   useUploadQueue: () => ({
-    files: [],
+    files: queue.files,
     uploading: queue.uploading,
     add: vi.fn(),
     remove: vi.fn(),
     clear: vi.fn(),
-    upload: vi.fn(),
+    upload: queue.upload,
   }),
 }))
 vi.mock('@/components/upload-profiles/profile-picker', () => ({
@@ -67,6 +95,10 @@ function picker(html: string) {
 
 beforeEach(() => {
   queue.uploading = false
+  queue.files = []
+  queue.activityUploading = false
+  queue.primaryProps = null
+  queue.upload.mockReset().mockResolvedValue(null)
 })
 
 describe('upload file-selection accessibility', () => {
@@ -109,5 +141,83 @@ describe('upload file-selection accessibility', () => {
     expect(attribute(region, 'aria-disabled')).toBe('true')
     expect(input).toMatch(/\sdisabled(?:="")?(?:\s|\/>)/)
     expect(button[1]).toMatch(/\sdisabled(?:="")?(?:\s|$)/)
+  })
+})
+
+function selectedFiles() {
+  return ['first.txt', 'second.txt', 'third.txt', 'fourth.txt'].map(
+    (name, index) => ({
+      key: index + 1,
+      file: new File([new Uint8Array(index + 1)], name, { type: 'text/plain' }),
+      uploaded: 0,
+      progress: 0,
+    })
+  )
+}
+
+describe('upload queue presentation', () => {
+  it('counts the complete batch while initially rendering two files and a named disclosure', () => {
+    queue.files = selectedFiles()
+    const html = render()
+    expect([...html.matchAll(/<li\b/g)]).toHaveLength(2)
+    expect(html).toContain('first.txt')
+    expect(html).toContain('second.txt')
+    expect(html).not.toContain('third.txt')
+    expect(html).not.toContain('fourth.txt')
+    expect(html).toContain('Show all 4 files')
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).toContain('Upload 4 files')
+    expect([...html.matchAll(/data-upload-primary=""/g)]).toHaveLength(1)
+    const text = html.replace(/<!--.*?-->/g, '').replace(/<[^>]+>/g, '')
+    expect(text).toContain('(4 · 10 B)')
+  })
+
+  it('renders every per-file progress entry during transfer without removal or collapse controls', () => {
+    queue.files = selectedFiles()
+    queue.uploading = true
+    const html = render()
+    expect([...html.matchAll(/<li\b/g)]).toHaveLength(4)
+    for (const { file } of queue.files) {
+      expect(html).toContain(`Upload progress for ${file.name}`)
+      expect(html).not.toContain(`Remove ${file.name}`)
+    }
+    expect(html).not.toContain('Show all')
+    expect(html).not.toContain('Show fewer files')
+    expect([...html.matchAll(/data-upload-primary=""/g)]).toHaveLength(1)
+  })
+
+  it('keeps a waiting batch and explains its disabled action while another upload is running', async () => {
+    queue.files = selectedFiles()
+    queue.activityUploading = true
+    const selected = queue.files
+    const html = render()
+    expect(queue.primaryProps!.disabled).toBe(true)
+    expect(html).toContain('Another upload is running.')
+    expect(html).toContain('Your files stay queued; start this')
+    const hint = queue.primaryProps!['aria-describedby']!
+    expect(html).toContain(`id="${hint}" role="status"`)
+    await queue.primaryProps!.onClick?.({} as never)
+    expect(queue.upload).not.toHaveBeenCalled()
+    expect(queue.files).toBe(selected)
+    expect(queue.files).toHaveLength(4)
+
+    queue.activityUploading = false
+    const ready = render()
+    expect(queue.primaryProps!.disabled).toBe(false)
+    expect(ready).not.toContain('Another upload is running.')
+    expect(queue.upload).not.toHaveBeenCalled()
+    await queue.primaryProps!.onClick?.({} as never)
+    await vi.waitFor(() => expect(queue.upload).toHaveBeenCalledOnce())
+  })
+
+  it('checks fresh global activity when an earlier enabled action is invoked', async () => {
+    queue.files = selectedFiles()
+    render()
+    expect(queue.primaryProps!.disabled).toBe(false)
+    const onClick = queue.primaryProps!.onClick!
+    queue.activityUploading = true
+    await onClick({} as never)
+    expect(queue.upload).not.toHaveBeenCalled()
+    expect(queue.files).toHaveLength(4)
   })
 })

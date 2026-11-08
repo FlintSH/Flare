@@ -18,6 +18,8 @@ Open **Settings → Appearance** to design the instance's identity and public sh
 
 These actions are in the bar under the studio, which also shows whether you have unsaved changes, a saved draft, or the published design. Flare keeps a saved draft, the published design, and the previous published design. This is a one-step restore, not an unlimited history. **Discard** removes the draft without changing the published appearance; with unsaved edits and no draft, it returns the studio to the published design. Concurrent saves use revisions, so a stale editor must reload instead of silently overwriting another administrator's work.
 
+Unsaved local edits or an in-progress studio action ask for confirmation before you leave through dashboard navigation or manually sign out. **Cancel** keeps the studio open. A draft already saved to Flare does not trigger this warning by itself; use **Save draft** when you want to continue later. The warning does not save or publish anything. Browser Back/Forward and reload protection have the [same browser limits as other Settings drafts](./index#save-changes-deliberately).
+
 The share-page preview simulates the draft. Its light and dark controls change only the preview, including its secondary text; they do not change your workspace mode or publish the design. Check a real share page after publishing.
 
 Classic colors, the favicon, and custom CSS/head HTML use the instance-settings bar. On phones it says **Unsaved settings**, with **Discard** and **Save** visible side by side even with enlarged text. **Save** is announced as **Save settings**; larger screens show that full label and the changed-section summary. The form can scroll above the bar. The studio keeps its own **Save draft** and **Publish appearance** actions.

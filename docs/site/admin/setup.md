@@ -10,9 +10,11 @@ Choose **Setup guide** in the header on any step to open the guide in a new tab,
 
 ## 1. Create the administrator
 
-Enter a username, email address, and password of at least eight characters and at most 72 UTF-8 bytes; emoji and many accented letters use more than one byte. This guidance stays visible while you type, and setup checks the limit before continuing. Some combined emoji count as several characters toward the minimum. An error stays beside the password field after leaving an invalid value or trying to continue; correcting the value clears it, and browser validation focuses the field to fix. These are the rules every account follows, so a one-character username still saves later in **Users** or **Profile**. Setup removes spaces around the username and address, never from the password. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
+Enter a username, email address, and password of at least eight characters and at most 72 UTF-8 bytes, then repeat it in **Confirm password**; emoji and many accented letters use more than one byte. This guidance stays visible while you type, and setup checks the limit before continuing. Some combined emoji count as several characters toward the minimum. An error stays beside the password field after leaving an invalid value or trying to continue; correcting the value clears it, and browser validation focuses the field to fix. These are the rules every account follows, so a one-character username still saves later in **Users** or **Profile**. Setup removes spaces around the username and address, never from the password. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
 
-<Screenshot src="/screenshots/documentation-links/setup-desktop.webp" alt="First-run account form with a Setup guide link in the header" caption="Keep the setup guide alongside the form as you create the first administrator." />
+The two password entries must match before **Continue** advances. A mismatch stays beside **Confirm password** until corrected. **Show administrator password** and **Show administrator password confirmation** temporarily reveal their own field; use the same button to hide it. Leaving the field and its button, or disabling the field during a request, conceals it again.
+
+<Screenshot src="/screenshots/documentation-links/setup-desktop.webp" alt="First-run account form with Password, Confirm password, individual visibility controls and a Setup guide link" caption="Keep the setup guide alongside the form as you create the first administrator." />
 
 ::: details Find the guide on a phone
 <div style="max-width: 390px; margin-inline: auto">
@@ -60,7 +62,7 @@ The ready step links to the workspace, a first upload, and the appearance studio
 
 ## Refreshing or resuming setup
 
-Before account creation, form values live only in memory. Refreshing starts over; passwords and storage credentials are not put in browser storage or URLs.
+Before account creation, form values, including the repeated password, live only in memory. Refreshing starts over; passwords and storage credentials are not put in browser storage or URLs.
 
 After creation, the address names the current step: `/setup?step=appearance`, `email`, or `ready`. Refreshing returns to that step; any other value opens the appearance step. If automatic sign-in fails, the account has still been created; use the offered sign-in link, and signing in returns you to the same step. A signed-out administrator can sign in to continue, but accounts without Administrator cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
 

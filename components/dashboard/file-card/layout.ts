@@ -2,11 +2,10 @@
 // Generic cards are shorter; the virtualizer measures actual row content.
 export const fileCardPreviewClassName =
   'h-[112px] sm:[@media(pointer:coarse)]:h-[128px]'
-export const fileCardGenericPreviewClassName = 'min-h-[52px]'
 export const fileCardDetailsClassName =
   'flex flex-col gap-1 border-t border-border/40 px-2 py-1 [@media(pointer:coarse)]:gap-0'
 export const fileCardNameRowClassName =
-  'flex min-h-7 min-w-0 items-center justify-between gap-2 border-b border-border/40 px-2 py-1 [@media(pointer:coarse)]:min-h-[44px] [@media(pointer:fine)]:[@container(max-width:16rem)]:items-start'
+  'flex min-h-7 min-w-0 items-center justify-between gap-2 border-b border-border/40 px-2 py-1 [@media(pointer:coarse)]:min-h-[44px]'
 export const fileCardLabelsClassName =
   'flex min-h-6 min-w-0 flex-wrap items-center gap-1.5'
 export const fileCardActivityClassName =

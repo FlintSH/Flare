@@ -17,6 +17,7 @@ import {
   PasswordFieldError,
   usePasswordFields,
 } from '@/components/auth/password-field'
+import { PasswordInput } from '@/components/auth/password-input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -264,11 +265,11 @@ export function ResetPasswordForm({
           <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
             <div className="space-y-2">
               <Label htmlFor="reset-password">New password</Label>
-              <Input
+              <PasswordInput
                 className="h-11"
                 id="reset-password"
                 name="password"
-                type="password"
+                visibilityLabel="new password"
                 autoComplete="new-password"
                 minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
                 {...passwords.passwordProps}
@@ -288,11 +289,11 @@ export function ResetPasswordForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="reset-confirm">Confirm new password</Label>
-              <Input
+              <PasswordInput
                 className="h-11"
                 id="reset-confirm"
                 name="confirmPassword"
-                type="password"
+                visibilityLabel="new password confirmation"
                 autoComplete="new-password"
                 minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
                 required

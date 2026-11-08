@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { measureFilenameGeometry } = require('./filename-geometry.cjs')
 const { isDeepStrictEqual } = require('node:util')
 const {
   chromium,
@@ -1036,7 +1037,11 @@ async function main() {
     )
 
     await goto('/dashboard')
-    await expect(page.locator('a[aria-label^="Open "]').first()).toBeVisible()
+    await expect(
+      page
+        .locator('[data-file-index] [data-file-card] a[data-file-primary]')
+        .first()
+    ).toBeVisible()
     const rail = page.getByRole('slider', { name: 'Browse files by date' })
     await expect(rail).toBeVisible()
     const point = await rail.boundingBox()
@@ -1071,7 +1076,7 @@ async function main() {
     await expect(
       page
         .getByRole('list', { name: 'Your files', exact: true })
-        .locator('a[aria-label^="Open "]')
+        .locator('[data-file-card] a[data-file-primary]')
         .first()
     ).toBeVisible()
     const fileList = page.getByRole('list', {
@@ -1231,6 +1236,41 @@ async function main() {
         .poll(async () => {
           measurement = await target.evaluate((element) => {
             const box = element.getBoundingClientRect()
+            const menuElement = element.closest('[role="menu"]')
+            const scrollBodies = menuElement?.querySelectorAll(
+              '[data-file-menu-scroll]'
+            )
+            if (scrollBodies?.length !== 1)
+              throw new Error(
+                'Exactly one actual file-menu scroll body is required'
+              )
+            const scrollElement = scrollBodies[0]
+            const footers = menuElement.querySelectorAll(
+              '[data-file-menu-delete]'
+            )
+            if (footers.length > 1)
+              throw new Error('At most one fixed Delete footer is allowed')
+            const footerElement = footers[0]
+            const insideScroll = scrollElement.contains(element)
+            const footerOutsideScroll =
+              !!footerElement &&
+              !scrollElement.contains(footerElement) &&
+              footerElement.parentElement === menuElement &&
+              !!(
+                scrollElement.compareDocumentPosition(footerElement) &
+                Node.DOCUMENT_POSITION_FOLLOWING
+              )
+            const isFixedDelete =
+              element === footerElement &&
+              footerOutsideScroll &&
+              element.matches('[role="menuitem"][data-file-menu-delete]')
+            if (!insideScroll && !isFixedDelete)
+              throw new Error(
+                'Target must belong to the scroll body or the verified fixed Delete footer'
+              )
+            const actionRegionElement = insideScroll
+              ? scrollElement
+              : footerElement.parentElement
             const clip = {
               left: 0,
               top: 0,
@@ -1293,14 +1333,19 @@ async function main() {
             })
             return {
               target: box.toJSON(),
-              menu: element
-                .closest('[role="menu"]')
+              menu: menuElement.getBoundingClientRect().toJSON(),
+              scroll: scrollElement.getBoundingClientRect().toJSON(),
+              actionRegion: actionRegionElement
                 .getBoundingClientRect()
                 .toJSON(),
-              scroll: element
-                .closest('[data-file-menu-scroll]')
-                .getBoundingClientRect()
-                .toJSON(),
+              actionRegionKind: insideScroll
+                ? 'scroll-body'
+                : 'fixed-delete-footer',
+              footer: footerElement?.getBoundingClientRect().toJSON() || null,
+              footerOutsideScroll,
+              fixedFooterParentIsMenu: isFixedDelete
+                ? footerElement.parentElement === menuElement
+                : null,
               clip,
               ancestors,
               hits,
@@ -1308,21 +1353,47 @@ async function main() {
               windowScrollY: scrollY,
             }
           })
-          const { target: box, menu, scroll, clip, hits } = measurement
-          const signature = JSON.stringify([box, menu, scroll, clip])
+          const {
+            target: box,
+            menu,
+            scroll,
+            actionRegion,
+            actionRegionKind,
+            footer,
+            clip,
+            hits,
+          } = measurement
+          const signature = JSON.stringify([
+            box,
+            menu,
+            scroll,
+            actionRegion,
+            actionRegionKind,
+            footer,
+            clip,
+          ])
           const stable = signature === previous
           previous = signature
           return (
             stable &&
             measurement.focused &&
+            box.width >= 44 &&
+            box.height >= 44 &&
+            (!footer ||
+              (measurement.footerOutsideScroll &&
+                footer.y >= scroll.bottom - 1)) &&
+            (actionRegionKind !== 'fixed-delete-footer' ||
+              measurement.fixedFooterParentIsMenu) &&
             menu.x >= 15.9 &&
             menu.right <= width - 15.9 &&
             menu.y >= 15.9 &&
             menu.bottom <= height - 15.9 &&
             box.y >= menu.y &&
             box.bottom <= menu.bottom + 1 &&
-            box.y >= scroll.y - 1 &&
-            box.bottom <= scroll.bottom + 1 &&
+            box.y >= actionRegion.y - 1 &&
+            box.bottom <= actionRegion.bottom + 1 &&
+            (actionRegionKind === 'scroll-body' ||
+              box.y >= scroll.bottom - 1) &&
             box.left >= clip.left - 1 &&
             box.right <= clip.right + 1 &&
             box.top >= clip.top - 1 &&
@@ -1461,6 +1532,25 @@ async function main() {
         await page.keyboard.press('End')
         const last = menu.getByRole('menuitem').last()
         await expect(last).toBeFocused()
+        await expect(last).toHaveAttribute('data-file-menu-delete', '')
+        assert.equal(
+          await last.evaluate(
+            (element) => !!element.closest('[data-file-menu-scroll]')
+          ),
+          false,
+          'Delete stays outside the scrolling action body'
+        )
+        const directFooterEnd = await settledMenuTarget(last, width, height)
+        // End now reaches the fixed Delete footer. ArrowUp separately exercises
+        // the last scrolling action and the same overflow/cue contract.
+        await page.keyboard.press('ArrowUp')
+        const lastScrolling = menuScroll.getByRole('menuitem').last()
+        await expect(lastScrolling).toBeFocused()
+        const scrollingEnd = await settledMenuTarget(
+          lastScrolling,
+          width,
+          height
+        )
         if (overflowing) {
           await expect(menuScroll).toHaveAttribute('data-scroll-above', '')
           await expect(aboveCue).toBeVisible()
@@ -1468,6 +1558,8 @@ async function main() {
         }
         // Cue strips can resize/reposition the popup. Check its settled current
         // geometry after the cue update, rather than its pre-keyboard rectangle.
+        await page.keyboard.press('End')
+        await expect(last).toBeFocused()
         const end = await settledMenuTarget(last, width, height)
         await page.screenshot({
           path: path.join(out, `file-menu-${width}-${height}.png`),
@@ -1486,14 +1578,20 @@ async function main() {
         await expect(trigger).toBeFocused()
         check(
           `Complete file menu bounds, directional scroll cues and keyboard End/Home at ${width}×${height}`,
-          { opener, initialBounds: bounds, end, home }
+          {
+            opener,
+            initialBounds: bounds,
+            directFooterEnd,
+            scrollingEnd,
+            end,
+            home,
+          }
         )
       }
       await goto('/dashboard?search=release-checklist.md')
-      const generic = page.getByRole('link', {
-        name: 'Open release-checklist.md',
-        exact: true,
-      })
+      const generic = page.locator(
+        '[data-file-primary][title="release-checklist.md"]'
+      )
       await expect(generic).toBeVisible()
       const genericCard = generic.locator(
         'xpath=ancestor::*[@data-file-card][1]'
@@ -1510,23 +1608,36 @@ async function main() {
         genericMeta,
         'The compact card comes from the actual owner API collection'
       )
+      const genericViewport = page.viewportSize()
       const preview = await generic.boundingBox()
       assert.ok(
-        Math.abs(preview.height - 52) < 1,
-        'Generic kind stage is exactly52px at the standard text size'
+        preview.height >= 44,
+        'Generic primary filename keeps at least44px at the standard text size'
       )
-      await expect(generic.getByText('MD', { exact: true })).toBeVisible()
-      const badgeRegion = generic
-        .locator('..')
-        .locator(':scope > [data-preview-badges]')
+      const typeLabels = {
+        'text/markdown': 'Markdown',
+        'text/x-markdown': 'Markdown',
+        'text/plain': 'Plain text',
+      }
+      assert.ok(
+        typeLabels[genericMeta.mimeType],
+        'The real Markdown demonstration uses a recognized stored text type'
+      )
+      await expect(genericCard.locator('[data-file-type]')).toHaveText(
+        typeLabels[genericMeta.mimeType]
+      )
+      const badgeRegion = genericCard.locator('[data-file-activity]')
       await expect(badgeRegion).toHaveCSS('position', 'static')
       const badges = await badgeRegion.boundingBox()
+      const heading = await genericCard
+        .locator('[data-file-heading]')
+        .boundingBox()
       assert.ok(
-        badges.y >= preview.y + preview.height - 0.5,
-        'Generic visibility and age badges flow below the header'
+        badges.y >= heading.y + heading.height - 0.5,
+        'Generic visibility, age, size and activity flow below the filename heading'
       )
-      const visibility = badgeRegion.locator(':scope > span').first()
-      const age = badgeRegion.locator(':scope > span').last()
+      const visibility = genericCard.locator('[data-file-visibility]')
+      const age = genericCard.locator('[data-file-uploaded]')
       await expect(visibility).toHaveText(
         genericMeta.hasPassword
           ? 'Protected'
@@ -1548,62 +1659,27 @@ async function main() {
       const name = genericCard.locator('[data-file-name]')
       await expect(name).toHaveAccessibleName(genericMeta.name)
       await expect(name).toHaveAttribute('title', genericMeta.name)
-      const filenameGeometry = await name.evaluate((element) => {
-        const box = element.getBoundingClientRect()
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-        const glyphs = []
-        while (walker.nextNode()) {
-          const node = walker.currentNode
-          let offset = 0
-          for (const glyph of node.textContent) {
-            const end = offset + glyph.length
-            if (/\S/u.test(glyph)) {
-              const range = document.createRange()
-              range.setStart(node, offset)
-              range.setEnd(node, end)
-              const rect = range.getBoundingClientRect()
-              glyphs.push({
-                glyph,
-                x: rect.x,
-                y: rect.y,
-                right: rect.right,
-                bottom: rect.bottom,
-                width: rect.width,
-                height: rect.height,
-              })
-            }
-            offset = end
-          }
-        }
-        return {
-          text: element.textContent,
-          box: { x: box.x, y: box.y, right: box.right, bottom: box.bottom },
-          glyphs,
-        }
-      })
+      const filenameGeometry = await name.evaluate(measureFilenameGeometry)
       assert.equal(
         filenameGeometry.text,
         genericMeta.name,
         'The complete short filename remains unchanged across display spans'
       )
       assert.ok(
-        filenameGeometry.glyphs.length > 0 &&
-          filenameGeometry.glyphs.every(
-            (glyph) =>
-              glyph.width > 0 &&
-              glyph.height > 0 &&
-              glyph.x >= filenameGeometry.box.x - 0.5 &&
-              glyph.y >= filenameGeometry.box.y - 0.5 &&
-              glyph.right <= filenameGeometry.box.right + 0.5 &&
-              glyph.bottom <= filenameGeometry.box.bottom + 0.5
-          ),
-        'Every short filename glyph is visible inside its link bounds'
+        filenameGeometry.glyphs.length > 0 && filenameGeometry.allGlyphsFit,
+        'Every filename grapheme is visible inside its link, heading, card and clipping bounds'
+      )
+      assert.equal(
+        filenameGeometry.extension?.text,
+        genericMeta.name.match(/\.[A-Za-z0-9]{1,16}$/)?.[0]
       )
       const nameBounds = await name.boundingBox()
       assert.ok(
-        nameBounds.y + nameBounds.height <= preview.y + 0.5 &&
-          nameBounds.y >= (await genericCard.boundingBox()).y,
-        'The complete filename leads the card before its preview and badge row'
+        nameBounds.y >= heading.y - 0.5 &&
+          nameBounds.y + nameBounds.height <=
+            heading.y + heading.height + 0.5 &&
+          heading.y + heading.height <= badges.y + 0.5,
+        'The complete primary filename is contained in the heading before its metadata footer'
       )
       const sizeBytes = genericMeta.size * 1024 * 1024
       const sizeLabel =
@@ -1687,66 +1763,8 @@ async function main() {
       } else await expect(expiry).toHaveCount(0)
       await page.keyboard.press('Tab')
       await generic.focus()
-      const overlay = generic
-        .locator('..')
-        .locator(':scope > [data-preview-actions]')
-      await expect(overlay).toHaveCount(1)
-      await expect
-        .poll(() =>
-          overlay.evaluate((element) =>
-            Number(getComputedStyle(element).opacity)
-          )
-        )
-        .toBe(1)
-      const inline = overlay.locator('button, a')
-      await expect(inline).toHaveCount(3)
-      await expect(
-        overlay.getByRole('link', { name: 'View', exact: true })
-      ).toBeVisible()
-      await expect(
-        overlay.getByRole('button', {
-          name: `Copy link to ${genericMeta.name}`,
-          exact: true,
-        })
-      ).toBeVisible()
-      await expect(
-        overlay.getByRole('link', {
-          name: `Download ${genericMeta.name}`,
-          exact: true,
-        })
-      ).toBeVisible()
-      const controlBoxes = []
-      for (const control of await inline.all()) {
-        const box = await control.boundingBox()
-        assert.ok(
-          box.width >= 44 && box.height >= 44,
-          'Every inline shortcut retains a44px target'
-        )
-        assert.ok(
-          box.x >= preview.x &&
-            box.x + box.width <= preview.x + preview.width + 0.5 &&
-            box.y >= preview.y &&
-            box.y + box.height <= preview.y + preview.height + 0.5,
-          'Inline actions stay wholly inside the52px stage'
-        )
-        assert.ok(
-          box.y + box.height <= badges.y - 4,
-          'Header controls leave a clear gap above flowing metadata'
-        )
-        for (const fraction of [0.1, 0.5, 0.9]) {
-          assert.ok(
-            await control.evaluate(
-              (element, point) => {
-                const hit = document.elementFromPoint(point.x, point.y)
-                return hit === element || element.contains(hit)
-              },
-              { x: box.x + box.width * fraction, y: box.y + box.height / 2 }
-            ),
-            'Inline target left/center/right hit points reach the intended action'
-          )
-        }
-        controlBoxes.push(box)
-      }
+      await expect(genericCard.locator('[data-preview-actions]')).toHaveCount(0)
+      const controlBoxes = [await generic.boundingBox()]
       const manage = genericCard.getByRole('button', {
         name: `Manage ${genericMeta.name}`,
         exact: true,
@@ -1757,9 +1775,9 @@ async function main() {
         'Manage file keeps its44px target'
       )
       assert.ok(
-        manageBox.y >= preview.y &&
-          manageBox.y + manageBox.height <= preview.y + preview.height + 0.5,
-        'Manage file stays inside the kind header'
+        manageBox.y >= heading.y &&
+          manageBox.y + manageBox.height <= heading.y + heading.height + 0.5,
+        'Manage file stays inside the filename header'
       )
       assert.ok(
         await manage.evaluate((element) => {
@@ -1785,8 +1803,8 @@ async function main() {
           'Visible metadata actions keep44px targets'
         )
         assert.ok(
-          box.y >= badges.y + badges.height - 0.5,
-          'Metadata actions follow the badge row'
+          box.y >= heading.y + heading.height - 0.5,
+          'Metadata actions follow the filename header'
         )
         controlBoxes.push(box)
       }
@@ -1803,12 +1821,60 @@ async function main() {
             'Header and metadata action targets never overlap'
           )
         }
+      await generic.press('Tab')
+      await expect(manage).toBeFocused()
+      await manage.press('Enter')
+      await expect(page.getByRole('menu')).toBeVisible()
+      const menuControls = []
+      for (const label of ['Open file', 'Copy link', 'Download file']) {
+        const control = page.getByRole('menuitem', { name: label, exact: true })
+        await expect(control).toBeEnabled()
+        if (label === 'Open file')
+          await expect(control).toHaveAttribute(
+            'href',
+            await generic.getAttribute('href')
+          )
+        if (label === 'Download file')
+          await expect(control).toHaveAttribute('download', genericMeta.name)
+        await control.focus()
+        const settled = await settledMenuTarget(
+          control,
+          width,
+          genericViewport.height
+        )
+        const box = await control.boundingBox()
+        assert.ok(
+          box.width >= 44 && box.height >= 44,
+          'Each relocated generic action retains a44px menu target'
+        )
+        for (const fraction of [0.1, 0.5, 0.9])
+          assert.ok(
+            await control.evaluate(
+              (element, point) => {
+                const hit = document.elementFromPoint(point.x, point.y)
+                return hit === element || element.contains(hit)
+              },
+              { x: box.x + box.width * fraction, y: box.y + box.height / 2 }
+            ),
+            'Relocated action left/center/right hit points reach the intended item'
+          )
+        menuControls.push({ label, box, settled })
+      }
+      const menuItems = page.getByRole('menuitem')
+      await page.keyboard.press('End')
+      await expect(menuItems.last()).toBeFocused()
+      await settledMenuTarget(menuItems.last(), width, genericViewport.height)
+      await page.keyboard.press('Home')
+      await expect(menuItems.first()).toBeFocused()
+      await settledMenuTarget(menuItems.first(), width, genericViewport.height)
+      await page.keyboard.press('Escape')
+      await expect(manage).toBeFocused()
       await page.screenshot({
         path: path.join(out, `compact-file-${width}.png`),
       })
       check(
         `Generic phone file preview is compact with readable filename at ${width}`,
-        { filenameGeometry }
+        { filenameGeometry, menuControls }
       )
     }
     assert.ok(

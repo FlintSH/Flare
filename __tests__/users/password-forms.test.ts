@@ -135,10 +135,14 @@ function change(view: ReactNode, id: string, value: string) {
   onChange({ target: { value } })
 }
 
-async function submit(view: ReactNode, fields: Record<string, string> = {}) {
+async function submit(
+  view: ReactNode,
+  fields: Record<string, string> = {},
+  currentTarget: unknown = fields
+) {
   const form = find(view, (element) => element.type === 'form')!
   const onSubmit = form.props.onSubmit as (event: SubmitEvent) => Promise<void>
-  await onSubmit({ preventDefault() {}, currentTarget: fields })
+  await onSubmit({ preventDefault() {}, currentTarget })
 }
 
 const realFormData = FormData
@@ -309,31 +313,80 @@ describe('profile password submission', () => {
 })
 
 const setup = () => SetupWizard({ documentationUrl: '/docs' })
-function setupAccount(password: string) {
+function setupAccount(password: string, confirmation = password) {
   for (const [id, value] of [
     ['setup-admin.name', 'Example'],
     ['setup-admin.email', 'example@example.test'],
     ['setup-admin.password', password],
+    ['setup-admin.passwordConfirmation', confirmation],
   ])
     change(render(setup), id, value)
   return render(setup)
+}
+
+function setupPasswordFields(password: string, confirmation = password) {
+  const field = (value: string) => ({
+    value,
+    setCustomValidity: vi.fn(),
+    // Native reportValidity requests validation/focus on this particular field.
+    // The browser's actual focus behavior remains a separate UI-suite check.
+    reportValidity: vi.fn(() => false),
+    form: null as unknown,
+  })
+  const primary = field(password)
+  const repeated = field(confirmation)
+  const form = {
+    elements: {
+      namedItem: (id: string) =>
+        id === 'setup-admin.password'
+          ? primary
+          : id === 'setup-admin.passwordConfirmation'
+            ? repeated
+            : null,
+    },
+  }
+  primary.form = repeated.form = form
+  return { primary, repeated, form }
 }
 
 describe('setup account password', () => {
   it.each(invalidPasswords)(
     'rejects %s without advancing or POST',
     async (_, password) => {
-      await submit(setupAccount(password))
+      const fields = setupPasswordFields(password)
+      await submit(setupAccount(password), {}, fields.form)
       expect(input(render(setup), 'setup-admin.password').props.value).toBe(
         password
       )
+      expect(
+        input(render(setup), 'setup-admin.passwordConfirmation').props.value
+      ).toBe(password)
+      expect(fields.primary.reportValidity).toHaveBeenCalledOnce()
+      expect(fields.repeated.reportValidity).not.toHaveBeenCalled()
+      expect(fields.primary.setCustomValidity).toHaveBeenLastCalledWith(
+        expect.stringMatching(/8|72/)
+      )
+      expect(
+        input(render(setup), 'setup-admin.password').props['aria-invalid']
+      ).toBe(true)
+      expect(
+        find(
+          render(setup),
+          (element) => element.props.id === 'setup-storage-title'
+        )
+      ).toBeUndefined()
       expect(harness.fetch).not.toHaveBeenCalled()
     }
   )
   it.each(boundaryPasswords)(
     'allows %s through to the existing setup POST',
     async (_, password) => {
-      await submit(setupAccount(password)) // Account → storage.
+      const fields = setupPasswordFields(password)
+      await submit(setupAccount(password), {}, fields.form) // Account → storage.
+      expect(fields.primary.setCustomValidity).toHaveBeenLastCalledWith('')
+      expect(fields.repeated.setCustomValidity).toHaveBeenLastCalledWith('')
+      expect(fields.primary.reportValidity).not.toHaveBeenCalled()
+      expect(fields.repeated.reportValidity).not.toHaveBeenCalled()
       await submit(render(setup)) // Local storage → access.
       await submit(render(setup)) // Create the instance.
       expect(harness.fetch).toHaveBeenCalledExactlyOnceWith(
@@ -342,10 +395,108 @@ describe('setup account password', () => {
       )
       expect(
         JSON.parse(harness.fetch.mock.calls[0][1]!.body as string).admin
-          .password
-      ).toBe(password)
+      ).toEqual({
+        name: 'Example',
+        email: 'example@example.test',
+        password,
+      })
     }
   )
+
+  it.each([
+    ['empty', '', 'Confirm your password.'],
+    ['mismatched', 'different-password', 'Passwords do not match.'],
+  ])(
+    'keeps %s confirmation on Account and targets that field without a request',
+    async (_, confirmation, message) => {
+      const fields = setupPasswordFields('valid-password', confirmation)
+      await submit(
+        setupAccount('valid-password', confirmation),
+        {},
+        fields.form
+      )
+      const view = render(setup)
+      const repeated = input(view, 'setup-admin.passwordConfirmation')
+      expect(repeated.props.required).toBe(true)
+      expect(repeated.props.value).toBe(confirmation)
+      expect(repeated.props['aria-invalid']).toBe(true)
+      expect(repeated.props['aria-describedby']).toBe(
+        'setup-admin.passwordConfirmation-error'
+      )
+      expect(
+        find(
+          view,
+          (element) =>
+            element.props.id === 'setup-admin.passwordConfirmation-error'
+        )?.props.message
+      ).toBe(message)
+      expect(fields.primary.setCustomValidity).toHaveBeenLastCalledWith('')
+      expect(fields.primary.reportValidity).not.toHaveBeenCalled()
+      expect(fields.repeated.setCustomValidity).toHaveBeenLastCalledWith(
+        message
+      )
+      expect(fields.repeated.reportValidity).toHaveBeenCalledOnce()
+      expect(
+        find(view, (element) => element.props.id === 'setup-storage-title')
+      ).toBeUndefined()
+      expect(harness.fetch).not.toHaveBeenCalled()
+      expect(harness.signIn).not.toHaveBeenCalled()
+    }
+  )
+
+  it('clears a corrected confirmation and advances locally without sending it to setup', async () => {
+    const password = 'valid-password'
+    const fields = setupPasswordFields(password, 'different-password')
+    await submit(setupAccount(password, 'different-password'), {}, fields.form)
+    expect(fields.repeated.reportValidity).toHaveBeenCalledOnce()
+    expect(harness.fetch).not.toHaveBeenCalled()
+    change(render(setup), 'setup-admin.passwordConfirmation', password)
+    fields.repeated.value = password
+    ;(
+      input(render(setup), 'setup-admin.passwordConfirmation').props
+        .onInput as (event: unknown) => void
+    )({ currentTarget: fields.repeated })
+    expect(fields.repeated.setCustomValidity).toHaveBeenLastCalledWith('')
+    expect(
+      input(render(setup), 'setup-admin.passwordConfirmation').props[
+        'aria-invalid'
+      ]
+    ).toBeUndefined()
+    await submit(render(setup), {}, fields.form)
+    expect(
+      find(
+        render(setup),
+        (element) => element.props.id === 'setup-admin.passwordConfirmation'
+      )
+    ).toBeUndefined()
+    expect(
+      find(
+        render(setup),
+        (element) => element.props.id === 'setup-storage-title'
+      )
+    ).toBeDefined()
+    expect(harness.fetch).not.toHaveBeenCalled()
+    expect(harness.signIn).not.toHaveBeenCalled()
+    await submit(render(setup)) // Local storage → access, still no request.
+    expect(harness.fetch).not.toHaveBeenCalled()
+    await submit(render(setup))
+    expect(harness.fetch).toHaveBeenCalledExactlyOnceWith(
+      '/api/setup',
+      expect.objectContaining({ method: 'POST' })
+    )
+    const payload = JSON.parse(harness.fetch.mock.calls[0][1]!.body as string)
+    expect(Object.keys(payload).sort()).toEqual([
+      'admin',
+      'registrations',
+      'storage',
+    ])
+    expect(payload.admin).toEqual({
+      name: 'Example',
+      email: 'example@example.test',
+      password,
+    })
+    expect(payload).not.toHaveProperty('passwordConfirmation')
+  })
 })
 
 const managedUser: User = {

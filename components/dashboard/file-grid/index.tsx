@@ -331,6 +331,38 @@ function FileLibrary({ scope }: { scope: string }) {
         }
       : undefined
 
+  const fileCount = (
+    <span
+      role="status"
+      aria-live="polite"
+      className="text-xs text-muted-foreground"
+      title={
+        !isLoading && !error
+          ? `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`
+          : undefined
+      }
+    >
+      {isLoading ? (
+        'Loading…'
+      ) : error ? (
+        'Unavailable'
+      ) : (
+        <>
+          <span className="sm:hidden" aria-hidden="true">
+            {total.toLocaleString('en', {
+              notation: 'compact',
+              maximumFractionDigits: 1,
+            })}{' '}
+            {total === 1 ? 'file' : 'files'}
+          </span>
+          <span className="sr-only sm:not-sr-only">
+            {total.toLocaleString()} {total === 1 ? 'file' : 'files'}
+          </span>
+        </>
+      )}
+    </span>
+  )
+
   return (
     <div
       className="space-y-[12px] sm:space-y-6"
@@ -359,14 +391,21 @@ function FileLibrary({ scope }: { scope: string }) {
           actionsBesideTitle
           headingRef={libraryHeading}
           title="Your files"
-          description="View and manage your uploaded files."
-          descriptionClassName="hidden sm:block"
+          description={
+            <>
+              <span className="sm:hidden">{fileCount}</span>
+              <span className="hidden sm:inline">
+                View and manage your uploaded files.
+              </span>
+            </>
+          }
+          descriptionClassName="mt-0 text-xs leading-4 sm:mt-2 sm:text-sm sm:leading-relaxed"
           actions={
             <div className="flex items-center gap-1 sm:contents">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-[44px] min-w-[44px] gap-1.5 px-2 max-sm:!min-h-[44px] max-sm:!min-w-[44px] sm:h-8 sm:min-w-0"
+                className="h-auto min-h-[44px] min-w-[44px] gap-1.5 px-2 py-[8px] max-sm:!min-h-[44px] max-sm:!min-w-[44px] sm:h-8 sm:min-h-0 sm:min-w-0 sm:py-0"
                 disabled={
                   (!selecting && !files.length) ||
                   !BATCH_ACTIONS.some((action) =>
@@ -378,44 +417,12 @@ function FileLibrary({ scope }: { scope: string }) {
                   clearSelection()
                 }}
                 aria-pressed={selecting}
-                aria-label={
-                  selecting ? 'Finish selecting files' : 'Select files'
-                }
+                aria-label={selecting ? 'Done selecting files' : 'Select files'}
               >
                 <CheckSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">
-                  {selecting ? 'Done' : 'Select'}
-                </span>
+                <span>{selecting ? 'Done' : 'Select'}</span>
               </Button>
-              <span
-                role="status"
-                aria-live="polite"
-                className="text-xs text-muted-foreground"
-                title={
-                  !isLoading && !error
-                    ? `${total.toLocaleString()} ${total === 1 ? 'file' : 'files'}`
-                    : undefined
-                }
-              >
-                {isLoading ? (
-                  'Loading…'
-                ) : error ? (
-                  'Unavailable'
-                ) : (
-                  <>
-                    <span className="sm:hidden" aria-hidden="true">
-                      {total.toLocaleString('en', {
-                        notation: 'compact',
-                        maximumFractionDigits: 1,
-                      })}{' '}
-                      {total === 1 ? 'file' : 'files'}
-                    </span>
-                    <span className="sr-only sm:not-sr-only">
-                      {total.toLocaleString()} {total === 1 ? 'file' : 'files'}
-                    </span>
-                  </>
-                )}
-              </span>
+              <span className="hidden sm:contents">{fileCount}</span>
               <Button
                 variant="ghost"
                 size="icon"

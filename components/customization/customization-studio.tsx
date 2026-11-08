@@ -62,6 +62,7 @@ import { exportAppearancePack } from '@/lib/customization/state'
 import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import { cn } from '@/lib/utils'
 
+import { useUnsavedDraft } from '@/hooks/use-draft-leave'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -232,6 +233,8 @@ export function CustomizationStudio({
       ? JSON.stringify(document) !==
         JSON.stringify(state.draft || state.published)
       : false
+
+  useUnsavedDraft(Boolean(dirty) || busy || logoBusy !== null)
 
   useEffect(() => {
     onDirtyChange?.(!!dirty)

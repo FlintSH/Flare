@@ -44,12 +44,23 @@ async function selectionAction(page, name) {
   }
 }
 async function finishSelection(page) {
-  await page
-    .getByRole('button', {
-      name: page.viewportSize().width < 640 ? 'Done selecting files' : 'Done',
+  // Exercise the sticky control retained beside a deep-library selection,
+  // independently of the matching Done control in the library heading.
+  const bar = page.locator('div[aria-busy]').filter({
+    has: page.getByRole('checkbox', {
+      name: 'Select visible files',
       exact: true,
-    })
-    .click()
+    }),
+  })
+  await expect(bar).toHaveCount(1)
+  const done = bar.getByRole('button', {
+    name: page.viewportSize().width < 640 ? 'Done selecting files' : 'Done',
+    exact: true,
+  })
+  await expect(bar).toBeInViewport()
+  await expect(done).toBeInViewport()
+  await done.click()
+  await expect(bar).toHaveCount(0)
 }
 
 async function context(browser, storageState, mobile = false, record = false) {
@@ -97,7 +108,9 @@ async function ready(page) {
     page.getByRole('list', { name: 'Your files', exact: true })
   ).toHaveAttribute('aria-busy', 'false')
   await expect(
-    page.locator('[data-file-index] a[aria-label^="Open "]').first()
+    page
+      .locator('[data-file-index] [data-file-card] a[data-file-primary]')
+      .first()
   ).toBeAttached()
 }
 
@@ -362,8 +375,36 @@ async function verifyTouchSeekContinuity(browser, storageState) {
               ?.getBoundingClientRect().bottom ?? 0
           const mounted = [...document.querySelectorAll('[data-file-index]')]
           const visible = mounted.flatMap((element) => {
-            const child = element.firstElementChild
-            const rect = child?.getBoundingClientRect()
+            const child = element.firstElementChild,
+              rect = child?.getBoundingClientRect(),
+              component = child?.matches('[data-file-card]') ? child : null,
+              kind = component?.dataset.fileKind,
+              primaries = component
+                ? [...component.querySelectorAll('a[data-file-primary]')]
+                : [],
+              primary = primaries.length === 1 ? primaries[0] : null,
+              primaryBox = primary?.getBoundingClientRect(),
+              primaryHref = primary?.getAttribute('href'),
+              fileName = component
+                ?.querySelector('[data-file-name]')
+                ?.getAttribute('title'),
+              primaryName = primary?.getAttribute('aria-label'),
+              loaded =
+                !!component &&
+                ['image', 'generic'].includes(kind) &&
+                !component.hidden &&
+                component.getAttribute('aria-hidden') !== 'true' &&
+                getComputedStyle(component).visibility === 'visible' &&
+                !!primaryBox &&
+                primaryBox.width > 0 &&
+                primaryBox.height > 0 &&
+                getComputedStyle(primary).visibility === 'visible' &&
+                !!primaryHref?.startsWith('/') &&
+                !primaryHref.startsWith('//') &&
+                primary.origin === location.origin &&
+                !!fileName &&
+                primaryName ===
+                  (kind === 'image' ? 'Open ' + fileName : fileName)
             return rect &&
               rect.height > 0 &&
               rect.bottom > Math.max(80, header) &&
@@ -373,7 +414,11 @@ async function verifyTouchSeekContinuity(browser, storageState) {
                     index: Number(element.dataset.fileIndex),
                     top: rect.top,
                     bottom: rect.bottom,
-                    loaded: !!element.querySelector('a[aria-label^="Open "]'),
+                    loaded,
+                    kind: kind ?? null,
+                    primaryCount: primaries.length,
+                    primaryHref: primaryHref ?? null,
+                    primaryName: primaryName ?? null,
                   },
                 ]
               : []
@@ -1317,12 +1362,17 @@ async function main() {
       page.getByText('1,000 files', { exact: true }).first()
     ).toBeVisible()
     await ready(page)
-    const names = await page
-      .locator('[data-file-index] a[aria-label^="Open "]')
+    const searchCards = page.locator('[data-file-index] [data-file-card]')
+    const names = await searchCards
+      .locator('[data-file-name]')
       .allTextContents()
     assert.ok(names.length > 0)
+    assert.ok(
+      names.every((name) => name.includes('Northern lights')),
+      'Every mounted result exposes its complete matching filename'
+    )
     await expect(
-      page.locator('[data-file-index] a[aria-label^="Open "]').first()
+      searchCards.locator('a[data-file-primary]').first()
     ).toHaveAttribute('aria-label', /Northern lights/)
     await pause(page, 2200)
     await page

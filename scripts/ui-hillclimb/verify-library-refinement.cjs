@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { measureFilenameGeometry } = require('./filename-geometry.cjs')
 const {
   chromium,
   expect,
@@ -23,31 +24,14 @@ const check = (name, details = {}) => {
   console.log('PASS:', name)
 }
 
-async function visibleFilenameEnd(filename) {
-  return filename.evaluate((el) => {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-    const nodes = []
-    while (walker.nextNode())
-      if (walker.currentNode.textContent.length) nodes.push(walker.currentNode)
-    const text = nodes.at(-1)
-    if (!text) return false
-    const box = el.getBoundingClientRect(),
-      end = document.createRange()
-    end.setStart(text, text.length - 1)
-    end.setEnd(text, text.length)
-    const glyph = end.getBoundingClientRect()
-    return (
-      glyph.left >= box.left - 1 &&
-      glyph.top >= box.top - 1 &&
-      glyph.right <= box.right + 1 &&
-      glyph.bottom <= box.bottom + 1
-    )
-  })
+async function completeFilenameVisible(filename) {
+  const measured = await filename.evaluate(measureFilenameGeometry)
+  return measured.text === measured.title && measured.allGlyphsFit
 }
 
 async function galleryKeyboard(page, card, nextCard) {
-  const preview = card.locator('a[aria-label^="Open "]').first()
-  const name = (await preview.getAttribute('aria-label')).slice(5)
+  const preview = card.locator('[data-file-primary]').first()
+  const name = await card.locator('[data-file-name]').getAttribute('title')
   await expect(card.locator('[data-file-name]')).toHaveAccessibleName(name)
   const manage = card.getByRole('button', {
     name: 'Manage ' + name,
@@ -64,7 +48,7 @@ async function galleryKeyboard(page, card, nextCard) {
   assert.deepEqual(
     stops,
     [
-      'Open ' + name,
+      await preview.getAttribute('aria-label'),
       'Manage ' + name,
       ...(await filters.evaluateAll((elements) =>
         elements.map((el) => el.getAttribute('aria-label'))
@@ -101,7 +85,7 @@ async function galleryKeyboard(page, card, nextCard) {
     await expect(filter).toBeFocused()
   }
   await page.keyboard.press('Tab')
-  await expect(nextCard.locator('a[aria-label^="Open "]').first()).toBeFocused()
+  await expect(nextCard.locator('[data-file-primary]').first()).toBeFocused()
   return { sequentialStops: stops.length, primaryName: name }
 }
 
@@ -111,7 +95,7 @@ async function mixedGrid(page) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const list = page.getByRole('list', { name: 'Your files', exact: true })
     await expect(list).toHaveAttribute('aria-busy', 'false')
-    await expect(list.locator('[data-file-preview]').first()).toBeVisible()
+    await expect(list.locator('[data-file-primary]').first()).toBeVisible()
     // This measures loaded-card geometry. Loading placeholders are covered
     // separately; never omit an unready row or treat a skeleton as a file.
     await expect
@@ -122,7 +106,7 @@ async function mixedGrid(page) {
             (elements) =>
               elements.length > 0 &&
               elements.every((element) =>
-                element.querySelector('[data-file-card] [data-file-preview]')
+                element.querySelector('[data-file-card] [data-file-primary]')
               )
           )
       )
@@ -143,7 +127,7 @@ async function mixedGrid(page) {
             .querySelector('[data-file-card]')
             .getBoundingClientRect().height,
           previewHeight: el
-            .querySelector('[data-file-preview]')
+            .querySelector('[data-file-primary]')
             .getBoundingClientRect().height,
           activityBottom: el
             .querySelector('[data-file-activity]')
@@ -153,9 +137,20 @@ async function mixedGrid(page) {
             .getBoundingClientRect().top,
           nameTop: el.querySelector('[data-file-name]').getBoundingClientRect()
             .top,
-          sizeTop: el
-            .querySelector('[data-file-heading]>span')
-            .getBoundingClientRect().top,
+          sizeInFooter: (() => {
+            const size = el
+                .querySelector('[data-file-activity] > span.mr-auto')
+                .getBoundingClientRect(),
+              footer = el
+                .querySelector('[data-file-activity]')
+                .getBoundingClientRect()
+            return (
+              size.width > 0 &&
+              size.height > 0 &&
+              size.top >= footer.top - 1 &&
+              size.bottom <= footer.bottom + 1
+            )
+          })(),
           labels: el.querySelectorAll('[data-file-label]').length,
           expiration: !!el.querySelector('[data-flare-wrap]'),
         })),
@@ -164,8 +159,10 @@ async function mixedGrid(page) {
     for (const row of rows) {
       for (const card of row.cards) {
         assert.ok(
-          Math.abs(card.previewHeight - (card.image ? 112 : 52)) <= 1,
-          'Fine-pointer image galleries use112px previews; generic stages are52px'
+          card.image
+            ? Math.abs(card.previewHeight - 112) <= 1
+            : card.previewHeight >= 44,
+          'Fine-pointer image stages stay112px; generic filename primary targets stay at least44px'
         )
         assert.ok(
           Math.abs(card.height - card.outerHeight) <= 1,
@@ -175,8 +172,8 @@ async function mixedGrid(page) {
           Math.abs(card.top - row.cards[0].top) <= 1 &&
             Math.abs(card.headingTop - row.cards[0].headingTop) <= 1 &&
             Math.abs(card.nameTop - row.cards[0].nameTop) <= 1 &&
-            Math.abs(card.sizeTop - row.cards[0].sizeTop) <= 1,
-          'Mixed cards share filename-header, first-line and size coordinates'
+            card.sizeInFooter,
+          'Mixed cards share filename-header coordinates and keep size visible inside their own footer'
         )
         assert.ok(
           Math.abs(card.activityBottom - (card.bottom - 5)) <= 1,
@@ -239,7 +236,7 @@ async function genericDensity(page, phone) {
         kind: card.dataset.fileKind,
         height: card.getBoundingClientRect().height,
         previewHeight: card
-          .querySelector('[data-file-preview]')
+          .querySelector('[data-file-primary]')
           .getBoundingClientRect().height,
         expiration: !!card.querySelector('[data-flare-wrap]'),
         labels: card.querySelectorAll('[data-file-label]').length,
@@ -257,7 +254,10 @@ async function genericDensity(page, phone) {
   for (const row of rows)
     for (const card of row.cards) {
       assert.equal(card.kind, 'generic')
-      assert.equal(card.previewHeight, 52)
+      assert.ok(
+        card.previewHeight >= 44,
+        'Generic primary filename keeps a44px target'
+      )
       assert.ok(
         card.stops >= 2 && card.stops <= 4,
         'Generic cards keep primary/menu and at most two metadata filter stops'
@@ -281,6 +281,9 @@ async function enlargedLibrary(page, mode, width) {
   await page.setViewportSize({ width, height: 844 })
   await page.goto(origin + '/dashboard')
   await page.waitForLoadState('networkidle')
+  const ownerReply = await page.request.get(origin + '/api/files?limit=100')
+  assert.equal(ownerReply.status(), 200)
+  const ownerFiles = (await ownerReply.json()).data
   const slider = page.getByRole('slider', { name: 'Browse files by date' })
   const measurements = []
   for (const size of [16, 32, 16]) {
@@ -386,52 +389,6 @@ async function enlargedLibrary(page, mode, width) {
             element.scrollWidth <= element.clientWidth + 1,
         }
       }
-      const edgeGlyph = (element, last) => {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
-        const nodes = []
-        while (walker.nextNode())
-          if (walker.currentNode.textContent.length)
-            nodes.push(walker.currentNode)
-        const node = last ? nodes.at(-1) : nodes[0]
-        if (!node) return { fits: false, ranges: [] }
-        const glyph = last
-          ? Array.from(node.textContent).at(-1)
-          : Array.from(node.textContent)[0]
-        const range = document.createRange()
-        range.setStart(node, last ? node.textContent.length - glyph.length : 0)
-        range.setEnd(node, last ? node.textContent.length : glyph.length)
-        const ranges = [...range.getClientRects()]
-          .filter((r) => r.width > 0 && r.height > 0)
-          .map((r) => ({ x: r.x, y: r.y, right: r.right, bottom: r.bottom }))
-        const clips = [rect(element)]
-        for (
-          let parent = element.parentElement;
-          parent && !parent.matches('[data-file-index]');
-          parent = parent.parentElement
-        ) {
-          const style = getComputedStyle(parent)
-          if (
-            ['hidden', 'clip'].includes(style.overflowX) ||
-            ['hidden', 'clip'].includes(style.overflowY)
-          )
-            clips.push(rect(parent))
-        }
-        return {
-          glyph,
-          ranges,
-          fits:
-            ranges.length > 0 &&
-            clips.every((box) =>
-              ranges.every(
-                (r) =>
-                  r.x >= box.x - 1 &&
-                  r.right <= box.right + 1 &&
-                  r.y >= box.y - 1 &&
-                  r.bottom <= box.bottom + 1
-              )
-            ),
-        }
-      }
       const rows = [...document.querySelectorAll('[data-row]')]
         .map((e) => ({
           index: Number(e.dataset.row),
@@ -502,25 +459,19 @@ async function enlargedLibrary(page, mode, width) {
         metadata: cards.flatMap((e) =>
           [
             ...e.querySelectorAll(
-              '[data-file-label] > span, [data-flare-wrap] > span, [data-preview-badges] > span'
+              '[data-file-label] > span, [data-flare-wrap] > span, [data-file-visibility], [data-file-uploaded], [data-file-type]'
             ),
           ].map(fullText)
         ),
         filenames: cards.map((e) => {
           const name = e.querySelector('[data-file-name]')
-          const start = name.firstElementChild.firstElementChild
-          const tail = name.querySelector('[data-file-name-tail]')
-          const stemTail = tail.firstElementChild
-          const extension = tail.lastElementChild
-          const abbreviated = stemTail.textContent.length > 0
           return {
-            ...fullText(name.firstElementChild),
+            ...fullText(name),
+            text: name.textContent,
             title: name.title,
             ariaLabel: name.getAttribute('aria-label'),
-            abbreviated,
-            prefixStart: edgeGlyph(start, false),
-            stemEnd: edgeGlyph(abbreviated ? stemTail : start, true),
-            extension: extension.textContent ? fullText(extension) : null,
+            filenameScrollWidth: name.scrollWidth,
+            filenameClientWidth: name.clientWidth,
             lineHeight: parseFloat(getComputedStyle(name).lineHeight),
             link: rect(name),
           }
@@ -528,10 +479,62 @@ async function enlargedLibrary(page, mode, width) {
       }
     })
     const filenameLinks = page.locator('[data-file-name]')
-    for (const [index, filename] of sample.filenames.entries())
+    for (const [index, filename] of sample.filenames.entries()) {
       await expect(filenameLinks.nth(index)).toHaveAccessibleName(
         filename.title
       )
+      filename.fullFilenameGeometry = await filenameLinks
+        .nth(index)
+        .evaluate(measureFilenameGeometry)
+      // CSS pre-wrap may give an unpainted trailing space a hanging Range box.
+      // Keep the raw fullText fits/rects, and accept visible filename ink only
+      // through the shared non-whitespace grapheme/ancestor checks plus the
+      // real scrollWidth bound. Logical whitespace stays owner-API exact.
+      filename.visibleFilenameFits =
+        filename.fullFilenameGeometry.allGlyphsFit &&
+        filename.filenameScrollWidth <= filename.filenameClientWidth + 1
+      filename.filenameAcceptance = {
+        method:
+          'Non-whitespace grapheme bounds and actual scrollWidth; raw pre-wrap hanging-space ranges retained',
+        legacyWholeRangeFits: filename.fits,
+        whitespaceOverhangs: filename.fullFilenameGeometry.graphemes
+          .filter((grapheme) => grapheme.whitespace)
+          .flatMap((grapheme) =>
+            grapheme.ranges.flatMap((range) => {
+              const outside = filename.fullFilenameGeometry.boundaries.filter(
+                ({ rect }) =>
+                  range.left < rect.left - 1 ||
+                  range.right > rect.right + 1 ||
+                  range.top < rect.top - 1 ||
+                  range.bottom > rect.bottom + 1
+              )
+              return outside.length
+                ? [
+                    {
+                      utf16Start: grapheme.utf16Start,
+                      utf16End: grapheme.utf16End,
+                      text: grapheme.text,
+                      range,
+                      outsideBoundaries: outside,
+                    },
+                  ]
+                : []
+            })
+          ),
+      }
+      const expected = ownerFiles[filename.fullFilenameGeometry.fileIndex]
+      assert.ok(
+        expected,
+        'Every measured filename has an independent owner API record'
+      )
+      filename.expectedFilenameFromOwnerApi = expected.name
+      assert.equal(filename.fullFilenameGeometry.text, expected.name)
+      assert.equal(filename.title, expected.name)
+      assert.ok(
+        filename.fullFilenameGeometry.allGlyphsFit,
+        'Every grapheme of every complete filename fits its actual link and clipping ancestors'
+      )
+    }
     assert.equal(sample.rootFont, size)
     for (const control of [sample.searchControl, sample.filtersControl]) {
       assert.ok(
@@ -540,9 +543,10 @@ async function enlargedLibrary(page, mode, width) {
       )
     }
     assert.ok(
-      Math.abs(sample.selectionControl.height - 44) <= 0.5 &&
+      sample.selectionControl.height >= 44 &&
+        sample.selectionControl.height < 88 &&
         sample.selectionControl.width >= 44,
-      'The icon-only phone selection control keeps its physical44px target'
+      'The labeled phone selection control keeps at least44px without a doubled88px floor'
     )
     if (size === 16 && width === 320)
       assert.ok(
@@ -598,20 +602,29 @@ async function enlargedLibrary(page, mode, width) {
       sample.filenames.every(
         (r) =>
           r.title === r.text &&
-          r.prefixStart.fits &&
-          r.stemEnd.fits &&
-          (!r.extension || r.extension.fits)
+          r.fullFilenameGeometry.first?.fits &&
+          r.fullFilenameGeometry.lastStem?.fits &&
+          (!r.fullFilenameGeometry.extension ||
+            (r.fullFilenameGeometry.extension.text ===
+              r.expectedFilenameFromOwnerApi.match(
+                /^(.+)(\.[A-Za-z0-9]{1,16})$/
+              )?.[2] &&
+              r.fullFilenameGeometry.extension.glyphs.every(
+                (glyph) => glyph.fits
+              )))
       ),
       'Touch filenames keep their exact logical name, visible beginning, final stem glyph and complete extension'
     )
     assert.ok(
-      sample.filenames.filter((r) => !r.abbreviated).every((r) => r.fits),
-      'Complete short filenames wrap without clipping, including after text enlargement'
+      sample.filenames.every((r) => r.visibleFilenameFits),
+      'Every complete filename keeps all non-whitespace glyphs unclipped; pre-wrap hanging-space ranges stay recorded'
     )
     if (size === 16)
       assert.ok(
-        sample.filenames.every((r) => r.link.height <= 2 * r.lineHeight + 1),
-        'Standard touch filenames occupy at most two readable lines'
+        sample.filenames.every(
+          (r) => r.link.height >= r.lineHeight && r.visibleFilenameFits
+        ),
+        'Standard filenames use their natural complete text height without a line clamp'
       )
     if (size === 32) {
       assert.ok(
@@ -635,7 +648,7 @@ async function enlargedLibrary(page, mode, width) {
       .locator('[data-file-index]')
       .filter({ has: page.locator('[data-file-kind="image"]') })
       .first()
-    await imageCard.locator('[data-file-preview]').focus()
+    await imageCard.locator('[data-file-primary]').focus()
     const shortcuts = await imageCard.evaluate((card) => {
       const box = (e) => {
         const r = e.getBoundingClientRect()
@@ -932,7 +945,7 @@ async function main() {
           exact: true,
         })
         const card = cards.getByRole('listitem').first()
-        const preview = card.locator('a[aria-label^="Open "]').first()
+        const preview = card.locator('[data-file-primary]').first()
         await expect(preview).toBeVisible()
         await expect(card.locator('img').first()).toBeVisible()
         const box = await preview.boundingBox()
@@ -943,7 +956,7 @@ async function main() {
         const filename = card.locator('[data-file-name]')
         const nameBox = await filename.boundingBox()
         assert.ok(
-          await visibleFilenameEnd(filename),
+          await completeFilenameVisible(filename),
           'The full demonstration filename, including its suffix, is visible'
         )
         assert.ok(
@@ -1061,9 +1074,18 @@ async function main() {
         await page.screenshot({
           path: path.join(out, mode + '-selection-' + width + '.png'),
         })
-        await page
+        const libraryHeader = page.locator(
+          'section[aria-label="Find and filter files"]'
+        )
+        await libraryHeader
           .getByRole('button', { name: 'Done selecting files', exact: true })
           .tap()
+        await expect(
+          libraryHeader.getByRole('button', {
+            name: 'Select files',
+            exact: true,
+          })
+        ).toHaveAttribute('aria-pressed', 'false')
         await expect(actions).toHaveCount(0)
         check(
           mode +
@@ -1078,7 +1100,7 @@ async function main() {
         .getByRole('list', { name: 'Your files', exact: true })
         .getByRole('listitem')
       await expect(
-        densityCards.nth(2).locator('a[aria-label^="Open "]').first()
+        densityCards.nth(2).locator('[data-file-primary]').first()
       ).toBeVisible()
       const geometry = []
       for (const card of [
@@ -1087,20 +1109,17 @@ async function main() {
         densityCards.nth(2),
       ]) {
         const preview = await card
-          .locator('a[aria-label^="Open "]')
+          .locator('[data-file-primary]')
           .first()
           .boundingBox()
         const bounds = await card.boundingBox()
         assert.ok(
-          Math.abs(
-            preview.height -
-              ((await card
-                .locator('[data-file-kind]')
-                .getAttribute('data-file-kind')) === 'image'
-                ? 112
-                : 52)
-          ) <= 1,
-          'Touch phone images use112px previews and generic stages use52px'
+          (await card
+            .locator('[data-file-kind]')
+            .getAttribute('data-file-kind')) === 'image'
+            ? Math.abs(preview.height - 112) <= 1
+            : preview.height >= 44,
+          'Touch phone images keep112px stages and generic filename primary targets keep at least44px'
         )
         assert.ok(
           (await card
@@ -1115,7 +1134,7 @@ async function main() {
           'Three complete mixed phone cards fit without scrolling at 390×844'
         )
         assert.ok(
-          await visibleFilenameEnd(card.locator('[data-file-name]')),
+          await completeFilenameVisible(card.locator('[data-file-name]')),
           'Each demonstration filename includes its complete suffix'
         )
         geometry.push(bounds)

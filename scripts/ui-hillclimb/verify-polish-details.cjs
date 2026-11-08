@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { measureFilenameGeometry } = require('./filename-geometry.cjs')
 const {
   chromium,
   expect,
@@ -474,23 +475,46 @@ async function main() {
         const card = cards
           .filter({ has: page.getByRole('link', { name, exact: true }) })
           .first()
-        const tail = card.locator('[data-file-name-tail]')
-        for (const part of await tail.locator(':scope > span').all()) {
-          const text = await part.textContent()
-          if (text) await inside(tail, await textRects(part, text))
-        }
-        const extension = await tail
-          .locator(':scope > span')
-          .last()
-          .textContent()
-        assert.ok(
-          extension && name.endsWith(extension),
-          'The real filename extension stays visible'
+        const filenameGeometry = await card
+          .locator('[data-file-name]')
+          .evaluate(measureFilenameGeometry)
+        const ownerReply = await context.request.get(
+          target + '/api/files?limit=100'
         )
-        const suffix = await tail.textContent()
+        assert.equal(ownerReply.status(), 200)
+        const expectedFile = (await ownerReply.json()).data[
+          filenameGeometry.fileIndex
+        ]
         assert.ok(
-          suffix.length > extension.length && name.endsWith(suffix),
-          'The visible tail is the real filename suffix'
+          expectedFile,
+          'The selected mounted file belongs to the independent actual owner collection'
+        )
+        assert.equal(name, expectedFile.name)
+        assert.equal(filenameGeometry.text, expectedFile.name)
+        assert.equal(filenameGeometry.title, expectedFile.name)
+        assert.equal(filenameGeometry.ariaLabel, expectedFile.name)
+        assert.equal(filenameGeometry.renderContractVersion, 'full-filename-v1')
+        assert.ok(
+          filenameGeometry.allGlyphsFit && filenameGeometry.glyphs.length > 0,
+          'Every actual complete filename grapheme fits its link, heading, card and clipping ancestors'
+        )
+        const extension =
+          expectedFile.name.match(/\.[A-Za-z0-9]{1,16}$/)?.[0] || ''
+        assert.ok(extension, 'The actual demonstration includes an extension')
+        assert.equal(filenameGeometry.extension?.text, extension)
+        assert.ok(
+          filenameGeometry.extension.glyphs.length > 0 &&
+            filenameGeometry.extension.glyphs.every((glyph) => glyph.fits),
+          'Every extension grapheme remains visible'
+        )
+        const ending = filenameGeometry.graphemes
+          .slice(-12)
+          .map((glyph) => glyph.text)
+          .join('')
+        assert.ok(
+          ending.length > extension.length &&
+            expectedFile.name.endsWith(ending),
+          'The complete rendered name includes its real distinguishing ending'
         )
         const manage = card.getByRole('button', {
           name: 'Manage ' + name,
@@ -547,7 +571,12 @@ async function main() {
         await expect(manage).toBeFocused()
         pass(
           `Coarse filename tail, extension, complete menu and keyboard ${width}/${mode}`,
-          { filenameLength: name.length }
+          {
+            renderContractVersion: 'full-filename-v1',
+            filenameLength: name.length,
+            expectedFilenameFromOwnerApi: expectedFile.name,
+            filenameGeometry,
+          }
         )
       }
     assert.equal(pageErrors, 0, 'No uncaught browser errors')

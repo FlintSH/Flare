@@ -374,6 +374,14 @@ test('security guide is discoverable and all three recordings load without autop
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/guide\/security\.html$/)
   await expect(page.locator('h2#add-a-passkey')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Require a passkey for sign-in' })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', {
+      name: 'Recover when required passkeys are unavailable',
+    })
+  ).toBeVisible()
   await page.goto('./demos.html')
   await page.getByRole('button', { name: '7. Secure', exact: true }).click()
   await expect(page.locator('.tour-description a')).toHaveAttribute(
@@ -425,7 +433,7 @@ test('security guide is discoverable and all three recordings load without autop
     page.getByRole('heading', { name: 'Create, use, and remove a passkey' })
   ).toBeVisible()
   await expect(
-    page.getByRole('heading', { name: 'Require a passkey and recover access' })
+    page.getByRole('heading', { name: 'When a passkey is required' })
   ).toBeVisible()
 })
 

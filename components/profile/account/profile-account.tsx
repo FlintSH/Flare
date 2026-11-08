@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { ProfileAccountProps } from '@/types/components/profile'
 import { signIn, useSession } from 'next-auth/react'
 
+import { PasswordInput } from '@/components/auth/password-input'
 import {
   hasRecentSecurityProof,
   recentSecurityProofName,
@@ -270,10 +271,10 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                       <Label htmlFor="email-current-password">
                         Current password
                       </Label>
-                      <Input
+                      <PasswordInput
                         id="email-current-password"
                         ref={emailPasswordRef}
-                        type="password"
+                        visibilityLabel="email confirmation password"
                         placeholder="Enter your current password"
                         autoComplete="current-password"
                         required

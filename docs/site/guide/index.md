@@ -19,7 +19,7 @@ Open the address your administrator gave you and sign in. Depending on the insta
 - **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 - **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
-- **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
+- **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. A refused attempt brings the passkey action and dedicated recovery forward; **Change account** returns to the ordinary form. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
 - **Single sign-on:** use the provider offered by your instance. Existing local accounts are not automatically linked to SSO accounts with the same email address.
 
 The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.

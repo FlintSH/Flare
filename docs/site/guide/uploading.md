@@ -15,12 +15,16 @@ Use **Upload** when you want to review settings before sending files. For quick 
 
 1. Open **Upload**.
 2. Select **Choose files** to open your device's file picker, or drag files into the selection area with a mouse. With a keyboard, focus **Choose files** and press Enter or Space to open the same picker. You can select several files and add more to the queue before starting.
-3. Review filenames and sizes. Remove an individual file, or clear the queue if you want to start again.
+3. Review filenames and sizes. The queue initially shows two files; for a larger batch, choose **Show all N files** to review and remove any file. **Show fewer files** returns to the compact summary. **Clear all** removes the entire waiting queue.
 4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. The line under it shows the effective visibility, password protection, expiration action, and filename behavior for this batch. Without that permission, your saved defaults apply automatically.
 5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Open **Upload options** for one-time visibility, password, or expiration overrides. You can leave it closed to use your saved defaults.
 6. Start the upload. Wait for the completion links before closing the tab.
 
-While files upload, the queue shows each file's progress, and a progress card shows the file being sent and its percentage. Drag-and-drop uploads use the same card. It has its own place on screen, so notifications such as **Copied to clipboard** don't cover it: the top left, below the navigation bar, or the bottom on a phone-sized screen. Close it with **×** if it's in the way; the upload continues, and the card returns for the next file. Earlier builds showed progress as a notification, so any other notification replaced it for the rest of that file.
+When no upload is running, the waiting batch's count, total size, and **Upload N files** action stay at the bottom of the window. The form scrolls above that bar. Expanding the queue shows its files in the page without adding a separate scrolling list. This limits the initial display, not the number of files you can select. While an upload is running, the action returns to the form and leaves space for its progress card.
+
+If another upload is running in this tab, the upload action waits and explains that your selected files stay queued. You can review or remove them while you wait. Start the batch when the current upload finishes; it does not start automatically.
+
+While files upload, the full queue shows each file's progress, and a progress card shows the file being sent and its percentage. Drag-and-drop uploads use the same card. It has its own place on screen, so notifications such as **Copied to clipboard** don't cover it: the top left, below the navigation bar, or the bottom on a phone-sized screen. Close it with **×** if it's in the way; the upload continues, and the card returns for the next file. Earlier builds showed progress as a notification, so any other notification replaced it for the rest of that file.
 
 The same selected options apply to the queued files. To give different files different passwords or destinations, upload them in separate batches. The open form keeps its chosen settings after a successful batch, including the password and visibility override. Review or reset them before uploading something different.
 
@@ -28,7 +32,7 @@ Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not aut
 
 Anyone who can access a supported archive's [share page](./archives#browse-an-archive-shared-with-you) can browse and download its entries under the file's visibility/password rules. This does not create separate library files. Review the archive's contents before making it public.
 
-<Screenshot src="/screenshots/workspace/upload-queue.png" alt="Several selected files in the upload queue" caption="Review your queue before uploading. Each file displays its size and transfer progress." />
+<Screenshot src="/screenshots/workspace/upload-queue.png" alt="Selected files and the upload batch action" caption="Review the waiting queue before uploading; expand a larger batch to inspect every file." />
 
 **Upload options** (or **Expiration options** when your role cannot share) starts closed so file selection and the upload action stay easy to reach. Its status changes to **Customized** after an override. Closing it keeps your choices; when profile selection is available, its effective summary stays visible and updates as you change them. **Save to** stays outside the disclosure so you can always review the destination. Password protection and expiration controls are still available to the same roles as before this layout change.
 

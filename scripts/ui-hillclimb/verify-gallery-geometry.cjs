@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /* Explicit native geometry regression: run against an isolated rendered gallery.
    Requires docs/site's installed Playwright and a real read-only owner session.
    FLARE_GALLERY_ORIGIN, FLARE_GALLERY_STORAGE_STATE, FLARE_GALLERY_OUTPUT. */
@@ -5,6 +6,7 @@ const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
+const { measureFilenameGeometry } = require('./filename-geometry.cjs')
 const { chromium, expect } = require(
   path.resolve('docs/site/node_modules/@playwright/test')
 )
@@ -21,7 +23,7 @@ fs.mkdirSync(out, { recursive: true })
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex')
 const result = {
   method:
-    'Real rendered read-only gallery. Native bounding boxes, computed styles and file identities. Explicit pointer cases, first/final-stem/all-extension clipping bounds, natural coarse or <=16rem container wrapping, exact size placement, fine common first-line and coarse centered headings; root32 is an explicitly local CSS text-size simulation. No layout correction, synthetic previews, mutation requests, saved settings or image masks. Normal GET/session/audit activity may persist.',
+    'Real rendered read-only gallery. Native bounding boxes, computed styles and file identities. Explicit pointer cases, complete raw filenames with owner-API identity, every-grapheme/extension/card clipping bounds, natural wrapping across pointer modes, size in the footer, fine common first-line and coarse centered headings; root32 is an explicitly local CSS text-size simulation. No layout correction, synthetic previews, mutation requests, saved settings or image masks. Normal GET/session/audit activity may persist.',
   cases: [],
   errors: [],
   forbiddenRequests: [],
@@ -228,109 +230,12 @@ async function main() {
         })
         item.geometry = await page.evaluate(() => {
           const box = (e) => e?.getBoundingClientRect().toJSON()
-          const textContext = document.createElement('canvas').getContext('2d')
-          const filenameText = (card) => {
-            const name = card.querySelector('[data-file-name]')
-            const style = getComputedStyle(name)
-            textContext.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
-            const inside = (a, b) =>
-              a.left >= b.left - 1 &&
-              a.right <= b.right + 1 &&
-              a.top >= b.top - 1 &&
-              a.bottom <= b.bottom + 1
-            const glyphs = (element) => {
-              const clips = [box(element), box(name)]
-              for (
-                let parent = element.parentElement;
-                parent && !parent.matches('[data-file-index]');
-                parent = parent.parentElement
-              ) {
-                const s = getComputedStyle(parent)
-                if (
-                  ['hidden', 'clip'].includes(s.overflowX) ||
-                  ['hidden', 'clip'].includes(s.overflowY)
-                )
-                  clips.push(box(parent))
-              }
-              const walker = document.createTreeWalker(
-                element,
-                NodeFilter.SHOW_TEXT
-              )
-              const items = []
-              while (walker.nextNode()) {
-                const node = walker.currentNode
-                for (const segment of new Intl.Segmenter(undefined, {
-                  granularity: 'grapheme',
-                }).segment(node.textContent)) {
-                  if (!/\S/u.test(segment.segment)) continue
-                  const range = document.createRange()
-                  range.setStart(node, segment.index)
-                  range.setEnd(node, segment.index + segment.segment.length)
-                  const ranges = [...range.getClientRects()]
-                    .filter((r) => r.width > 0 && r.height > 0)
-                    .map((r) => r.toJSON())
-                  items.push({
-                    glyph: segment.segment,
-                    ranges,
-                    clips,
-                    fits:
-                      ranges.length > 0 &&
-                      clips.every((clip) =>
-                        ranges.every((r) => inside(r, clip))
-                      ),
-                  })
-                }
-              }
-              return items
-            }
-            const visible = (element) => {
-              const r = box(element)
-              return (
-                !!r &&
-                getComputedStyle(element).display !== 'none' &&
-                r.width > 0 &&
-                r.height > 0
-              )
-            }
-            const first = name.firstElementChild.firstElementChild
-            const tail = name.querySelector('[data-file-name-tail]')
-            const stem = tail.firstElementChild
-            const extension = tail.lastElementChild
-            const firstGlyphs = glyphs(first)
-            const stemGlyphs = glyphs(stem.textContent ? stem : first)
-            const allGlyphs = glyphs(name)
-            const cardStyle = getComputedStyle(card)
-            return {
-              lineHeight: parseFloat(style.lineHeight),
-              fullInlineWidth: textContext.measureText(name.title).width,
-              ariaLabel: name.getAttribute('aria-label'),
-              first: firstGlyphs[0] || allGlyphs[0] || null,
-              lastStem: stemGlyphs.at(-1) || null,
-              extension: extension.textContent,
-              extensionGlyphs: glyphs(extension),
-              abbreviated: stem.textContent.length > 0,
-              allGlyphs,
-              containerInlineSize:
-                card.clientWidth -
-                parseFloat(cardStyle.paddingLeft) -
-                parseFloat(cardStyle.paddingRight),
-              nameBodyDisplay: getComputedStyle(name.firstElementChild).display,
-              inlineSizeVisible: visible(
-                card.querySelector('[data-file-heading] > span')
-              ),
-              activitySizeVisible: visible(
-                card.querySelector('[data-file-activity] > span')
-              ),
-            }
-          }
           const kindContent = (card) => {
             if (card.dataset.fileKind !== 'generic') return null
-            const preview = card.querySelector('[data-file-preview]')
-            const row = preview.firstElementChild
-            const label = row.querySelector(':scope > span')
+            const row = card.querySelector('[data-file-heading]')
+            const label = card.querySelector('[data-file-type]')
             const icon = row.querySelector(':scope > svg')
             const style = getComputedStyle(label)
-            const rowStyle = getComputedStyle(row)
             const range = document.createRange()
             range.selectNodeContents(label)
             const lines = [...range.getClientRects()]
@@ -372,13 +277,9 @@ async function main() {
               glyphs,
               lineCount,
               labelContentHeight,
-              expectedStageHeight: Math.max(
-                52,
-                Math.max(
-                  labelContentHeight,
-                  icon.getBoundingClientRect().height
-                ) + verticalChrome(rowStyle)
-              ),
+              primary: box(card.querySelector('[data-file-primary]')),
+              footer: box(card.querySelector('[data-file-activity]')),
+              renderContractVersion: 'filename-led-generic-v1',
             }
           }
           const rows = [...document.querySelectorAll('[data-row]')]
@@ -403,20 +304,20 @@ async function main() {
                   box: box(card),
                   heading: box(card.querySelector('[data-file-heading]')),
                   filename: box(card.querySelector('[data-file-name]')),
-                  filenameText: filenameText(card),
-                  size: box(card.querySelector('[data-file-heading]>span')),
-                  preview: box(card.querySelector('[data-file-preview]')),
-                  badges: box(card.querySelector('[data-preview-badges]')),
-                  date: box(
-                    card.querySelector('[data-preview-badges]>span:last-child')
+                  size: box(
+                    card.querySelector('[data-file-activity] > span.mr-auto')
                   ),
+                  primary: box(card.querySelector('[data-file-primary]')),
+                  preview: box(card.querySelector('[data-file-preview]')),
+                  badges: box(
+                    card.querySelector('[data-preview-badges]') ||
+                      card.querySelector('[data-file-activity]')
+                  ),
+                  date: box(card.querySelector('[data-file-uploaded]')),
                   activity: box(card.querySelector('[data-file-activity]')),
                   labelRows: [
-                    ...card.querySelector('[data-file-activity]').parentElement
-                      .children,
-                  ]
-                    .filter((child) => !child.matches('[data-file-activity]'))
-                    .map(box),
+                    ...card.querySelectorAll('[data-file-labels]'),
+                  ].map(box),
                   kindContent: kindContent(card),
                   labels: [...card.querySelectorAll('[data-file-label]')].map(
                     box
@@ -473,6 +374,44 @@ async function main() {
             })(),
           }
         })
+        const ownerReply = await context.request.get(
+          origin + '/api/files?limit=100'
+        )
+        assert.equal(
+          ownerReply.status(),
+          200,
+          'Independent owner collection must load'
+        )
+        const ownerBody = await ownerReply.text(),
+          ownerFiles = JSON.parse(ownerBody).data
+        item.ownerApiProof = {
+          route: '/api/files?limit=100',
+          status: ownerReply.status(),
+          responseSha256: sha(ownerBody),
+          fileCount: ownerFiles.length,
+        }
+        item.renderContractVersion = 'full-filename-v1'
+        for (const row of item.geometry.rows)
+          for (const card of row.cards) {
+            const element = page.locator(
+              `[data-file-index="${card.id}"] [data-file-name]`
+            )
+            card.filenameText = await element.evaluate(measureFilenameGeometry)
+            const expected = ownerFiles[Number(card.id)]
+            assert.ok(
+              expected,
+              'Every measured row index has an independent actual owner record'
+            )
+            card.expectedFilenameFromOwnerApi = expected.name
+            assert.equal(card.name, expected.name)
+            assert.equal(card.filenameText.text, expected.name)
+            assert.equal(card.filenameText.title, expected.name)
+            assert.ok(
+              Math.abs(card.filenameText.card.top - card.box.top) <= 1 &&
+                Math.abs(card.filenameText.card.height - card.box.height) <= 1,
+              'Shared filename measurement uses the same settled card layout'
+            )
+          }
         const g = item.geometry,
           failures = []
         const check = (ok, message) => {
@@ -556,8 +495,6 @@ async function main() {
           }
           for (const c of row.cards) {
             const text = c.filenameText
-            const naturalWrap =
-              spec.coarse || text.containerInlineSize <= 16 * spec.rootSize
             check(c.logicalName === c.name, 'Full logical filename retained')
             check(
               text.ariaLabel === c.name,
@@ -579,24 +516,31 @@ async function main() {
             )
             if (text.extension)
               check(
-                text.extensionGlyphs.length > 0 &&
-                  text.extensionGlyphs.every((g) => g.fits),
+                text.extension.text ===
+                  c.expectedFilenameFromOwnerApi.match(
+                    /\.[A-Za-z0-9]{1,16}$/
+                  )?.[0] &&
+                  text.extension.glyphs.length > 0 &&
+                  text.extension.glyphs.every((g) => g.fits),
                 'Every extension grapheme is inside its own span, link and clipping ancestors'
               )
-            if (naturalWrap && !text.abbreviated)
-              check(
-                text.allGlyphs.length > 0 &&
-                  text.allGlyphs.every((g) => g.fits),
-                'Every short naturally wrapping filename grapheme remains visible'
-              )
             check(
-              text.nameBodyDisplay === (naturalWrap ? 'block' : 'flex'),
-              'Filename body uses the actual coarse or narrow-container wrapping model'
+              text.allGlyphsFit &&
+                text.glyphs.length > 0 &&
+                text.glyphs.every((glyph) => glyph.fits),
+              'Every complete naturally wrapping filename grapheme remains visible'
             )
             check(
-              text.inlineSizeVisible === !naturalWrap &&
-                text.activitySizeVisible === naturalWrap,
-              'File size moves from header to activity exactly for coarse or narrow containers'
+              text.css.whiteSpace === 'pre-wrap' &&
+                text.css.textOverflow !== 'ellipsis',
+              'Filename uses a complete natural wrapping model without ellipsis'
+            )
+            check(
+              c.size &&
+                inside(c.size, c.activity) &&
+                c.size.width > 0 &&
+                c.size.height > 0,
+              'File size remains visible exactly in the activity footer'
             )
             check(
               inside(c.filename, c.heading) && inside(c.heading, c.box),
@@ -618,12 +562,11 @@ async function main() {
               )
             if (text.fullInlineWidth <= c.filename.width + 0.5) {
               check(
-                c.filename.height <= text.lineHeight + 1,
+                text.lineCount === 1,
                 'A complete filename that fits is not forced onto two lines'
               )
               check(
-                text.allGlyphs.length > 0 &&
-                  text.allGlyphs.every((g) => g.fits),
+                text.glyphs.length > 0 && text.glyphs.every((g) => g.fits),
                 'Every grapheme of a complete fitting filename remains visible'
               )
             }
@@ -663,21 +606,24 @@ async function main() {
               if (kind) {
                 check(
                   Math.abs(kind.label.height - kind.labelContentHeight) <= 1 &&
-                    Math.abs(c.preview.height - kind.expectedStageHeight) <= 1,
-                  'Generic stage grows only to fit its kind text/icon content above52px'
+                    kind.primary.height >= 44 &&
+                    !c.preview,
+                  'Generic type grows only for its actual text and its primary heading keeps44px without a preview stage'
                 )
                 check(
-                  inside(kind.row, c.preview) &&
-                    inside(kind.label, c.preview) &&
-                    inside(kind.icon, c.preview) &&
+                  inside(kind.row, c.box) &&
+                    inside(kind.primary, kind.row) &&
+                    inside(kind.label, kind.footer) &&
+                    inside(kind.footer, c.box) &&
+                    inside(kind.icon, kind.row) &&
                     kind.glyphs.every(
                       (glyph) =>
                         glyph.width > 0 &&
                         glyph.height > 0 &&
                         inside(glyph, kind.label) &&
-                        inside(glyph, c.preview)
+                        inside(glyph, kind.footer)
                     ),
-                  'Every generic kind glyph/icon stays inside its label and stage'
+                  'Every generic kind glyph stays inside its label/footer and the icon inside the filename header'
                 )
               }
             }

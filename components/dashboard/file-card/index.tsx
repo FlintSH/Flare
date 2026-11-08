@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, type MouseEvent, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -35,7 +35,6 @@ import {
   fileCardActivityClassName,
   fileCardDetailsClassName,
   fileCardFilenameParts,
-  fileCardGenericPreviewClassName,
   fileCardLabelsClassName,
   fileCardNameRowClassName,
   fileCardPreviewClassName,
@@ -359,6 +358,219 @@ export function FileCard({
   // The tag count opens the editor only where the menu offers it.
   const editTags = offered('editTags')
 
+  const openPrimary = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      (browseArchive || (isImage && onPreview)) &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
+      event.preventDefault()
+      if (browseArchive) browseArchive()
+      else onPreview?.(file)
+    }
+  }
+  const deleteAction = offered('delete')
+  const DeleteIcon = FILE_ACTIONS.delete.icon
+  const menuGroups = CARD_MENU.map((group) =>
+    group.filter((id) => id !== 'delete' && offered(id))
+  ).filter((group) => group.length > 0)
+  const manageMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent [&_svg]:size-[16px]',
+            hasImagePreview
+              ? 'h-[32px] w-[32px]'
+              : 'h-[44px] w-[44px] shrink-0',
+            previewFocusClassName
+          )}
+          aria-label={`Manage ${file.name}`}
+          title="Manage file"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        data-file-menu=""
+        className="group/file-menu flex w-56 min-w-0 max-w-[calc(100vw-32px)] flex-col overflow-hidden"
+      >
+        <DropdownMenuLabel className="shrink-0">Manage file</DropdownMenuLabel>
+        <DropdownMenuSeparator className="shrink-0" />
+        {/* Direction cues sit outside the scrolling items, so they
+                  never mask focused actions or the menu's border. */}
+        <div
+          aria-hidden="true"
+          className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-above]]/file-menu:flex"
+        >
+          <span
+            data-file-menu-scroll-cue="above"
+            className="flex items-center gap-1"
+          >
+            <ChevronUp className="h-3 w-3" />
+            More actions above
+          </span>
+        </div>
+        <div
+          ref={scrollFadeRef}
+          data-file-menu-scroll=""
+          tabIndex={-1}
+          onFocus={(event) => {
+            if (event.target === event.currentTarget)
+              event.currentTarget.closest<HTMLElement>('[role="menu"]')?.focus()
+          }}
+          className="min-h-0 overflow-y-auto overscroll-contain outline-none [scroll-padding-block:0.25rem]"
+        >
+          <DropdownMenuLabel
+            data-file-menu-filename=""
+            className="break-words text-xs font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
+          >
+            {nameStart}
+            {nameSeparator}
+            {nameTail}
+            <span className="whitespace-nowrap">{nameExtension}</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {menuGroups.map((group, index) => (
+            <Fragment key={index}>
+              {index > 0 && <DropdownMenuSeparator />}
+              {group.map((id) => {
+                const handler = offered(id)
+                if (!handler) return null
+                const { icon: Icon, menu } = FILE_ACTIONS[id]
+                const content = (
+                  <>
+                    <Icon />
+                    {typeof menu === 'function'
+                      ? menu({
+                          hasPassword: file.hasPassword,
+                          busy: ocr.loading,
+                        })
+                      : menu}
+                  </>
+                )
+                return (
+                  <DropdownMenuItem
+                    key={id}
+                    asChild={!!handler.href}
+                    disabled={handler.disabled}
+                    onSelect={handler.run}
+                  >
+                    {!handler.href ? (
+                      content
+                    ) : handler.download ? (
+                      <a href={handler.href} download={handler.download}>
+                        {content}
+                      </a>
+                    ) : (
+                      <Link prefetch={false} href={handler.href}>
+                        {content}
+                      </Link>
+                    )}
+                  </DropdownMenuItem>
+                )
+              })}
+            </Fragment>
+          ))}
+        </div>
+        <div
+          aria-hidden="true"
+          className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-below]]/file-menu:flex"
+        >
+          <span
+            data-file-menu-scroll-cue="below"
+            className="flex items-center gap-1"
+          >
+            More actions below
+            <ChevronDown className="h-3 w-3" />
+          </span>
+        </div>
+        {deleteAction && (
+          <>
+            <DropdownMenuSeparator className="shrink-0" />
+            <DropdownMenuItem
+              data-file-menu-delete=""
+              onSelect={deleteAction.run}
+              className="min-h-[44px] shrink-0 text-destructive focus:bg-danger/10 focus:text-destructive"
+            >
+              <DeleteIcon />
+              Delete file
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+  const selectionControl = onSelect && (
+    <label
+      className={cn(
+        'flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border/50 bg-background/95 shadow-sm',
+        hasImagePreview && 'absolute left-[8px] top-[8px] z-10'
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={onSelect}
+        aria-label={`Select ${file.name}`}
+        className="h-[16px] w-[16px] cursor-pointer accent-primary"
+      />
+    </label>
+  )
+  const statusBadges = (
+    <>
+      <span
+        data-file-visibility=""
+        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
+      >
+        {file.hasPassword ? (
+          <KeyRound className="h-3 w-3" />
+        ) : (
+          <VisibilityIcon className="h-3 w-3" />
+        )}
+        {file.hasPassword ? 'Protected' : visibilityLabel}
+      </span>
+      <span
+        data-file-uploaded=""
+        className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-normal break-words rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
+        title={format(new Date(file.uploadedAt), 'PPP p')}
+      >
+        <Clock className="h-3 w-3" />
+        {getRelativeTime(new Date(file.uploadedAt))}
+      </span>
+    </>
+  )
+  const expirationBadge = file.expiresAt &&
+    !onSelect &&
+    permitted('expiration') && (
+      <button
+        type="button"
+        tabIndex={-1}
+        data-flare-control=""
+        data-flare-wrap=""
+        onClick={() => setIsExpiryModalOpen(true)}
+        title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
+        className={cn(
+          'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px] [@container(max-width:12rem)]:max-w-[calc(100%-16px)] [@media(pointer:coarse)]:!min-h-[44px]',
+          !hasImagePreview && 'static mx-0 mb-1 max-w-full self-start',
+          previewFocusClassName
+        )}
+      >
+        <Timer className="h-3 w-3 shrink-0 text-primary" />
+        <span className="min-w-0 break-words whitespace-normal">
+          Expires{' '}
+          {formatDistanceToNow(new Date(file.expiresAt), {
+            addSuffix: true,
+          })}
+        </span>
+      </button>
+    )
+
   return (
     <Card
       data-file-card=""
@@ -374,88 +586,62 @@ export function FileCard({
           : 'hover:border-primary/30'
       )}
     >
-      <div data-file-heading="" className={fileCardNameRowClassName}>
+      <div
+        data-file-heading=""
+        className={cn(
+          fileCardNameRowClassName,
+          !hasImagePreview && 'items-start'
+        )}
+      >
+        {!hasImagePreview &&
+          (onSelect ? (
+            selectionControl
+          ) : (
+            <FileTypeIcon
+              file={file}
+              className="mt-[12px] h-[20px] w-[20px] shrink-0 text-muted-foreground"
+            />
+          ))}
         <Link
           prefetch={false}
           href={urls.page}
           title={file.name}
           aria-label={file.name}
-          tabIndex={-1}
-          data-file-name=""
-          className="min-w-0 truncate rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:whitespace-normal [@container(max-width:16rem)]:whitespace-normal"
-        >
-          <span
-            aria-hidden="true"
-            className="flex min-w-0 [@media(pointer:coarse)]:block [@media(pointer:coarse)]:whitespace-pre-wrap [@container(max-width:16rem)]:block [@container(max-width:16rem)]:whitespace-pre-wrap"
-          >
-            <span
-              className={cn(
-                'min-w-0 truncate',
-                nameTail
-                  ? '[@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:max-w-full [@media(pointer:coarse)]:align-top [@container(max-width:16rem)]:inline-block [@container(max-width:16rem)]:max-w-full [@container(max-width:16rem)]:align-top'
-                  : '[@media(pointer:coarse)]:inline [@media(pointer:coarse)]:overflow-visible [@media(pointer:coarse)]:break-words [@media(pointer:coarse)]:whitespace-normal [@media(pointer:coarse)]:text-clip [@container(max-width:16rem)]:inline [@container(max-width:16rem)]:overflow-visible [@container(max-width:16rem)]:break-words [@container(max-width:16rem)]:whitespace-normal [@container(max-width:16rem)]:text-clip'
-              )}
-            >
-              {nameStart}
-            </span>
-            <span
-              data-file-name-separator=""
-              data-separator={nameSeparator}
-              className="min-w-0 overflow-hidden before:whitespace-pre before:content-[attr(data-separator)] [@media(pointer:coarse)]:hidden [@container(max-width:16rem)]:hidden"
-            />
-            {nameSeparator}
-            <span
-              data-file-name-tail=""
-              className={cn(
-                'flex max-w-full shrink-0',
-                nameTail
-                  ? '[@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:align-top [@container(max-width:16rem)]:inline-flex [@container(max-width:16rem)]:align-top'
-                  : '[@media(pointer:coarse)]:inline [@container(max-width:16rem)]:inline'
-              )}
-            >
-              <span className="min-w-0 truncate [direction:rtl]">
-                <bdi dir="ltr">{nameTail}</bdi>
-              </span>
-              <span className="max-w-full shrink-0 truncate">
-                {nameExtension}
-              </span>
-            </span>
-          </span>
-        </Link>
-        <span className="shrink-0 text-xs text-muted-foreground [@media(pointer:coarse)]:hidden [@container(max-width:16rem)]:hidden">
-          {formatFileSize(file.size)}
-        </span>
-      </div>
-      <div className="relative">
-        <Link
-          data-file-preview=""
-          prefetch={false}
-          href={urls.page}
-          aria-label={`Open ${file.name}`}
           aria-haspopup={
-            browseArchive || (isImage && onPreview) ? 'dialog' : undefined
+            !hasImagePreview && (browseArchive || (isImage && onPreview))
+              ? 'dialog'
+              : undefined
           }
-          onClick={(event) => {
-            if (
-              (browseArchive || (isImage && onPreview)) &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.shiftKey &&
-              !event.altKey
-            ) {
-              event.preventDefault()
-              if (browseArchive) browseArchive()
-              else onPreview?.(file)
-            }
-          }}
+          onClick={hasImagePreview ? undefined : openPrimary}
+          tabIndex={hasImagePreview ? -1 : undefined}
+          data-file-name=""
+          data-file-primary={hasImagePreview ? undefined : ''}
           className={cn(
-            'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
-            hasImagePreview
-              ? imagePreviewClassName
-              : fileCardGenericPreviewClassName
+            'min-w-0 flex-1 whitespace-pre-wrap rounded-sm text-sm font-medium leading-5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]',
+            !hasImagePreview && 'flex min-h-[44px] items-center'
           )}
         >
-          {hasImagePreview ? (
+          {file.name}
+        </Link>
+        {!hasImagePreview && manageMenu}
+      </div>
+      {hasImagePreview && (
+        <div className="relative">
+          <Link
+            data-file-preview=""
+            data-file-primary=""
+            prefetch={false}
+            href={urls.page}
+            aria-label={`Open ${file.name}`}
+            aria-haspopup={
+              browseArchive || (isImage && onPreview) ? 'dialog' : undefined
+            }
+            onClick={openPrimary}
+            className={cn(
+              'relative block overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:shadow-[inset_0_0_0_2px_hsl(var(--foreground)),inset_0_0_0_4px_hsl(var(--ring)),inset_0_0_0_7px_hsl(var(--background))] focus-visible:outline-none focus-visible:after:block',
+              imagePreviewClassName
+            )}
+          >
             <Image
               src={urls.thumbnail}
               alt={file.name}
@@ -466,343 +652,151 @@ export function FileCard({
               onError={() => setPreviewFailed(true)}
               unoptimized={!canOptimizeThumbnail(file)}
             />
-          ) : (
-            // The icon steps aside for the hover and focus controls, so it
-            // doesn't show through between them.
-            <div
-              className={cn(
-                'flex min-h-[52px] items-center gap-[8px] pl-[12px] pr-[60px] transition-opacity',
-                !onSelect &&
-                  'group-has-[:focus-visible]:opacity-0 group-has-[[data-preview-actions]_:focus]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0',
-                onSelect && 'pl-[64px]'
-              )}
-            >
-              {!onSelect && (
-                <FileTypeIcon
-                  file={file}
-                  className="h-[28px] w-[28px] shrink-0 text-muted-foreground"
-                />
-              )}
-              <span className="min-w-0 break-words rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
-                {file.name.includes('.')
-                  ? file.name.split('.').pop()?.toUpperCase().slice(0, 12)
-                  : fileTypeLabel(file.mimeType)}
-              </span>
-            </div>
-          )}
-        </Link>
-        {/* These pointer shortcuts repeat the primary link and menu actions,
+          </Link>
+          {/* These pointer shortcuts repeat the primary link and menu actions,
             so Tab goes from the primary link to Manage file, then the filters.
             Keyboard focus still exposes the shortcuts and their full labels. */}
-        <div
-          data-preview-actions=""
-          className={cn(
-            'pointer-events-none absolute inset-0 bottom-auto flex items-center justify-center gap-2 bg-background/50 pt-[18px] pb-[8px] opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
-            hasImagePreview &&
-              cn(
-                imagePreviewClassName,
-                '[@media(pointer:coarse)]:!pt-[28px] [@media(pointer:coarse)]:!pb-[8px]'
-              ),
-            !hasImagePreview &&
-              'bottom-auto right-[52px] h-[52px] gap-[8px] pt-0 pb-0',
-            onSelect && 'hidden'
-          )}
-        >
-          {browseArchive ? (
-            <Button
-              tabIndex={-1}
-              variant="outline"
-              size={hasImagePreview ? 'sm' : 'icon'}
-              aria-label="Browse archive"
-              title="Browse archive"
-              className={cn('bg-background', previewFocusClassName)}
-              onClick={browseArchive}
-            >
-              {hasImagePreview ? (
-                'Browse archive'
-              ) : (
-                <Folder className="h-4 w-4" />
-              )}
-            </Button>
-          ) : isImage && onPreview ? (
-            <>
+          <div
+            data-preview-actions=""
+            className={cn(
+              'pointer-events-none absolute inset-0 bottom-auto flex items-center justify-center gap-2 bg-background/50 pt-[18px] pb-[8px] opacity-0 transition-opacity focus-within:opacity-100 focus-within:[&>*]:pointer-events-auto group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100',
+              imagePreviewClassName,
+              '[@media(pointer:coarse)]:!pt-[28px] [@media(pointer:coarse)]:!pb-[8px]',
+              onSelect && 'hidden'
+            )}
+          >
+            {browseArchive ? (
               <Button
-                data-preview-text-shortcut={hasImagePreview ? '' : undefined}
                 tabIndex={-1}
                 variant="outline"
                 size={hasImagePreview ? 'sm' : 'icon'}
-                aria-label="View image"
-                title="View image"
+                aria-label="Browse archive"
+                title="Browse archive"
                 className={cn('bg-background', previewFocusClassName)}
-                onClick={() => onPreview(file)}
+                onClick={browseArchive}
               >
-                {hasImagePreview ? 'View image' : <Eye className="h-4 w-4" />}
+                {hasImagePreview ? (
+                  'Browse archive'
+                ) : (
+                  <Folder className="h-4 w-4" />
+                )}
               </Button>
-              {hasImagePreview && (
+            ) : isImage && onPreview ? (
+              <>
                 <Button
-                  data-preview-icon-shortcut=""
+                  data-preview-text-shortcut={hasImagePreview ? '' : undefined}
                   tabIndex={-1}
                   variant="outline"
-                  size="icon"
+                  size={hasImagePreview ? 'sm' : 'icon'}
                   aria-label="View image"
                   title="View image"
-                  className={cn('hidden bg-background', previewFocusClassName)}
+                  className={cn('bg-background', previewFocusClassName)}
                   onClick={() => onPreview(file)}
                 >
-                  <Eye className="h-4 w-4" />
+                  {hasImagePreview ? 'View image' : <Eye className="h-4 w-4" />}
                 </Button>
-              )}
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(
-                'h-auto bg-background px-[8px] [&[data-flare-control]]:min-h-[44px] [&[data-flare-control]]:min-w-[44px]',
-                previewFocusClassName
-              )}
-              asChild
-            >
-              <Link prefetch={false} href={urls.page} tabIndex={-1}>
-                View
-              </Link>
-            </Button>
-          )}
-          <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-[4px]">
-            {previewActions.map((id) => {
-              const handler = offered(id)
-              if (!handler) return null
-              const { icon: Icon, button } = FILE_ACTIONS[id]
-              const className =
-                'h-[32px] w-[32px] bg-background px-0 [&_svg]:size-[16px]'
-              return handler.href ? (
-                <Button
-                  key={id}
-                  variant="outline"
-                  size="icon"
-                  className={cn(className, previewFocusClassName)}
-                  asChild
-                >
-                  <a
+                {hasImagePreview && (
+                  <Button
+                    data-preview-icon-shortcut=""
                     tabIndex={-1}
-                    href={handler.href}
-                    download={handler.download}
+                    variant="outline"
+                    size="icon"
+                    aria-label="View image"
+                    title="View image"
+                    className={cn(
+                      'hidden bg-background',
+                      previewFocusClassName
+                    )}
+                    onClick={() => onPreview(file)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  'h-auto bg-background px-[8px] [&[data-flare-control]]:min-h-[44px] [&[data-flare-control]]:min-w-[44px]',
+                  previewFocusClassName
+                )}
+                asChild
+              >
+                <Link prefetch={false} href={urls.page} tabIndex={-1}>
+                  View
+                </Link>
+              </Button>
+            )}
+            <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-[4px]">
+              {previewActions.map((id) => {
+                const handler = offered(id)
+                if (!handler) return null
+                const { icon: Icon, button } = FILE_ACTIONS[id]
+                const className =
+                  'h-[32px] w-[32px] bg-background px-0 [&_svg]:size-[16px]'
+                return handler.href ? (
+                  <Button
+                    key={id}
+                    variant="outline"
+                    size="icon"
+                    className={cn(className, previewFocusClassName)}
+                    asChild
+                  >
+                    <a
+                      tabIndex={-1}
+                      href={handler.href}
+                      download={handler.download}
+                      aria-label={button.label(file.name)}
+                      title={button.title}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    key={id}
+                    tabIndex={-1}
+                    variant="outline"
+                    size="icon"
+                    className={cn(className, previewFocusClassName)}
+                    disabled={handler.disabled}
+                    onClick={handler.run}
                     aria-label={button.label(file.name)}
                     title={button.title}
                   >
                     <Icon className="h-4 w-4" />
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  key={id}
-                  tabIndex={-1}
-                  variant="outline"
-                  size="icon"
-                  className={cn(className, previewFocusClassName)}
-                  disabled={handler.disabled}
-                  onClick={handler.run}
-                  aria-label={button.label(file.name)}
-                  title={button.title}
-                >
-                  <Icon className="h-4 w-4" />
-                </Button>
-              )
-            })}
-          </div>
-        </div>
-        {onSelect && (
-          <label className="absolute left-[8px] top-[8px] z-10 flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-lg border border-border/50 bg-background/95 shadow-sm">
-            <input
-              type="checkbox"
-              checked={!!selected}
-              onChange={onSelect}
-              aria-label={`Select ${file.name}`}
-              className="h-[16px] w-[16px] cursor-pointer accent-primary"
-            />
-          </label>
-        )}
-        <div className="absolute right-[8px] top-[8px] flex">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  'h-[32px] w-[32px] rounded-lg border border-border/50 bg-background/90 shadow-sm hover:bg-background data-[state=open]:bg-accent [&_svg]:size-[16px]',
-                  previewFocusClassName
-                )}
-                aria-label={`Manage ${file.name}`}
-                title="Manage file"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              data-file-menu=""
-              className="group/file-menu flex w-56 min-w-0 max-w-[calc(100vw-32px)] flex-col overflow-hidden"
-            >
-              <DropdownMenuLabel className="shrink-0">
-                Manage file
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="shrink-0" />
-              {/* Direction cues sit outside the scrolling items, so they
-                  never mask focused actions or the menu's border. */}
-              <div
-                aria-hidden="true"
-                className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-above]]/file-menu:flex"
-              >
-                <span
-                  data-file-menu-scroll-cue="above"
-                  className="flex items-center gap-1"
-                >
-                  <ChevronUp className="h-3 w-3" />
-                  More actions above
-                </span>
-              </div>
-              <div
-                ref={scrollFadeRef}
-                data-file-menu-scroll=""
-                tabIndex={-1}
-                onFocus={(event) => {
-                  if (event.target === event.currentTarget)
-                    event.currentTarget
-                      .closest<HTMLElement>('[role="menu"]')
-                      ?.focus()
-                }}
-                className="min-h-0 overflow-y-auto overscroll-contain outline-none [scroll-padding-block:0.25rem]"
-              >
-                <DropdownMenuLabel
-                  data-file-menu-filename=""
-                  className="break-words text-xs font-normal leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
-                >
-                  {nameStart}
-                  {nameSeparator}
-                  {nameTail}
-                  <span className="whitespace-nowrap">{nameExtension}</span>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {CARD_MENU.map((group, index) => (
-                  <Fragment key={index}>
-                    {index > 0 && <DropdownMenuSeparator />}
-                    {group.map((id) => {
-                      const handler = offered(id)
-                      if (!handler) return null
-                      const { icon: Icon, menu } = FILE_ACTIONS[id]
-                      const content = (
-                        <>
-                          <Icon />
-                          {typeof menu === 'function'
-                            ? menu({
-                                hasPassword: file.hasPassword,
-                                busy: ocr.loading,
-                              })
-                            : menu}
-                        </>
-                      )
-                      return (
-                        <DropdownMenuItem
-                          key={id}
-                          asChild={!!handler.href}
-                          disabled={handler.disabled}
-                          onSelect={handler.run}
-                          className={
-                            id === 'delete'
-                              ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
-                              : undefined
-                          }
-                        >
-                          {!handler.href ? (
-                            content
-                          ) : handler.download ? (
-                            <a href={handler.href} download={handler.download}>
-                              {content}
-                            </a>
-                          ) : (
-                            <Link prefetch={false} href={handler.href}>
-                              {content}
-                            </Link>
-                          )}
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </Fragment>
-                ))}
-              </div>
-              <div
-                aria-hidden="true"
-                className="hidden h-5 shrink-0 items-center justify-center text-[11px] text-muted-foreground group-has-[[data-scroll-below]]/file-menu:flex"
-              >
-                <span
-                  data-file-menu-scroll-cue="below"
-                  className="flex items-center gap-1"
-                >
-                  More actions below
-                  <ChevronDown className="h-3 w-3" />
-                </span>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div
-          data-preview-badges=""
-          className={cn(
-            'pointer-events-none absolute bottom-2 inset-x-2 flex flex-wrap items-end justify-between gap-2 text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:px-[8px] [@container(max-width:12rem)]:py-[4px]',
-            !hasImagePreview && 'static px-[8px] py-[4px]'
-          )}
-        >
-          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0">
-            {file.hasPassword ? (
-              <KeyRound className="h-3 w-3" />
-            ) : (
-              <VisibilityIcon className="h-3 w-3" />
-            )}
-            {file.hasPassword ? 'Protected' : visibilityLabel}
-          </span>
-          <span
-            className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-border/40 bg-background/90 px-[8px] py-[4px] backdrop-blur-sm [&>svg]:size-[12px] [&>svg]:shrink-0"
-            title={format(new Date(file.uploadedAt), 'PPP p')}
-          >
-            <Clock className="h-3 w-3" />
-            {getRelativeTime(new Date(file.uploadedAt))}
-          </span>
-        </div>
-        {file.expiresAt && !onSelect && permitted('expiration') && (
-          <button
-            type="button"
-            tabIndex={-1}
-            data-flare-control=""
-            data-flare-wrap=""
-            onClick={() => setIsExpiryModalOpen(true)}
-            title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
-            className={cn(
-              'absolute left-[8px] top-[8px] inline-flex min-h-[32px] max-w-[calc(100%-68px)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 py-[4px] text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:mx-[8px] [@container(max-width:12rem)]:my-[4px] [@container(max-width:12rem)]:max-w-[calc(100%-16px)] [@media(pointer:coarse)]:!min-h-[44px]',
-              !hasImagePreview && 'static mx-[8px] mb-[8px]',
-              previewFocusClassName
-            )}
-          >
-            <Timer className="h-3 w-3 shrink-0 text-primary" />
-            <span className="min-w-0 break-words whitespace-normal">
-              {formatDistanceToNow(new Date(file.expiresAt), {
-                addSuffix: true,
+                  </Button>
+                )
               })}
-            </span>
-          </button>
-        )}
-        {ocr.loading && (
-          <div
-            role="status"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
-          >
-            <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            <span className="text-sm font-medium">Extracting text…</span>
+            </div>
           </div>
-        )}
-      </div>
+          {selectionControl}
+          <div className="absolute right-[8px] top-[8px] flex">
+            {manageMenu}
+          </div>
+          <div
+            data-preview-badges=""
+            className="pointer-events-none absolute bottom-2 inset-x-2 flex flex-wrap items-end justify-between gap-2 text-xs [@container(max-width:12rem)]:static [@container(max-width:12rem)]:px-[8px] [@container(max-width:12rem)]:py-[4px]"
+          >
+            {statusBadges}
+          </div>
+          {expirationBadge}
+          {ocr.loading && (
+            <div
+              role="status"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
+            >
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+              <span className="text-sm font-medium">Extracting text…</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className={fileCardDetailsClassName}>
+        {!hasImagePreview && expirationBadge}
         {(folder || tags.length > 0) && (
-          <div className={fileCardLabelsClassName}>
+          <div data-file-labels="" className={fileCardLabelsClassName}>
             {folder && (
               <button
                 type="button"
@@ -860,10 +854,25 @@ export function FileCard({
               ))}
           </div>
         )}
-        <div data-file-activity="" className={fileCardActivityClassName}>
-          <span className="mr-auto hidden [@media(pointer:coarse)]:inline [@container(max-width:16rem)]:inline">
-            {formatFileSize(file.size)}
-          </span>
+        <div
+          data-file-activity=""
+          className={cn(
+            fileCardActivityClassName,
+            !hasImagePreview && 'gap-x-1.5 gap-y-1'
+          )}
+        >
+          {!hasImagePreview && (
+            <>
+              <span
+                data-file-type=""
+                className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-md border border-border bg-muted/50 px-1 py-0.5 font-medium"
+              >
+                {fileTypeLabel(file.mimeType)}
+              </span>
+              {statusBadges}
+            </>
+          )}
+          <span className="mr-auto">{formatFileSize(file.size)}</span>
           <div className="ml-auto flex flex-wrap items-center gap-x-3">
             <span
               className="inline-flex items-center gap-1"
@@ -890,6 +899,16 @@ export function FileCard({
           </div>
         </div>
       </div>
+
+      {!hasImagePreview && ocr.loading && (
+        <div
+          role="status"
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
+        >
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          <span className="text-sm font-medium">Extracting text…</span>
+        </div>
+      )}
 
       <Dialog
         open={isPasswordDialogOpen}

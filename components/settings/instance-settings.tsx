@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import type { BuildInfo } from '@/types/dto/updates'
@@ -33,6 +32,7 @@ import { createPortal } from 'react-dom'
 import { CustomizationStudio } from '@/components/customization/customization-studio'
 import { RecoveryLink } from '@/components/customization/recovery-link'
 import { EmailSettings } from '@/components/email/email-settings'
+import { GuardedLink } from '@/components/navigation/guarded-link'
 import {
   PreferencesPanel,
   PreferencesShell,
@@ -79,6 +79,7 @@ import {
 } from '@/lib/preferences/navigation'
 import { cn } from '@/lib/utils'
 
+import { useUnsavedDraft } from '@/hooks/use-draft-leave'
 import { usePermissions } from '@/hooks/use-permissions'
 import { usePreferenceSection } from '@/hooks/use-preference-section'
 import { useToast } from '@/hooks/use-toast'
@@ -213,6 +214,8 @@ export function InstanceSettings({
     !deepEqual(savedConfig, workingConfig) ||
     pendingFaviconFile !== null ||
     inviteAccessChanged
+
+  useUnsavedDraft(hasChanges || isSaving)
 
   function changedFields(previous: unknown, next: unknown): unknown {
     if (deepEqual(previous, next)) return undefined
@@ -908,14 +911,16 @@ export function InstanceSettings({
                     {can('users.read') &&
                       (can('invites.create') || can('invites.manage')) && (
                         <Button variant="outline" size="sm" asChild>
-                          <Link href="/dashboard/users?tab=invites">
+                          <GuardedLink href="/dashboard/users?tab=invites">
                             Review invites
-                          </Link>
+                          </GuardedLink>
                         </Button>
                       )}
                     {can('roles.manage') && (
                       <Button variant="outline" size="sm" asChild>
-                        <Link href="/dashboard/roles">Manage roles</Link>
+                        <GuardedLink href="/dashboard/roles">
+                          Manage roles
+                        </GuardedLink>
                       </Button>
                     )}
                   </div>

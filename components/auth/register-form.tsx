@@ -13,6 +13,7 @@ import {
   PasswordFieldError,
   usePasswordFields,
 } from '@/components/auth/password-field'
+import { PasswordInput } from '@/components/auth/password-input'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -155,10 +156,10 @@ export function RegisterForm({
           <Label className="text-sm font-medium" htmlFor="password">
             Password
           </Label>
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
+            visibilityLabel="new password"
             required
             disabled={isLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"
@@ -167,7 +168,7 @@ export function RegisterForm({
             minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
             {...passwords.passwordProps}
           />
-          <p id="password-hint" className="text-xs text-muted-foreground">
+          <p id="password-hint" className="text-sm text-muted-foreground">
             {ACCOUNT_PASSWORD_HELP}
           </p>
           <PasswordFieldError
@@ -179,10 +180,10 @@ export function RegisterForm({
           <Label className="text-sm font-medium" htmlFor="confirmPassword">
             Confirm password
           </Label>
-          <Input
+          <PasswordInput
             id="confirmPassword"
             name="confirmPassword"
-            type="password"
+            visibilityLabel="password confirmation"
             required
             disabled={isLoading}
             className="h-11 bg-background/50 focus:bg-background transition-colors"

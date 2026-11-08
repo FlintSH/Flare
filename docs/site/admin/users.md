@@ -104,6 +104,8 @@ Deleting an account also deletes the invites it created, so they stop working. A
 
 ## Create an account
 
+The **Show new account password** and **Show replacement account password** controls temporarily reveal only their own field. Entries start concealed and hide again when you leave the field and its button.
+
 1. With `users.create`, open Users and choose **New user**. Assigning additional roles also requires `users.roles`.
 2. Enter the person's name and email.
 3. Set a password of at least eight characters for an account that should sign in locally.

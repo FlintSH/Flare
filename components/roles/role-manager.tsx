@@ -63,6 +63,7 @@ import {
 } from '@/lib/permissions/policy'
 import { cn } from '@/lib/utils'
 
+import { useUnsavedDraft } from '@/hooks/use-draft-leave'
 import { type ListedRole as Role, readRoles } from '@/hooks/use-roles'
 import { useToast } from '@/hooks/use-toast'
 
@@ -145,6 +146,8 @@ export function RoleManager() {
     roleCanHold(selected, permission) &&
     canGrantPermissions(actor, [permission])
   const dirty = draft !== null && JSON.stringify(draft) !== savedDraft
+  useUnsavedDraft(dirty || busy)
+
   const positionProblem =
     draft && editable && !isEveryone
       ? rolePositionProblem(actor, draft.position)

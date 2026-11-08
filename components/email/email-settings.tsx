@@ -42,6 +42,8 @@ import { apiRequest } from '@/lib/client/request'
 import type { EmailConfig } from '@/lib/email/schema'
 import { cn } from '@/lib/utils'
 
+import { useUnsavedDraft } from '@/hooks/use-draft-leave'
+
 interface SettingsResponse {
   config: EmailConfig
   passwordConfigured: boolean
@@ -105,6 +107,11 @@ export function EmailSettings({
   const [feedbackLocation, setFeedbackLocation] = useState<'test' | 'save'>(
     'save'
   )
+
+  const dirty = Boolean(
+    config && settings && (clearPassword || !deepEqual(config, settings.config))
+  )
+  useUnsavedDraft(dirty || busy === 'save')
 
   const load = useCallback(async () => {
     try {
@@ -320,7 +327,6 @@ export function EmailSettings({
           ? 'verify'
           : ''
       : ''
-  const dirty = clearPassword || !deepEqual(config, settings.config)
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()

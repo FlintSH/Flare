@@ -258,6 +258,18 @@ describe('the File type filter', () => {
       expect(fileTypeGroup(type), type).toBe('Other files')
   })
 
+  it.each([
+    ['text/markdown', 'Markdown'],
+    ['text/x-markdown', 'Markdown'],
+    ['application/typescript', 'TypeScript'],
+    ['application/json', 'JSON'],
+    ['application/x-zip-compressed', 'ZIP archive'],
+    ['video/mp4', 'MP4 video'],
+    ['audio/mpeg', 'MP3 audio'],
+  ])('gives %s the same readable label wherever it is shown', (type, label) => {
+    expect(fileTypeLabel(type)).toBe(label)
+  })
+
   it('names common types and capitalizes the rest', () => {
     expect(fileTypeLabel('text/plain')).toBe('Plain text')
     expect(

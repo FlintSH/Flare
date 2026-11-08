@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { useRouter } from 'next/navigation'
 
+import { PasswordInput } from '@/components/auth/password-input'
 import { hasRecentSecurityProof } from '@/components/auth/security-api'
 import { PasskeyConfirmation } from '@/components/profile/security/passkey-confirmation'
 import { Button } from '@/components/ui/button'
@@ -167,9 +168,9 @@ export function AccountEmail({
           {requiresPassword && (
             <>
               <Label htmlFor="email-enroll-password">Current password</Label>
-              <Input
+              <PasswordInput
                 id="email-enroll-password"
-                type="password"
+                visibilityLabel="email verification password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -270,9 +271,9 @@ export function AccountEmail({
           {requiresPassword && (
             <div className="space-y-2">
               <Label htmlFor="email-change-password">Current password</Label>
-              <Input
+              <PasswordInput
                 id="email-change-password"
-                type="password"
+                visibilityLabel="email change password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}

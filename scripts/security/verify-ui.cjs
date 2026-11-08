@@ -105,12 +105,45 @@ async function api(
   return response.json()
 }
 
-async function passwordStep(page, account) {
+async function passwordStep(page, account, checkVisibility = false) {
   await page.goto(origin + '/auth/login?local=1')
   await page
     .getByLabel('Email address', { exact: true })
     .fill(`security-demo-${account}@example.test`)
-  await page.getByLabel('Password', { exact: true }).fill(password)
+  const field = page.getByLabel('Password', { exact: true })
+  await field.fill(password)
+  if (checkVisibility && !videos) {
+    // Never reveal a password in a recorded walkthrough or screenshot.
+    const show = page.getByRole('button', {
+      name: 'Show password',
+      exact: true,
+    })
+    await expect(field).toHaveAttribute('type', 'password')
+    await expect(show).toHaveAttribute('aria-pressed', 'false')
+    await expect(show).toHaveAttribute('aria-controls', 'password')
+    const hit = await show.boundingBox()
+    assert(hit && hit.width >= 44 && hit.height >= 44)
+    await show.click()
+    await expect(field).toHaveAttribute('type', 'text')
+    await expect(
+      page.getByRole('button', { name: 'Hide password', exact: true })
+    ).toHaveAttribute('aria-pressed', 'true')
+    assert(
+      await field.evaluate(
+        (input, expected) => input.value === expected,
+        password
+      ),
+      'Revealing does not alter the native password value'
+    )
+    await page
+      .getByRole('button', { name: 'Hide password', exact: true })
+      .click()
+    await expect(field).toHaveAttribute('type', 'password')
+    await show.click()
+    await page.keyboard.press('Tab')
+    await expect(field).toHaveAttribute('type', 'password')
+    await expect(show).toHaveAttribute('aria-pressed', 'false')
+  }
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 }
 
@@ -578,10 +611,93 @@ async function testRequiredPasskeys(browser) {
   await stale.close()
   await reenter(page)
 
-  await passwordStep(page, 'jamie')
-  await expect(page.locator('form [role="alert"]')).toContainText(/passkey/i)
+  await passwordStep(page, 'jamie', true)
+  const required = page.locator('form [data-passkey-required]')
+  await expect(required).toContainText('Password and SSO sign-in are blocked.')
+  const requiredHeading = page.getByRole('heading', {
+    name: 'Passkey required',
+    exact: true,
+  })
+  await expect(requiredHeading).toBeFocused()
+  await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: 'Sign in', exact: true })
+  ).toHaveCount(0)
+  const permitted = page.getByRole('button', {
+    name: 'Sign in with a passkey',
+    exact: true,
+  })
+  const recovery = page.getByRole('button', {
+    name: 'Use a passkey recovery code',
+    exact: true,
+  })
+  const changeAccount = page.getByRole('button', {
+    name: 'Change account',
+    exact: true,
+  })
+  const actions = await Promise.all(
+    [permitted, recovery, changeAccount].map((x) => x.boundingBox())
+  )
+  assert(actions.every((x) => x && x.width >= 44 && x.height >= 44))
+  assert(
+    actions[0].y < actions[1].y && actions[1].y < actions[2].y,
+    'The permitted primary method precedes recovery and account reset'
+  )
+  const unexpectedPassword = page
+    .waitForRequest(
+      (request) =>
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname === '/api/auth/callback/credentials',
+      { timeout: 500 }
+    )
+    .then(
+      () => true,
+      (error) => {
+        if (error.name !== 'TimeoutError') throw error
+        return false
+      }
+    )
+  await required
+    .locator('xpath=ancestor::form')
+    .evaluate((form) => form.requestSubmit())
+  assert.equal(
+    await unexpectedPassword,
+    false,
+    'The refused-method step sends no credentials retry'
+  )
   await api(ctx, '/api/files', 'GET', undefined, 401)
   await shot(page, 'passkey-required-password')
+  if (!videos) {
+    await recovery.click()
+    await expect(page.getByLabel('Email', { exact: true })).toHaveValue(
+      'security-demo-jamie@example.test'
+    )
+    await page
+      .getByRole('button', { name: 'Back to passkey sign-in', exact: true })
+      .click()
+    await expect(requiredHeading).toBeFocused()
+    // This URL exercises an existing error presentation, not an SSO operation.
+    await page.goto(
+      origin +
+        '/auth/login?local=1&setupEmail=1&setupStep=appearance&error=OidcPasskeyRequired'
+    )
+    await expect(requiredHeading).toBeVisible()
+    await changeAccount.click()
+    await expect(
+      page.getByLabel('Email address', { exact: true })
+    ).toBeFocused()
+    const resetUrl = new URL(page.url())
+    assert.equal(resetUrl.searchParams.has('error'), false)
+    assert.equal(resetUrl.searchParams.get('local'), '1')
+    assert.equal(resetUrl.searchParams.get('setupEmail'), '1')
+    assert.equal(resetUrl.searchParams.get('setupStep'), 'appearance')
+    await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute(
+      'type',
+      'password'
+    )
+    await passwordStep(page, 'jamie')
+    await expect(required).toBeVisible()
+  }
   await signInWithPasskey()
   await profile(page)
   let status = await api(ctx, '/api/auth/security')
