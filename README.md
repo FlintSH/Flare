@@ -60,6 +60,12 @@ of these with a guide.
 Start from the template, check the [Railway guide](https://flintsh.github.io/Flare/hosting/railway.html)
 for storage and domain settings, then open `/setup`.
 
+**RepoCloud**
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Flare/)
+
+One-click template, no other instructions required.
+
 **Docker Compose**
 
 You need Docker with the Compose plugin and OpenSSL.
