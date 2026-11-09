@@ -1,4 +1,5 @@
 import { authorizeFile, serveFile } from '@/lib/files/delivery'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
@@ -7,6 +8,7 @@ type Context = { params: Promise<{ id: string }> }
 const api = routes('/api/files/[id]/download', {
   failure: { message: 'Internal server error' },
   logger: loggers.files,
+  cors: 'file',
 })
 
 /** GET takes the password as a query value, POST in a JSON body. */
@@ -25,3 +27,5 @@ const download = api(
 )
 
 export { download as GET, download as POST }
+
+export const OPTIONS = preflight('file')

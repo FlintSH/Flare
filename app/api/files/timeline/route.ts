@@ -1,5 +1,6 @@
 import { fileTimeline } from '@/lib/files/timeline'
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
@@ -16,3 +17,5 @@ export const GET = api(async (request) => {
     await fileTimeline(user.id, new URL(request.url).searchParams)
   )
 })
+
+export const OPTIONS = preflight('token')

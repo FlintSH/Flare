@@ -1,4 +1,5 @@
 import { authorizeFile, serveFile } from '@/lib/files/delivery'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
@@ -7,6 +8,7 @@ type Context = { params: Promise<{ id: string }> }
 const api = routes('/api/files/[id]/thumbnail', {
   failure: { message: 'Error serving thumbnail' },
   logger: loggers.files,
+  cors: 'file',
 })
 
 export const GET = api(
@@ -28,3 +30,5 @@ export const GET = api(
   },
   { audit: { action: 'file.thumbnail', category: 'files' } }
 )
+
+export const OPTIONS = preflight('file')

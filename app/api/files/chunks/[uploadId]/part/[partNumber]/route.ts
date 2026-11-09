@@ -1,4 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import {
   getUploadStorage,
@@ -83,3 +84,5 @@ export const PUT = api(async (request, { params }: Context) => {
   })
   return { data: { etag: result.ETag } }
 })
+
+export const OPTIONS = preflight('token')

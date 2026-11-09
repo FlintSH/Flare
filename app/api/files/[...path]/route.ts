@@ -1,4 +1,5 @@
 import { authorizeFile, serveFile } from '@/lib/files/delivery'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 
@@ -9,6 +10,7 @@ type Context = { params: Promise<{ path: string[] }> }
 const api = routes('/api/files/[...path]', {
   failure: { message: 'Internal server error' },
   logger,
+  cors: 'file',
 })
 
 async function serveContent(request: Request, { params }: Context) {
@@ -48,3 +50,5 @@ export const GET = api(serveContent, {
     category: 'files',
   },
 })
+
+export const OPTIONS = preflight('file')

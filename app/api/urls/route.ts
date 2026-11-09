@@ -1,4 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { readJson } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
@@ -22,3 +23,5 @@ export const GET = api(async (request) => {
   const user = await requireAccount(request)
   return apiResponse({ urls: await listOwnShortLinks(user.id) })
 })
+
+export const OPTIONS = preflight('token')

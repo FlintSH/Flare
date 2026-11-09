@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { authorizeFile } from '@/lib/files/delivery'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
@@ -76,6 +77,7 @@ const api = routes('/api/files/[id]/ocr', {
   envelope: 'api',
   failure: { message: 'Failed to fetch OCR text' },
   logger: loggers.files,
+  cors: 'file',
 })
 
 export const GET = api(async (request, { params }: Context) => {
@@ -111,3 +113,5 @@ export const GET = api(async (request, { params }: Context) => {
     confidence: file.ocrConfidence,
   })
 })
+
+export const OPTIONS = preflight('file')

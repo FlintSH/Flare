@@ -31,7 +31,50 @@ curl --fail-with-body \
 
 For that listing request, the token needs `files:read`. Authentication schemes are case-insensitive (`Bearer` and `bearer` work); the secret itself is case-sensitive. Tokens belong in the header, not in the URL.
 
-A named `flr_` bearer token uses its own authority even if browser cookies accompany the request. A signed-in administrator's cookie does not add permissions to a named token on these routes. Use a server-side process or command-line client for custom automation; the docs builder does not act as an authenticated proxy to your instance.
+A named `flr_` bearer token uses its own authority even if browser cookies accompany the request. A signed-in administrator's cookie does not add permissions to a named token on these routes. Scripts, servers and command-line clients can call Flare as shown. A web app running in a browser on another site also needs the instance to allow its origin; see [call Flare from a web app](#call-flare-from-a-web-app). The docs builder does not act as an authenticated proxy to your instance.
+
+## Call Flare from a web app
+
+Browsers refuse to let a page read answers from another site unless that site allows it with CORS headers. Flare sends none by default, so a web app on its own origin, such as a PWA at `https://app.example.com` or a dev server at `http://localhost:5173`, gets `TypeError: Failed to fetch` and a CORS error in the console, even with a valid token. The same request from `curl` works.
+
+The instance operator turns cross-origin access on with [`FLARE_CORS_ORIGINS`](/hosting/configuration#cross-origin-browser-access) and restarts Flare:
+
+```sh
+FLARE_CORS_ORIGINS=https://app.example.com,http://localhost:5173
+```
+
+Then the app sends a named token in the `Authorization` header, as any client does:
+
+```js
+const flare = 'https://files.example.com'
+const token = 'flr_YOUR_TOKEN' // from the person using the app, never hardcoded
+
+const response = await fetch(`${flare}/api/files?limit=10`, {
+  headers: { Authorization: `Bearer ${token}` },
+})
+if (!response.ok) throw new Error((await response.json()).error)
+const { data } = await response.json()
+
+// File content follows the file's own access rules, not the token,
+// so this works for public files.
+const bytes = await fetch(`${flare}/api/files/${data[0].id}/download`)
+const blob = await bytes.blob()
+```
+
+What other sites can reach:
+
+- **Every method a named token can call**, listed in the [scope reference](#scope-reference). The token's scopes and its owner's role permissions apply exactly as they do elsewhere. Browsers send a preflight `OPTIONS` request first; Flare answers it for these routes and caches it in the browser for 10 minutes.
+- **File content for anonymous visitors**, with `GET` and `HEAD`: `/{userUrlId}/{filename}/raw`, `/{userUrlId}/{filename}/direct`, `/api/files/{path}`, and `/api/files/{id}/download`, `/thumbnail` and `/ocr`. Public files work, password-protected ones with the `password` query value. Private files stay unavailable to other sites: named tokens [don't unlock file content](./endpoint-inventory#file-content-and-access-checks), and the browser doesn't send Flare's session cookie.
+- **Response headers** an app needs: `Retry-After` on API routes, and `Accept-Ranges`, `Content-Disposition` and `Content-Range` on file content.
+
+What stays on Flare's own pages:
+
+- **The session cookie never works from another site.** Flare doesn't send `Access-Control-Allow-Credentials`, so a browser refuses `credentials: 'include'` requests outright, and requests without it carry no cookie and answer `401`. A signed-in person visiting a hostile page doesn't give it their session.
+- **Routes named tokens can't call** get no CORS headers, whatever the setting: account settings, organization, tags, folders, file changes, invites, roles, audit and the rest of the [endpoint inventory](./endpoint-inventory). The legacy upload token works from another site only on the named-token routes it can also call, such as uploads.
+
+The token sits in the app's storage in the visitor's browser, where any script the app runs can read it. Create a separate token for the app with only the scopes it uses, set an expiration, and revoke it from **Profile → Integrations** if the app or device is lost.
+
+On S3 storage, `/api/files/{id}/download` redirects to a signed storage URL, and the browser follows it. The bucket needs its own CORS rule for the app's origin to read that answer; Flare's setting doesn't reach the bucket. The same applies to presigned chunk part URLs, as [chunked uploads](./files#optional-send-parts-directly-to-s3) describe. Builds before this setting existed sent no CORS headers, so browser apps on other sites could not use the API at all.
 
 ## Browser-session writes
 
@@ -126,15 +169,16 @@ The last-used timestamp is best-effort activity metadata, not a full audit log. 
 
 ## Troubleshoot a 401 or 403
 
-| Symptom                                             | What to check                                                                                                                                                                                                                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `401 Unauthorized` on every request                 | Confirm the complete token, header, instance URL, expiration, and revocation status. Make sure your reverse proxy forwards `Authorization`.                                                                                                                             |
-| Upload works but listing returns `401`              | Add `files:read` by creating a replacement token with the required scopes.                                                                                                                                                                                              |
-| Named token works on files but not account settings | The route is outside the named-token allowlist. Use the dashboard for account administration.                                                                                                                                                                           |
-| A previously working account loses API access       | Check whether the administrator now requires email verification. A user who must verify their email cannot use named or legacy token authentication until eligible again. Also check current role grants: removing an operation’s permission stops both kinds of token. |
-| `403` says you lack permission                      | Ask the administrator to review the owner’s current role grants. Token scope alone does not grant account authority.                                                                                                                                                    |
-| `403` mentions an upload profile                    | Remove conflicting overrides, select the bound profile, and confirm it still exists.                                                                                                                                                                                    |
-| `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                   |
+| Symptom                                             | What to check                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401 Unauthorized` on every request                 | Confirm the complete token, header, instance URL, expiration, and revocation status. Make sure your reverse proxy forwards `Authorization`.                                                                                                                                              |
+| Upload works but listing returns `401`              | Add `files:read` by creating a replacement token with the required scopes.                                                                                                                                                                                                               |
+| Named token works on files but not account settings | The route is outside the named-token allowlist. Use the dashboard for account administration.                                                                                                                                                                                            |
+| A previously working account loses API access       | Check whether the administrator now requires email verification. A user who must verify their email cannot use named or legacy token authentication until eligible again. Also check current role grants: removing an operation’s permission stops both kinds of token.                  |
+| `403` says you lack permission                      | Ask the administrator to review the owner’s current role grants. Token scope alone does not grant account authority.                                                                                                                                                                     |
+| `403` mentions an upload profile                    | Remove conflicting overrides, select the bound profile, and confirm it still exists.                                                                                                                                                                                                     |
+| A web app on another site gets `Failed to fetch`    | The instance hasn't allowed the app's origin. Ask the operator to add it to [`FLARE_CORS_ORIGINS`](#call-flare-from-a-web-app), written exactly as the browser sends it, such as `http://localhost:5173`. Session-only routes and `credentials: 'include'` never work from another site. |
+| `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                                    |
 
 Missing credentials, unknown tokens, expired tokens, revoked tokens, missing scopes, and required email verification intentionally share a generic `401` response. The server does not reveal which authentication check failed to an unauthenticated caller. An authenticated request lacking a current role permission returns `403`; restoring that role grant can restore access without issuing another token.
 
