@@ -6,12 +6,13 @@ import { requiredApiScope } from '@/lib/integrations/bearer-routes'
  *
  * - `token`: the API routes a named token may call. A page elsewhere can call
  *   them with a token it holds in an Authorization header.
- * - `file`: `/raw` and `/direct` file content, read as an anonymous visitor.
+ * - `file`: file content (`/raw`, `/direct`, `/api/files/{path}`, download,
+ *   thumbnail and OCR), read as an anonymous visitor.
  *
- * Responses never carry Access-Control-Allow-Credentials, so browsers don't
- * send Flare's session cookie with these requests or let another site read
- * an answer the cookie authorized. Only a credential the page itself sends
- * works, and anything a session alone could do stays on Flare's own pages.
+ * Responses never carry Access-Control-Allow-Credentials. A browser may still
+ * send Flare's session cookie with a `credentials: 'include'` request, but it
+ * won't let the page read the answer, and a write the cookie authorizes fails
+ * the same-origin check. Only a credential the page itself sends works.
  */
 export type CorsKind = 'token' | 'file'
 
@@ -31,7 +32,12 @@ const ALLOWED_HEADERS = [
 /** Response headers clients need beyond the CORS-safelisted ones. */
 const EXPOSED_HEADERS = {
   token: ['Retry-After'],
-  file: ['Accept-Ranges', 'Content-Disposition', 'Content-Range'],
+  file: [
+    'Accept-Ranges',
+    'Content-Disposition',
+    'Content-Range',
+    'Retry-After',
+  ],
 } satisfies Record<CorsKind, string[]>
 
 /** How long a browser may reuse a preflight answer, in seconds. */

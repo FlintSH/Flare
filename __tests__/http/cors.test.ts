@@ -243,8 +243,8 @@ describe('answers to cross-origin requests', () => {
       'file'
     )
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
-    expect(response.headers.get('Access-Control-Expose-Headers')).toContain(
-      'Content-Range'
+    expect(response.headers.get('Access-Control-Expose-Headers')).toBe(
+      'Accept-Ranges, Content-Disposition, Content-Range, Retry-After'
     )
   })
 
